@@ -53,5 +53,5 @@ END {DemoReboot}.
 
  Jun.17.1993.Toronto UUCP greg.vigneault@bville.gts.org FIDO 1:250/304
 ---
- þ RoseMail 2.10á: NANET 41-62-24 Baudeville -Toronto ON - 416-283-0114
+ â–  RoseMail 2.10ÃŸ: NANET 41-62-24 Baudeville -Toronto ON - 416-283-0114
 

@@ -18,20 +18,20 @@ Const Days : Array [0..6] of String[9] =
 Procedure Help;
 Begin
   ClrScr;
-  Textcolor(9);Writeln('ş BFTIME v1.0 - A File Date/Timestamp Updater Program ş');
-  Textcolor(15);Writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+  Textcolor(9);Writeln('â–  BFTIME v1.0 - A File Date/Timestamp Updater Program â– ');
+  Textcolor(15);Writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   Writeln('');Textcolor(14);
   Writeln('Command Line Usage:  BFTIME [FILE MASK] (Log File)');
   Writeln('');Textcolor(11);
-  Writeln('Ex 1: BFTIME *.ZIP                    <ÄÄÄ< No Log File');
-  Writeln('Ex 2: BFTIME *.ZIP C:\LOG\BFTIME.LOG  <ÄÄÄ< Log File Used');
+  Writeln('Ex 1: BFTIME *.ZIP                    <â”€â”€â”€< No Log File');
+  Writeln('Ex 2: BFTIME *.ZIP C:\LOG\BFTIME.LOG  <â”€â”€â”€< Log File Used');
   Textcolor(7);
   Writeln('                 ');
-  Writeln('      ³      ³     ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ< Path & Name Of Log File');
-  Writeln('      ³      ³');
-  Writeln('      ³      ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ< Mask For Files To Be Updated');
-  Writeln('      ³');
-  Writeln('      ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ< Executionable Program File');
+  Writeln('      â”‚      â”‚     â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€< Path & Name Of Log File');
+  Writeln('      â”‚      â”‚');
+  Writeln('      â”‚      â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€< Mask For Files To Be Updated');
+  Writeln('      â”‚');
+  Writeln('      â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€< Executionable Program File');
   Writeln('');Sound(850);Delay(350);NoSound;Sound(650);Delay(350);NoSound;Sound(850);Delay(350);NoSound;
   Halt;
 End;
@@ -52,7 +52,7 @@ Begin
     {$I-}Reset(F1);{$I+}
     IF IOResult<> 0 Then Rewrite(F1);
     Append(F1);
-    Writeln(F1,'START  LOG: ',Days[Dow],', ',Month:0, '-', Day:0, '-', Year:0,' ş BFTIME v1.0');
+    Writeln(F1,'START  LOG: ',Days[Dow],', ',Month:0, '-', Day:0, '-', Year:0,' â–  BFTIME v1.0');
   End;
 End;
 
@@ -78,12 +78,12 @@ Begin
     GetFTime(F,FTime);
     Gotoxy(1,9);
     Textcolor(14);
-    Writeln('ş ',DirInfo.Name,' Was Re-Dated And Re-Timestamped At '
+    Writeln('â–  ',DirInfo.Name,' Was Re-Dated And Re-Timestamped At '
     ,LeadingZero(h),':',LeadingZero(m),':',LeadingZero(s));
     If Log=True Then
     Begin
       Append(F1);
-      Writeln(F1,'    ş ',DirInfo.Name,' Was Re-Dated And Re-Timestamped At '
+      Writeln(F1,'    â–  ',DirInfo.Name,' Was Re-Dated And Re-Timestamped At '
       ,LeadingZero(h),':',LeadingZero(m),':',LeadingZero(s));
     End;
     UnpackTime(FTime,DT);
@@ -105,18 +105,18 @@ Begin
   End;
   Gotoxy(1,10);
   Textcolor(11);
-  If Count>=1 Then Writeln('ş Operation Successfull - There Were ',Count,' Files Updated!');
+  If Count>=1 Then Writeln('â–  Operation Successfull - There Were ',Count,' Files Updated!');
   If Count<=0 Then
   Begin
-    Writeln('ş Operation Failed - There Were No Files Matches Found!');
+    Writeln('â–  Operation Failed - There Were No Files Matches Found!');
     Sound(350);Delay(350);NoSound; Sound(150);Delay(350);NoSound;
   End;
   If Log=True Then
   Begin
     Append(F1);
-    If Count<=0 Then Writeln(F1,'    ş Operation Failed - No File Match Found ş');
+    If Count<=0 Then Writeln(F1,'    â–  Operation Failed - No File Match Found â– ');
     Writeln(F1,'END OF LOG: BFTIME (C) 1995 Brian Leiter, All Rights Reserved');
-    Writeln(F1,'ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ');
+    Writeln(F1,'â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
     Close(F1);
   End;
 End;
@@ -125,13 +125,13 @@ Procedure Logo;
 Begin
   Clrscr;
   Textcolor(15);Textbackground(4);
-  Writeln('ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
-  Writeln('º -=ş BFTIME v1.0 ş=-               03/11/95 º');
-  Writeln('º                                            º');
-  Writeln('º      File Date And Timestamp Updater       º');
-  Writeln('º                                            º');
-  Writeln('º (C) 1995 Brian Leiter, All Rights Reserved º');
-  Writeln('ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼');
+  Writeln('â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
+  Writeln('â•‘ -=â–  BFTIME v1.0 â– =-               03/11/95 â•‘');
+  Writeln('â•‘                                            â•‘');
+  Writeln('â•‘      File Date And Timestamp Updater       â•‘');
+  Writeln('â•‘                                            â•‘');
+  Writeln('â•‘ (C) 1995 Brian Leiter, All Rights Reserved â•‘');
+  Writeln('â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
   Textbackground(0);
 End;
 

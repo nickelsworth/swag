@@ -1,29 +1,29 @@
 {
- ÚÄÄ GEORGE VAISEY ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
- ³ GV¯ I've read throught the book and even looked it up in the two   ³
- ³ GV¯ pascal books I've got and can't seem to get any help.I'm       ³
- ³ GV¯ trying (without luck) to get this this command:                ³
- ³ GV¯ trying (without luck) to get this this PROMPT $mTYPE "EXIT" TO ³
- ³ GV¯ RETURN to be sent as a command before it shells. This is so    ³
- ³ GV¯ that the individual that shells out will always know that he   ³
- ³ GV¯ needs to type EXIT to return.  If you can help or know of a    ³
- ³ GV¯ better way PLEASE let me know.  Here is what I use to shell to ³
- ³ GV¯ OS:                                                            ³
- ³                                                                    ³
- ³ GV¯ Begin                                                          ³
- ³ GV¯   ClrScr;                                                      ³
- ³ GV¯   TextColor(Yellow+Blink);                                     ³
- ³ GV¯   Writeln ('Type EXIT To Return To Program');                  ³
- ³ GV¯   SwapVectors;                                                 ³
- ³ GV¯   Exec(GetEnv('Comspec'), '');                                 ³
- ³ GV¯   SwapVectors;                                                 ³
- ³ GV¯   NormVideo;                                                   ³
- ³ GV¯ End.                                                           ³
- ³ GV¯ I want it to be                                                ³
- ³ GV¯ TYPE "EXIT" TO RETURN                                          ³
- ³ GV¯ then the prompt command.  Thanks again for your help.          ³
- ³ GV¯     George Vaisey                                              ³
- ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+ â”Œâ”€â”€ GEORGE VAISEY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ â”‚ GVÂ» I've read throught the book and even looked it up in the two   â”‚
+ â”‚ GVÂ» pascal books I've got and can't seem to get any help.I'm       â”‚
+ â”‚ GVÂ» trying (without luck) to get this this command:                â”‚
+ â”‚ GVÂ» trying (without luck) to get this this PROMPT $mTYPE "EXIT" TO â”‚
+ â”‚ GVÂ» RETURN to be sent as a command before it shells. This is so    â”‚
+ â”‚ GVÂ» that the individual that shells out will always know that he   â”‚
+ â”‚ GVÂ» needs to type EXIT to return.  If you can help or know of a    â”‚
+ â”‚ GVÂ» better way PLEASE let me know.  Here is what I use to shell to â”‚
+ â”‚ GVÂ» OS:                                                            â”‚
+ â”‚                                                                    â”‚
+ â”‚ GVÂ» Begin                                                          â”‚
+ â”‚ GVÂ»   ClrScr;                                                      â”‚
+ â”‚ GVÂ»   TextColor(Yellow+Blink);                                     â”‚
+ â”‚ GVÂ»   Writeln ('Type EXIT To Return To Program');                  â”‚
+ â”‚ GVÂ»   SwapVectors;                                                 â”‚
+ â”‚ GVÂ»   Exec(GetEnv('Comspec'), '');                                 â”‚
+ â”‚ GVÂ»   SwapVectors;                                                 â”‚
+ â”‚ GVÂ»   NormVideo;                                                   â”‚
+ â”‚ GVÂ» End.                                                           â”‚
+ â”‚ GVÂ» I want it to be                                                â”‚
+ â”‚ GVÂ» TYPE "EXIT" TO RETURN                                          â”‚
+ â”‚ GVÂ» then the prompt command.  Thanks again for your help.          â”‚
+ â”‚ GVÂ»     George Vaisey                                              â”‚
+ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
 George,
 
@@ -67,12 +67,12 @@ Procedure ShellMessage ( ProgName : String );
 begin
  clrscr;
  Change the following 6 lines to WRITELN's then delete this line entirely.
- write(' ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
- write(' º ş While in the DOS SHELL, do not execute any TSR programs like  º');
- write(' º   SideKick or DOS''s PRINT command.                              º')
- write(' º ş Type EXIT and press ENTER to quit the SHELL and return to the º');
- write(Extend ( ' º   ' + ProgName  + ' program.', 67 ), 'º' );
- write(' ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼');
+ write(' â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
+ write(' â•‘ â–  While in the DOS SHELL, do not execute any TSR programs like  â•‘');
+ write(' â•‘   SideKick or DOS''s PRINT command.                              â•‘')
+ write(' â•‘ â–  Type EXIT and press ENTER to quit the SHELL and return to the â•‘');
+ write(Extend ( ' â•‘   ' + ProgName  + ' program.', 67 ), 'â•‘' );
+ write(' â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 end;
 
 

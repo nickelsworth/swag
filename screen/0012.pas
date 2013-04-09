@@ -24,19 +24,19 @@ begin
  First Write top line of bordered display
 ******************************************}
 
-  Write ('…');                     {Write top Left Corner}
+  Write ('‚ïî');                     {Write top Left Corner}
   For Index1 := 1 to 78 do         {Write top Horizontal line }
-    Write ('Õ');
-  Write ('ª');                     {Write top Right Corner}
+    Write ('‚ïê');
+  Write ('‚ïó');                     {Write top Right Corner}
 
 {*******************************************
  Now Write Bottom line of bordered display
 *******************************************}
 
-  Write ('»');                     {Write Bottom Left Corner}
+  Write ('‚ïö');                     {Write Bottom Left Corner}
   For Index1 := 1 to 78 do         {Write Bottom horizontal line}
-    Write ('Õ');
-  Write ('º');                     {Write Bottom Right Corner}
+    Write ('‚ïê');
+  Write ('‚ïù');                     {Write Bottom Right Corner}
 
 {********************************************************************
  Now inSERT 23 lines of Left&Right bordered display, pushing bottom
@@ -46,10 +46,10 @@ begin
   For Index1 := 1 to 23 do begin   { Repeat 23 times }
     GotoXY (1, 2);                 {Move cursor back to Col 1, Line 2}
     InsLine;                       {Insert blank line (Scroll Text down)}
-    Write ('∫');                   {Write Left border vertical caracter}
+    Write ('‚ïë');                   {Write Left border vertical caracter}
     For Index2 := 1 to 78 do       {Write 78 spaces}
       Write (' ');
-    Write ('∫');                   {Write Right border vertical caracter}
+    Write ('‚ïë');                   {Write Right border vertical caracter}
   end;
 
 {***********************************************************

@@ -1,9 +1,9 @@
-(* ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Programated by Vladimir Zahoransky                        ³
-   ³                Vladko software                            ³
-   ³ Contact      : zahoran@cezap.ii.fmph.uniba.sk             ³
-   ³ Program tema : Squard effekt with rekusion inside         ³
-   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ *)
+(* â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Programated by Vladimir Zahoransky                        â”‚
+   â”‚                Vladko software                            â”‚
+   â”‚ Contact      : zahoran@cezap.ii.fmph.uniba.sk             â”‚
+   â”‚ Program tema : Squard effekt with rekusion inside         â”‚
+   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ *)
 
 { This program draw squard effekt how rekpic04.pas, but this program
   draw squards inside. This program just modify vlavo(90) in

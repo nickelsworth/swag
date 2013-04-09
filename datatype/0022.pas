@@ -55,11 +55,11 @@ begin
   with thecard do
   if suit = backside then begin
     textattr := blue shl 4+yellow;
-    write('°°°°°');
+    write('â–‘â–‘â–‘â–‘â–‘');
     gotoxy(wherex-5,wherey+1);
-    write('°°°°°');
+    write('â–‘â–‘â–‘â–‘â–‘');
     gotoxy(wherex-5,wherey+1);
-    write('°°°°°');
+    write('â–‘â–‘â–‘â–‘â–‘');
   end
   else begin
     case suit of

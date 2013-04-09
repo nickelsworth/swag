@@ -98,7 +98,7 @@ begin;
       if latxt[counter] in ['a'..'z'] then sDisplay(0,7,0,latxt[counter])
       else if latxt[counter] in ['A'..'Z'] then sDisplay(0,11,0,latxt[counter])
       else if latxt[counter] in ['0'..'9'] then sDisplay(0,14,0,latxt[counter])
-      else if latxt[counter] = 'บ' then sdisplay(0,8,0,latxt[counter])
+      else if latxt[counter] = 'โ•‘' then sdisplay(0,8,0,latxt[counter])
       else sdisplay(0,3,0,latxt[counter]);
       crlf;
 end;
@@ -127,35 +127,35 @@ procedure drawscreen;
 begin;
   clearscreen;
   done := false;
-  sdisplay(0,8,0,'ษออออออออ');
-  sdisplay(0,7,0,'อออออออออ');
-  sdisplay(0,15,0,'ออออออออออ');
-  sdisplay(0,7,0,'อออออออออ');
-  display(0,8,0,'ออออออออป');
-  sdisplay(0,8,0,'บ');
+  sdisplay(0,8,0,'โ•”โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•—');
+  sdisplay(0,8,0,'โ•‘');
   sdisplay_ln(' Stoney''s User Editor (Version 0.00 *BETA*) ');
-  display(0,8,0,'บ');
-  sdisplay(0,8,0,'ฬออออออออ');
-  sdisplay(0,7,0,'อออออออออ');
-  sdisplay(0,15,0,'ออออออออออ');
-  sdisplay(0,7,0,'อออออออออ');
-  display(0,8,0,'ออออออออน');
-  ezln('บ User Number..:                             บ');
-  ezln('บ Real Name....:                             บ');
-  ezln('บ Alias........:                             บ');
-  ezln('บ Calling From.:                             บ');
-  ezln('บ Security.....:                             บ');
-  ezln('บ Sex..........:                             บ');
-  ezln('บ Date of Birth:                             บ');
-  ezln('บ Phone Number.:                             บ');
-  ezln('บ Uploads......:                             บ');
-  ezln('บ Downloads....:                             บ');
-  ezln('บ Number Calls.:                             บ');
-  sdisplay(0,8,0,'ศออออออออ');
-  sdisplay(0,7,0,'อออออออออ');
-  sdisplay(0,15,0,'ออออออออออ');
-  sdisplay(0,7,0,'อออออออออ');
-  display(0,8,0,'ออออออออผ');
+  display(0,8,0,'โ•‘');
+  sdisplay(0,8,0,'โ• โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•ฃ');
+  ezln('โ•‘ User Number..:                             โ•‘');
+  ezln('โ•‘ Real Name....:                             โ•‘');
+  ezln('โ•‘ Alias........:                             โ•‘');
+  ezln('โ•‘ Calling From.:                             โ•‘');
+  ezln('โ•‘ Security.....:                             โ•‘');
+  ezln('โ•‘ Sex..........:                             โ•‘');
+  ezln('โ•‘ Date of Birth:                             โ•‘');
+  ezln('โ•‘ Phone Number.:                             โ•‘');
+  ezln('โ•‘ Uploads......:                             โ•‘');
+  ezln('โ•‘ Downloads....:                             โ•‘');
+  ezln('โ•‘ Number Calls.:                             โ•‘');
+  sdisplay(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+  display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•');
   crlf;
 end;
 
@@ -182,8 +182,8 @@ begin;
               display_ln(rjust(usr.location,30));
               if counter3 = 23 then
                 begin;
-                sdisplay_ln('ฐฑฒ Hit A Key For More, (:) Set Current Record #,
-(N) No More List! ฒฑฐ');                ch := upcase(getchar);
+                sdisplay_ln('โ–‘โ–’โ–“ Hit A Key For More, (:) Set Current Record #,
+(N) No More List! โ–“โ–’โ–‘');                ch := upcase(getchar);
                 case ch of
                 ':' : begin;
                       crlf;
@@ -216,7 +216,7 @@ begin;
           seek(usrf,recno);
           read(usrf,usr);
           {$I+}
-          more('ฐฑฒ That''s All Folks - Hit Any Key to Continue! ฒฑฐ',12);
+          more('โ–‘โ–’โ–“ That''s All Folks - Hit Any Key to Continue! โ–“โ–’โ–‘',12);
           drawscreen;
 end;
 
@@ -303,7 +303,7 @@ else if usr.sex = 2 then sdisplay_ln(ljust('Female',28))
               display_ln(rjust(usr.location,30));
               if counter3 = 22 then
                 begin;
-                more('ฐฑฒ Hit A Key For More Puss, Man! ฒฑฐ',12);
+                more('โ–‘โ–’โ–“ Hit A Key For More Puss, Man! โ–“โ–’โ–‘',12);
                 counter3 := 1;
                 end;
               end;
@@ -312,7 +312,7 @@ else if usr.sex = 2 then sdisplay_ln(ljust('Female',28))
           seek(usrf,recno);
           read(usrf,usr);
           {$I+}
-          more('ฐฑฒ No More Puss Left - Hit Any Key to Continue! ฒฑฐ',12);
+          more('โ–‘โ–’โ–“ No More Puss Left - Hit Any Key to Continue! โ–“โ–’โ–‘',12);
           drawscreen;
           end;
     'L' : begin;
@@ -321,19 +321,19 @@ else if usr.sex = 2 then sdisplay_ln(ljust('Female',28))
     'S' : begin;
           sdisplay_ln('Change Security Level..');
           cursorpos(18,1);
-          sdisplay(0,8,0,'ษอออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          sdisplay(0,15,0,'อออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          display(0,8,0,'อออออออออออออออป');
-          sdisplay(0,8,0,'บ ');
+          sdisplay(0,8,0,'โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—');
+          sdisplay(0,8,0,'โ•‘ ');
           sdisplay_ln('Levels: Lockout, Unval, Reg, Special, Elite, Awesome,
-sYsop. Which One...? ');          display(0,8,0,' บ');
-          sdisplay(0,8,0,'ศอออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          sdisplay(0,15,0,'อออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          display(0,8,0,'อออออออออออออออผ');
+sYsop. Which One...? ');          display(0,8,0,' โ•‘');
+          sdisplay(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
           cursorpos(19,77);
           repeat ch := upcase(getchar) until ch in
 ['L','U','R','S','E','A','Y'];          case ch of
@@ -350,19 +350,19 @@ sYsop. Which One...? ');          display(0,8,0,' บ');
           write(usrf,usr);
           {$I+}
           cursorpos(18,1);
-          sdisplay(0,8,0,'ษอออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          sdisplay(0,15,0,'อออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          display(0,8,0,'อออออออออออออออป');
-          sdisplay(0,8,0,'บ ');
+          sdisplay(0,8,0,'โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—');
+          sdisplay(0,8,0,'โ•‘ ');
           sdisplay_ln('Writing User File - C:\RA\MSGBASE\USERS.BBS, One
-Moment..................  ');          display(0,8,0,' บ');
-          sdisplay(0,8,0,'ศอออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          sdisplay(0,15,0,'อออออออออออออออ');
-          sdisplay(0,7,0,'ออออออออออออออออ');
-          display(0,8,0,'อออออออออออออออผ');
+Moment..................  ');          display(0,8,0,' โ•‘');
+          sdisplay(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,15,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          sdisplay(0,7,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
+          display(0,8,0,'โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
           cursorpos(19,77);
           delay(490);
           cursorpos(18,1);

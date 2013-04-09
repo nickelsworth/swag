@@ -21,9 +21,9 @@ seek(fil,16);
 blockread(fil,bpp,1);
 blockread(fil,storage,1);
 writeln;
-writeln('อออออออออออออออ TARGA Information อออออออออออออออ');
+writeln('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ• TARGA Information โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
 writeln;
-writeln('อออออออออออออออ Misc. Information อออออออออออออออ');
+writeln('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ• Misc. Information โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
 case tgatype of
 3 :writeln('Type           : 8-bit grayscale uncompressed (3)');
 2 :writeln('Type           : 24-bit true color uncompressed (2)');
@@ -36,11 +36,11 @@ case storage of
 else writeln('Storing method : unknown (',storage,')');
 end;
 writeln;
-writeln('อออออออออออออออ Color Information อออออออออออออออ');
+writeln('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ• Color Information โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
 writeln('BPP    : ',bpp);
 writeln('Colors : ',256*(bpp div 8));
 writeln;
-writeln('อออออออออออออออ  Size Information อออออออออออออออ');
+writeln('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•  Size Information โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
 writeln('X-Size : ',xsize);
 writeln('Y-Size : ',ysize);
 readln;

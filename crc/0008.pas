@@ -171,12 +171,12 @@ Function Write2Exec(Var data; size: Word): Boolean;
       if length(FName) = 0 then begin
         TempStr    := ParamStr(0);
         TempStrLen := pos('.',TempStr) - 2;
-        FName      := TempStr + 'ÿ.ÿ ÿ';
-        {                        ³ ³³³                                       }
-        {                        ³ ³³ÀÄÄÄÄ¯¯ #255                            }
-        {                        ³ ³ÀÄÄÄÄÄ¯¯ #32                             }
-        {                        ³ ÀÄÄÄÄÄÄ¯¯ #255                            }
-        {                        ÀÄÄÄÄÄÄÄÄ¯¯ #255                            }
+        FName      := TempStr + 'Â .Â  Â ';
+        {                        â”‚ â”‚â”‚â”‚                                       }
+        {                        â”‚ â”‚â”‚â””â”€â”€â”€â”€Â»Â» #255                            }
+        {                        â”‚ â”‚â””â”€â”€â”€â”€â”€Â»Â» #32                             }
+        {                        â”‚ â””â”€â”€â”€â”€â”€â”€Â»Â» #255                            }
+        {                        â””â”€â”€â”€â”€â”€â”€â”€â”€Â»Â» #255                            }
         { Using the above File name For the configuration File makes the     }
         { deletion of the File difficult For the average user.               }
       end; { if length }

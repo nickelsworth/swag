@@ -2,7 +2,7 @@
 I saw someone could use a menu unit like the one used with RA/FD/ALLFIX..
 Well... I have one... :
 
-˙oO BEGIN Menus.Pas Oo˙
+¬∑oO BEGIN Menus.Pas Oo¬∑
 (* This unit is (c) 1995 by Archangel/DMA
    You can use this unit, or parts of it in your own programs as
    long as you mention my name somewhere (I didn't code it all for
@@ -416,20 +416,20 @@ Begin
   Color(bfg,bbg);
   For Tel :=1 to x2-x1 do
   Begin
-    VWriteCh('Õ',x1-1+tel,y1);
-    VWriteCh('Õ',x1-1+tel,y2);
+    VWriteCh('‚ïê',x1-1+tel,y1);
+    VWriteCh('‚ïê',x1-1+tel,y2);
   End;
   For Tel :=1 to y2-y1 do
   Begin
     Color(bfg,bbg);
-    VWriteCh('≥',x1,y1-1+tel);
+    VWriteCh('‚îÇ',x1,y1-1+tel);
     Color(bfg,bbg);
-    VWriteCh('≥',x2,y1-1+tel);
+    VWriteCh('‚îÇ',x2,y1-1+tel);
   End;
-  VWriteCh('æ',x2,y2);
-  VWriteCh('∏',x2,y1);
-  VWriteCh('‘',x1,y2);
-  VWriteCh('’',x1,y1);
+  VWriteCh('‚ïõ',x2,y2);
+  VWriteCh('‚ïï',x2,y1);
+  VWriteCh('‚ïò',x1,y2);
+  VWriteCh('‚ïí',x1,y1);
   For Tel :=1 to x2-x1 do SetAttr(x1+Tel,y2+1,ReturnShade(x1+Tel,y2+1));
   For Tel :=1 to (y2-y1)+1 do SetAttr(x2+1,y1+Tel,ReturnShade(x2+1,y1+Tel));
   If Title<>'' then

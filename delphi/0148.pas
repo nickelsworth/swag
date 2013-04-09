@@ -36,20 +36,20 @@ type
   function getpierre: integer;
   procedure setpierre (param1: integer);
   procedure WndProc(var Message: TMessage) ;override;
-    { Déclarations privées }
+    { DÎ˜clarations privÎ˜es }
   protected
-    { Déclarations protégées }
+    { DÎ˜clarations protÎ˜gÎ˜es }
 
 
   public
   constructor Create(AOwner: TComponent); override;
 
-   { Déclarations publiques }
+   { DÎ˜clarations publiques }
   published
   //property ENTREE: Boolean read Getpierre write Setpierre default True;
   / property ENTERKey: integer read getpierre write setpierre default 1;
   property DoEnterKey: boolean read varia write varia;
-    { Déclarations publiées }
+    { DÎ˜clarations publiÎ˜es }
   end;
 
 
@@ -97,7 +97,7 @@ begin
           end;
      end;
 
-  inherited WndProc(Message);        { répartition normale }
+  inherited WndProc(Message);        { rÎ˜partition normale }
 end;
 
 

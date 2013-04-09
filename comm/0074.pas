@@ -16,7 +16,7 @@ Autor:  T.Fink
 
 Zweck:  Hardwarenaher Zugriff auf die V24-Schnittstelle.
 
-Copyr.: Thomas Fink, Graurheindorfer Stra·e 81, 5300 Bonn 1.
+Copyr.: Thomas Fink, Graurheindorfer Stra√üe 81, 5300 Bonn 1.
 
   Datum  I Modifikation                                             I durch:
 ---------+----------------------------------------------------------+---------
@@ -64,12 +64,12 @@ function  V24RByte:byte;                        { Wartet, bis Ch empfangen }
 procedure V24TByte( B:byte );                   { Wartet, bis Ch gesendet }
 function  V24ReceiveByte:byte;                  { Bricht mit Timeout ab }
 procedure V24TransmitByte( B:byte );            { Bricht mit Timeout ab }
-procedure V24Select( K:V24Kanal );              { WÑhlt Schnittstelle aus }
+procedure V24Select( K:V24Kanal );              { W√§hlt Schnittstelle aus }
 procedure V24Init( B:V24Baud; D:V24Data; P:V24Parity; S:V24Stop; ds:word );
 function  V24Error( var E:V24Status ):boolean;  { ob Fehler aufgetreten ist }
 procedure V24SetControl( C:V24Control );        { setzt DTR&CTS               }
 function  V24THand:boolean;                     { ob Handshake Senden erlaubt }
-procedure V24RHand( B:boolean );                { setzt Handshake fÅr Partner }
+procedure V24RHand( B:boolean );                { setzt Handshake f√ºr Partner }
 procedure V24TBreak;                            { sendet ein Break }
 procedure V24Config;                            { interaktive Konfiguration }
 function  V24StatusString(S:V24Status):string;  { gibt Status an }
@@ -86,7 +86,7 @@ var
 
 Beschreibung der Pins der V24-Schnittstelle:
 
-Typ: DTE (Terminal), mÑnnlich.
+Typ: DTE (Terminal), m√§nnlich.
 
 DB25 DB9
  Pin Pin Name  Richtung  Verwendung
@@ -100,10 +100,10 @@ DB25 DB9
  20   4  DTR   Out       Betriebsbereitschaft der Software              *3
 
 *1 : Diese Leitung kann abweichend von der V24-Norm betrieben werden,
-     z.B. um um ein bidirektionales Handshake oder eine GerÑtesteuerung
+     z.B. um um ein bidirektionales Handshake oder eine Ger√§testeuerung
      zu ermoeglichen.
-*2 : Ermîglicht die Sendefreigabe innerhalb des UARTs.
-*3 : Kann als +12V zum Kurzschlie·en des Handshakes (CTS,DSR) dienen.
+*2 : Erm√∂glicht die Sendefreigabe innerhalb des UARTs.
+*3 : Kann als +12V zum Kurzschlie√üen des Handshakes (CTS,DSR) dienen.
 *)
 
 
@@ -285,8 +285,8 @@ end;
 
 
 {
-  Initialisieren der Baudrate, der Datenbitzahl, der ParitÑt, der Stopbitzahl
-  und der Zeit in 1/10 sec, die die Receive- &Transmit-routinen warten dÅrfen.
+  Initialisieren der Baudrate, der Datenbitzahl, der Parit√§t, der Stopbitzahl
+  und der Zeit in 1/10 sec, die die Receive- &Transmit-routinen warten d√ºrfen.
 }
 procedure V24Init( B:V24Baud; D:V24Data; P:V24Parity; S:V24Stop; ds:word );
 const

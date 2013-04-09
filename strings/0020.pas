@@ -79,11 +79,11 @@ END.
   ...I tried timing these two routines on my PC (Recently upgraded
   to a 386dx-40 AMD motherboard), and here are the results:
 
- Compiler ³ Length ³ Your routine ³ My routine ³ Ratio
-ÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄ
- TP 7     ³   30   ³    0.03167   ³   0.04043  ³ 1.28
-ÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄ
- PASCAL+  ³   30   ³    0.02037   ³   0.01959  ³ 0.96
+ Compiler â”‚ Length â”‚ Your routine â”‚ My routine â”‚ Ratio
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€
+ TP 7     â”‚   30   â”‚    0.03167   â”‚   0.04043  â”‚ 1.28
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€
+ PASCAL+  â”‚   30   â”‚    0.02037   â”‚   0.01959  â”‚ 0.96
 
  *** Both functions were called in a loop 1000 times on each run,
      result was discarded ($X+ directive).
@@ -92,5 +92,5 @@ END.
  listing in the next message.
                                - Guy
 ---
- ş DeLuxeı/386 1.25 #5060 ş
+ â–  DeLuxeÂ²/386 1.25 #5060 â– 
 

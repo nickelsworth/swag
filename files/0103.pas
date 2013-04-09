@@ -195,9 +195,9 @@ Begin        (* GraphIt *)
                 Percent := 0;
                 OldX := 1;
          {       GotoXY(1,WhereY);
-                WriteLn('ษอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออป');
-                WriteLn('บ                                                                             บ');
-                WriteLn('ศอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ');}
+                WriteLn('โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—');
+                WriteLn('โ•‘                                                                             โ•‘');
+                WriteLn('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');}
             {    GotoXY(3,WhereY - 2);}
         End Else
         Begin
@@ -467,15 +467,15 @@ FOR J:=1 TO 24 DO
 FOR I:=1 TO 80 DO
  BEGIN
  GOTOXY(I,J);
- WRITELN('Û');
+ WRITELN('โ–');
  END;
 textattr:=white+(16*0);
 FOR I:=1 TO 80 DO
 BEGIN
 GOTOXY(I,1);
-WRITELN('Û');
+WRITELN('โ–');
 GOTOXY(I,23);
-WRITELN('Û');
+WRITELN('โ–');
 END;
 textattr:=black+(16*white);
 GOTOXY(3,1);
@@ -489,31 +489,31 @@ textattr:=white+(16*9);
 FOR I:=1 TO 27 DO
  BEGIN
  GOTOXY(2+I,3);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  GOTOXY(2+I,20);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  END;
 FOR J:=1 TO 16 DO
  BEGIN
  GOTOXY(2,3+J);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(29,3+J);
- WRITELN('ณ');
+ WRITELN('โ”');
  END;
  GOTOXY(29,3);
- WRITELN('ฟ');
+ WRITELN('โ”');
  GOTOXY(29,20);
- WRITELN('ู');
+ WRITELN('โ”');
  GOTOXY(2,3);
- WRITELN('ฺ');
+ WRITELN('โ”');
  GOTOXY(2,20);
- WRITELN('ภ');
+ WRITELN('โ””');
 textattr:=9+(16*0);
 for j:=1 to 16 do
 for i:=1 to 26 do
 begin
 gotoxy(2+i,3+j);
-writeln('Û');
+writeln('โ–');
 end;
 EnableHighBgd;
 textattr:=10+(16*9);
@@ -532,27 +532,27 @@ textattr:=white+(16*9);
 FOR I:=1 TO 37 DO
  BEGIN
  GOTOXY(40+I,3);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  GOTOXY(40+I,5);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  END;
  GOTOXY(40,4);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(77,4);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(77,3);
- WRITELN('ฟ');
+ WRITELN('โ”');
  GOTOXY(77,5);
- WRITELN('ู');
+ WRITELN('โ”');
  GOTOXY(40,3);
- WRITELN('ฺ');
+ WRITELN('โ”');
  GOTOXY(40,5);
- WRITELN('ภ');
+ WRITELN('โ””');
 textattr:=9+(16*0);
 for i:=1 to 36 do
 begin
 gotoxy(40+i,4);
-writeln('Û');
+writeln('โ–');
 end;
 textattr:=10+(16*9);
 gotoxy(42,3);
@@ -569,32 +569,32 @@ textattr:=white+(16*9);
 FOR I:=1 TO 37 DO
  BEGIN
  GOTOXY(40+I,7);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  GOTOXY(40+I,10);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  END;
  GOTOXY(40,8);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(77,8);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(40,9);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(77,9);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(77,7);
- WRITELN('ฟ');
+ WRITELN('โ”');
  GOTOXY(77,10);
- WRITELN('ู');
+ WRITELN('โ”');
  GOTOXY(40,7);
- WRITELN('ฺ');
+ WRITELN('โ”');
  GOTOXY(40,10);
- WRITELN('ภ');
+ WRITELN('โ””');
 textattr:=9+(16*9);
 FOR J:=1 TO 2 DO
 for i:=1 to 36 do
 begin
 gotoxy(40+i,7+J);
-writeln('Û');
+writeln('โ–');
 end;
 textattr:=10+(16*9);
 gotoxy(42,7);
@@ -696,31 +696,31 @@ textattr:=white+(16*9);
 FOR I:=1 TO 37 DO
  BEGIN
  GOTOXY(40+I,12);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  GOTOXY(40+I,20);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  END;
 FOR I:=1 TO 7 DO
 BEGIN
  GOTOXY(40,12+I);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(77,12+I);
- WRITELN('ณ');
+ WRITELN('โ”');
 END;
  GOTOXY(77,12);
- WRITELN('ฟ');
+ WRITELN('โ”');
  GOTOXY(77,20);
- WRITELN('ู');
+ WRITELN('โ”');
  GOTOXY(40,12);
- WRITELN('ฺ');
+ WRITELN('โ”');
  GOTOXY(40,20);
- WRITELN('ภ');
+ WRITELN('โ””');
 textattr:=9+(16*0);
 FOR J:=1 TO 7 DO
 for i:=1 to 36 do
 begin
 gotoxy(40+i,12+J);
-writeln('Û');
+writeln('โ–');
 end;
 SHADOW(12,77,19,77);
 SHADOW(20,41,20,77);
@@ -755,27 +755,27 @@ textattr:=WHITE+(16*9);
 FOR I:=1 TO 57 DO
  BEGIN
  GOTOXY(10+I,7);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  GOTOXY(10+I,9);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  END;
  GOTOXY(10,8);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(67,8);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(67,7);
- WRITELN('ฟ');
+ WRITELN('โ”');
  GOTOXY(67,9);
- WRITELN('ู');
+ WRITELN('โ”');
  GOTOXY(10,7);
- WRITELN('ฺ');
+ WRITELN('โ”');
  GOTOXY(10,9);
- WRITELN('ภ');
+ WRITELN('โ””');
 textattr:=9+(16*0);
 for i:=1 to 56 do
 begin
 gotoxy(10+i,8);
-writeln('Û');
+writeln('โ–');
 end;
 textattr:=10+(16*9);
 gotoxy(12,7);
@@ -812,27 +812,27 @@ textattr:=WHITE+(16*9);
 FOR I:=1 TO 57 DO
  BEGIN
  GOTOXY(10+I,7);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  GOTOXY(10+I,9);
- WRITELN('ฤ');
+ WRITELN('โ”€');
  END;
  GOTOXY(10,8);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(67,8);
- WRITELN('ณ');
+ WRITELN('โ”');
  GOTOXY(67,7);
- WRITELN('ฟ');
+ WRITELN('โ”');
  GOTOXY(67,9);
- WRITELN('ู');
+ WRITELN('โ”');
  GOTOXY(10,7);
- WRITELN('ฺ');
+ WRITELN('โ”');
  GOTOXY(10,9);
- WRITELN('ภ');
+ WRITELN('โ””');
 textattr:=9+(16*0);
 for i:=1 to 56 do
 begin
 gotoxy(10+i,8);
-writeln('Û');
+writeln('โ–');
 end;
 textattr:=10+(16*9);
 gotoxy(12,7);

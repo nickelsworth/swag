@@ -1,5 +1,5 @@
 {$A-,B-,E-,G+,N-,O-,R-,S-,T-,V-,X+}
-     {¥ âà®£ âì “œ…’ !!!}
+     {Ã¬Ã‘ Î“Î±Â«ÃºÃ¡Î“âˆ Ã´Ã¼Â£Ã Ã† !!!}
      {MODS File player }
      { See test program and OBJ at the end .. }
 Unit Mods;
@@ -545,9 +545,9 @@ begin
  repeat
   ch:=ReadKey; if ch=#0 then ch:=ReadKey;
   Case ch of
-   #43 :  begin Inc(Volume); SetVolume(Volume); end; {‘¥àë© ¯«îá}
-   #45 :  begin Dec(Volume); SetVolume(Volume); end; {‘¥àë© ¬¨­ãá}
-   #42 :  begin Volume:=255; SetVolume(Volume); end; {‘¥à ï §¢¥§¤®çª  MAX}
+   #43 :  begin Inc(Volume); SetVolume(Volume); end; {Ã¦Ã‘Î±Î´âŒ Â»Â½ÎµÃŸ}
+   #45 :  begin Dec(Volume); SetVolume(Volume); end; {Ã¦Ã‘Î±Î´âŒ Â¼Â¿Â¡Ï€ÃŸ}
+   #42 :  begin Volume:=255; SetVolume(Volume); end; {Ã¦Ã‘Î±Ã¡âˆ© ÂºÃ³Ã‘ÂºÃ±Â«Ï„Â¬Ã¡ MAX}
   end;
  until ch in [#27];
  StopMod;

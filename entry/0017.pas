@@ -20,7 +20,7 @@ Function Input(X,Y: Byte;StartStr,BackG,PassChar: String;MaxLen,StartPos:
 String;
 X,Y         Where on screen to put the input.
 StartStr    Default input string.
-BackG       Background Character, eg ' ' or '°' etc.
+BackG       Background Character, eg ' ' or 'â–‘' etc.
 PassChar    If defined this character will be displyed instead of the input
 stream.MaxLen      MaxLen of Input.
 StartPos    Where in input string to place the cursor, -1 = End of StartStr
@@ -244,7 +244,7 @@ end;
 
 BEGIN
  Write('Enter Your Name: ');
- S:=Input(WhereX,WhereY,'KLoPPeR','°','',35,-1,[#32..#175],True,IS);
+ S:=Input(WhereX,WhereY,'KLoPPeR','â–‘','',35,-1,[#32..#175],True,IS);
  WriteLn;
  WriteLn('Hello '+S+', have a nice day today!');
 END.

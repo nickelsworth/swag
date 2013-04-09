@@ -27,12 +27,12 @@ END;
 VAR S : STRING;
 
 BEGIN
-  S := 'ННT??$h$бббiНб????s$ %i%s? ???Нa% ?TНe%st.???ббб%б.%бббб.';
+  S := 'в•ђв•ђT??$h$ГџГџГџiв•ђГџ????s$ %i%s? ???в•ђa% ?Tв•ђe%st.???ГџГџГџ%Гџ.%ГџГџГџГџ.';
   Writeln('the test string: ');
   Writeln(S);
   Write('press <RETURN>'); Readln;
   Writeln('the test string with cremove: ');
-  writeln(CREMOVE(S, '%$Н?б'));
+  writeln(CREMOVE(S, '%$в•ђ?Гџ'));
   Writeln('Ok...');
 END.
 

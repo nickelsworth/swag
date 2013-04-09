@@ -136,15 +136,15 @@ TmpVar : Array [1..10] of Integer;
  WinSet : Array [1..WinSets,1..WinComponents] of Char;
 
 Begin
-          Winset[1,01]:='€'; {Top left}
-          Winset[1,02]:='ﬂ'; {Top}
-          Winset[1,03]:='€'; {Top right}
-          Winset[1,04]:='›'; {Left side}
-          Winset[1,05]:='ﬁ'; {Right side}
-          Winset[1,06]:='€'; {Bottom Left}
-          Winset[1,07]:='‹'; {Bottom}
-          Winset[1,08]:='€'; {Bottom Right}
-          Winset[1,09]:='±'; {Shadow}
+          Winset[1,01]:='‚ñà'; {Top left}
+          Winset[1,02]:='‚ñÄ'; {Top}
+          Winset[1,03]:='‚ñà'; {Top right}
+          Winset[1,04]:='‚ñå'; {Left side}
+          Winset[1,05]:='‚ñê'; {Right side}
+          Winset[1,06]:='‚ñà'; {Bottom Left}
+          Winset[1,07]:='‚ñÑ'; {Bottom}
+          Winset[1,08]:='‚ñà'; {Bottom Right}
+          Winset[1,09]:='‚ñí'; {Shadow}
  TXTFG(FGCol);
  TXTBG(BGCol);
  Locate(X1,Y1);

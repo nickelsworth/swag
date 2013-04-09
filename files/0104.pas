@@ -32,7 +32,7 @@ procedure CodeFile(FN: String);
 
 const
   GenTopicSize: Byte = 7;
-  TopicChar = 'þ';
+  TopicChar = 'â– ';
 
 implementation
 uses Dos;
@@ -70,7 +70,7 @@ begin
   Reset(F);
   if IOResult <> 0 then
   begin
-    Writeln('þ CodeFile þ File not found: ', FN);
+    Writeln('â–  CodeFile â–  File not found: ', FN);
     Halt(10);
   end;
   Assign(FTo, '$CODE$.$$$');
@@ -178,7 +178,7 @@ begin
   until (St = Search) or EOF(F);
   if EOF(F) then
   begin
-    Writeln('þ TDataFile.Readmode þ  Topic not found: ',Topic);
+    Writeln('â–  TDataFile.Readmode â–   Topic not found: ',Topic);
     Halt(10);
   end;
   Readln(F, ReserveStr);
@@ -200,7 +200,7 @@ function TDataFile.Read: DataStr;
 begin
   if EndTopic then
   begin
-    Writeln('þ TDataFile.Read þ Topic data overflow: ', CurTopic);
+    Writeln('â–  TDataFile.Read â–  Topic data overflow: ', CurTopic);
     Halt(10);
   end;
 
@@ -239,7 +239,7 @@ begin
 
   if LastOne then
   begin
-    Writeln('þ TDataFile.Delete þ Topic not found: ',Topic);
+    Writeln('â–  TDataFile.Delete â–  Topic not found: ',Topic);
     Halt(100);
   end;
 

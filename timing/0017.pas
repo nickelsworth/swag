@@ -16,9 +16,9 @@ interface
   procedure Elapsed(var Hour,Minute,Second,HundSec:Word); 
   function ElapsedStr:String;    { 'HH:MM:SS,HH' }
   { Elapsed und ElapsedStr ermitteln die Zeit, die seit dem Aufruf von  }
-  { Start vergangen ist. Schaltjahre werden nicht berÅcksichtigt.  }
+  { Start vergangen ist. Schaltjahre werden nicht ber√ºcksichtigt.  }
   procedure beep;           { gibt kurzen Ton }
-  function escape:Boolean;  { true, wenn <Esc> gedrÅckt wurde (ReadKey) }
+  function escape:Boolean;  { true, wenn <Esc> gedr√ºckt wurde (ReadKey) }
 {***************************************************************************}
 
 implementation

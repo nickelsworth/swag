@@ -2,7 +2,7 @@
 {                                                       }
 {       xTool - Component Collection                    }
 {                                                       }
-{       Copyright (c) 1995 Stefan Böther                }
+{       Copyright (c) 1995 Stefan BÃ·ther                }
 {                            stefc@fabula.com           }
 {*******************************************************}
 {
@@ -705,24 +705,24 @@ end;
 
 function  strNiceDateDefault(const S, Default: String): String;
 (* sinn der Procedure:
-   Irgendeinen String übergeben und in ein leidlich brauchbares Datum verwandeln.
+   Irgendeinen String â¿bergeben und in ein leidlich brauchbares Datum verwandeln.
    Im Wesentlichen zum Abfangen des Kommazeichens auf dem Zehnerfeld.
-   eingabe 10 = Rückgabe 10 des Laufenden Monats
-   eingabe 10.12 = Rückgabe des 10.12. des laufenden Jahres.
-   eingabe 10.12.96 = Rückgabe des Strings
-   eingabe 10,12,96 = Rückgabe 10.12.95 (wird dann won STRtoDATE() gefressen)
-   Eine Plausbilitätskontrolle des Datums findet nicht Statt.
+   eingabe 10 = Râ¿ckgabe 10 des Laufenden Monats
+   eingabe 10.12 = Râ¿ckgabe des 10.12. des laufenden Jahres.
+   eingabe 10.12.96 = Râ¿ckgabe des Strings
+   eingabe 10,12,96 = Râ¿ckgabe 10.12.95 (wird dann won STRtoDATE() gefressen)
+   Eine PlausbilitÎ£tskontrolle des Datums findet nicht Statt.
    Geplante Erweiterung:
-   eingabe: +14  = Rückgabe 14 Tage Weiter
-   eingabe: +3m  = Rückgabe 3 Monate ab Heute
-   eingabe: +3w  = Rückgabe 3 Wochen (3*7 Tage) ab Heute
-   Das gleiche auch Rückwärts mit  Minuszeichen
-   eingabe: e oder E oder f  = Nächster Erster
-   eingabe: e+1m Erster des übernächsten Monats
-   Da läßt sich aber noch trefflich weiterspinnen
+   eingabe: +14  = Râ¿ckgabe 14 Tage Weiter
+   eingabe: +3m  = Râ¿ckgabe 3 Monate ab Heute
+   eingabe: +3w  = Râ¿ckgabe 3 Wochen (3*7 Tage) ab Heute
+   Das gleiche auch Râ¿ckwÎ£rts mit  Minuszeichen
+   eingabe: e oder E oder f  = NÎ£chster Erster
+   eingabe: e+1m Erster des â¿bernÎ£chsten Monats
+   Da lÎ£â–€t sich aber noch trefflich weiterspinnen
 
-   EV. mit Quelle rausgeben, damit sich die Engländer und Franzosen an
-   Ihren Datumsformaten selbst erfreuen können und wir die passenden umsetzungen
+   EV. mit Quelle rausgeben, damit sich die EnglÎ£nder und Franzosen an
+   Ihren Datumsformaten selbst erfreuen kÃ·nnen und wir die passenden umsetzungen
    bekommen. *)
 var
   a        : array [0..2] of string[4];
@@ -976,13 +976,13 @@ begin
  j := length(hs3);
  while i > 0 do
  begin
-   delete(hs,1,i+j-1); {Anfang Rest geändert 8.7.96 KM}
-   hs1 := Hs1+copy(s,1,i-1); {Kopieren geändert 8.7.96 KM}
-   delete(s,1,i-1); {Löschen bis Anfang posgeändert 8.7.96 KM}
+   delete(hs,1,i+j-1); {Anfang Rest geÎ£ndert 8.7.96 KM}
+   hs1 := Hs1+copy(s,1,i-1); {Kopieren geÎ£ndert 8.7.96 KM}
+   delete(s,1,i-1); {LÃ·schen bis Anfang posgeÎ£ndert 8.7.96 KM}
    hs2 := copy(s,1,j); {Bis ende pos Sichern}
-   delete(s,1,j); {Löschen bis ende Pos}
+   delete(s,1,j); {LÃ·schen bis ende Pos}
    if    (not (srWord in Options))
-       or (pos(s[1],' .,:;-#''+*?=)(/&%$§"!{[]}\~<>|') > 0) then
+       or (pos(s[1],' .,:;-#''+*?=)(/&%$Âº"!{[]}\~<>|') > 0) then
     begin
      {Quelle durch ziel erstzen}
      hs1 := hs1+dest;
@@ -1216,7 +1216,7 @@ begin
                        n:=n*m;
                      end;
          ',',#46   : m := 10;
-         '('       : Bracket := True; {hier Klammeranfang merken, Zähler!!}
+         '('       : Bracket := True; {hier Klammeranfang merken, ZÎ£hler!!}
          '*','x',
          'X',
          '/','+'   : begin
@@ -1227,7 +1227,7 @@ begin
                      end;
        end {case}
     else
-       Bracket:= Expr[i]<> ')'; {hier Rekursiver Aufruf, Zähler !!};
+       Bracket:= Expr[i]<> ')'; {hier Rekursiver Aufruf, ZÎ£hler !!};
   end;
   Stack[j] := z/n;
   for i := 1 to j do

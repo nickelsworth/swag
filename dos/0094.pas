@@ -4,7 +4,7 @@ From: Rene Schwietzke <rs@informatik.tu-cottbus.de>
 
 program wildcards;
 {****************************************************************************
- *  René Schwietzke  Richard-Koenig-Str. 08  D-04916 Herzberg  GERMANY      *
+ *  RenÎ˜ Schwietzke  Richard-Koenig-Str. 08  D-04916 Herzberg  GERMANY      *
  *                                                                          *
  *  Internet: rs@informatik.tu-cottbus.de                                   *
  ****************************************************************************
@@ -174,7 +174,7 @@ begin
  {examples with the right result 'T' or 'F'}
  writeln(wild('Gebauer','G?bauer',false),' T');
  writeln(wild('Heiter','*r*s',false),' F');
- writeln(wild('Löffler','*r*s',false),' F');
+ writeln(wild('LÃ·ffler','*r*s',false),' F');
  writeln(wild('Trinks','*r*s',false),' T');
  writeln(wild('Schwietzke','*e*e*',false),' T');
  writeln(wild('Endemann','*e*e*',false),' F');
@@ -195,13 +195,13 @@ begin
  writeln(wild('Schwietzke','Sch*k',false),' F');
  writeln(wild('Schwietzke','Sch*i?t*k?',false),' T');
 
- writeln(wild('Physik in Übersichten','?*',false),' T');
- writeln(wild('Physik in Übersichten','P*??*en',false),' T');
+ writeln(wild('Physik in â–„bersichten','?*',false),' T');
+ writeln(wild('Physik in â–„bersichten','P*??*en',false),' T');
 
- writeln(wild('Alle Physik in Übersichten Physik in Ablagen',
+ writeln(wild('Alle Physik in â–„bersichten Physik in Ablagen',
               '*n Physik*',false),' T');
 
  {Thank's for testing and using.}
- {René Schwietzke 01-16-1995}
+ {RenÎ˜ Schwietzke 01-16-1995}
 end.
 

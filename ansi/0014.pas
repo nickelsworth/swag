@@ -63,7 +63,7 @@ begin
     ParseFile (fname);
     inc (FileNum);
   Until paramstr (FileNum + 1) = '';
-  Writeln; Write (' þ Done, With ',Filesdone,' File');
+  Writeln; Write (' â–  Done, With ',Filesdone,' File');
   if Filesdone <> 1 then Write ('s');
   Writeln (' processed.');
 end.

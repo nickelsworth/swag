@@ -9,7 +9,7 @@ Uses Crt;
 *)
 
 Const
-  SpinChar : Array [1..4] of Char = ('³','/','Ä','\');
+  SpinChar : Array [1..4] of Char = ('â”‚','/','â”€','\');
 
 Function ReadKeySpin(Wait : Byte) : Char;
 Var

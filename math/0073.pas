@@ -276,7 +276,7 @@ BEGIN
 
       Tfp_newchar(p);
 
-    {----Correct ñ.xx to ñ0.xx}
+    {----Correct Â±.xx to Â±0.xx}
       IF (Length(temp)=1) AND
          (temp[1] IN ['+','-']) AND
          (tfp_nextchar='.')
@@ -288,7 +288,7 @@ BEGIN
           IF (tfp_nextchar='E')
             THEN
               BEGIN
-              {----Correct ñxxx.E to ñxxx.0E}
+              {----Correct Â±xxx.E to Â±xxx.0E}
                 IF (temp[Length(temp)-1]='.')
                   THEN Insert('0',temp,Length(temp));
                 Tfp_newchar(p);
@@ -306,7 +306,7 @@ BEGIN
       IF (tfp_nextchar=' ')
         THEN Tfp_skip(p);
 
-    {----Correct ñxx. to ñxx.0 but NOT ñxxEñyy.}
+    {----Correct Â±xx. to Â±xx.0 but NOT Â±xxEÂ±yy.}
       IF (temp[Length(temp)]='.') AND
          (Pos('E',temp)=0)
         THEN temp:=temp+'0';

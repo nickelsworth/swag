@@ -9,28 +9,28 @@
 PROCEDURE load_pcx(dx, dy : WORD; name : STRING);
 VAR q                          : FILE;        { Quellendatei-Handle         }
     b                          : ARRAY[0..2047] OF BYTE;  { Puffer          }
-    anz, pos, c, w, h, e, pack : WORD;        { diverse benîtigte Variablen }
-    x, y                       : WORD;        { fÅr die PCX-Laderoutine     }
+    anz, pos, c, w, h, e, pack : WORD;        { diverse ben√∂tigte Variablen }
+    x, y                       : WORD;        { f√ºr die PCX-Laderoutine     }
 
 LABEL ende_background;                        { Sprungmarken definieren     }
 
 BEGIN
   x := dx; y := dy;                           { Nullpunkt festsetzen        }
 
-  ASSIGN(q, name); {$I-} RESET(q, 1); {$I+}   { Quellendatei îffnen         }
-  IF IORESULT <> 0 THEN                       { Fehler beim ôffnen?         }
+  ASSIGN(q, name); {$I-} RESET(q, 1); {$I+}   { Quellendatei √∂ffnen         }
+  IF IORESULT <> 0 THEN                       { Fehler beim √ñffnen?         }
     GOTO ende_background;                     { Ja: zum Ende springen       }
 
   BLOCKREAD(q, b, 128, anz);                  { Header einlesen             }
 
   IF (b[0] <> 10) OR (b[3] <> 8) THEN         { wirklich ein PCX-File?      }
   BEGIN
-    CLOSE(q);                                 { Nein: Datei schlie·en und   }
+    CLOSE(q);                                 { Nein: Datei schlie√üen und   }
     GOTO ende_background;                     {       zum Ende springen     }
   END;
 
   w := SUCC((b[9] - b[5]) SHL 8 + b[8] - b[4]);  { Breite auslesen          }
-  h := SUCC((b[11] - b[7]) SHL 8 + b[10] - b[6]);  { Hîhe auslesen          }
+  h := SUCC((b[11] - b[7]) SHL 8 + b[10] - b[6]);  { H√∂he auslesen          }
 
   pack := 0; c := 0; e := y + h;
   REPEAT
@@ -58,7 +58,7 @@ BEGIN
       IF c = w THEN                           { letzte Spalte erreicht?     }
       BEGIN
         c := 0;                               { Ja: Spalte auf 0 setzen und }
-        INC(y);                               {     in die nÑchste Zeile    }
+        INC(y);                               {     in die n√§chste Zeile    }
       END;
     END;
   UNTIL (anz = 0) OR (y = e);

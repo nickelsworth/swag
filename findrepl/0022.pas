@@ -37,9 +37,9 @@ Begin;
       te:=te+upcase(strn[i]);
       {German Umlaut}
       case strn[i] of
-       'Ñ' : te[i]:='é';
-       'î' : te[i]:='ô';
-       'Å' : te[i]:='ö';
+       '√§' : te[i]:='√Ñ';
+       '√∂' : te[i]:='√ñ';
+       '√º' : te[i]:='√ú';
       End;
     End;
   End;

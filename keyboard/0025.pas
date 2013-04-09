@@ -1,5 +1,5 @@
 ==============================================================================
- BBS: ÄðÄ The Graphics Connection ÄðÄ Speciali
+ BBS: â”€â‰¡â”€ The Graphics Connection â”€â‰¡â”€ Speciali
   To: JOE JACOBSON                 Date: 12-20-92 (15:25)
 From: GUY MCLOUGHLIN             Number: 1137   [121] Pascal-IL
 Subj: CTRL-ALT-DELETE TRAPPING   Status: Public
@@ -100,6 +100,6 @@ BEGIN
 END.
                                - Guy
 ---
- þ DeLuxeý/386 1.25 #5060 þ
- þ QNet3á þ ILink - Canada Remote Systems - Toronto, Ont (416) 798-4713
+ â–  DeLuxeÂ²/386 1.25 #5060 â– 
+ â–  QNet3ÃŸ â–  ILink - Canada Remote Systems - Toronto, Ont (416) 798-4713
 

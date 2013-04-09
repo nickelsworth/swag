@@ -138,7 +138,7 @@ Begin
         Repeat
               GrassX:=0;
               Repeat
-                    OutTextXY(GrassX,GrassY,'±');
+                    OutTextXY(GrassX,GrassY,'â–’');
                     Inc(GrassX,8);
               Until (GrassX >= GetMaxX);
               Inc(GrassY,8);

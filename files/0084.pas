@@ -35,7 +35,7 @@ Use the file handle methods instead.
    FUNCTION AsmFilesize(CONST F): longint;
    { -- F MUST be a Text or File-variable. }
    ASSEMBLER;
-   { --  LSEEK ÄÄ Move file read/write pointer (Func 42)
+   { --  LSEEK â”€â”€ Move file read/write pointer (Func 42)
 
      -- INT 21 - DOS 2+
      --    AH = 42h

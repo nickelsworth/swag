@@ -1046,35 +1046,35 @@ TBCDSign - An enumerated data type used by the TBCD object to represent the
 TBCD
 -----------------------------------------------------------------------------
  TObject       TBCD
-ÚÄÄÄÄÄÄ¿      ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-³      ³      ³ BCDSize                         ³
-ÃÄÄÄÄÄÄ´      ³ Sign                            ³
-³ Init ³      ³ Value                           ³
-³*Done ³      ³ Precision                       ³
-³ Free ³      ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
-ÀÄÄÄÄÄÄÙ      ³ InitBCD         MultiplyByBCD   ³
-              ³ InitReal        MultiplyByReal  ³
-              ³ InitPChar       MultiplyByPChar ³
-              ³ Done            DivideByBCD     ³
-              ³ Load            DivideByReal    ³
-              ³ Store           DivideByPChar   ³
-              ³ GetValue        AbsoluteValue   ³
-              ³ GetSign         Increment       ³
-              ³ GetPrecision    Decrement       ³
-              ³ GetBCDSize      ShiftLeft       ³
-              ³ SetValueBCD     ShiftRight      ³
-              ³ SetValueReal    BCD2Int         ³
-              ³ SetValuePChar   BCD2Real        ³
-              ³ SetSign         PicStr          ³
-              ³ SetPrecision    StrPic          ³
-              ³ SetBCDSize      CompareBCD      ³
-              ³ AddBCD          CompareReal     ³
-              ³ AddReal         ComparePChar    ³
-              ³ AddPChar                        ³
-              ³ SubtractBCD                     ³
-              ³ SubtractReal                    ³
-              ³ SubtractPChar                   ³
-              ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+â”Œâ”€â”€â”€â”€â”€â”€â”      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚      â”‚      â”‚ BCDSize                         â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”¤      â”‚ Sign                            â”‚
+â”‚ Init â”‚      â”‚ Value                           â”‚
+â”‚*Done â”‚      â”‚ Precision                       â”‚
+â”‚ Free â”‚      â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â””â”€â”€â”€â”€â”€â”€â”˜      â”‚ InitBCD         MultiplyByBCD   â”‚
+              â”‚ InitReal        MultiplyByReal  â”‚
+              â”‚ InitPChar       MultiplyByPChar â”‚
+              â”‚ Done            DivideByBCD     â”‚
+              â”‚ Load            DivideByReal    â”‚
+              â”‚ Store           DivideByPChar   â”‚
+              â”‚ GetValue        AbsoluteValue   â”‚
+              â”‚ GetSign         Increment       â”‚
+              â”‚ GetPrecision    Decrement       â”‚
+              â”‚ GetBCDSize      ShiftLeft       â”‚
+              â”‚ SetValueBCD     ShiftRight      â”‚
+              â”‚ SetValueReal    BCD2Int         â”‚
+              â”‚ SetValuePChar   BCD2Real        â”‚
+              â”‚ SetSign         PicStr          â”‚
+              â”‚ SetPrecision    StrPic          â”‚
+              â”‚ SetBCDSize      CompareBCD      â”‚
+              â”‚ AddBCD          CompareReal     â”‚
+              â”‚ AddReal         ComparePChar    â”‚
+              â”‚ AddPChar                        â”‚
+              â”‚ SubtractBCD                     â”‚
+              â”‚ SubtractReal                    â”‚
+              â”‚ SubtractPChar                   â”‚
+              â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
 Fields ---------------------------------------------------------------------
 

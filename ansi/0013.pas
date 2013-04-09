@@ -1,8 +1,8 @@
-{ﬁ Oh, about the thedraw screens, here's
-ﬁ a bit of code in which you can load up a File saved as O)bject, P)ascal.
-ﬁ Oh this is saved as Uncrunched not Crunched.
-ﬁ
-ﬁ {$L,TESTFile.OBJ}  {This is the File you saved in thedraw as a Object}
+{‚ñê Oh, about the thedraw screens, here's
+‚ñê a bit of code in which you can load up a File saved as O)bject, P)ascal.
+‚ñê Oh this is saved as Uncrunched not Crunched.
+‚ñê
+‚ñê {$L,TESTFile.OBJ}  {This is the File you saved in thedraw as a Object}
                     {It is linked directly into the code at Compile time}
 
  Procedure ImageData; external;   {The imagedata Procedure you can}

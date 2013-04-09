@@ -3,7 +3,7 @@
 > I'm trying to get my Sound Blaster card (version 1.0) to speak a string,
 > like the SAY.EXE program that comes with SB.
 
-(Sorry for the german comments, but I'm to lazy to rewrite them :-|) }
+(Sorry for the german comments, but I'm to lazy to rewrite them ‚â°:-|) }
 
 Program Talk;
 { by Mirko Holzer; 16.2.1994 }
@@ -21,8 +21,8 @@ Type
     Signature: array[0..2] of char;  {Signatur: "FB "}
     MajorVers: byte;                 {Hauptversion ??}
     Entry: pointer;                  {Treiber Einsprungadresse}
-    Unknown: array[0..23] of byte;   {Wei· nicht was da drin steht...}
-    DataLen: byte;                   {LÑnge des zu sprechenden Strings}
+    Unknown: array[0..23] of byte;   {Wei√ü nicht was da drin steht...}
+    DataLen: byte;                   {L√§nge des zu sprechenden Strings}
     TalkStr: array[0..255] of char;  {Zu sprechender String}
   end;
   pTalkEpStruc=^tTalkEpStruc;
@@ -74,7 +74,7 @@ begin
   end;
   TalkIt(sbt,'Hello, here is S B talker speaking... Please enter your string '+
              'or press enter to stop the program.');
-  Writeln('Zu sprechenden String eingeben oder <ENTER> drÅcken fÅr Ende.');
+  Writeln('Zu sprechenden String eingeben oder <ENTER> dr√ºcken f√ºr Ende.');
   Repeat
     eing:='';
     Readln(eing);

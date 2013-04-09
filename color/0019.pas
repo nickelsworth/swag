@@ -165,7 +165,7 @@ const
   YellowOnLtGray          : byte = $7E;
   WhiteOnLtGray           : byte = $7F;
 
-  {鷠
+  {路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路路}
 
   { black background blinking }
 

@@ -2,7 +2,7 @@
   A good VGA Scroll.
 
   Author   : Jose Antonio Noda
-             Urb: 80 viviendas, B-5§, 1¦ izq.
+             Urb: 80 viviendas, B-5Âº, 1Âª izq.
              35620 - Gran Tarajal
              Fuerteventura - (Islas Canarias)
              Spain

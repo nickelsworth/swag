@@ -1,9 +1,9 @@
-(* ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Programated by Vladimir Zahoransky                        ³
-   ³                Vladko software                            ³
-   ³ Contact      : zahoran@cezap.ii.fmph.uniba.sk             ³
-   ³ Program tema : Triangles in triangle - rekusion           ³
-   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ *)
+(* â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Programated by Vladimir Zahoransky                        â”‚
+   â”‚                Vladko software                            â”‚
+   â”‚ Contact      : zahoran@cezap.ii.fmph.uniba.sk             â”‚
+   â”‚ Program tema : Triangles in triangle - rekusion           â”‚
+   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ *)
 
 {  Well, this is nice effekt. It is easy to undestand if you undestand
   rekpic20.pas. There are only two variables. Parameter of cycle (in

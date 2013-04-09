@@ -61,7 +61,7 @@ begin
     if a[i] then
       Write(' ')
     else
-      Write('Û');
+      Write('â–ˆ');
   end;
 end.
 

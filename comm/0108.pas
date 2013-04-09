@@ -467,7 +467,7 @@ Procedure X00Dvr.SetBaud(Bd,Sz : Word; Prty : Char; StpBts : Word);
       Bits := Bits + 3
     Else if Parity = 'O' Then
 
-{  c¾îºD‘B6´= Bits + 1;}
+{  câ•›Îµâ•‘DÃ¦B6â”¤= Bits + 1;}
 
     Bits := Bits Shl 1;
     If Stops = 2 then
@@ -735,7 +735,7 @@ Procedure X00Dvr.TxCharNoWait(Ch : Char);
 Function  X00Dvr.RXPeekChar(Var Ch : Char) : Boolean;
   Begin
     If MaxFuncs < $0C Then
-      c¾îºD‘B6Q|   Regs.DX := Port;
+      câ•›Îµâ•‘DÃ¦B6Q|   Regs.DX := Port;
     Regs.AH := $0C;
     Intr(CommVect,Regs);
     Ch := Char(Regs.AL);
@@ -878,12 +878,12 @@ Procedure X00Dvr.XmitOn;
 --- FD 1.99c
  * Origin: If you clone around you'll end up talking to yourself! (1:105/324.1)
 
-Ä Turbo Pascal ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ PASCAL Ä
+â”€ Turbo Pascal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ PASCAL â”€
 Msg  : 351 of 400                                                               
 From : Gordon Tackett                      1:105/324.1          01 Apr 91  10:44 
 To   : Roland Frederic                     2:292/500.0                           
 Subj : BBS Program in TP. Part 5 of 5                                         
-ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 {
 * Transmitter Off
 *
@@ -1040,7 +1040,7 @@ Function X00Dvr.InsertTimerFunction(TF : TimerFunctionPtr) : Boolean;
 
 Function X00Dvr.DeleteTimerFunction(TF : TimerFunctionPtr) : Boolean;
   Begin
-    I„ÎîºD‘B6ñ9 < $16 Then
+    IÃ¤â•¬Îµâ•‘DÃ¦B6Â±9 < $16 Then
         Exit;
     Regs.AH := $16;
     Regs.AL := 0;

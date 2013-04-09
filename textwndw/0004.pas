@@ -114,23 +114,23 @@ begin
   TextColor(FrameColor);
   Window(1, 1, 80, 24);
   GotoXY(X - 2, Y - 1);
-  Write('Ú');
+  Write('â”Œ');
   For A := 1 to Columns + 2 Do
-    Write('Ä');
+    Write('â”€');
 
-  Write('¿');
+  Write('â”');
   For A := 1 to Lines Do
   begin
     GotoXY(X - 2, Y + A - 1);
-    Write('³');
+    Write('â”‚');
     GotoXY(X + Columns + 1, Y + A - 1);
-    Write('³');
+    Write('â”‚');
   end;
   GotoXY(X - 2, Y + Lines);
-  Write('À');
+  Write('â””');
   For A := 1 to Columns + 2 Do
-    Write('Ä');
-  Write('Ù');
+    Write('â”€');
+  Write('â”˜');
   If Shade = Shading Then
   begin
     For A := Y to Y + Lines + 1 Do

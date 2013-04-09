@@ -11,7 +11,7 @@ enhance component as a descendant from          www.fabula.com
 TBitmap and register the GIF file format        stefc@fabula.com
 so it's ideal for include it in the xTools      CompuServe 100023,275
 Now you can Load bitmaps from
-by Stefan Böther
+by Stefan BÃ·ther
 
 Left Open :
   - Also store the format via SaveToStream override

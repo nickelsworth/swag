@@ -12,15 +12,15 @@ BO BendTSEN
   Made available to everyone 1993 by Bo Bendtsen 2:231/111 +4542643827
 
      Lowcase   Upper/high/capital letters
-              í
-     õ         ù
-     Ü         è
-     Ñ         é
-     á         Ä
-     Ç         ê
-     î         ô
-     §         •
-     Å         ö
+              √Ü
+     ¬¢         ¬•
+     √•         √Ö
+     √§         √Ñ
+     √ß         √á
+     √©         √â
+     √∂         √ñ
+     √±         √ë
+     √º         √ú
 
 }
 
@@ -29,11 +29,11 @@ Function UpChar(Ch : Char) : Char;
 begin
   If Ord(Ch) In [97..122] Then Ch := Chr(Ord(Ch) - 32)
   Else If Ord(Ch) > 90 Then
-    If Ch='' Then Ch:='í'
-    Else If Ch='õ' Then Ch:='ù' Else If Ch='Ü' Then Ch:='è'
-    Else If Ch='Ñ' Then Ch:='é' Else If Ch='á' Then Ch:='Ä'
-    Else If Ch='Ç' Then Ch:='ê' Else If Ch='î' Then Ch:='ô'
-    Else If Ch='§' Then Ch:='•' Else If Ch='Å' Then Ch:='ö';
+    If Ch='' Then Ch:='√Ü'
+    Else If Ch='¬¢' Then Ch:='¬•' Else If Ch='√•' Then Ch:='√Ö'
+    Else If Ch='√§' Then Ch:='√Ñ' Else If Ch='√ß' Then Ch:='√á'
+    Else If Ch='√©' Then Ch:='√â' Else If Ch='√∂' Then Ch:='√ñ'
+    Else If Ch='√±' Then Ch:='√ë' Else If Ch='√º' Then Ch:='√ú';
   UpChar:=Ch;
 end;
 
@@ -52,11 +52,11 @@ Function LowChar(Ch : Char) : Char;
 begin
   If Ord(Ch) In [65..90] Then Ch := Chr(Ord(Ch) + 32)
   Else If Ord(Ch) > 122 Then
-    If Ch='í' Then Ch := ' '
-    Else If Ch='ù' Then Ch:='õ' Else If Ch='è' Then Ch:='Ü'
-    Else If Ch='é' Then Ch:='Ñ' Else If Ch='Ä' Then Ch:='á'
-    Else If Ch='ê' Then Ch:='Ç' Else If Ch='ô' Then Ch:='î'
-    Else If Ch='•' Then Ch:='§' Else If Ch='ö' Then Ch:='Å';
+    If Ch='√Ü' Then Ch := ' '
+    Else If Ch='¬•' Then Ch:='¬¢' Else If Ch='√Ö' Then Ch:='√•'
+    Else If Ch='√Ñ' Then Ch:='√§' Else If Ch='√á' Then Ch:='√ß'
+    Else If Ch='√â' Then Ch:='√©' Else If Ch='√ñ' Then Ch:='√∂'
+    Else If Ch='√ë' Then Ch:='√±' Else If Ch='√ú' Then Ch:='√º';
   LowChar := Ch;
 end;
 
@@ -80,8 +80,8 @@ begin
   begin
     If Ord(S[i]) In [65..90] Then S[i] := Chr(Ord(S[i]) + 32)
     Else If Ord(S[i]) In [97..122] Then S[i] := Chr(Ord(S[i]) - 32)
-    Else If Pos(S[i],'õÜÑáÇî§Å') <> 0 Then S[i]:=UpChar(S[i])
-    Else If Pos(S[i],'íèùÄéôêö•')<> 0 Then S[i]:=LowChar(S[i]);
+    Else If Pos(S[i],'¬¢√•√§√ß√©√∂√±√º') <> 0 Then S[i]:=UpChar(S[i])
+    Else If Pos(S[i],'√Ü√Ö¬•√á√Ñ√ñ√â√ú√ë')<> 0 Then S[i]:=LowChar(S[i]);
   end;
   StToggleCase := S;
 end;

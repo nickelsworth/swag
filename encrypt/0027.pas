@@ -79,7 +79,7 @@ writeln('DECODIFICA IN CORSO...');
   e:='.'+chr(LByte)+chr(b)+chr(SByte);
   assign(f2, n+e); rewrite(f2);
 
-  read(f1, LByte); {LETTURA EOF 4ø CARATTERE}
+  read(f1, LByte); {LETTURA EOF 4Â° CARATTERE}
 
   read(f1, LByte); {PRIMO BYTE "SIGNIFICATIVO"}
 

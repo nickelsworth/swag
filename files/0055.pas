@@ -3,7 +3,7 @@
   then truncate the file. I use it to shrink log files and to remove
   index entries from Squish .SQI files, but many other uses may be found.  }
 
-{ Donated to the public domain by Rapha‰l Vanney.                          }
+{ Donated to the public domain by RaphaÃ«l Vanney.                          }
 
 Uses DOS ;
 

@@ -1,9 +1,9 @@
 {
- ± Anybody know a realitively easy way to determine the file allocation
- ± unit size offa hard/floppy drive??  Pascal source would be prefered over
- ± pascal assembly as I know next to nothing about assembly.
+ â–’ Anybody know a realitively easy way to determine the file allocation
+ â–’ unit size offa hard/floppy drive??  Pascal source would be prefered over
+ â–’ pascal assembly as I know next to nothing about assembly.
 }
-{ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ}
+{â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€}
 Function GetUA(Drive: Byte:LongInt; {0=Default, 1=A, 2=B,..etc .}
 Var regs:Registers;
 Begin

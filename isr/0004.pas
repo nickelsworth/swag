@@ -1,12 +1,12 @@
 {
-³- Also, is there anyway of making "HOT-KEYS" without using ReadKey f³
-³  CharS?  I want it For Integers or can I have CharS as a RANdoM #? ³
-³  PROBLEMO!                                                         ³
+â”‚- Also, is there anyway of making "HOT-KEYS" without using ReadKey fâ”‚
+â”‚  CharS?  I want it For Integers or can I have CharS as a RANdoM #? â”‚
+â”‚  PROBLEMO!                                                         â”‚
 
-> Unless you want to Write an ISR (initiate and stay resident) routine   ³
-> that traps keyboard interrupts and either preprocesses them or passes  ³
-> them on to your routine, ReadKey is the only way. (Writing an ISR      ³
-> is not a simple task.)                                                 ³
+> Unless you want to Write an ISR (initiate and stay resident) routine   â”‚
+> that traps keyboard interrupts and either preprocesses them or passes  â”‚
+> them on to your routine, ReadKey is the only way. (Writing an ISR      â”‚
+> is not a simple task.)                                                 â”‚
 
 Actualy it is not that difficult in pascal:
 }

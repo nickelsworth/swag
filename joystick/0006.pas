@@ -1,6 +1,6 @@
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: MATT CRILL                   Date: 01-05Ä92 (23:03)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: MATT CRILL                   Date: 01-05â”€92 (23:03)
 From: DANIEL CHURCHMAN           Number: 4144   [101] PASCAL
 Subj: JOYSTICK 1                 Status: Public
 ------------------------------------------------------------------------------
@@ -196,8 +196,8 @@ Procedure Calibrate;
 --- Msged/sq
  * Origin: C&O Systems, Brisbane, AUSTRALIA (3:640/777)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: MATT CRILL                   Date: 01-05Ä92 (23:04)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: MATT CRILL                   Date: 01-05â”€92 (23:04)
 From: DANIEL CHURCHMAN           Number: 4145   [101] PASCAL
 Subj: JOYSTICK 2                 Status: Public
 ------------------------------------------------------------------------------
@@ -319,8 +319,8 @@ Procedure GetKey;
 --- Msged/sq
  * Origin: C&O Systems, Brisbane, AUSTRALIA (3:640/777)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: MATT CRILL                   Date: 01-05Ä92 (23:05)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: MATT CRILL                   Date: 01-05â”€92 (23:05)
 From: DANIEL CHURCHMAN           Number: 4146   [101] PASCAL
 Subj: JOYSTICK 3                 Status: Public
 ------------------------------------------------------------------------------

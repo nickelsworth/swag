@@ -3,7 +3,7 @@
 > as a friend of mine is writing a BBS.  Also, if anyone has the specs for
 > QWK packets, send those to me also.  Thanx.
 
-                      þþ THE MYSTERIOUS QWK-FILE FORMAT þþ
+                      â– â–  THE MYSTERIOUS QWK-FILE FORMAT â– â– 
                                       by
                                   Jeffery Foy
 

@@ -1,6 +1,6 @@
 {
- ±   Hey.. AnyBody out there know how to change TEXT fonts w/ Pascal?
- ± Any routines would be apprecited....
+ â–’   Hey.. AnyBody out there know how to change TEXT fonts w/ Pascal?
+ â–’ Any routines would be apprecited....
 
 Yes, a friend of mine made a text font editor, a couple of years ago, but it
 would be too long to post it in this conference. You may use this routine to

@@ -19,12 +19,12 @@ uses Crt, cursorUnit;
   This version for the IBM PC: Wilbert van Leijen
   Written:     16 Sept. 1987
   Revised:     19 March 1989
-  Revised:     Jan 15th 1995 by Bj”rn Felten @ 2:203/208
+  Revised:     Jan 15th 1995 by BjÃ¶rn Felten @ 2:203/208
 }
 
 const
   Title        : string[6] = ' Maze ';
-  Usage        : string[38] = ' F1ÄFull speed F2ÄDelay move EscÄQuit ';
+  Usage        : string[38] = ' F1â”€Full speed F2â”€Delay move Escâ”€Quit ';
   MazeX        = 77;
   MazeY        = 22;
 
@@ -93,7 +93,7 @@ var
     Maze[X, Y] := Val;
     case Val of
       Path : ShowMaze(X, Y, ' ');
-      Wall : WriteXY(0, $0F, X+2, Y+1, 'Û')
+      Wall : WriteXY(0, $0F, X+2, Y+1, 'â–ˆ')
     end
   end;  { SetSquare }
 

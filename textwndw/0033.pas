@@ -111,8 +111,8 @@ Procedure VS_ScreenDump(var V: TVirtScr; fn: String);
 {makes a complete virtual screen dump into a file}
 
 Procedure DrawWindow(x1,y1,x2,y2,Lines: Byte);
-{extra proc: draws windows. Lines=1 --> Ä
-                            Lines=2 --> Í}
+{extra proc: draws windows. Lines=1 --> â”€
+                            Lines=2 --> â•}
 
 Procedure CursorOff;
   Inline($B4/$01/$B7/$00/$B9/$1E/$1F/$CD/$10);
@@ -128,7 +128,7 @@ Var VidMem: Pointer; {pointer to video memory}
 
 Procedure FastMove(Var source; Var dest; NumToMove : Word);
 {This procedure ain't mine, but i don't know who made it... sorry
- The reasen i use it is that it's ñ1.6 times faster then Pascal's Move}
+ The reasen i use it is that it's Â±1.6 times faster then Pascal's Move}
 Begin
   InLine ($8C/$DA/$C5/$B6/> Source/$C4/$BE/> Dest/$8B/$8E/> NumToMove/
           $39/$FE/$72/$08/$FC/$D1/$E9/$73/$11/$A4/$EB/$0E/$FD/$01/$CE/
@@ -366,8 +366,8 @@ Var x,y: Byte;
     lb,rb,lo,ro,vert,hor: Char;
 Begin
   Case Lines Of
-    1: Begin lb:='Ú'; rb:='¿'; lo:='À'; ro:='Ù'; vert:='³'; hor:='Ä'; End;
-    2: Begin lb:='É'; rb:='»'; lo:='È'; ro:='¼'; vert:='º'; hor:='Í'; End;
+    1: Begin lb:='â”Œ'; rb:='â”'; lo:='â””'; ro:='â”˜'; vert:='â”‚'; hor:='â”€'; End;
+    2: Begin lb:='â•”'; rb:='â•—'; lo:='â•š'; ro:='â•'; vert:='â•‘'; hor:='â•'; End;
     Else Begin lb:=' '; rb:=' '; lo:=' '; ro:=' '; vert:=' '; hor:=' ';End;
   End;
   GotoXY(x1,y1); Write(lb); For x:=x1+1 To x2-1 Do Write(hor); Write(rb);

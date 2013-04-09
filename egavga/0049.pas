@@ -54,7 +54,7 @@ begin
 end;
 
 begin
-  Writeln('DISPIC v0.01á (c)1993 Brian Pape/Jagaer Technologies'+#10#13);
+  Writeln('DISPIC v0.01ÃŸ (c)1993 Brian Pape/Jagaer Technologies'+#10#13);
   Writeln(maxavail,' Bytes available.');
   if paramcount < 1 then
     stop('no .PIC File specified.');

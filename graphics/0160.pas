@@ -1,4 +1,4 @@
-{gravity type program modified by þMr. Krinkleþ}
+{gravity type program modified by â– Mr. Krinkleâ– }
 uses {vgaSCRN,}crt;
 const Balls = 900;  {if program too fast increase: if too slow decrease}
 

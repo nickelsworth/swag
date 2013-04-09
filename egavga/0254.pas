@@ -1,6 +1,6 @@
 {
 Date: 06-06-95
-From: Zbigniew Szuszkiewicz Krak¢w POLSKA
+From: Zbigniew Szuszkiewicz Krak√≥w POLSKA
 Subj: VGA 132 kolumn
 }
 PROGRAM VGA_132k;

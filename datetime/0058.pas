@@ -88,7 +88,7 @@ berechnet, wurde oben erlaeutert. Hier nun also die Berechnungen der
 restlichen Feiertage.
 
 Aschermittwoch:      40 Tage vor dem Ostersonntag,
-                     dann zurückgehen bis zum Mittwoch
+                     dann zurâ¿ckgehen bis zum Mittwoch
                      Bsp.:  result := GetOstern;
                             Dec(result,40);
                             WHILE DayOfWeek(result) <> 3 DO
@@ -108,8 +108,8 @@ Fronleichnam:        60 Tage nach dem Ostersonntag.
 
 Maria Himmelfahrt:   Fest am 15. August (nicht ueberall Feiertag!)
 
-1. Advent:           Vom 24.12. zurück bis zum nächsten Sonntag,
-                     dann noch drei Wochen zurück.
+1. Advent:           Vom 24.12. zurâ¿ck bis zum nÎ£chsten Sonntag,
+                     dann noch drei Wochen zurâ¿ck.
                      Bsp.:  result := MakeDate(24,12,year);
                             WHILE DayOfWeek(result) <> 0 DO
                                Dec(result);
@@ -117,22 +117,22 @@ Maria Himmelfahrt:   Fest am 15. August (nicht ueberall Feiertag!)
 
 Buss- und Bettag:    Der vorvorige Mittwoch vor dem 1. Advent, also
                      vom 1. Advent aus den Mittwoch suchen, dann noch
-                     eine Woche zurück.
+                     eine Woche zurâ¿ck.
                      Bsp:  <adventberechnung>   <-- wie oben
                            WHILE DayOfWeek(result) <> 3 DO
                               Dec(result);
                            Dec(result,7);
 
 
-Hl. drei Köinige:    Fest am 06.01.
+Hl. drei KÃ·inige:    Fest am 06.01.
 
 Allerheiligen:       Fest am 01.11.
 
 Tag der Arbeit:      Fest am 01.05.
 
 Tag der dt. Einheit: Fest am 03.10. Hier wird im Zuge von Sparmassnahmen
-                     für die einzuführende Pflegeversicherung allerdings
-                     überlegt, diesen Feiertag immer auf den ersten Sonn-
+                     fâ¿r die einzufâ¿hrende Pflegeversicherung allerdings
+                     â¿berlegt, diesen Feiertag immer auf den ersten Sonn-
                      tag im Oktober zu legen, man sollte hier also die
                      politischen Nachrichten verfolgen!
 
@@ -220,7 +220,7 @@ END{FUNC};
 Berechnung des Tages im Jahr
 ----------------------------
 
-Diese Methode gilt fuer alle Jahre ab 1582, der Einführung des
+Diese Methode gilt fuer alle Jahre ab 1582, der Einfâ¿hrung des
 gregorianischen Kalenders.
 
 FUNCTION DayOfYear (day,month,year : WORD) : INTEGER;
@@ -234,7 +234,7 @@ BEGIN
 END;
 
 Eine andere Methode kommt ohne die Berechnung der Tage im Monat aus
-und bezieht ebenfalls Schaltjahre ein. Der Gültigkeitsbereich dieses
+und bezieht ebenfalls Schaltjahre ein. Der Gâ¿ltigkeitsbereich dieses
 Alogorithmus liegt von 1901 bis 2099.
 
 FUNCTION DayNumber(Day,Month,Year : INTEGER ) : INTEGER;

@@ -35,7 +35,7 @@ BEGIN
   BarOffs:=(Xpos-1)*2+(Ypos-1)*SCWIDTH;
   BarSize:=Size;
   BarCol:=BackCol*16+ForCol;
-  wValue:=ORD('²')+BarCol*256;
+  wValue:=ORD('â–“')+BarCol*256;
   FOR ix:=0 TO BarSize-1 DO
     MEMW[SCSEG:BarOffs+ix*2]:=wValue;
 END; (* InitBar(Xpos,Ypos,Size,ForCol,BackCol:BYTE) *)
@@ -53,7 +53,7 @@ VAR
   wValue         : WORD;
 BEGIN
   pSize:=TRUNC((Curr/100)*BarSize);
-  wValue:=ORD('Û')+BarCol*256;
+  wValue:=ORD('â–ˆ')+BarCol*256;
   FOR ix:=0 TO pSize-1 DO
     MEMW[SCSEG:BarOffs+ix*2]:=wValue;
 END; (* UpdateBar(Curr:BYTE) *)

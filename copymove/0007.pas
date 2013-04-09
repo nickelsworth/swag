@@ -43,15 +43,15 @@ but you get the idea, no?
     if ioresult <> 0 then begin __copyfil := 2; exit end;
     assign(target, targ); rewrite(target,1);
     if ioresult <> 0 then begin __copyfil := 3; exit end;
-    if show then __write(x1+2,y,f,b,__rep(x2-x1-3,'°')); tr := 0;
+    if show then __write(x1+2,y,f,b,__rep(x2-x1-3,'â–‘')); tr := 0;
     repeat
       blockread(source,filebuf^,bufsize,bread);
       tr := tr + bread; nr := tr/fs;
       nr := nr * (x2-x1-3);
-      if show then __write(x1+2,y,f,b,__rep(trunc(nr), 'Û'));
+      if show then __write(x1+2,y,f,b,__rep(trunc(nr), 'â–ˆ'));
       blockwrite(target,filebuf^,bread,bwrite);
     until (bread = 0) or (bread <> bwrite);
-    if show then __write(x1+2,y,f,b,__rep((x2-x1-3),'Û'));
+    if show then __write(x1+2,y,f,b,__rep((x2-x1-3),'â–ˆ'));
     close(source); close(target);
     if bread <> bwrite then __copyfil := 4 else __copyfil := 0;
   end;

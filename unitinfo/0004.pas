@@ -67,7 +67,7 @@ of the Windows API is emulated by the DOS protected mode Run-Time Manager,
 allowing one DLL file to run in Windows or in DOS without recompiling.
 
  Using DLLs
- ßßßßßßßßßßßß
+ â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€
 There are two ways to access and call a DLL function:
 
   1. Using an external declaration in your program.
@@ -116,7 +116,7 @@ constant-integer expression. For example:
    procedure ImportByOrdinal; external TestLib index Ordinal;
 
  Writing DLLs
- ßßßßßßßßßßßßßß
+ â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€
 The structure of a Borland Pascal DLL is identical to that of a program,
 except that a DLL starts with a library header instead of a program header.
 

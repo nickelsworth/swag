@@ -73,31 +73,31 @@ begin
    ClrScr;
    LowVideo;
    GotoXY(22,1);
-   Write('Edition du caractŠre nø ',No:3,' - "',Chr(No),'".');
+   Write('Edition du caractÃ¨re nÂ° ',No:3,' - "',Chr(No),'".');
    GotoXY(22,2);
-   Write('ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ');
+   Write('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
    gotoXY(30,4);
-   Write('ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
+   Write('â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
    gotoXY(30,5);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,6);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,7);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,8);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,9);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,10);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,11);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,12);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,13);
-   Write('º                 º');
+   Write('â•‘                 â•‘');
    gotoXY(30,14);
-   Write('ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼');
+   Write('â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
    For i := 0 to 8 do
    begin
       gotoXY(31,5+i);
@@ -112,21 +112,21 @@ begin
    for i := 0 to 8 do
    begin
       if SmallCar[No]^[i] and 1 <> 0 then Buffer[0,i] := '*' else Buffer[0,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 2 <> 0 then Buffer[1,i] := '*' else Buffer[1,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 4 <> 0 then Buffer[2,i] := '*' else Buffer[2,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 8 <> 0 then Buffer[3,i] := '*' else Buffer[3,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 16 <> 0 then Buffer[4,i] := '*' else Buffer[4,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 32 <> 0 then Buffer[5,i] := '*' else Buffer[5,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 64 <> 0 then Buffer[6,i] := '*' else Buffer[6,i]
-:= 'ú';
+:= 'Â·';
       if SmallCar[No]^[i] and 128 <> 0 then Buffer[7,i] := '*' else
-Buffer[7,i] := 'ú';
+Buffer[7,i] := 'Â·';
 
    end;
 end;
@@ -225,13 +225,13 @@ begin
          '8',chr(72)   : if y = 0 then y := 8 else dec(y);
          '4',chr(75)   : if x = 0 then x := 7 else dec(x);
          '6',chr(77)   : if x = 7 then x := 0 else inc(x);
-         ' '           : if Buffer[x,y] = '*' then Buffer[x,y] := 'ú' else
+         ' '           : if Buffer[x,y] = '*' then Buffer[x,y] := 'Â·' else
 Buffer[x,y] := '*';
          #13, #81, #73 : Sortie := true;
          #27           : Sortie := True;
          'G','g'       : begin
                             GotoXY(20,24);
-                            Write('Aller … quel code ascii ? ');
+                            Write('Aller Ã  quel code ascii ? ');
                             Read(Go);
                             if (Go >= 32) and (go <= 180) then
                             begin
@@ -405,51 +405,51 @@ begin
    ClrScr;
    LowVideo;
    GotoXY(22,1);
-   Write('Edition du caractŠre nø ',No:3,' - "',Chr(No),'".');
+   Write('Edition du caractÃ¨re nÂ° ',No:3,' - "',Chr(No),'".');
    GotoXY(22,2);
-   Write('ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ');
+   Write('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
    gotoXY(20,4);
-   Write('ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
+   Write('â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
    gotoXY(20,5);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,6);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,7);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,8);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,9);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,10);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,11);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,12);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,13);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,14);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,15);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,16);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,17);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,18);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,19);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,20);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,21);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,22);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,23);
-   Write('º                                 º');
+   Write('â•‘                                 â•‘');
    gotoXY(20,24);
-   Write('ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼');
+   Write('â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
    For i := 0 to 18 do
    begin
       gotoXY(21,5+i);
@@ -464,37 +464,37 @@ begin
    for i := 0 to 18 do
    begin
       if MidCar[No]^[i] and 1 <> 0 then Buffer[0,i] := '*' else Buffer[0,i] :=
-'ú';
+'Â·';
       if MidCar[No]^[i] and 2 <> 0 then Buffer[1,i] := '*' else Buffer[1,i] :=
-'ú';
+'Â·';
       if MidCar[No]^[i] and 4 <> 0 then Buffer[2,i] := '*' else Buffer[2,i] :=
-'ú';
+'Â·';
       if MidCar[No]^[i] and 8 <> 0 then Buffer[3,i] := '*' else Buffer[3,i] :=
-'ú';
+'Â·';
       if MidCar[No]^[i] and 16 <> 0 then Buffer[4,i] := '*' else Buffer[4,i]
-:= 'ú';
+:= 'Â·';
       if MidCar[No]^[i] and 32 <> 0 then Buffer[5,i] := '*' else Buffer[5,i]
-:= 'ú';
+:= 'Â·';
       if MidCar[No]^[i] and 64 <> 0 then Buffer[6,i] := '*' else Buffer[6,i]
-:= 'ú';
+:= 'Â·';
       if MidCar[No]^[i] and 128 <> 0 then Buffer[7,i] := '*' else Buffer[7,i]
-:= 'ú';
+:= 'Â·';
       if MidCar[No]^[i] and 256 <> 0 then Buffer[8,i] := '*' else Buffer[8,i]
-:= 'ú';
+:= 'Â·';
       if MidCar[No]^[i] and 512 <> 0 then Buffer[9,i] := '*' else Buffer[9,i]
-:= 'ú';
+:= 'Â·';
       if MidCar[No]^[i] and 1024 <> 0 then Buffer[10,i] := '*' else
-Buffer[10,i] := 'ú';
+Buffer[10,i] := 'Â·';
       if MidCar[No]^[i] and 2048 <> 0 then Buffer[11,i] := '*' else
-Buffer[11,i] := 'ú';
+Buffer[11,i] := 'Â·';
       if MidCar[No]^[i] and 4096 <> 0 then Buffer[12,i] := '*' else
-Buffer[12,i] := 'ú';
+Buffer[12,i] := 'Â·';
       if MidCar[No]^[i] and 8192 <> 0 then Buffer[13,i] := '*' else
-Buffer[13,i] := 'ú';
+Buffer[13,i] := 'Â·';
       if MidCar[No]^[i] and 16384 <> 0 then Buffer[14,i] := '*' else
-Buffer[14,i] := 'ú';
+Buffer[14,i] := 'Â·';
       if MidCar[No]^[i] and 32768 <> 0 then Buffer[15,i] := '*' else
-Buffer[15,i] := 'ú';
+Buffer[15,i] := 'Â·';
 
    end;
 end;
@@ -638,13 +638,13 @@ begin
          '8',chr(72)   : if y = 0 then y := 18 else dec(y);
          '4',chr(75)   : if x = 0 then x := 15 else dec(x);
          '6',chr(77)   : if x = 15 then x := 0 else inc(x);
-         ' '           : if Buffer[x,y] = '*' then Buffer[x,y] := 'ú' else
+         ' '           : if Buffer[x,y] = '*' then Buffer[x,y] := 'Â·' else
 Buffer[x,y] := '*';
          #13, #81, #73 : Sortie := true;
          #27           : Sortie := True;
          'G','g'       : begin
                             GotoXY(20,24);
-                            Write('Aller … quel code ascii ? ');
+                            Write('Aller Ã  quel code ascii ? ');
                             Read(Go);
                             if (Go >= 32) and (go <= 180) then
                             begin
@@ -669,7 +669,7 @@ Buffer[x,y] := '*';
                          end;
          'c', 'C'      : begin
                             gotoXY(20,24);
-                            Write('Copier quel caractŠre ? ');
+                            Write('Copier quel caractÃ¨re ? ');
                             CaracTempo := ReadKey;
                             if CaracTempo <> #13 then
                             begin
@@ -838,89 +838,89 @@ begin
       else
          if etat = trace then write('Trace');
    GotoXY(22,1);
-   Write('Edition du caractŠre nø ',No:3,' - "',Chr(No),'".');
+   Write('Edition du caractÃ¨re nÂ° ',No:3,' - "',Chr(No),'".');
    GotoXY(22,2);
-   Write('ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ');
+   Write('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
    gotoXY(2,4);
-Write('ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
+Write('â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
    gotoXY(2,5);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,6);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,7);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,8);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,9);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,10);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,11);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,12);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,13);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,14);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,15);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,16);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,17);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,18);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,19);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,20);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,21);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,22);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,23);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,24);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,25);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,26);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,27);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,28);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,29);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,30);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,31);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,32);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,33);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,34);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,35);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,36);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,37);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,38);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,39);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,40);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,41);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,42);
-   Write('º º');
+   Write('â•‘ â•‘');
    gotoXY(2,43);
-Write('ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼');
+Write('â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
    For i := 0 to 36 do
    begin
       gotoXY(3,5+i);
@@ -935,69 +935,69 @@ begin
    for i := 0 to 36 do
    begin
       if BigCar[No]^[i] and 1 <> 0 then Buffer[0,i] := '*' else Buffer[0,i] :=
-'ú';
+'Â·';
       if BigCar[No]^[i] and 2 <> 0 then Buffer[1,i] := '*' else Buffer[1,i] :=
-'ú';
+'Â·';
       if BigCar[No]^[i] and 4 <> 0 then Buffer[2,i] := '*' else Buffer[2,i] :=
-'ú';
+'Â·';
       if BigCar[No]^[i] and 8 <> 0 then Buffer[3,i] := '*' else Buffer[3,i] :=
-'ú';
+'Â·';
       if BigCar[No]^[i] and $10 <> 0 then Buffer[4,i] := '*' else Buffer[4,i]
-:= 'ú';
+:= 'Â·';
       if BigCar[No]^[i] and $20 <> 0 then Buffer[5,i] := '*' else Buffer[5,i]
-:= 'ú';
+:= 'Â·';
       if BigCar[No]^[i] and $40 <> 0 then Buffer[6,i] := '*' else Buffer[6,i]
-:= 'ú';
+:= 'Â·';
       if BigCar[No]^[i] and $80 <> 0 then Buffer[7,i] := '*' else Buffer[7,i]
-:= 'ú';
+:= 'Â·';
       if BigCar[No]^[i] and $100 <> 0 then Buffer[8,i] := '*' else Buffer[8,i]
-:= 'ú';
+:= 'Â·';
       if BigCar[No]^[i] and $200 <> 0 then Buffer[9,i] := '*' else Buffer[9,i]
-:= 'ú';
+:= 'Â·';
       if BigCar[No]^[i] and $400 <> 0 then Buffer[10,i] := '*' else
-Buffer[10,i] := 'ú';
+Buffer[10,i] := 'Â·';
       if BigCar[No]^[i] and $800 <> 0 then Buffer[11,i] := '*' else
-Buffer[11,i] := 'ú';
+Buffer[11,i] := 'Â·';
       if BigCar[No]^[i] and $1000 <> 0 then Buffer[12,i] := '*' else
-Buffer[12,i] := 'ú';
+Buffer[12,i] := 'Â·';
       if BigCar[No]^[i] and $2000 <> 0 then Buffer[13,i] := '*' else
-Buffer[13,i] := 'ú';
+Buffer[13,i] := 'Â·';
       if BigCar[No]^[i] and $4000 <> 0 then Buffer[14,i] := '*' else
-Buffer[14,i] := 'ú';
+Buffer[14,i] := 'Â·';
       if BigCar[No]^[i] and $8000 <> 0 then Buffer[15,i] := '*' else
-Buffer[15,i] := 'ú';
+Buffer[15,i] := 'Â·';
       if BigCar[No]^[i] and $10000 <> 0 then Buffer[16,i] := '*' else
-Buffer[16,i] := 'ú';
+Buffer[16,i] := 'Â·';
       if BigCar[No]^[i] and $20000 <> 0 then Buffer[17,i] := '*' else
-Buffer[17,i] := 'ú';
+Buffer[17,i] := 'Â·';
       if BigCar[No]^[i] and $40000 <> 0 then Buffer[18,i] := '*' else
-Buffer[18,i] := 'ú';
+Buffer[18,i] := 'Â·';
       if BigCar[No]^[i] and $80000 <> 0 then Buffer[19,i] := '*' else
-Buffer[19,i] := 'ú';
+Buffer[19,i] := 'Â·';
       if BigCar[No]^[i] and $100000 <> 0 then Buffer[20,i] := '*' else
-Buffer[20,i] := 'ú';
+Buffer[20,i] := 'Â·';
       if BigCar[No]^[i] and $200000 <> 0 then Buffer[21,i] := '*' else
-Buffer[21,i] := 'ú';
+Buffer[21,i] := 'Â·';
       if BigCar[No]^[i] and $400000 <> 0 then Buffer[22,i] := '*' else
-Buffer[22,i] := 'ú';
+Buffer[22,i] := 'Â·';
       if BigCar[No]^[i] and $800000 <> 0 then Buffer[23,i] := '*' else
-Buffer[23,i] := 'ú';
+Buffer[23,i] := 'Â·';
       if BigCar[No]^[i] and $1000000 <> 0 then Buffer[24,i] := '*' else
-Buffer[24,i] := 'ú';
+Buffer[24,i] := 'Â·';
       if BigCar[No]^[i] and $2000000 <> 0 then Buffer[25,i] := '*' else
-Buffer[25,i] := 'ú';
+Buffer[25,i] := 'Â·';
       if BigCar[No]^[i] and $4000000 <> 0 then Buffer[26,i] := '*' else
-Buffer[26,i] := 'ú';
+Buffer[26,i] := 'Â·';
       if BigCar[No]^[i] and $8000000 <> 0 then Buffer[27,i] := '*' else
-Buffer[27,i] := 'ú';
+Buffer[27,i] := 'Â·';
       if BigCar[No]^[i] and $10000000 <> 0 then Buffer[28,i] := '*' else
-Buffer[28,i] := 'ú';
+Buffer[28,i] := 'Â·';
       if BigCar[No]^[i] and $20000000 <> 0 then Buffer[29,i] := '*' else
-Buffer[29,i] := 'ú';
+Buffer[29,i] := 'Â·';
       if BigCar[No]^[i] and $40000000 <> 0 then Buffer[30,i] := '*' else
-Buffer[30,i] := 'ú';
+Buffer[30,i] := 'Â·';
       if BigCar[No]^[i] and $80000000 <> 0 then Buffer[31,i] := '*' else
-Buffer[31,i] := 'ú';
+Buffer[31,i] := 'Â·';
 
    end;
 end;
@@ -1163,46 +1163,46 @@ begin
          '2',chr(80)   : begin
                             if y = 36 then y := 0 else inc(y);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '8',chr(72)   : begin
                             if y = 0 then y := 36 else dec(y);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '4',chr(75)   : begin
                             if x = 0 then x := 31 else dec(x);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '6',chr(77)   : Begin
                             if x = 31 then x := 0 else inc(x);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '1',chr(80)   : begin
                             if y = 36 then y := 0 else inc(y);
                             if x = 0 then x := 31 else dec(x);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '7',chr(72)   : begin
                             if y = 0 then y := 36 else dec(y);
                             if x = 0 then x := 31 else dec(x);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '9',chr(75)   : begin
                             if x = 31 then x := 0 else inc(x);
                             if y = 0 then y := 36 else dec(y);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          '3',chr(77)   : Begin
                             if x = 31 then x := 0 else inc(x);
                             if y = 36 then x := 0 else inc(y);
                             if etat = trace then buffer[x,y] := '*'
-                            else if etat = delete then buffer[x,y] := 'ú';
+                            else if etat = delete then buffer[x,y] := 'Â·';
                          end;
          ' '           : if etat <> trace then etat := succ(etat) else etat :=
 move;
@@ -1210,7 +1210,7 @@ move;
          #27           : Sortie := True;
          'G','g'       : begin
                             GotoXY(20,49);
-                            Write('Aller … quel code ascii ? ');
+                            Write('Aller Ã  quel code ascii ? ');
                             Read(Go);
                             if (Go >= 32) and (go <= 180) then
                             begin
@@ -1235,7 +1235,7 @@ move;
                          end;
          'c', 'C'      : begin
                             gotoXY(20,49);
-                            Write('Copier quel caractŠre ? ');
+                            Write('Copier quel caractÃ¨re ? ');
                             CaracTempo := ReadKey;
                             if CaracTempo <> #13 then
                             begin

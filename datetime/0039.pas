@@ -25,7 +25,7 @@ Type
                    CurrFormat  : CurrType;   { Way currency is formatted }
                    CurrDigits  : Byte;       { Digits in currency }
                    Clock24hrs  : Boolean;    { True if 24-hour clock }
-                   CaseMapCall : Procedure;  { Lookup table for ASCII ò $80 }
+                   CaseMapCall : Procedure;  { Lookup table for ASCII â‰¥ $80 }
                    DataListSep : Array[0..1] of Char;
                    CountryCode : Word;
                  end;
@@ -183,7 +183,7 @@ ASM
 end;  { SetSysTime }
 
 { Convert a binary number to an unpacked decimal
-  On entry:  AL <-- number ó 99
+  On entry:  AL <-- number â‰¤ 99
   On exit:   AX --> ASCII representation }
 
 Procedure UnpackNumber; Assembler;

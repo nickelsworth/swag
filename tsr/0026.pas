@@ -57,9 +57,9 @@ begin
  writeln('One short low beep means "No error", a long high one means trouble');
  writeln;
  writeln('Only catch when you''re sure:');
- writeln('ùYour hard-disk is not busy');
- writeln('ùYou''re in a program (so not at the command-prompt)');
- writeln('ùYou''re in the mcga 320x200 256 color modus ($13)');
+ writeln('âˆ™Your hard-disk is not busy');
+ writeln('âˆ™You''re in a program (so not at the command-prompt)');
+ writeln('âˆ™You''re in the mcga 320x200 256 color modus ($13)');
 
  keep(0);
 end.

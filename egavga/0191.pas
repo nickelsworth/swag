@@ -62,7 +62,7 @@ Var
 Const
   vCycle_direction: byte = 1;
 
-{อออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออ}
+{โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•}
 Procedure Clearscreen(c: byte);
 procedure Line(X1,Y1,X2,Y2: Integer; Color: Byte);
 Procedure HLine(x,y,x2: integer; color: byte);
@@ -77,10 +77,10 @@ Procedure GetColor(Color: byte; var R,G,B : Byte);
 Procedure SetPalette(var vPal: tDAC);
 Procedure GetPalette(var vPal: tDAC);
 procedure Rectangle(x1, y1, x2, y2 : word; Color : byte);
-{ฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤ}
+{โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€}
 Function SetMode(mode: word): boolean; { VGA & VESA modes }
 Function GetMode(var mode: word): boolean;
-{อออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออ}
+{โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•}
 
 Implementation
 
@@ -370,7 +370,7 @@ begin
   { the pythagorean theorm }
   hy := ymax div 2; { Centre Y }
   hx := xmax div 2; { Centre X }          {       _____ }
-  pixels := round(sqrt((hx*hx)+(hy*hy))); { c := ๛aý+bý }
+  pixels := round(sqrt((hx*hx)+(hy*hy))); { c := โaยฒ+bยฒ }
 
   for loop := 0 to pixels do begin
     circle(xmax div 2,ymax div 2,loop,loop mod 255+1);

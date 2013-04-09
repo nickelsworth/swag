@@ -41,7 +41,7 @@ The file is name REINES5.PAS (litterally QUEENS5.PAS) and it's limited
  const colname:string =
                         'abcdefghijklmnopqrstuvwxyz'+
                         'ABCDEFGHIJKLMNOPQRSTUVWXYZ'+
-                        'абвздежийкл';
+                        'О±ГџО“П„ОЈПѓВµО¦ОО©Оґ';
  type echiquier = array[1..max,1..max] of byte;
  var  sol,recursions:longint;
       top:word;

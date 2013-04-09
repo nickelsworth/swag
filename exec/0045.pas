@@ -1,8 +1,8 @@
 (*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-           ษอออออออออออออออออออออออออออออออออออออออออออออออป
-           บ Heap management procedures, by Keld R. Hansen บ
-           บ       From SWAG, in the "EXEC" section.       บ
-           ศอออออออออออออออออออออออออออออออออออออออออออออออผ
+           โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+           โ•‘ Heap management procedures, by Keld R. Hansen โ•‘
+           โ•‘       From SWAG, in the "EXEC" section.       โ•‘
+           โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 
 EXECUTE shrinks your program's memory allocation to the smallest possible
 value, runs the specified program, and then expands the memory allocation

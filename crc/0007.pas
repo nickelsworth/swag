@@ -157,7 +157,7 @@ begin
   assign(source, fname);
   reset(source, 1);
   GotoXY(x1, y);
-  Write(__rep(x2-x1-3, '°'));
+  Write(__rep(x2-x1-3, 'â–‘'));
   Write('  ', fname);
   Repeat
     blockread(source, Filebuf^, bufsize, bread);
@@ -165,7 +165,7 @@ begin
     nr := tr/fsize;
     nr := nr * (x2-x1-3);
     GotoXY(x1, y);
-    Write(__rep(trunc(nr), 'Û'));
+    Write(__rep(trunc(nr), 'â–ˆ'));
     For i := 1 to bread do
       crc := __crc32(Filebuf^[i], crc);
   Until (bread = 0);
@@ -196,7 +196,7 @@ begin
   assign(source, fname);
   reset(source, 1);
   GotoXY(x1, y);
-  Write(__rep(x2-x1-3, '°'));
+  Write(__rep(x2-x1-3, 'â–‘'));
   Write('  ', fname);
   Repeat
     blockread(source, Filebuf^, bufsize, bread);
@@ -204,7 +204,7 @@ begin
     nr := tr/fsize;
     nr := nr * (x2-x1-3);
     GotoXY(x1, y);
-    Write(__rep(trunc(nr), 'Û'));
+    Write(__rep(trunc(nr), 'â–ˆ'));
     For i := 1 to bread do
       crc := __crc16(Filebuf^[i], crc);
   Until (bread = 0);
@@ -241,7 +241,7 @@ begin
   assign(source, fname);
   reset(source, 1);
   GotoXY(x1, y);
-  Write(__rep(x2-x1-3, '°'));
+  Write(__rep(x2-x1-3, 'â–‘'));
   Write('  ', fname);
   Repeat
     blockread(source, Filebuf^, bufsize, bread);
@@ -249,7 +249,7 @@ begin
     nr := tr/fsize;
     nr := nr * (x2-x1-3);
     GotoXY(x1, y);
-    Write(__rep(trunc(nr), 'Û'));
+    Write(__rep(trunc(nr), 'â–ˆ'));
     For i := 1 to bread do begin
       crc := __crc16(Filebuf^[i], crc);
       crc32 := __crc32(Filebuf^[i], crc32);

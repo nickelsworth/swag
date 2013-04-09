@@ -130,9 +130,9 @@ end.
 
    The SCANNER will do the following tasks:
 
-   ø scan Words, numbers, Strings and special Characters.
-   ø determine the value of a number.
-   ø recognize RESERVED WordS.
+   Â° scan Words, numbers, Strings and special Characters.
+   Â° determine the value of a number.
+   Â° recognize RESERVED WordS.
 
    LOOKinG For toKENS
 

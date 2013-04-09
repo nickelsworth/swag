@@ -1,12 +1,12 @@
 
 UNIT  uMCursor;                               { (c) 1994 by NEBULA-Soft. }
-      { Mausroutinen fr Textmodus          } { Olaf Bartelt & Oliver Carow }
-{ ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ } INTERFACE { ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ }
+      { Mausroutinen fÃ¼r Textmodus          } { Olaf Bartelt & Oliver Carow }
+{ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• } INTERFACE { â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• }
 USES  DOS, video;                             { Einbinden der Units         }
 
 { The unit VIDEO is also included in the SWAG distribution in the CRT.SWG   }
 
-{ Ä Konstantendeklarationen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Konstantendeklarationen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 CONST cLinke_taste                 = 1;       { linke Maustaste             }
       cRechte_taste                = 2;       { rechte Maustaste            }
       cMittlere_taste              = 4;       { mittlere Maustaste (bei 3)  }
@@ -27,13 +27,13 @@ CONST cLinke_taste                 = 1;       { linke Maustaste             }
       vgatextgraphiccursor         : BOOLEAN = FALSE;
 
 
-{ Ä Typendeklarationen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Typendeklarationen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 TYPE  mousetype                    = (twobutton, threebutton, another);
       buttonstate                  = (buttondown, buttonup);
       direction                    = (moveright, moveleft, moveup, movedown,
 nomove);
 
-{ Ä Variablendeklarationen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Variablendeklarationen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 VAR   mouse_present                : BOOLEAN;
       mouse_buttons                : mousetype;
       eventx, eventy, eventbuttons : WORD;
@@ -46,18 +46,18 @@ VAR   mouse_present                : BOOLEAN;
       maxmousey                    : INTEGER;
 
 
-{ Ä exportierte Prozeduren und Funktionen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ exportierte Prozeduren und Funktionen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 PROCEDURE set_graphic_mouse_cursor;        { graphischen Mousecursor setzen }
 PROCEDURE showmousecursor;
 
-{ ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ } IMPLEMENTATION { ÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ }
+{ â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• } IMPLEMENTATION { â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• }
 {$IFDEF VER60}                                { in TP 6.0 gibt es SEGxxxx   }
 CONST SEG0040 = $0040;                        { noch nicht! => definieren!  }
       SEGB800 = $B800;
       SEGA000 = $A000;
 {$ENDIF}
 
-{ Ä Typendeklarationen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Typendeklarationen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 TYPE  pTextgraphikcursor = ^tTextgraphikcursor;  { Zeiger auf Array         }
       tTextgraphikcursor = ARRAY[0..31] OF LONGINT;
 
@@ -67,7 +67,7 @@ TYPE  pTextgraphikcursor = ^tTextgraphikcursor;  { Zeiger auf Array         }
       pChardefs          = ^tChardefs;
       tChardefs          = ARRAY[0..(32*8)] OF BYTE;
 
-{ Ä Konstantendeklarationen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Konstantendeklarationen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 CONST pfeil                  : tTextgraphikcursor =
 { Maske:  } ($3FFFFFFF, $1FFFFFFF, $0FFFFFFF, $07FFFFFF, $03FFFFFF, $01FFFFFF,
              $00FFFFFF, $007FFFFF, $003FFFFF, $007FFFFF, $01FFFFFF, $10FFFFFF,
@@ -113,7 +113,7 @@ CONST pfeil                  : tTextgraphikcursor =
 
       vgatextgraphicptr      : pTextgraphikcursor = @pfeil;
                                                   { @sanduhr                }
-{ Ä Variablendeklarationen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Variablendeklarationen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 VAR   hidebox                : box;
       regs                   : REGISTERS;
       vgastoredarray         : ARRAY[1..3, 1..3] OF BYTE;
@@ -126,7 +126,7 @@ CONST chardefs               : pChardefs = NIL;
       defchar                = $D0;
 
 
-{ Ä exportierte Prozeduren und Funktionen ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ exportierte Prozeduren und Funktionen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 procedure swap(var a,b : word);
 var c : word;
 begin
@@ -176,20 +176,20 @@ end; {mouseBox}
 
 PROCEDURE initmouse;
 VAR overridedriver : BOOLEAN;                 { wegen Hercules-Karten       }
-    tempvideomode  : BYTE;                    { Zwischenspeicher fr Modus  }
+    tempvideomode  : BYTE;                    { Zwischenspeicher fÃ¼r Modus  }
 BEGIN
   overridedriver := FALSE;                    { erstmal nicht override!     }
 
   IF (FALSE AND (MEM[SEG0040:$0049] = 7)) THEN  { doch overriden?           }
   BEGIN
-    MEM[SEG0040:$0049] := 6;                  { Ja: Videomodus vort„uschen  }
+    MEM[SEG0040:$0049] := 6;                  { Ja: Videomodus vortÃ¤uschen  }
     overridedriver := TRUE;                   {     und override setzen!    }
   END;
 
   IF vgatextgraphiccursor = TRUE THEN         { Graphikcursor im Textmodus? }
   BEGIN
     tempvideomode := MEM[SEG0040:$0049];      { Videomodus zwischenspeichern}
-    MEM[SEG0040:$0049] := 6;                  { anderen Modus vort„uschen   }
+    MEM[SEG0040:$0049] := 6;                  { anderen Modus vortÃ¤uschen   }
   END;
 
   WITH regs DO                                { Maustyp ermitteln           }
@@ -197,7 +197,7 @@ BEGIN
     AX := 0; BX := 0;                         { Maus initialisieren (00h)   }
     INTR($33, regs);                          { Mausinterrupt aufrufen      }
 
-    mouse_present := (AX <> 0);               { berhaupt Maus vorhanden?   }
+    mouse_present := (AX <> 0);               { Ã¼berhaupt Maus vorhanden?   }
     IF (BX AND 2) <> 0 THEN mouse_buttons := twobutton  { Maustasten ermitt.}
                        ELSE IF (BX AND 3) > 0 THEN mouse_buttons := threebutton
                                               ELSE mouse_buttons := another;
@@ -858,7 +858,7 @@ BEGIN
   setvgatextgraphiccursor; initmouse; setdefaulthandler(left_button_pressed);
 END;
 
-{ Ä Hauptprogramm der Unit ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€ Hauptprogramm der Unit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 BEGIN
    eventx := 0; eventy := 0; eventhappened := FALSE;
    NEW(chardefs); initmouse;

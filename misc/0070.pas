@@ -1,9 +1,9 @@
 (*
-³{$F+}
-³PROCEDURE DoNothing; INTERRUPT;
-³BEGIN
-³END;
-³{$F-}
+â”‚{$F+}
+â”‚PROCEDURE DoNothing; INTERRUPT;
+â”‚BEGIN
+â”‚END;
+â”‚{$F-}
 
  Would you believe that the code in your DoNothing procedure can be
  improved for smaller size and better speed? (No, I'm not kidding,

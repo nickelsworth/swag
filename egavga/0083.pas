@@ -98,7 +98,7 @@ End;
 
 Begin
   Writeln('Program to draw Fractals of Mandelbrot.');
-  Writeln('Written by Miguel Mart°nez. ');
+  Writeln('Written by Miguel Mart√≠nez. ');
   Writeln('Press any key to continue...');
   If ReadKey=#0 Then ReadKey;   {Skip double codes.               }
 

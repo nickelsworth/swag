@@ -37,32 +37,32 @@ And here is more help from Tech Help
 
 
 Port  Description
-ßßßß  ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-060H  şPC/XTş  PPI port A.  Read keyboard scan code:
+â–€â–€â–€â–€  â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€
+060H  â– PC/XTâ–   PPI port A.  Read keyboard scan code:
       IN   al,60H  ;fetches most recent scan code.
 
-061H  şPC/XTş PPI (Programmable Peripheral Interface) port B.
-      Ö7Â6Â5Â4Â3Â2Â1Â0·
-      º ³ ³ ³ ³ ³0³ ³ º
-      ÓÒÁÒÁÒÁÒÁÒÁÄÁÒÁÒ½ bit
-       º º º º º   º ÈÍ 0: Timer 2 gate (speaker)  ÍËÍ OR 03H=speaker ON
-       º º º º º   ÈÍÍÍ 1: Timer 2 data  ÍÍÍÍÍÍÍÍÍÍÍ¼  AND 0fcH=speaker OFF
-       º º º º ÈÍÍÍÍÍÍÍ 3: 1=read high switches; 0=read low switches(see 62H)
-       º º º ÈÍÍÍÍÍÍÍÍÍ 4: 0=enable RAM parity checking; 1=disable
-       º º ÈÍÍÍÍÍÍÍÍÍÍÍ 5: 0=enable I/O channel check
-       º ÈÍÍÍÍÍÍÍÍÍÍÍÍÍ 6: 0=hold keyboard clock low
-       ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ 7: 0=enable keyboard; 1=disable keyboard
+061H  â– PC/XTâ–  PPI (Programmable Peripheral Interface) port B.
+      â•“7â”¬6â”¬5â”¬4â”¬3â”¬2â”¬1â”¬0â•–
+      â•‘ â”‚ â”‚ â”‚ â”‚ â”‚0â”‚ â”‚ â•‘
+      â•™â•¥â”´â•¥â”´â•¥â”´â•¥â”´â•¥â”´â”€â”´â•¥â”´â•¥â•œ bit
+       â•‘ â•‘ â•‘ â•‘ â•‘   â•‘ â•šâ• 0: Timer 2 gate (speaker)  â•â•¦â• OR 03H=speaker ON
+       â•‘ â•‘ â•‘ â•‘ â•‘   â•šâ•â•â• 1: Timer 2 data  â•â•â•â•â•â•â•â•â•â•â•â•  AND 0fcH=speaker OFF
+       â•‘ â•‘ â•‘ â•‘ â•šâ•â•â•â•â•â•â• 3: 1=read high switches; 0=read low switches(see 62H)
+       â•‘ â•‘ â•‘ â•šâ•â•â•â•â•â•â•â•â• 4: 0=enable RAM parity checking; 1=disable
+       â•‘ â•‘ â•šâ•â•â•â•â•â•â•â•â•â•â• 5: 0=enable I/O channel check
+       â•‘ â•šâ•â•â•â•â•â•â•â•â•â•â•â•â• 6: 0=hold keyboard clock low
+       â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â• 7: 0=enable keyboard; 1=disable keyboard
 
-062H  şPC/XTş PPI port C.
-      Ö7Â6Â5Â4Â3Â2Â1Â0·
-      º ³ ³ ³0³equip'tº
-      ÓÒÁÒÁÒÁÄÁÄÁÄÁÄÁÄ½ bit
-       º º º   ÈÍÍÍÍÍÊÍ 0-3: values of DIP switches.  See Equipment List
-       º º ÈÍÍÍÍÍÍÍÍÍÍÍ 5: 1=Timer 2 channel out
-       º ÈÍÍÍÍÍÍÍÍÍÍÍÍÍ 6: 1=I/O channel check
-       ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ 7: 1=RAM parity check error occurred.
+062H  â– PC/XTâ–  PPI port C.
+      â•“7â”¬6â”¬5â”¬4â”¬3â”¬2â”¬1â”¬0â•–
+      â•‘ â”‚ â”‚ â”‚0â”‚equip'tâ•‘
+      â•™â•¥â”´â•¥â”´â•¥â”´â”€â”´â”€â”´â”€â”´â”€â”´â”€â•œ bit
+       â•‘ â•‘ â•‘   â•šâ•â•â•â•â•â•©â• 0-3: values of DIP switches.  See Equipment List
+       â•‘ â•‘ â•šâ•â•â•â•â•â•â•â•â•â•â• 5: 1=Timer 2 channel out
+       â•‘ â•šâ•â•â•â•â•â•â•â•â•â•â•â•â• 6: 1=I/O channel check
+       â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â• 7: 1=RAM parity check error occurred.
 
-063H  şPC/XTş PPI Command/Mode Register.  Selects which PPI ports are input
+063H  â– PC/XTâ–  PPI Command/Mode Register.  Selects which PPI ports are input
       or output.  BIOS sets to 99H (Ports A and C are input, B is output).
 
 With this and a look at BP 7's RTL source for the keyboard routines you should

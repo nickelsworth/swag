@@ -1,7 +1,7 @@
-ÚÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ        Andy Stewart        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄ·
-³o³ Can someone tell/show me how to write a procedure that   ³oº
-³o³ will take a string input and search for it in a textfile ³oº
-ÔÍÏÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÏÍ¼
+â”Œâ”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€        Andy Stewart        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â•–
+â”‚oâ”‚ Can someone tell/show me how to write a procedure that   â”‚oâ•‘
+â”‚oâ”‚ will take a string input and search for it in a textfile â”‚oâ•‘
+â•˜â•â•§â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•§â•â•
 { Simple example for a straight forward search routine }
 var
   f    : text;
@@ -69,7 +69,7 @@ begin
   else writeln('File not found');
 end.
 ---
- ş Tags ç Us ş Abandon the search for truth: settle on a good fantasy.
+ â–  Tags Ï„ Us â–  Abandon the search for truth: settle on a good fantasy.
  * Suburban Software - Home of King of the Board(tm) - 708-636-6694
  * PostLink(tm) v1.05  SUBSOFT (#715) : RelayNet(tm) Hub
 

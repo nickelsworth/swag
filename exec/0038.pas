@@ -1,18 +1,18 @@
 { Have NO IDEA what the message say ..  they are in Russian ! GDAVIS}
 {$IFDEF VIRTUALPASCAL}
-Какие в OS/2 вообще мог
-т быть овеpлеи ? Вы в своем
-ме ? :)
+├и├б┬м┬┐├С ├│ OS/2 ├│┬л┬л├н╬Ш├С ┬╝┬л├║
+╬У ├н╬┤╬УтИЮ ┬л├│├Сp┬╜├С┬┐ ? ├й╬┤ ├│ ├Я├│┬л├С┬╝
+┬╝├С ? :)
 {$ENDIF}
 {$IFDEF DPMI}
-Какие в DPMI вообще мог
-т быть овеpлеи ? Вы в своем
-ме ? :)
+├и├б┬м┬┐├С ├│ DPMI ├│┬л┬л├н╬Ш├С ┬╝┬л├║
+╬У ├н╬┤╬УтИЮ ┬л├│├Сp┬╜├С┬┐ ? ├й╬┤ ├│ ├Я├│┬л├С┬╝
+┬╝├С ? :)
 {$ENDIF}
 {$IFDEF OS2}
-Какие в OS/2 вообще мог
-т быть овеpлеи ? Вы в своем
-ме ? :)
+├и├б┬м┬┐├С ├│ OS/2 ├│┬л┬л├н╬Ш├С ┬╝┬л├║
+╬У ├н╬┤╬УтИЮ ┬л├│├Сp┬╜├С┬┐ ? ├й╬┤ ├│ ├Я├│┬л├С┬╝
+┬╝├С ? :)
 {$ENDIF}
 
 Unit MainOvr;
@@ -42,15 +42,15 @@ Begin
     If OvrResult=OvrNotFound
       Then
         Begin
-          WriteLn('Оверлейный файл не найден : ',ovr_name);
-          Write  ('Введите правильное имя :');
+          WriteLn('├Д├│├С╬▒┬╜├СтМР┬б╬┤тМР ╬г├бтМР┬╜ ┬б├С ┬б├бтМР├▒├С┬б : ',ovr_name);
+          Write  ('├й├│├С├▒┬┐╬У├С ┬╗╬▒├б├│┬┐┬╜тИЮ┬б┬л├С ┬┐┬╝тИй :');
           ReadLn(Ovr_Name);
         End;
   Until OvrResult<>OvrNotFound;
   If OvrResult<>OvrOk
     Then
       Begin
-        WriteLn('Ошибка администратора овeрлеев ',OvrResult);
+        WriteLn('├Д╬ж┬┐├н┬м├б ├б├▒┬╝┬┐┬б┬┐├Я╬У╬▒├б╬У┬л╬▒├б ┬л├│e╬▒┬╜├С├С├│ ',OvrResult);
 {$IFDEF STONYBROOK}
         Halt(1);
 {$ELSE}
@@ -62,11 +62,11 @@ Begin
     Then
       Begin
         Case OvrResult Of
-          OvrNoEMSDriver : Write('Драйвер EMS нестановлен');
-          OvrNoEMSMemory : Write('Мало свободной EMS памяти');
-          OvrIOError     : Write('Ошибка чтения файла');
+          OvrNoEMSDriver : Write('├д╬▒├бтМР├│├С╬▒ EMS ┬б├С├Я╬У├б┬б┬л├│┬╜├С┬б');
+          OvrNoEMSMemory : Write('├о├б┬╜┬л ├Я├│┬л├н┬л├▒┬б┬лтМР EMS ┬╗├б┬╝тИй╬У┬┐');
+          OvrIOError     : Write('├Д╬ж┬┐├н┬м├б ╧Д╬У├С┬б┬┐тИй ╬г├бтМР┬╜├б');
         End;
-        Write(' - EMS память не использется.');
+        Write(' - EMS ┬╗├б┬╝тИй╬УтИЮ ┬б├С ┬┐├Я┬╗┬л┬╜тИЮ┬║├С╬У├ЯтИй.');
       End;
   OvrSetRetry(OvrGetBuf div 3);
 end.

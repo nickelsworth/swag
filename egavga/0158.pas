@@ -67,8 +67,8 @@ end;
 
 procedure HelpMenu;
 begin
-  writeln('ş Forbis''s Cool Text Mode Thing! v0.01');
-  writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+  writeln('â–  Forbis''s Cool Text Mode Thing! v0.01');
+  writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   writeln('Usage: TEXTMODE <MODE>');
   writeln;
   writeln('MODE:');
@@ -78,10 +78,10 @@ begin
   writeln('       3 : 132x 60y 16c  Mode: 4Fh');
   writeln('       4 : 132x 25y 16c  Mode: 50h');
   writeln('       5 : 132x 43y 16c  Mode: 51h');
-  writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+  writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   writeln('I will not be held liable if this messes');
   writeln('up your machine!');
-  writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+  writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
 end;
 
 var

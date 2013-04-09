@@ -56,7 +56,7 @@
 
       Section 1. Network addresses.
 
-      þ What is an address þ
+      â–  What is an address â– 
 
       A network address is comprised of a Network Number, and
       a Node Number within a Network. This is how Netware recognizes
@@ -78,7 +78,7 @@
 
       Section 2. Data types and packet format
 
-      þ Inside IPX þ
+      â–  Inside IPX â– 
 
       I will now discuss some of the parts of IPX. This is the hardest
       part in understanding IPX. To send information from one computer
@@ -90,7 +90,7 @@
       Keep reading and I'll explain. The numbers beside each data field
       correspond to the information that follows the format listing.
 
-      þ Format of IPX header þ
+      â–  Format of IPX header â– 
 
       (1) Checksum (hi-low) : =word=
       (2) Length of packet (hi-low) : =word=
@@ -114,7 +114,7 @@
          send on filled.
 
 
-      þ Format of ECB þ
+      â–  Format of ECB â– 
 
       Here's the format for an IPX Event Control Block.
 
@@ -131,7 +131,7 @@
                                               fragments= (see below)
 
 
-      þ Format of a fragment record (Data Fragments) þ
+      â–  Format of a fragment record (Data Fragments) â– 
 
       Format for the fragments of data found in the ECB. This does not
       necessarily have to be an array of two fragments, it could be
@@ -261,7 +261,7 @@
       Here's all the routines that you will be using to send packets,
       listen for packets, get your address and others.
 
-      þ essential routines þ
+      â–  essential routines â– 
       {------------------------------------------------------------------------}
       {sending a packet: ecbpointer is an ecb record type}
       procedure sendpacket(var ecbpointer);assembler;
@@ -336,7 +336,7 @@
         end;
       {------------------------------------------------------------------------}
 
-      þ Other routines þ
+      â–  Other routines â– 
 
       {------------------------------------------------------------------------}
       {some of these routines use this.}

@@ -1,6 +1,6 @@
 {$A+,G+,R-,S-}
 UNIT MCGA;   { Copyright by Stefan Ohrhallinger in 1991,92,93,94 }
-             { aka ¯The Faker® of AARDVARK }
+             { aka Â»The FakerÂ« of AARDVARK }
 INTERFACE
 CONST
      Up=0;
@@ -21,7 +21,7 @@ PROCEDURE LoadFont(Nr:Byte; Name:String);
 PROCEDURE SetText(Nr:Byte; MultX,DivX,MultY,DivY:Byte);
 PROCEDURE DrawPolygon(Count:Integer; VAR P; C:Byte);
 PROCEDURE Fill(X,Y:Integer; C:Byte);  { Nur die selbe Farbe ersetzen }
-PROCEDURE Flood(X,Y:Integer; C,C2:Byte);  { Anf„rben bis zur Randfarbe C2 }
+PROCEDURE Flood(X,Y:Integer; C,C2:Byte);  { AnfÃ¤rben bis zur Randfarbe C2 }
 PROCEDURE MCGAOn;
 PROCEDURE MCGAOff;
 PROCEDURE FillPolygon(Size:Integer; VAR P1; C:Byte);
@@ -564,7 +564,7 @@ BEGIN
      Suchen(X,X,Y+1,1);
 END;
 
-PROCEDURE Flood(X,Y:Integer; C,C2:Byte);  { Anf„rben bis zur Randfarbe C2 }
+PROCEDURE Flood(X,Y:Integer; C,C2:Byte);  { AnfÃ¤rben bis zur Randfarbe C2 }
 
    PROCEDURE Suchen(L,R,Y:Integer; UpDown:Byte);
    VAR

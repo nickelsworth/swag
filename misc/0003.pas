@@ -32,7 +32,7 @@ Here is the dBase program that calls Turbo Pascal:
 
 * <T>Program ----> EDIT2.PRG
 * <D>Language ---> dBase IV 1.5
-* <P>Author -----> P.A.T. Systemsø C.1993
+* <P>Author -----> P.A.T. SystemsÂ° C.1993
 * <T>Creation date -> 07/22/1992
 * <L>Last update ---> 01/06/1993
 

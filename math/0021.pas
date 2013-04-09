@@ -1,6 +1,6 @@
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: JEFFREY HUNTSMAN             Date: 11-27Ä91 (09:08)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: JEFFREY HUNTSMAN             Date: 11-27â”€91 (09:08)
 From: FLOOR NAAIJKENS            Number: 3162   [101] PASCAL
 Subj: CALC (1)                   Status: Public
 ------------------------------------------------------------------------------
@@ -205,8 +205,8 @@ function Tan_Degree{ ( Degrees : real ) : real };
 
 <ORIGINAL MESSAGE OVER 200 LINES, SPLIT IN 2 OR MORE>
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: JEFFREY HUNTSMAN             Date: 11-27Ä91 (09:08)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: JEFFREY HUNTSMAN             Date: 11-27â”€91 (09:08)
 From: FLOOR NAAIJKENS            Number: 3163   [101] PASCAL
 Subj: CALC (1)           <CONT>  Status: Public
 ------------------------------------------------------------------------------
@@ -230,8 +230,8 @@ function ArcTan_Degree{ ( Degrees : real ) : real };
 --- D'Bridge 1.30 demo/922115
  * Origin: EURO-ONLINE Home of The Fast Commander (2:500/233)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: JEFFREY HUNTSMAN             Date: 11-27Ä91 (09:08)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: JEFFREY HUNTSMAN             Date: 11-27â”€91 (09:08)
 From: FLOOR NAAIJKENS            Number: 3164   [101] PASCAL
 Subj: CALC (2)                   Status: Public
 ------------------------------------------------------------------------------
@@ -363,8 +363,8 @@ function Tan_DegreeType{ ( DegreeVar : DegreeType ) : real };
 --- D'Bridge 1.30 demo/922115
  * Origin: EURO-ONLINE Home of The Fast Commander (2:500/233)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: JEFFREY HUNTSMAN             Date: 11-27Ä91 (09:08)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: JEFFREY HUNTSMAN             Date: 11-27â”€91 (09:08)
 From: FLOOR NAAIJKENS            Number: 3165   [101] PASCAL
 Subj: CALC (3)                   Status: Public
 ------------------------------------------------------------------------------

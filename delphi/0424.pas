@@ -42,12 +42,12 @@ begin
 // Get Device Caps
   waveOutGetDevCaps(0, @waveCaps, SizeOf(waveCaps));
 // Show device caps
-  Memo1.Lines.Add('Iазвание: '+waveCaps.szPName);
+  Memo1.Lines.Add('IО±П„О“О±П†О¦Пѓ: '+waveCaps.szPName);
   Version := waveCaps.vDriverVersion;
-  Memo1.Lines.Add(Format('Aеdсия дdайвеdа: %d.%d', [Hi(Version), Lo(Version)]));
+  Memo1.Lines.Add(Format('AПѓdВ±О¦В  ОЈdО±ОО“ПѓdО±: %d.%d', [Hi(Version), Lo(Version)]));
   Case waveCaps.wChannels of
-    1 : Memo1.Lines.Add('Iоно');
-    2 : Memo1.Lines.Add('Стеdео');
+    1 : Memo1.Lines.Add('IОµП†Оµ');
+    2 : Memo1.Lines.Add('в•¤в‰ҐПѓdПѓОµ');
   End;
  // Standard formats
 

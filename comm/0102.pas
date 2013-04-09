@@ -977,83 +977,83 @@ Control := New(PButton, Init(R, 'Cancel', cmCancel, bfNormal));
 DlgWin^.Insert(Control);
 
 R.Assign(2,1,3,9);
-Control := New(PStaticText, Init(R, 'Ú³³³³³³³'));
+Control := New(PStaticText, Init(R, 'â”Œâ”‚â”‚â”‚â”‚â”‚â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(2,9,18,10);
-Control := New(PStaticText, Init(R, 'ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ'));
+Control := New(PStaticText, Init(R, 'â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜'));
 DlgWin^.Insert(Control);
 
 R.Assign(17,2,18,9);
-Control := New(PStaticText, Init(R, '³³³³³³³'));
+Control := New(PStaticText, Init(R, 'â”‚â”‚â”‚â”‚â”‚â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(19,4,28,5);
-Control := New(PStaticText, Init(R, 'ÀÄÄÄÄÄÄÄÙ'));
+Control := New(PStaticText, Init(R, 'â””â”€â”€â”€â”€â”€â”€â”€â”˜'));
 DlgWin^.Insert(Control);
 
 R.Assign(29,4,38,5);
-Control := New(PStaticText, Init(R, 'ÀÄÄÄÄÄÄÄÙ'));
+Control := New(PStaticText, Init(R, 'â””â”€â”€â”€â”€â”€â”€â”€â”˜'));
 DlgWin^.Insert(Control);
 
 R.Assign(27,2,28,4);
-Control := New(PStaticText, Init(R, '³³'));
+Control := New(PStaticText, Init(R, 'â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(37,2,38,4);
-Control := New(PStaticText, Init(R, '³³'));
+Control := New(PStaticText, Init(R, 'â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(19,1,20,4);
-Control := New(PStaticText, Init(R, 'Ú³³'));
+Control := New(PStaticText, Init(R, 'â”Œâ”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(29,1,30,4);
-Control := New(PStaticText, Init(R, 'Ú³³'));
+Control := New(PStaticText, Init(R, 'â”Œâ”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(19,9,31,10);
-Control := New(PStaticText, Init(R, 'ÀÄÄÄÄÄÄÄÄÄÄÙ'));
+Control := New(PStaticText, Init(R, 'â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜'));
 DlgWin^.Insert(Control);
 
 R.Assign(19,5,20,9);
-Control := New(PStaticText, Init(R, 'Ú³³³'));
+Control := New(PStaticText, Init(R, 'â”Œâ”‚â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(30,6,31,9);
-Control := New(PStaticText, Init(R, '³³³'));
+Control := New(PStaticText, Init(R, 'â”‚â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(2,14,22,15);
-Control := New(PStaticText, Init(R, 'ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ'));
+Control := New(PStaticText, Init(R, 'â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜'));
 DlgWin^.Insert(Control);
 
 R.Assign(21,11,22,14);
-Control := New(PStaticText, Init(R, '³³³'));
+Control := New(PStaticText, Init(R, 'â”‚â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(2,10,3,14);
-Control := New(PStaticText, Init(R, 'Ú³³³'));
+Control := New(PStaticText, Init(R, 'â”Œâ”‚â”‚â”‚'));
 DlgWin^.Insert(Control);
 
 R.Assign(14,1,18,2);
-Control := New(PStaticText, Init(R, 'ÄÄÄ¿'));
+Control := New(PStaticText, Init(R, 'â”€â”€â”€â”'));
 DlgWin^.Insert(Control);
 
 R.Assign(26,1,28,2);
-Control := New(PStaticText, Init(R, 'Ä¿'));
+Control := New(PStaticText, Init(R, 'â”€â”'));
 DlgWin^.Insert(Control);
 
 R.Assign(36,1,38,2);
-Control := New(PStaticText, Init(R, 'Ä¿'));
+Control := New(PStaticText, Init(R, 'â”€â”'));
 DlgWin^.Insert(Control);
 
 R.Assign(17,10,22,11);
-Control := New(PStaticText, Init(R, 'ÄÄÄÄ¿'));
+Control := New(PStaticText, Init(R, 'â”€â”€â”€â”€â”'));
 DlgWin^.Insert(Control);
 
 R.Assign(28,5,31,6);
-Control := New(PStaticText, Init(R, 'ÄÄ¿'));
+Control := New(PStaticText, Init(R, 'â”€â”€â”'));
 DlgWin^.Insert(Control);
 
 DlgWin^.SelectNext(False);

@@ -129,12 +129,12 @@ END;
 
 BEGIN
   WriteLn;
-  WriteLn('þ Search For v1.0    By Discovery/EfS! (c)1994');
+  WriteLn('â–  Search For v1.0    By Discovery/EfS! (c)1994');
   WriteLn;
   IF ParamCount=0 Then Begin
-    WriteLn('þ Syntax : SF [FileName] [OutPut]');
+    WriteLn('â–  Syntax : SF [FileName] [OutPut]');
     WriteLn;
-    WriteLn('þ Where [FileName] will be searched on all directories of');
+    WriteLn('â–  Where [FileName] will be searched on all directories of');
     WriteLn('  current drive from current directory. ');
     WriteLn('  [FileName] Accept WildCards (*, ?)');
     WriteLn;

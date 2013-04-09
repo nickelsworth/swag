@@ -38,7 +38,7 @@ var
 
 procedure DrawPercentage(x1,y1 : integer;num : real);
 { Draw Percentage Complete as a Bar }
-{ ²²²²°°°°°°°° }
+{ â–“â–“â–“â–“â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘ }
 var
    yy,z    : integer;
    percentage : byte;
@@ -50,8 +50,8 @@ begin
      textcolor(lightgray);
      gotoxy(x1,y1);
      write('(');
-     for z := 1 to percentage do write('²');
-     for yy := percentage to 10 do write('°');
+     for z := 1 to percentage do write('â–“');
+     for yy := percentage to 10 do write('â–‘');
      { Draw up percentage }
      write(')');
 end;

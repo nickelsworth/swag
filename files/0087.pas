@@ -1,9 +1,9 @@
 (*
-MH³Anyone have any suggestions on protecting source code against this sort
-  ³of piracy? I have tried using a CRC calculation on the .EXE but run
-  ³into "FILE ACCESS DENIED" if the game is running on a network (the
-  ³program is meant for networks...)
-MH³Any suggestions would be appreciated.
+MHâ”‚Anyone have any suggestions on protecting source code against this sort
+  â”‚of piracy? I have tried using a CRC calculation on the .EXE but run
+  â”‚into "FILE ACCESS DENIED" if the game is running on a network (the
+  â”‚program is meant for networks...)
+MHâ”‚Any suggestions would be appreciated.
 
  You are probably opening the .exe file with RESET command using the
  default file open mode of read/write which tries to open it with

@@ -1,22 +1,22 @@
 {
-|³-> You can allocate some memory and put all your parameters there, then
-|³-> pass a pointer which points to this memory block.  You have to
-|³-> setup some convention if you want to pass different types, or
-|³-> parameters with different length.
-|³
-|³Well how do I do that in Pascal- I really think that I might be better
-|³off making the function in C and then compiling it out to an object file
-|³and then linking it into pascal
+|â”‚-> You can allocate some memory and put all your parameters there, then
+|â”‚-> pass a pointer which points to this memory block.  You have to
+|â”‚-> setup some convention if you want to pass different types, or
+|â”‚-> parameters with different length.
+|â”‚
+|â”‚Well how do I do that in Pascal- I really think that I might be better
+|â”‚off making the function in C and then compiling it out to an object file
+|â”‚and then linking it into pascal
 
 Mixed language programming is tricky and difficult unless the
 compilers explicitely support it.
 
-|³but I am not sure that that will even
-|³work I might just abandon Pascal and learn C
+|â”‚but I am not sure that that will even
+|â”‚work I might just abandon Pascal and learn C
 
 Good luck!  <evil grin>
 
-|³(even though the SYNTAX rules for C are based on Pascal anyhow)
+|â”‚(even though the SYNTAX rules for C are based on Pascal anyhow)
                                           ^^^^^^^^^^^^^^^
 Hmmmm.....
 

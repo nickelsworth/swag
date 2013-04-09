@@ -222,7 +222,7 @@ Begin
   If ParamCount <> 1 Then
   Begin
     ClrScr;
-    TextColor (15); WriteLn (' Cool View v1.0 Coded 醳 ScrewFace CopyRight
+    TextColor (15); WriteLn (' Cool View v1.0 Coded 脽y ScrewFace CopyRight
 95-96'    ); TextColor (8); WriteLn (' Usage :  VIEWER
 [Drive:[\Path\]Name.Ext');    Sound (600);
     Delay (200);
@@ -300,9 +300,9 @@ End;
 
 
 {clrscr;  (*Examples*)
-StringFx('     Press Any Key     ',(lo(windmax) div
+StringFx('   路路  Press Any Key  路路   ',(lo(windmax) div
 2)-10,hi(windmax)+1,red,lightred,lightred,15,300);{clrscr;
-StringFx('     Press Any Key     ',(27),11,red,lightred,lightred,15,50);}
+StringFx('   路路  Press Any Key  路路   ',(27),11,red,lightred,lightred,15,50);}
 
 Procedure Curon;
 Begin

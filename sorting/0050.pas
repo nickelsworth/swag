@@ -1,7 +1,7 @@
 
 { This unit will sort ANY type of data into ANY type of order. As an added
 bonus, there are a routine to search through a sorted list of ANY type...
-Credits go to Bjîrn Felten for his QSort unit, which inspired me to write this
+Credits go to Bj√∂rn Felten for his QSort unit, which inspired me to write this
 routine }
 
 Unit SortSrch;

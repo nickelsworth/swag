@@ -3,12 +3,12 @@ UNIT vector;
 
   (*  DESCRIPTION :
      Set of 22 functions and procedures for vector ,i.e array of real
-     Manipulation de vecteur: 22 fonctions et procÇdures
+     Manipulation de vecteur: 22 fonctions et proc√©dures
 
      RELEASE     :  1.0
      DATE        :  25/04/94
      AUTHOR      :  Fernand LEMOINE
-                    rue du Colläge 34
+                    rue du Coll√®ge 34
                     B-6200 CHATELET
                     BELGIQUE
      All code granted to the public domain
@@ -32,13 +32,13 @@ CONST
   all = 0;
   accept_zero : Boolean = False;
 
-  (* Clear all values - remise Ö zÇro                                      *)
+  (* Clear all values - remise √† z√©ro                                      *)
 PROCEDURE VClear(VAR A : ARRAY OF Real; lim : Word);
   (* Display  of a vector  - Affichage d'un vecteur                        *)
 PROCEDURE VDisplay(CONST A : ARRAY OF Real; l, m : Byte);
-  (* Linear index generator - GÇnÇration d 'index                          *)
+  (* Linear index generator - G√©n√©ration d 'index                          *)
 PROCEDURE VIndex(VAR A : ARRAY OF Real; lim : Word);
-  (* Random generator - GÇnÇrateur alÇatoire                               *)
+  (* Random generator - G√©n√©rateur al√©atoire                               *)
 PROCEDURE VRnd(VAR A : ARRAY OF Real; lim : Word);
   (* Sum   of a vector  - Somme d'un vecteur                               *)
 FUNCTION VSum(CONST A : ARRAY OF Real; lim : Word) : Real;
@@ -50,9 +50,9 @@ FUNCTION VMin(CONST A : ARRAY OF Real; lim : Word) : Real;
 FUNCTION VAvg(CONST A : ARRAY OF Real; lim : Word) : Real;
   (* Maximum   of a vector  - Maximum d'un vecteur                         *)
 FUNCTION VMax(CONST A : ARRAY OF Real; lim : Word) : Real;
-  (* First value of a vector  - Premiäre valeur d'un vecteur               *)
+  (* First value of a vector  - Premi√®re valeur d'un vecteur               *)
 FUNCTION VFirst(CONST A : ARRAY OF Real; lim : Word) : Real;
-  (* Last  value of a vector  - Derniäre valeur d'un vecteur               *)
+  (* Last  value of a vector  - Derni√®re valeur d'un vecteur               *)
 FUNCTION VLast(CONST A : ARRAY OF Real; lim : Word) : Real;
   (* Number of values of a vector - Nombre de valeurs d'un vecteur         *)
 FUNCTION VSize(CONST A : ARRAY OF Real; lim : Word) : Word;
@@ -72,14 +72,14 @@ FUNCTION VOrdMax(CONST A : ARRAY OF Real; lim : Word) : Word;
   (* Position of minimum    -  Position du minimum d'un vecteur            *)
 FUNCTION VOrdMin(CONST A : ARRAY OF Real; lim : Word) : Word;
   (*  Subtract minimum from maximum of a vector
-   DiffÇrence entre maximum et minimum d'un vecteur                        *)
+   Diff√©rence entre maximum et minimum d'un vecteur                        *)
 FUNCTION VRange(CONST A : ARRAY OF Real; lim : Word) : Real;
  (*  Mean between maximum and minimum of a vector
    Moyenne du maximum et et du minimum d'un vecteur                        *)
 FUNCTION VMidRange(CONST A : ARRAY OF Real; lim : Word) : Real;
- (* Median of a vector    - MÇdiane d'un vecteur
+ (* Median of a vector    - M√©diane d'un vecteur
     If not in ascending order , VMedian returns zero
-    Doit àtre triÇ en ordre ascendant  sinon valeur zÇro
+    Doit √™tre tri√© en ordre ascendant  sinon valeur z√©ro
   *)
 FUNCTION VMedian(CONST A : ARRAY OF Real; lim : Word) : Real;
 

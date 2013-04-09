@@ -1,6 +1,6 @@
 {
-³ I'm looking for a routine to swap two nodes in a double
-³ linked list or a complete sort.
+â”‚ I'm looking for a routine to swap two nodes in a double
+â”‚ linked list or a complete sort.
 
 There has been a thread on the TP conf area in CIS on quick
 sorting a (double) linked list. To swap two nodes, remove one,

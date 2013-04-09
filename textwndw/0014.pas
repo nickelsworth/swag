@@ -58,7 +58,7 @@ TYPE
 CONST
   None = '';
 
-  VertFrame   : TVertFrameChars = '³ºÛ';
+  VertFrame   : TVertFrameChars = 'â”‚â•‘â–ˆ';
 
   { Display combination codes returned by the GetDisplay function }
 
@@ -77,11 +77,11 @@ CONST
 
   { Window frame classes }
 
-  SingleFrame : TFrame       = 'ÚÄ¿³³ÀÄÙ';
-  DoubleFrame : TFrame       = 'ÉÍ»ººÈÍ¼';
-  SingleDoubleFrame : TFrame = 'ÖÄ·ººÓÄ½';
-  DoubleSingleFrame : TFrame = 'ÕÍ¸³³ÔÍ¾';
-  BarFrame : TFrame          = 'ÛßÛÛÛÛÜÛ';
+  SingleFrame : TFrame       = 'â”Œâ”€â”â”‚â”‚â””â”€â”˜';
+  DoubleFrame : TFrame       = 'â•”â•â•—â•‘â•‘â•šâ•â•';
+  SingleDoubleFrame : TFrame = 'â•“â”€â•–â•‘â•‘â•™â”€â•œ';
+  DoubleSingleFrame : TFrame = 'â•’â•â••â”‚â”‚â•˜â•â•›';
+  BarFrame : TFrame          = 'â–ˆâ–€â–ˆâ–ˆâ–ˆâ–ˆâ–„â–ˆ';
 
   { Window frame constants }
 

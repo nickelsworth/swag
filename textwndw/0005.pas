@@ -38,20 +38,20 @@ begin
   X := X2 - (X1-1);      { find box width  }
   Y := Y2 - (Y1-1);      { find box height }
   { draw box }
-  S := Concat('…', CharS(X-2, 'Õ'), 'ª');
+  S := Concat('‚ïî', CharS(X-2, '‚ïê'), '‚ïó');
   GotoXY(X1, Y1);
   TextAttr := Attr;
   Write(S);
-  Title := Concat('µ ', Title,' ∆');
+  Title := Concat('‚ï° ', Title,' ‚ïû');
   GotoXY(Center(X1, X2, Title), Y1);
   Write(Title);
   For L := 2 to (Y-1) do
     begin
       GotoXY(X1, Y1+L-1);
-      Write('∫', CharS(X-2, ' '), '∫');
+      Write('‚ïë', CharS(X-2, ' '), '‚ïë');
     end;
   GotoXY(X1, Y2);
-   Write('»', CharS(X-2, 'Õ'), 'º');
+   Write('‚ïö', CharS(X-2, '‚ïê'), '‚ïù');
 
 end;
 

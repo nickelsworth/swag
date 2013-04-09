@@ -251,7 +251,7 @@ BEGIN
    IF (radians >=0) AND (radians<1) THEN
    BEGIN
    Outtextxy(x+28,y+175,'The Sine of ');
-   st:=st + 'ø';
+   st:=st + 'Â°';
    Outtextxy(x+120,y+175,st);
    Outtextxy(x+240,y+175,'is');
    SETcolOR(red);
@@ -262,7 +262,7 @@ BEGIN
       SINcheck(deg);
       radians:=(deg*pi)/180;
       Outtextxy(x+28,y+175,'The Sine of ');
-      st:=st + 'ø';
+      st:=st + 'Â°';
       Outtextxy(x+120,y+175,st);
       Outtextxy(x+240,y+175,'is');
       SETcolOR(red);
@@ -288,7 +288,7 @@ BEGIN
    IF (radians >-1) AND (radians < 1) THEN
    BEGIN
       Outtextxy(x+28,y+175,'The Cosine of ');
-      st:=st + 'ø';
+      st:=st + 'Â°';
       Outtextxy(x+140,y+175,st);
       Outtextxy(x+240,y+175,'is');
       SETcolOR(red);
@@ -299,7 +299,7 @@ BEGIN
       Coscheck(deg);
       radians:=(deg*pi)/180;
       Outtextxy(x+28,y+175,'The Cosine of ');
-      st:=st + 'ø';
+      st:=st + 'Â°';
       Outtextxy(x+140,y+175,st);
       Outtextxy(x+240,y+175,'is');
       SETcolOR(red);
@@ -330,7 +330,7 @@ BEGIN
       cos_radians1:=(deg*pi)/180;
       sIN_radians1:=(deg*pi)/180;
       Outtextxy(x+28,y+175,'The Tan of ');
-      st:=st + 'ø';
+      st:=st + 'Â°';
       Outtextxy(x+120,y+175,st);
       Outtextxy(x+240,y+175,'is');
       SETcolOR(red);
@@ -358,7 +358,7 @@ BEGIN
    IF (radians >=0) AND (radians<1) THEN
    BEGIN
      Outtextxy(x+28,y+175,'The Cosec of ');
-     st:=st + 'ø';
+     st:=st + 'Â°';
      Outtextxy(x+136,y+175,st);
      Outtextxy(x+240+length(st)+20,y+175,'is');
      IF ((trunc(deg) MOD 360 = 0)) OR ((trunc(deg) MOD 360 = 180)) THEN
@@ -377,7 +377,7 @@ BEGIN
         SINcheck(deg);
         radians:=(deg*pi)/180;
         Outtextxy(x+28,y+175,'The Cosec of ');
-        st:=st + 'ø';
+        st:=st + 'Â°';
         Outtextxy(x+136,y+175,st);
         Outtextxy(x+240+length(st)+20,y+175,'is');
         IF (trunc(deg) MOD 360 = 0) OR (trunc(deg) MOD 360 = 180) THEN
@@ -413,7 +413,7 @@ BEGIN
    IF (radians >=0) AND (radians<1) THEN
    BEGIN
      Outtextxy(x+28,y+175,'The Sec of ');
-     st:=st + 'ø';
+     st:=st + 'Â°';
      Outtextxy(x+116,y+175,st);
      Outtextxy(x+240,y+175,'is');
      IF ((trunc(deg) MOD 90 = 0)) OR ((trunc(deg) MOD 90 = 45)) THEN
@@ -432,7 +432,7 @@ BEGIN
         SINcheck(deg);
         radians:=(deg*pi)/180;
         Outtextxy(x+28,y+175,'The Sec of ');
-        st:=st + 'ø';
+        st:=st + 'Â°';
         Outtextxy(x+116,y+175,st);
         Outtextxy(x+240,y+175,'is');
         IF (trunc(deg) MOD 90 = 0) OR (trunc(deg) MOD 90 = 45) THEN
@@ -470,7 +470,7 @@ BEGIN
       cos_radians1:=(deg*pi)/180;
       sIN_radians1:=(deg*pi)/180;
       Outtextxy(x+28,y+175,'The Cot of ');
-      st:=st + 'ø';
+      st:=st + 'Â°';
       Outtextxy(x+120,y+175,st);
       Outtextxy(x+240,y+175,'is');
       IF (trunc(deg) MOD 180 = 0) THEN

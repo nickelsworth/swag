@@ -7,43 +7,43 @@ RTM, boy. Right from Tech Help 4.0:
                Standard EXE-format files begin with this header.
 
 Offset Size Contents
-ßßßßßß ßßßß ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
-            ÚÄÄÄÄÄÄÄ¿
- +0      2  ³4Dh 5aH³ .EXE file signature ('MZ')
-            ÃÄÄÄÁÄÄÄ´
- +2      2  ³PartPag³ length of partial page at end (generally ignored)
-            ÃÄÄÄÁÄÄÄ´
- +4      2  ³PageCnt³ length of image in 512-byte pages, including the header
-            ÃÄÄÄÁÄÄÄ´
- +6      2  ³ReloCnt³ number of items in relocation table
-            ÃÄÄÄÁÄÄÄ´
- +8      2  ³HdrSize³ size of header in 16-byte paragraphs
-            ÃÄÄÄÁÄÄÄ´
-+0aH     2  ³MinMem ³ minimum memory needed above end of program (paragraphs)
-            ÃÄÄÄÁÄÄÄ´
-+0cH     2  ³MaxMem ³ maximum memory needed above end of program (paragraphs)
-            ÃÄÄÄÁÄÄÄ´
-+0eH     2  ³ReloSS ³ segment offset of stack segment (for setting SS)
-            ÃÄÄÄÁÄÄÄ´
-+10H     2  ³ExeSP  ³ value for SP register (stack pointer) when started
-            ÃÄÄÄÁÄÄÄ´
-+12H     2  ³ChkSum ³ file checksum (negative sum of all words in file)
-            ÃÄÄÄÁÄÄÄ´
-+14H     2  ³ExeIP  ³ value for IP register (instruction pointer) when started
-            ÃÄÄÄÁÄÄÄ´
-+16H     2  ³ReloCS ³ segment offset of code segment (for setting CS)
-            ÃÄÄÄÁÄÄÄ´
-+18H     2  ³TablOff³ file-offset of first relocation item (often 001cH)
-            ÃÄÄÄÁÄÄÄ´
-+1aH     2  ³Overlay³ overlay number (0 for base module)
-            ÀÄÄÄÁÄÄÄÙ
+â–€â–€â–€â–€â–€â–€ â–€â–€â–€â–€ â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€
+            â”Œâ”€â”€â”€â”€â”€â”€â”€â”
+ +0      2  â”‚4Dh 5aHâ”‚ .EXE file signature ('MZ')
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
+ +2      2  â”‚PartPagâ”‚ length of partial page at end (generally ignored)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
+ +4      2  â”‚PageCntâ”‚ length of image in 512-byte pages, including the header
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
+ +6      2  â”‚ReloCntâ”‚ number of items in relocation table
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
+ +8      2  â”‚HdrSizeâ”‚ size of header in 16-byte paragraphs
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++0aH     2  â”‚MinMem â”‚ minimum memory needed above end of program (paragraphs)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++0cH     2  â”‚MaxMem â”‚ maximum memory needed above end of program (paragraphs)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++0eH     2  â”‚ReloSS â”‚ segment offset of stack segment (for setting SS)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++10H     2  â”‚ExeSP  â”‚ value for SP register (stack pointer) when started
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++12H     2  â”‚ChkSum â”‚ file checksum (negative sum of all words in file)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++14H     2  â”‚ExeIP  â”‚ value for IP register (instruction pointer) when started
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++16H     2  â”‚ReloCS â”‚ segment offset of code segment (for setting CS)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++18H     2  â”‚TablOffâ”‚ file-offset of first relocation item (often 001cH)
+            â”œâ”€â”€â”€â”´â”€â”€â”€â”¤
++1aH     2  â”‚Overlayâ”‚ overlay number (0 for base module)
+            â””â”€â”€â”€â”´â”€â”€â”€â”˜
 1cH         size of formatted portion of EXE header
-            ÚÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÂ Ä Ä ÂÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄ¿ Relocation table.  Starts
-+ ?     4*? ³offset  segment³  ³offset  segment³ at file offset [EXE+18H].
-            ÀÄÄÄÁÄÄÄÁÄÄÄÁÄÄÄÁ Ä Ä ÁÄÄÄÁÄÄÄÁÄÄÄÁÄÄÄÙ Has [EXE+6] DWORD entries.
+            â”Œâ”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”¬ â”€ â”€ â”¬â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â” Relocation table.  Starts
++ ?     4*? â”‚offset  segmentâ”‚  â”‚offset  segmentâ”‚ at file offset [EXE+18H].
+            â””â”€â”€â”€â”´â”€â”€â”€â”´â”€â”€â”€â”´â”€â”€â”€â”´ â”€ â”€ â”´â”€â”€â”€â”´â”€â”€â”€â”´â”€â”€â”€â”´â”€â”€â”€â”˜ Has [EXE+6] DWORD entries.
 + ?     ?   filler to a paragraph boundary
 + ?     ?   start of program image
-ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  Since an EXE file may be loaded on any segment, all absolute segment
  references (such as FAR CALLs, long address pointers, and references such as
  MOV AX,data_seg) must be adjusted to work for the memory location in which

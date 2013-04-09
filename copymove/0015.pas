@@ -1,6 +1,6 @@
 {
-³ I am interested in the source in Asm or TP to move a File from one
-³ directory to another by means of the FAT table.
+â”‚ I am interested in the source in Asm or TP to move a File from one
+â”‚ directory to another by means of the FAT table.
 
 All you have to do is use the Rename Procedure.  It isn't done via the
 FAT table, but via Dos Function 56h.  The only restrictions are (1)

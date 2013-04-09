@@ -19,8 +19,8 @@ type
          wint:wintype;
        end;
 const
-  normal:wintype=('Ú','¿','À','Ù','Ä','³');
-  double:wintype=('É','»','È','¼','Í','º');
+  normal:wintype=('â”Œ','â”','â””','â”˜','â”€','â”‚');
+  double:wintype=('â•”','â•—','â•š','â•','â•','â•‘');
 
 procedure initback(var sav:psave);
 procedure saveback(var sav:psave;xx1,yy1,xx2,yy2:word);

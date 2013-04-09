@@ -247,7 +247,7 @@ begin
    Level := 0;
    writeln('      Level');
    writeln('0 1 2 3 4 5 6 7 8');
-   writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+   writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
    Traverse( Tree,Level )
 end;
 

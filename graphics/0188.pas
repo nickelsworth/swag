@@ -275,11 +275,11 @@ BEGIN
    y:=ang_y * Pi / 180;
    z:=ang_z * Pi / 180;
    {
-    ⁄                                                                      ø
-    ≥     cosZ*cosY                      -cosY*sinZ                 sinY   ≥
-    ≥ cosX*sinZ-sinY*cosZ*sinX      cosZ*cosX+sinX*sinZ*sinY     cosY*sinX ≥
-    ≥-sinX*sinZ-sinY*cosZ*cosX     -cosZ*sinX+sinZ*sinY*cosX     cosX*cosY ≥
-    ¿                                                                      Ÿ
+    ‚îå                                                                      ‚îê
+    ‚îÇ     cosZ*cosY                      -cosY*sinZ                 sinY   ‚îÇ
+    ‚îÇ cosX*sinZ-sinY*cosZ*sinX      cosZ*cosX+sinX*sinZ*sinY     cosY*sinX ‚îÇ
+    ‚îÇ-sinX*sinZ-sinY*cosZ*cosX     -cosZ*sinX+sinZ*sinY*cosX     cosX*cosY ‚îÇ
+    ‚îî                                                                      ‚îò
    }
    Mat[1][1]:=round(cos(z)*cos(y)*(1 SHL 12));
    Mat[1][2]:=round(-sin(z)*cos(y)*(1 SHL 12));
@@ -300,15 +300,15 @@ BEGIN
    WriteStr(10,10,'X');
    WriteNr( 20,10, Dist_X);
    WriteNr( 50,10,  Ang_X);
-   WriteStr(74,10,'¯');
+   WriteStr(74,10,'¬∞');
    WriteStr(10,20,'Y');
    WriteNr( 20,20, Dist_Y);
    WriteNr( 50,20,  Ang_Y);
-   WriteStr(74,20,'¯');
+   WriteStr(74,20,'¬∞');
    WriteStr(10,30,'Z');
    WriteNr( 20,30, Dist_Z);
    WriteNr( 50,30,  Ang_Z);
-   WriteStr(74,30,'¯');
+   WriteStr(74,30,'¬∞');
     { Raster }
    color:=white;
    FOR k:=-5 TO 5  DO

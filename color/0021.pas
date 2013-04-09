@@ -1,9 +1,9 @@
 {
- ÃÄ>I would like to implement color codes into my on-line doors.  You know
- ÃÄ>the type that Wildcat or PCB have.  The @ codes.  Does anyone have a
- ÃÄ>routine that would (I assume) read in a file bite by bite and when it
- ÃÄ>comes across the @ char it would read the next 3 bits and determine what
- ÃÄ>action to take?
+ â”œâ”€>I would like to implement color codes into my on-line doors.  You know
+ â”œâ”€>the type that Wildcat or PCB have.  The @ codes.  Does anyone have a
+ â”œâ”€>routine that would (I assume) read in a file bite by bite and when it
+ â”œâ”€>comes across the @ char it would read the next 3 bits and determine what
+ â”œâ”€>action to take?
 
 Hi Larry! Sure do have one for 'ya!
 

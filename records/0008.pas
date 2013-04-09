@@ -33,5 +33,5 @@ end;
  * The Right Place (tm) BBS/Atlanta - 404/476-2607 SuperRegional Hub
  * PostLink(tm) v1.05  TRP (#564) : RelayNet(tm)
 ---
- þ OLX 2.1 TD þ I just steal 'em, I don't explain 'em.
+ â–  OLX 2.1 TD â–  I just steal 'em, I don't explain 'em.
 

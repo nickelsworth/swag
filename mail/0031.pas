@@ -86,7 +86,7 @@ If Not OpenMsgArea(MsgOut, AreaId) Then
      textbackground(0);
      clrscr;
      textcolor(15);
-       for a:=1 to 80 do write('Ä');  { header starts here }
+       for a:=1 to 80 do write('â”€');  { header starts here }
          textcolor(2);
          MsgOut^.MsgStartUp;
          WriteLn(MsgOut^.GetMsgNum);
@@ -104,7 +104,7 @@ If Not OpenMsgArea(MsgOut, AreaId) Then
                  Write('Subj: ');
                  WriteLn(MsgOut^.GetSubj);
                  textcolor(15);
-                   for a:=1 to 80 do write('Ä'); { header ends here }
+                   for a:=1 to 80 do write('â”€'); { header ends here }
                      window(1,wherey,80,25); {make a window to scroll message}
                      textcolor(7);
                      textbackground(0);

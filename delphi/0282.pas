@@ -2,7 +2,7 @@ unit UBitmap;
 {
 Extented TBitmap object for Delphi 1.0
 Added methods to load and save a compressed bitmap.
-Copyright © 1997 by Herbert J.Beemster.
+Copyright ‚åê 1997 by Herbert J.Beemster.
 
 Questions, positive remarks, improvements etc. : herbertjb@compuserve.com
 

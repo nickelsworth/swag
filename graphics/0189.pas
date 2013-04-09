@@ -8,7 +8,7 @@ kiszely@bmeik.eik.bme.hu}
 {--------------------------------------------------------------------------}
 uses    crt,mygraf;
 const   end_seq:real=237;       {the end of a data-stream,
-				 it is a 'í' sign, indicates
+				 it is a 'Ï†' sign, indicates
 				 the end of a kind of stream}
 
 {---------------------------------------------------------------------------}
@@ -98,7 +98,7 @@ begin
 	writeln;writeln;writeln;
 	writeln('                A little program to rotate a 4 dimensional cube');
 	writeln;writeln;
-	writeln('                           programmed by Kiszely L szl¢');
+	writeln('                           programmed by Kiszely LÃ¡szlÃ³');
 	writeln;writeln;writeln;
 	writeln('                                  Control Keys');
 	writeln('                4 - 6       Rotation around the YW-plane');
@@ -517,7 +517,7 @@ program		generate_the_4d_cube;
 kiszely@bmeik.eik.bme.hu}
 
 const   end_seq:real=237;        {the end of a data-stream,
-				  it is a 'í' sign, indicates
+				  it is a 'Ï†' sign, indicates
 				  the end of a kind of stream}
 
         vertex_number:integer=16;  {the number of the vertexes}

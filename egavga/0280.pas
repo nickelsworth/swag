@@ -2,7 +2,7 @@ Unit NEWFONT; {VGA Textfont & color changer. Source.}
         {
                 Version: 1.0 (Beta/not all mode tested)
 
-                Author: Nilton Castillo Albarrac°n.
+                Author: Nilton Castillo Albarrac√≠n.
                         ncastill@araucaria.cec.uchile.cl
                         El Boldo 275 Est.Central Santiago Chile
 

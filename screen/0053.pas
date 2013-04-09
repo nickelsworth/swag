@@ -1,7 +1,7 @@
 {
-Ã>Ok, here is a simple problem that is really annoying me!
-Ã>Whenever I try to put a character at position x=80, y=25, the screen
-Ã>scrolls up one line.
+â”œ>Ok, here is a simple problem that is really annoying me!
+â”œ>Whenever I try to put a character at position x=80, y=25, the screen
+â”œ>scrolls up one line.
 
 Don't use gotoxy(); and write(); statements. Try this one:
 }

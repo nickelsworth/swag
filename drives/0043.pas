@@ -61,5 +61,5 @@ begin
 end.
 ===========================================================
 ---
- þ RNET 2.00m: ILink: Faster-Than-Light þ Atlanta GA þ 404-296-3120 / 299-3930
+ â–  RNET 2.00m: ILink: Faster-Than-Light â–  Atlanta GA â–  404-296-3120 / 299-3930
 

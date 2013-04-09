@@ -1,5 +1,5 @@
 { ANAGRAM. --------------------------------------------------------------------
-  Rapha‰l Vanney, 01/93
+  RaphaÃ«l Vanney, 01/93
 
   Purpose : Reads a list of Words 4 to 10 Characters long from a File
             named 'LIST.#1', outputs a list of anagrams founds in a
@@ -342,7 +342,7 @@ begin
 
   If ParamCount<>1 Then
   begin
-    WriteLn('Anagram. Rapha‰l Vanney, 01/93 - Anagram''s contest entry.');
+    WriteLn('Anagram. RaphaÃ«l Vanney, 01/93 - Anagram''s contest entry.');
     WriteLn ;
     WriteLn('Anagram <input_File>') ;
     WriteLn ;

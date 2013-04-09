@@ -126,12 +126,12 @@ Function FPick(Path          : PathStr;
       TextAttr := BorderColor;                   {<- Set the Frame color }
       Window(TopX,TopY,TopX+BoxWidth,BotY+1);    {<- Window the file box }
       Inc(TopY); dec(BotY);
-      Write('ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿');                    {     Now     }
+      Write('â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”');                    {     Now     }
       GotoXY(3,1);Write(LastDir(SearchDir));
       GotoXY(1,2);
       For Ypos := TopY to BotY do                   {   Draw the  }
-        Write('³              ³');                  {     Box     }
-      Write('ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ');                    {    image    }
+        Write('â”‚              â”‚');                  {     Box     }
+      Write('â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜');                    {    image    }
       Inc(TopX);
       Deep := BotY - TopY;                       {<- Change to inside depth }
       GotoXY(6,Deep+3);

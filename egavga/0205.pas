@@ -9,8 +9,8 @@ The Flame Effect :-
   123  123
   4X5  4X5
   678  ABC  X's colour = A+B+C / 3 ( beacause were adding 3 values ) - DV
-        ^ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-  ^ X and its surrounding pixel colours. À> X and the pixels we've chosen
+        ^â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  ^ X and its surrounding pixel colours. â””> X and the pixels we've chosen
 
 The basics of the flame effect are to choose as many of the 8 pixels
 ( you could use others ) arround the pixel, you are trying to finds

@@ -82,7 +82,7 @@ You might want to take a look at Dr. Dobbs from a few months back
 
 Cyrus
 ---
- þ SPEED 1ú30 #666 þ 2!  4!  6!  8!  It's time to calculate!  2 24 720 40,32
+ â–  SPEED 1Â·30 #666 â–  2!  4!  6!  8!  It's time to calculate!  2 24 720 40,32
  * Midas Touch of Chicago 312-764-0591/0761 DUAL STD
  * PostLink(tm) v1.06  MIDAS (#887) : RelayNet(tm) Hub
 

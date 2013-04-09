@@ -170,9 +170,9 @@ begin {WordWrap}
   end; {WHILE ( not (Chatended) )}
   Display(0, 12, 0, 'Sysop Left Chat Mode.');
   If (NOT Registered) Then
-  DisplayLoc(0, 7, 0, 'þ If you find this Program of value, please register.');
+  DisplayLoc(0, 7, 0, 'â–  If you find this Program of value, please register.');
   Delay(2500);
-  Display(0, 15, 0, 'Press ( '+#17+'ÄÄÙ ) to Continue . . .');
+  Display(0, 15, 0, 'Press ( '+#17+'â”€â”€â”˜ ) to Continue . . .');
   ClearScreen;
   Chatended := False;
   InactiveVal := 30;

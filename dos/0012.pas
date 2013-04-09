@@ -111,5 +111,5 @@ Read/Write            2            34         50         66
 -------------------------------------------------------------------
 
 --- GEcho 1.00
- * Origin: Access-PC BBS þ Scarborough, ON þ (416)491-9249 (1:250/320)
+ * Origin: Access-PC BBS â–  Scarborough, ON â–  (416)491-9249 (1:250/320)
 

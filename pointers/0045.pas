@@ -134,9 +134,9 @@ begin
                   Father := SelectFatherNode( Father )
                end;
             writeln('BFT Spanning Tree');
-            writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+            writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
             PrintTree( BFTree );
-            writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+            writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
             writeln;
             V := SelectGraphNode( Grph )
       end
@@ -204,7 +204,7 @@ begin
    BFTraverse( Grph1,c );
    Window(40,2,80,25);
    writeln('Adjacency Matrix');
-   writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+   writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
    writeln;
    PrintGraph( Grph1 );
    delay(5000);
@@ -214,7 +214,7 @@ begin
    BFTraverse( Grph2,k );
    Window(40,2,80,25);
    writeln('Adjacency Matrix');
-   writeln('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+   writeln('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
    writeln;
    PrintGraph( Grph2 )
 end.

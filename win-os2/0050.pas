@@ -45,8 +45,8 @@ Info follows in the file included below.
 {                                                  }
 {   Christer Fahlgren                              }
 {   Email: chrfa@ida.liu.se                        }
-{   Snail: Västanågatan 26A:204                    }
-{   S-582 35 Linköping                             }
+{   Snail: VÎ£stanÏƒgatan 26A:204                    }
+{   S-582 35 LinkÃ·ping                             }
 {   Sweden                                         }
 {**************************************************}
 

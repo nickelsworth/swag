@@ -71,7 +71,7 @@ procedure Wait(ms : word);
 
                     The variable "LoopsPerTick" has the number of loops
                     to do for one BIOS tick (18.2 of these/sec). If you
-                    want to delay for "X" æs, the number of loops required
+                    want to delay for "X" Âµs, the number of loops required
                     would be  "(LoopsPerTick * X) div 54945". This will not
                     compile if you are using TP 4.0, 5.0 or 5.5 due to the
                     conditional defines. This is because it makes use of

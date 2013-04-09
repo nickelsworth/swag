@@ -70,11 +70,11 @@ begin
     textattr := lightgray;
     writeln('Completely erases file contents, and filename from FAT and');
     writeln('from the actual disk. Very throughly done!'#10);
-    writeln('Summary of action: þ Un-attributes file.');
-    writeln('                   þ Renames FAT file name.');
-    writeln('                   þ Rewrites file contents with a random buffer');
-    writeln('                   þ Truncates file to 0 bytes.');
-    writeln('                   þ Erases file.');
+    writeln('Summary of action: â–  Un-attributes file.');
+    writeln('                   â–  Renames FAT file name.');
+    writeln('                   â–  Rewrites file contents with a random buffer');
+    writeln('                   â–  Truncates file to 0 bytes.');
+    writeln('                   â–  Erases file.');
     halt(1);
   end;
   randomize;

@@ -209,7 +209,7 @@ begin
      write('      Look out for more software by     ');
      gotoxy(17,5);
      textcolor(lightcyan);
-     write('       °±²                     ²±°      ');
+     write('       â–‘â–’â–“                     â–“â–’â–‘      ');
      gotoxy(31,5);
      textcolor(lightred+blink);
      write('NATHAN DAWSON');

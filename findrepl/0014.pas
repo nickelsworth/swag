@@ -116,13 +116,13 @@ Type
 
 
 
-³   Implement a symbol table SEARCH routine, and a symbol table ENTER
-³   routine. Both routines must accept a Pointer to the root of the
-³   tree, and the name of the identifier you are working with, and
-³   must return a Pointer to the node that was found in the search
-³   routine, or enters in the enter routine. If no node was found, or
-³   entered, the routines must return NIL.
-³   The resulting symbol table should be a sorted tree.
+â”‚   Implement a symbol table SEARCH routine, and a symbol table ENTER
+â”‚   routine. Both routines must accept a Pointer to the root of the
+â”‚   tree, and the name of the identifier you are working with, and
+â”‚   must return a Pointer to the node that was found in the search
+â”‚   routine, or enters in the enter routine. If no node was found, or
+â”‚   entered, the routines must return NIL.
+â”‚   The resulting symbol table should be a sorted tree.
 
 
 

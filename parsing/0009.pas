@@ -9,7 +9,7 @@ UNIT match;
      RELEASE     :  2.0
      DATE        :  09/08/93
      AUTHOR      :  Fernand LEMOINE
-                    rue du Colläge 34
+                    rue du Coll√®ge 34
                     B-6200 CHATELET
                     BELGIQUE
      All code granted to the public domain

@@ -102,7 +102,7 @@ end;
 
 {
   TFileCopy.Init
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   initializes the Object and allocates memory
 
@@ -121,7 +121,7 @@ end;
 
 {
   TFileCopy.Done
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Destructor, free up buffer memory
 
@@ -129,13 +129,13 @@ end;
 Destructor TFileCopy.Done;
 begin
   If bufsize > 0 Then FreeMem (buffer, bufsize);
-  { bufsize := 0; }   { man weiá ja nie... }
+  { bufsize := 0; }   { man weiÃŸ ja nie... }
 end;
 
 
 {
   TFileCopy.SetBufferSize
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   change buffer size
 
@@ -155,7 +155,7 @@ end;
 
 {
   TFileCopy.CopyFile
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   copy a File onto another; no wildcards allowed
   calls Progress and Error
@@ -212,7 +212,7 @@ begin
       If iores <> 0 Then begin
         If Error (iores) = 1 Then begin      {abort?}
           Close (fsrc);                      {* }
-          Close (fdest);                     {* hier k”nnte man auch}
+          Close (fdest);                     {* hier kÃ¶nnte man auch}
           Erase (fdest);                     {* Error aufrufen, naja...}
           CopyFile := 4;
           Exit;
@@ -228,7 +228,7 @@ begin
         If (rd <> wr) or (iores <> 0) Then begin
           If Error (iores) = 1 Then begin      {abort?}
             Close (fsrc);                      {* }
-            Close (fdest);                     {* hier k”nnte man auch}
+            Close (fdest);                     {* hier kÃ¶nnte man auch}
             Erase (fdest);                     {* Error aufrufen, naja...}
             CopyFile := 5;
             Exit;
@@ -255,7 +255,7 @@ end;
 
 {
   TFileCopy.Progress
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   is called by CopyFile to allow displaying a progress bar or s.e.
 
@@ -272,7 +272,7 @@ end;
 
 {
   TFileCopy.Error
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   is called by CopyFile if an error occured during the copy process
 
@@ -394,7 +394,7 @@ begin
   Dlg.Insert (New (PStaticText, Init (R,
                    '0%              50%             100%')));
   R.Move (0, 1);
-  MyBar := New (PProgressBar, Init (R, '°', '²', 0));
+  MyBar := New (PProgressBar, Init (R, 'â–‘', 'â–“', 0));
   Dlg.Insert (MyBar);
   Desktop^.Insert (@Dlg);
   DoCopy.Init (4096, MyBar);

@@ -62,8 +62,8 @@ IMPLEMENTATION
 uses Crt;
 const
 	NilFrame: string[6] = '      ';      { frame 0 }
-	SglFrame: string[6] = 'ĳڿ��';      { frame 1 }
-	DblFrame: string[6] = 'ͺɻȼ';      { frame 2 }
+	SglFrame: string[6] = '─│┌┐└┘';      { frame 1 }
+	DblFrame: string[6] = '═║╔╗╚╝';      { frame 2 }
 var
 	WP: array[1..10] of pointer;
 	ArraySize: word;

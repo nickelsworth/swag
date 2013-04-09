@@ -66,7 +66,7 @@ PROGRAM BPWinG;
         by Robert B. Hess, Microsoft Corp.
 
       flames.pas from the SWAG libraries (DOS VGA demo)
-        by Keith Degrâce, ekd0840@bosoleil.ci.umoncton.ca.
+        by Keith DegrÎ“ce, ekd0840@bosoleil.ci.umoncton.ca.
                        or 9323767@info.umoncton.ca
 
     Note: WinG must be installed before this program can be run.

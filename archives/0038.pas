@@ -47,7 +47,7 @@ end.
 
 {
         Object-Oriented Archive-viewer, version 3
-        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         This Object-Oriented Archive-viewer (OOAV) is copyright (c) by
         Edwin Groothuis, MavEtJu software. You are free to use it
         if you agree with these three rules:
@@ -65,7 +65,7 @@ end.
         That's all!
 
         How to use this unit:
-        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         (see also the file ArchTest.pas)
 
         - Declare a variable Arch of the       var Arch:TArchive;
@@ -95,7 +95,7 @@ end.
           with.
 
         What if you want to add more archive-types
-        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         - Add the unit name in the second Uses-statement.
         - Find out how to identify it and add that algoritm
           to the IdentifyArchive()-function. Please choose a
@@ -107,7 +107,7 @@ end.
           files ZipView, ArjView and others for examples ;-)
 
         Author:
-        ÄÄÄÄÄÄÄ
+        â”€â”€â”€â”€â”€â”€â”€
         Edwin Groothuis          email:
         Johann Strausslaan 1     edwing@stack.urc.tue.nl (valid until 10-94)
         5583ZA Aalst-Waalre      Edwin_Groothuis@p1.f205.n284.z2.gds.nl

@@ -83,9 +83,9 @@ begin
   else
   begin
     Writeln(' Demo : direct output to the SoundblasterCard !');
-    Writeln('  ÚÄÄ¿  ÚÄÄ¿  ÚÄÄ¿  ÚÄÄ¿  ÚÄÄ¿  Ú  creates a square');
-    Writeln('  ³  ³  ³  ³  ³  ³  ³  ³  ³  ³  ³  waveform With an');
-    Writeln('ÄÄÙ  ÀÄÄÙ  ÀÄÄÙ  ÀÄÄÙ  ÀÄÄÙ  ÀÄÄÙ  64`er amplitude ');
+    Writeln('  â”Œâ”€â”€â”  â”Œâ”€â”€â”  â”Œâ”€â”€â”  â”Œâ”€â”€â”  â”Œâ”€â”€â”  â”Œ  creates a square');
+    Writeln('  â”‚  â”‚  â”‚  â”‚  â”‚  â”‚  â”‚  â”‚  â”‚  â”‚  â”‚  waveform With an');
+    Writeln('â”€â”€â”˜  â””â”€â”€â”˜  â””â”€â”€â”˜  â””â”€â”€â”˜  â””â”€â”€â”˜  â””â”€â”€â”˜  64`er amplitude ');
     Writeln;
     Writeln(' RedFox (14.11.91) ');
 

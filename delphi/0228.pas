@@ -1,6 +1,6 @@
 {*******************************************************************************
   TRichButton
-  Copyright © 1997 Mentor Computer Solutions
+  Copyright ‚åê 1997 Mentor Computer Solutions
   Version 1.0 revised February 2, 1997
 
   Author:       Garret Wilson
@@ -25,7 +25,7 @@
   Acknowledgements: TRichButton was developed in part by referring to the
                     Borland source code for TCustomPanel and TRichEdit. Some
                     features of TRichButton originated from ideas implemented in
-                    TTransBitmap, which is Copyright © 1996 Alan GARNY,
+                    TTransBitmap, which is Copyright ‚åê 1996 Alan GARNY,
                     gry@physiol.ox.ac.uk, http://www.physiol.ox.ac.uk/~gry
                     and these instances are indicated.
 *******************************************************************************}

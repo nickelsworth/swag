@@ -1,8 +1,8 @@
 {
-³ I'm trying to understand the rudiments of linked lists
+â”‚ I'm trying to understand the rudiments of linked lists
 
-³ 4) What are common uses for linked lists?  Is any one particular form
-³    (oneway, circular etc ) preferred or used over any other form?
+â”‚ 4) What are common uses for linked lists?  Is any one particular form
+â”‚    (oneway, circular etc ) preferred or used over any other form?
 
 One use is to maintain queues.  New people, requests, or jobs come in at
 the end of the line (or break in with priority), but once the head of

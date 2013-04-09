@@ -581,7 +581,7 @@ begin
    begin
     window (20,8,60,16);
     clrscr;
-    Writeln ('       Modos gr†ficos');
+    Writeln ('       Modos gr√°ficos');
     writeln;
     Writeln ('1 - VGA 320x200 256 colores');
     Writeln ('2 - SVGA 600x480 256 colores');

@@ -43,7 +43,7 @@ Begin
  KeyPressed := Mem[$40:$1C] - Mem[$40:$1A] <> 0;
 end;
 Begin {Telo programa}
-WriteLn('Copyright by Boçtjan Gabrovçek'); WriteLn;
+WriteLn('Copyright by BoÏ„tjan GabrovÏ„ek'); WriteLn;
  New(Sk);
  Ka := 0;
 While (Char(Ka) < '1') or (Char(Ka) > '5') do
@@ -78,5 +78,5 @@ xor di,di; mov cx,32000; REP movsw; mov ds,bx; sti; end;
 Until KeyPressed;
 asm mov ax,3; int 10h; end;
  Dispose(Sk);
-WriteLn('Copyright by Boçtjan Gabrovçek'); WriteLn;
+WriteLn('Copyright by BoÏ„tjan GabrovÏ„ek'); WriteLn;
 End.

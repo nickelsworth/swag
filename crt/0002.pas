@@ -38,7 +38,7 @@ RM>Anybody know and easy way to do DarkGrey for a bkgrnd???
 
                                - Guy
 ---
- þ DeLuxeý/386 1.25 #5060 þ
+ â–  DeLuxeÂ²/386 1.25 #5060 â– 
  * Rose Media, Toronto, Canada : 416-733-2285
  * PostLink(tm) v1.04  ROSE (#1047) : RelayNet(tm)
 

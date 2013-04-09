@@ -1,8 +1,8 @@
 {
 LEE BARKER
 
-³ I'm trying to Write a small Poker game For a grade in my
-³ High School Pascal Class.
+â”‚ I'm trying to Write a small Poker game For a grade in my
+â”‚ High School Pascal Class.
 
 While the Array of Strings will work, it is a lot of overhead
 for what you want to do. It is also difficult to do the scoring.

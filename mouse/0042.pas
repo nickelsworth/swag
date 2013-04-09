@@ -15,28 +15,28 @@ TYPE
 
 CONST
 
-   { Nombre de Handle actuellement associÇ au Handler de la souris }
+   { Nombre de Handle actuellement associ√© au Handler de la souris }
 
    cgCurrentProc : Byte = 0;
 
-   { Autorise l'appel aux diffÇrentes procÇdures crÇÇes par les Handler ou
+   { Autorise l'appel aux diff√©rentes proc√©dures cr√©√©es par les Handler ou
      interdit leur appel. }
 
    cgEnableMouseProc : Boolean = True;
 
-   { DÇfinit si les coordonnÇes sont Ö considÇrer comme Çtant relatifs Ö des
-     pixels ou bien relatifs Ö des caractäres }
+   { D√©finit si les coordonn√©es sont √† consid√©rer comme √©tant relatifs √† des
+     pixels ou bien relatifs √† des caract√®res }
 
    cgCoordonnees : cgCoord = cgPixel;
 
 TYPE
 
-   { Constantes Boutons enfoncÇs }
+   { Constantes Boutons enfonc√©s }
 
    cgMouse_Key = (cgMouse_None, cgMouse_Left, cgMouse_Right, cgMouse_Both);
 
-   { Structure permettant d'associer une procÇdure lorsque le clic de la
-     souris se fait dans le rectangle dÇlimitÇ par
+   { Structure permettant d'associer une proc√©dure lorsque le clic de la
+     souris se fait dans le rectangle d√©limit√© par
            (XMin, YMin) -------------- (XMax, YMin)
                 :                            :
                 :                            :
@@ -50,16 +50,16 @@ TYPE
    END;
 
    { Lorsque l'utilisateur clic en un certain endroit, si cet endroit est
-     compris dans le rectangle spÇcifiÇ ci-dessus, alors il faudra exÇcuter
-     une certaine procÇdure.
+     compris dans le rectangle sp√©cifi√© ci-dessus, alors il faudra ex√©cuter
+     une certaine proc√©dure.
 
-     On va pouvoir spÇcifier autant de surfaces diffÇrentes. La seule
-     restriction sera la mÇmoire disponible.
+     On va pouvoir sp√©cifier autant de surfaces diff√©rentes. La seule
+     restriction sera la m√©moire disponible.
 
      Ainsi, on pourra dessiner un bouton OK, un bouton CLOSE, ... et leur
-     associer un Çvänement qui leur est propre.
+     associer un √©v√®nement qui leur est propre.
 
-     Cela sera obtenu par la gestion d'un liste chaånÇe vers le haut. }
+     Cela sera obtenu par la gestion d'un liste cha√Æn√©e vers le haut. }
 
    TpListMouseHandle = ^TListMouseHandle;
    TListMouseHandle  = RECORD
@@ -69,29 +69,29 @@ TYPE
 
 VAR
 
-   { Liste chaånÇe des diffÇrents handles associÇs au handler de la souris }
+   { Liste cha√Æn√©e des diff√©rents handles associ√©s au handler de la souris }
 
    MouseProc      : TpListMouseHandle;  { Zone de travail }
-   MouseProcFirst : TpListMouseHandle;  { Tout premier Çvänement }
-   MouseProcOld   : TpListMouseHandle;  { Sauvegarde de l'ancien Çvänement }
+   MouseProcFirst : TpListMouseHandle;  { Tout premier √©v√®nement }
+   MouseProcOld   : TpListMouseHandle;  { Sauvegarde de l'ancien √©v√®nement }
 
-   { True si un gestionnaire de souris est prÇsent }
+   { True si un gestionnaire de souris est pr√©sent }
 
    bMouse_Exist : Boolean;
 
-   { CoordonnÇes du pointeur de la souris }
+   { Coordonn√©es du pointeur de la souris }
 
    cgMouse_X    : Word;
    cgMouse_Y    : Word;
 
    { Correspondant du LastKey.  Contient la valeur du dernier bouton
-     enfoncÇ }
+     enfonc√© }
 
    cgMouse_LastButton : cgMouse_Key;
 
    { Lorsque le clic ne se fait pas dans une des surfaces couvertes par les
-     diffÇrents handlers (voir AddMouseHandler); on peut exÇcuter une
-     certaine procÇdure. }
+     diff√©rents handlers (voir AddMouseHandler); on peut ex√©cuter une
+     certaine proc√©dure. }
 
    hClicNotInArea     : Pointer;
 
@@ -113,7 +113,7 @@ FUNCTION  Mouse_ReleaseButton (Button : cgMouse_Key) : Boolean;
 
 IMPLEMENTATION
 
-{ Teste si un gestionnaire de souris est prÇsent }
+{ Teste si un gestionnaire de souris est pr√©sent }
 
 FUNCTION Mouse_Init : Boolean;
 
@@ -152,8 +152,8 @@ ASM
 
 END;
 
-{ Retourne une des constantes Çquivalents aux boutons enfoncÇs.  Retourne 0
-  si aucun bouton n'a ÇtÇ enfoncÇ }
+{ Retourne une des constantes √©quivalents aux boutons enfonc√©s.  Retourne 0
+  si aucun bouton n'a √©t√© enfonc√© }
 
 FUNCTION Mouse_Pressed : cgMouse_Key;  ASSEMBLER;
 
@@ -162,7 +162,7 @@ ASM
     Mov  Ax, 03h
     Int  33h
 
-    { Bx contiendra 0 si aucun bouton n'a ÇtÇ enfoncÇ
+    { Bx contiendra 0 si aucun bouton n'a √©t√© enfonc√©
                     1          bouton de gauche
                     2          bouton de droite
                     3          bouton de gauche et bouton de droite
@@ -188,7 +188,7 @@ ASM
 
 END;
 
-{ DÇfinit la fenàtre dans laquelle le curseur de la souris peut Çvoluer }
+{ D√©finit la fen√™tre dans laquelle le curseur de la souris peut √©voluer }
 
 PROCEDURE Mouse_Window (XMin, XMax, YMin, YMax : Word); ASSEMBLER;
 
@@ -217,8 +217,8 @@ BEGIN
     ELSE
        BEGIN
 
-          { Les coordonnÇes sont-elles Ö considÇrer comme pixels ou comme
-            caractäres }
+          { Les coordonn√©es sont-elles √† consid√©rer comme pixels ou comme
+            caract√®res }
 
           IF cgCoordonnees = cgPixel THEN
              BEGIN
@@ -233,9 +233,9 @@ BEGIN
           ELSE
              BEGIN
 
-                { Il s'agit de caractäres.  Or un caractäre fait 8 pixels de long.
+                { Il s'agit de caract√®res.  Or un caract√®re fait 8 pixels de long.
                   Donc, lorsque l'on programme (0,1,0,1, xxx), il s'agit du
-                  caractäre se trouvant en (0,0) qui se trouve en rÇalitÇ en
+                  caract√®re se trouvant en (0,0) qui se trouve en r√©alit√© en
                   0..7,0..15 puisqu'il fait 8 pixels de long sur 16 de haut. }
 
                 IF NOT (cgMouse_X Shr 3 < XMin ) AND
@@ -250,7 +250,7 @@ BEGIN
 
 END;
 
-{ Ajoute un Çvänement. }
+{ Ajoute un √©v√®nement. }
 
 PROCEDURE Mouse_AddHandler (XMin, XMax, YMin, YMax : Word; Adress : TProcedure);
 
@@ -259,9 +259,9 @@ BEGIN
     IF bMouse_Exist THEN
        BEGIN
 
-          { On peut ajouter un Çvänement pour autant qu'il reste de la mÇmoire
-            disponible pour le stockage du pointeur sur la procÇdure et de la
-            sauvegarde des coordonnÇes de la surface dÇlimitÇe pour son action. }
+          { On peut ajouter un √©v√®nement pour autant qu'il reste de la m√©moire
+            disponible pour le stockage du pointeur sur la proc√©dure et de la
+            sauvegarde des coordonn√©es de la surface d√©limit√©e pour son action. }
 
           IF MemAvail > SizeOf(TListMouseHandle) THEN
              BEGIN
@@ -271,7 +271,7 @@ BEGIN
                 IF cgCurrentProc = 1 THEN
                    BEGIN
 
-                      { C'est le tout premier Çvänement.  Sauvegarde du pointeur
+                      { C'est le tout premier √©v√®nement.  Sauvegarde du pointeur
                         pour pouvoir ensuite fabriquer la liste. }
 
                       New (MouseProc);
@@ -282,10 +282,10 @@ BEGIN
 
                       MouseProcOld   := MouseProc;
 
-                      { Etant donnÇ que le liste se rempli de bas en haut -le
+                      { Etant donn√© que le liste se rempli de bas en haut -le
                         premier introduit est le moins prioritaire, ...-; seul le
-                        premier aura un pointeur vers NIL.  Cette mÇthode permettra
-                        Ö un Çvänement de recouvrir une surface dÇjÖ dÇlimitÇe par
+                        premier aura un pointeur vers NIL.  Cette m√©thode permettra
+                        √† un √©v√®nement de recouvrir une surface d√©j√† d√©limit√©e par
                         un autre objet. }
 
                       MouseProc^.Next := NIL;
@@ -293,8 +293,8 @@ BEGIN
                 ELSE
                    BEGIN
 
-                      { Ce n'est pas le premier.  Il faut que je crÇe le lien avec
-                        le pointeur NEXT de l'Çvänement prÇcÇdent. }
+                      { Ce n'est pas le premier.  Il faut que je cr√©e le lien avec
+                        le pointeur NEXT de l'√©v√®nement pr√©c√©dent. }
 
                       MouseProcOld := MouseProc;
                       New (MouseProc);
@@ -302,8 +302,8 @@ BEGIN
                       MouseProcFirst := MouseProc;
                    END;
 
-                { Les liens crÇÇs, je peux en toute sÇcuritÇ sauvegarder les
-                  donnÇes. }
+                { Les liens cr√©√©s, je peux en toute s√©curit√© sauvegarder les
+                  donn√©es. }
 
                 MouseProc^.Item.XMin    := XMin;
                 MouseProc^.Item.XMax    := XMax;
@@ -315,8 +315,8 @@ BEGIN
        END;
 END;
 
-{ Cette procÇdure retire le tout dernier Çvänement introduit tout en
-  conservant la cohÇrence de la liste. }
+{ Cette proc√©dure retire le tout dernier √©v√®nement introduit tout en
+  conservant la coh√©rence de la liste. }
 
 PROCEDURE Mouse_RemoveHandler;
 
@@ -339,9 +339,9 @@ BEGIN
 END;
 
 
-{ Examine si le clic s'est fait dans une surface dÇlimitÇe par un Çvänement.
+{ Examine si le clic s'est fait dans une surface d√©limit√©e par un √©v√®nement.
 
-  Si c'est le cas, alors appel de l'Çvänement en question. }
+  Si c'est le cas, alors appel de l'√©v√®nement en question. }
 
 PROCEDURE Mouse_Handle;
 
@@ -354,7 +354,7 @@ BEGIN
     IF bMouse_Exist THEN
        BEGIN
 
-          { Il doit y avoir un process uniquement si on a associÇ des ÇlÇments au
+          { Il doit y avoir un process uniquement si on a associ√© des √©l√©ments au
             handler de la souris.  ET SEULEMENT SI LES APPELS AUX DIFFERENTES
             PROCEDURES SONT AUTORISES OU NON. }
 
@@ -368,7 +368,7 @@ BEGIN
 
                 bNotFound := False;
 
-                { Pointe sur le tout premier Çvänement }
+                { Pointe sur le tout premier √©v√®nement }
 
                 MouseProcOld := MouseProcFirst;
 
@@ -378,8 +378,8 @@ BEGIN
                       MouseProcOld^.Item.YMin, MouseProcOld^.Item.YMax) THEN
                       BEGIN
 
-                         { Le clic s'est fait dans une surface Ö surveiller.  Appel
-                           de l'Çvänement ad'hoc. }
+                         { Le clic s'est fait dans une surface √† surveiller.  Appel
+                           de l'√©v√®nement ad'hoc. }
 
                          MouseProcOld^.Item.Adress_Proc;
                          bFin := True;
@@ -404,8 +404,8 @@ BEGIN
        END;
 END;
 
-{ Retourne TRUE lorsque l'utilisateur maintien le bouton xxx enfoncÇ et
-  renvoi FALSE lorsque ce bouton est relÉchÇ. }
+{ Retourne TRUE lorsque l'utilisateur maintien le bouton xxx enfonc√© et
+  renvoi FALSE lorsque ce bouton est rel√¢ch√©. }
 
 FUNCTION Mouse_ReleaseButton (Button : cgMouse_Key) : Boolean; ASSEMBLER;
 
@@ -415,8 +415,8 @@ ASM
    Int  33h
 END;
 
-{ Cette procÇdure va attendre jusqu'Ö ce que le dernier bouton enfoncÇ ne
-  le soit plus; autrement dit jusqu'Ö ce que l'utilisateur relÉche ce màme
+{ Cette proc√©dure va attendre jusqu'√† ce que le dernier bouton enfonc√© ne
+  le soit plus; autrement dit jusqu'√† ce que l'utilisateur rel√¢che ce m√™me
   bouton.  Ce qui aura pour effet de vider le buffer de la souris. }
 
 PROCEDURE Mouse_Flush;

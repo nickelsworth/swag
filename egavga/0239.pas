@@ -283,7 +283,7 @@ begin
 end;
 
 begin
-  writeln('þ Creating landscape...');
+  writeln('â–  Creating landscape...');
   randomize; x:=0; y:=0; dir:=0;
   new(mp); fillchar(mp^,65535,0);
   new(scr); fillChar(scr^, 64000, 0);

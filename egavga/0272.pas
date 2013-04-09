@@ -1,6 +1,6 @@
 UNIT VESAdrv;
 INTERFACE
-const ProgName   :string[80] = 'VESA driver interface by Pî'#$0D#$0A'$';
+const ProgName   :string[80] = 'VESA driver interface by PÎµ'#$0D#$0A'$';
 	  ProgVersion:word = $0102;  { programmed for VESA version 1.2 }
 	  MaxVertical =      480*2;       { max. vertical lines you need }
 									  { double if 2 pages required }

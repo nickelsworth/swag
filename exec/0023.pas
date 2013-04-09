@@ -49,8 +49,8 @@ const
   { Foutboodschap als de DOS versie niet goed is. }
   StrDos = 'Sorry, dit programma werkt slechts met DOS versie 3.xx en hoger.';
   { Onbekende fout boodschap. }
-  StrError     = 'EXEMENU: door onbekende fout voortijdig be‰indigd.';
-  StrExit      = 'Exemenu is ge‰indigd.';        { Stop EXEMENU boodschap. }
+  StrError     = 'EXEMENU: door onbekende fout voortijdig beÃ«indigd.';
+  StrExit      = 'Exemenu is geÃ«indigd.';        { Stop EXEMENU boodschap. }
 *)
 
   DirMax = 1000;                    { Number of entries in directory array. }
@@ -182,20 +182,20 @@ if length(StrCopyright) > 76
   then i := 76
   else i := length(StrCopyright);
 s[0] := chr((76 - i) div 2);
-Fillchar(s[1],ord(s[0]),'Í');
-Show('É'+s+'µ');
+Fillchar(s[1],ord(s[0]),'â•');
+Show('â•”'+s+'â•¡');
 colour := $1B;
 Show(copy(StrCopyright,1,i));
 colour := $13;
 s[0] := chr(76 - length(s) - length(StrCopyright));
-Fillchar(s[1],ord(s[0]),'Í');
-Show('Æ'+s+'»º ');
+Fillchar(s[1],ord(s[0]),'â•');
+Show('â•'+s+'â•—â•‘ ');
 
 colour := $1E;                                 { Second line. }
 Show(left(Message,76));
 
 colour := $13;                                   { Third line. }
-Show(' ºÇÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¶');
+Show(' â•‘â•Ÿâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¢');
 
 { Display all the directory entries, using the current cursor position
   to calculate the top-left of the page. }
@@ -203,7 +203,7 @@ pagetop := DirHere - DirHere mod 105 + 1;
 for i := pagetop to pagetop + 20 do
   begin
   colour := $13;
-  Show('º ');
+  Show('â•‘ ');
   colour := $1E;
   row := 0;
   while row <= 84 do
@@ -216,11 +216,11 @@ for i := pagetop to pagetop + 20 do
     row := row + 21;
     end;
   colour := $13;
-  Show('       º');
+  Show('       â•‘');
   end;
 
 colour := $13;                                      { Last line. }
-Show('ÈÍÍµ');
+Show('â•šâ•â•â•¡');
 colour := $1B;
 if length(StrHelp) > 74
   then i := 74
@@ -228,8 +228,8 @@ if length(StrHelp) > 74
 Show(copy(StrHelp,1,i));
 colour := $13;
 s[0] := chr(74-i);
-Fillchar(s[1],ord(s[0]),'Í');
-Show('Æ'+s+'¼');
+Fillchar(s[1],ord(s[0]),'â•');
+Show('â•'+s+'â•');
 end;
 
 procedure ShowBar(here : word; onoff : boolean);

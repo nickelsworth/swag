@@ -34,16 +34,16 @@
 
 
 
-               ����������������������������������������ͻ
-               �                                        ��
-               �          AVONTURE CHRISTOPHE           ��
-               �              AVC SOFTWARE              ��
-               �     BOULEVARD EDMOND MACHTENS 157/53   ��
-               �           B-1080 BRUXELLES             ��
-               �              BELGIQUE                  ��
-               �                                        ��
-               ����������������������������������������ͼ�
-               �������������������������������������������
+               ╔════════════════════════════════════════╗
+               ║                                        ║░
+               ║          AVONTURE CHRISTOPHE           ║░
+               ║              AVC SOFTWARE              ║░
+               ║     BOULEVARD EDMOND MACHTENS 157/53   ║░
+               ║           B-1080 BRUXELLES             ║░
+               ║              BELGIQUE                  ║░
+               ║                                        ║░
+               ╚════════════════════════════════════════╝░
+               ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
 }
 
@@ -194,7 +194,7 @@ begin
     WriteLn ('');
     WriteLn ('');
     WriteLn ('');
-    WriteLn ('� File : '+ParamStr(1));
+    WriteLn ('■ File : '+ParamStr(1));
     TextAttr := 11;
     WriteLn ('');
     WriteLn ('');
@@ -257,16 +257,16 @@ begin
      ClrScr;
      TextAttr := 30;
      WriteLn('');
-     WriteLn('����������������������������������������������������������������������Ŀ');
-     WriteLn('� Ani2Ico : Extraction utility from Christophe AVONTURE                �');
-     WriteLn('������������������������������������������������������������������������');
+     WriteLn('┌──────────────────────────────────────────────────────────────────────┐');
+     WriteLn('│ Ani2Ico : Extraction utility from Christophe AVONTURE                │');
+     WriteLn('└──────────────────────────────────────────────────────────────────────┘');
      WriteLn('');
      WriteLn('');
      TextAttr := 7;
 
      If Not (ParamCount = 1) then Begin
         TextAttr := 14;
-        WriteLn('� PURPOSE');
+        WriteLn('■ PURPOSE');
         TextAttr := 11;
         WriteLn('');
         WriteLn('  Ani2Ico program  will allowed you to  extract all cursors pictures  from');
@@ -280,7 +280,7 @@ begin
         ClrScrWin (1,6,79,24);
         GotoXy (1,6);
         TextAttr := 14;
-        WriteLn('� UTILISATION');
+        WriteLn('■ UTILISATION');
         TextAttr := 11;
         WriteLn('');
         WriteLn('');
@@ -300,7 +300,7 @@ begin
         ClrScrWin (1,6,79,24);
         GotoXy (1,6);
         TextAttr := 14;
-        WriteLn('� IN THE FUTURE');
+        WriteLn('■ IN THE FUTURE');
         TextAttr := 11;
         WriteLn('');
         WriteLn('  Actually, I''m developping a Delphi component for  Delphi 1.0  and Delphi');
@@ -321,7 +321,7 @@ begin
         ClrScrWin (1,6,79,23);
         GotoXy (1,6);
         TextAttr := 14;
-        WriteLn('� REGISTRATION');
+        WriteLn('■ REGISTRATION');
         TextAttr := 11;
         WriteLn('');
         WriteLn('  This program is free. ');

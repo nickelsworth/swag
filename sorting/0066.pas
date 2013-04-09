@@ -162,7 +162,7 @@ but don't trust me 8-) Murphy never sleeps 8-)
 }
 
 Unit SORT;
-{ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ}
+{â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€}
 { Purpose  : Unit that implements a generic QSort(), similar to           }
 {            the one in the standard C library.                           }
 { Author   : Alexander Christov                                           }
@@ -170,7 +170,7 @@ Unit SORT;
 {                                                                         }
 {  Use freely.                                                            }
 {                                                                         }
-{ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ}
+{â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€}
 Interface
 
 Type CmpFunc=Function(El1,El2:Pointer):Boolean;
@@ -272,7 +272,7 @@ end.
   compiles in your computer. The only critical ones (I Think) are R- and F+
 }
 Unit SORT;
-{ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ}
+{â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€}
 { Purpose:   Unit that implements a generic QSort, similar to the         }
 {            one in the standard C library, but a lot more general        }
 {            This new version allows ordering of almost anything,         }
@@ -288,7 +288,7 @@ Unit SORT;
 {                                                                         }
 {    Use freely.                                                          }
 {                                                                         }
-{ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ}
+{â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€}
 Interface
 
 Type CmpFunc=Function(El1,El2:Pointer):Boolean;
@@ -882,7 +882,7 @@ unit QSort;
 {*********************************************************
  *                     QSORT.PAS                         *
  *           C-like QuickSort implementation             *
- *     Written 931118 by Bj”rn Felten @ 2:203/208        *
+ *     Written 931118 by BjÃ¶rn Felten @ 2:203/208        *
  *           After an idea by Pontus Rydin               *
  *********************************************************}
 interface
@@ -961,7 +961,7 @@ end. { of unit }
 
 { A simple testprogram can look like this: }
 
-program QS_Test; {Test QuickSort   la C}
+program QS_Test; {Test QuickSort Ã¡ la C}
 uses qsort;
 var v: array[0..9999] of word;
     i: word;

@@ -126,13 +126,13 @@ $1234.
 $1234 is written 0001 0010 0011 0100 in binary. Each hex-digit corresponds to a
 four-group binary digits.
 
-þ) The binary number 0001 is 0*(2^3) + 0*(2^2) + 0*(2^1) + 1*(2^0). It gives
+â– ) The binary number 0001 is 0*(2^3) + 0*(2^2) + 0*(2^1) + 1*(2^0). It gives
 0+0+0+1=1 in decimal.
 
-þ) The binary number 0101 is 0*(2^3) + 1*(2^2) + 0*(2^1) + 1*(2^0). It gives
+â– ) The binary number 0101 is 0*(2^3) + 1*(2^2) + 0*(2^1) + 1*(2^0). It gives
 0+4+0+1=5 in decimal.
 
-þ The _decimal_ number 1101 is 1*(10^3) + 1*(10^2) + 0*(10^1) + 1*(10^0). It
+â–  The _decimal_ number 1101 is 1*(10^3) + 1*(10^2) + 0*(10^1) + 1*(10^0). It
 gives 1000+100+0+1=1011! As you can see, the only difference between the
 decimal and the binary and the hexadecimal system is the base-power. True, the
 hex-system Uses strange digits For us used to decimal, but For the ones used to
@@ -153,7 +153,7 @@ Hi returns the upper 8 bits of the Word, in this Case 0001 0010; Lo returns the
 lower bits (!), 0011 0100. The above code Uses 'and' and 'shr', a breif
 explanation of them will probably be nescessary (oh no :-)).
 
-þ and, when not used as a Boolean operator, Uses two binary numbers and, For
+â–  and, when not used as a Boolean operator, Uses two binary numbers and, For
 each bit, tests them. if _both_ bits are set (equal to 1) the resuling bit is
 set to 1, if any or both of them is cleared (equal to 0) the result is 0. This
 means:
@@ -167,7 +167,7 @@ means:
 This was the second and first statement, and out you get the second and first
 number! When we pass them to Translate, we get back '2' and '4'.
 
-þ shr, only For binary operations, shifts the bits to the right. The bits that
+â–  shr, only For binary operations, shifts the bits to the right. The bits that
 passes over the right side is lost, and the ones that move on left side is
 replaced by zeroes. The bits shifts as many times as the value after the
 shr-keyWord, here 4 times. Like this:

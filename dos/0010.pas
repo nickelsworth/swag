@@ -65,6 +65,6 @@ END.
 
 Greg Estabrooks <<Message Entered on 06-15-93 at 09am>>
 ---
- þ OLX 2.1 TD þ Beer. It's not just for breakfast anymore!
- þ RoseMail 2.10á: NANET: VE1EI BBS, Halifax NS, (902)-868-2475
+ â–  OLX 2.1 TD â–  Beer. It's not just for breakfast anymore!
+ â–  RoseMail 2.10ÃŸ: NANET: VE1EI BBS, Halifax NS, (902)-868-2475
 

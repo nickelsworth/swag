@@ -18,11 +18,11 @@
   Or write me:
 
   SQS 113 Bl "G" Apto 102
-  Brasil - Bras°lia - DF
+  Brasil - Bras√≠lia - DF
   Cep: 70.376-070
 
-  Written By G0D ZÓU$ - Rodrigo M. Silveira - Brazil -  Brasilia
-  It is for Rodrigo frÇdÇric, hi brother :) !
+  Written By G0D ZŒµU$ - Rodrigo M. Silveira - Brazil -  Brasilia
+  It is for Rodrigo fr√©d√©ric, hi brother :) !
 *)
 
 Program Nibbles;
@@ -41,7 +41,7 @@ Const
   Disc      : Array[0..5] of String=
     ('40 Blocks','80 Blocks','120 Blocks','160 Blocks','200 Blocks',
     'Many Blocks!!!');
-  sc        = 'CoDeD By ZÓU$/NiTRo'; { The Little Scrooler }
+  sc        = 'CoDeD By ZŒµU$/NiTRo'; { The Little Scrooler }
 
 {----------------------------------------------------------------------------}
 Type

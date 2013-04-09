@@ -1,6 +1,6 @@
 {
-´ You mean there is a way to have just a PART of the screen scroll with
-´ registers?!?!?
+â”¤ You mean there is a way to have just a PART of the screen scroll with
+â”¤ registers?!?!?
 
 All this routines is importet from Myown ASM-lib. And works fine i
 Turbo Pascal. v7

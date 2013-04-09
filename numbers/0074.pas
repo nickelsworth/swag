@@ -2,28 +2,28 @@ Unit BitOper;
 {$F+,O+}
 Interface
 
-Function GetBit(a,n: byte):byte;              { ‚®§Άΰ ι ¥β §­ η¥­¨¥ n-®£® ΅¨β 
+Function GetBit(a,n: byte):byte;              { Γ©Β«ΒΊΓ³Ξ±Γ΅ΞΓ΅Γ‘Ξ“ ΒΊΒ΅Γ΅Ο„Γ‘Β΅ΒΏΓ‘ n-Β«ΓΊΒ« Γ­ΒΏΞ“Γ΅
 }
-Function SetBitZero(a,n:byte):byte;                      { ‘΅ΰ αλΆ ¥β n-λ© ΅¨β
+Function SetBitZero(a,n:byte):byte;                      { Γ¦Γ­Ξ±Γ΅ΓΞ΄Γ³Γ΅Γ‘Ξ“ n-Ξ΄β Γ­ΒΏΞ“
 }
-Function SetBitOne(a,n:byte):byte;                    { “αβ ­ Ά«¨Ά ¥β n-λ© ΅¨β
+Function SetBitOne(a,n:byte):byte;                    { Γ΄ΓΞ“Γ΅Β΅Γ΅Γ³Β½ΒΏΓ³Γ΅Γ‘Ξ“ n-Ξ΄β Γ­ΒΏΞ“
 }
 
 Implementation
 
-Function GetBit(a,n: byte):byte;              { ‚®§Άΰ ι ¥β §­ η¥­¨¥ n-®£® ΅¨β 
+Function GetBit(a,n: byte):byte;              { Γ©Β«ΒΊΓ³Ξ±Γ΅ΞΓ΅Γ‘Ξ“ ΒΊΒ΅Γ΅Ο„Γ‘Β΅ΒΏΓ‘ n-Β«ΓΊΒ« Γ­ΒΏΞ“Γ΅
 }
 Begin
     GetBit:=1 and (a shr n);
 End;
 
-Function SetBitZero(a,n:byte):byte;                      { ‘΅ΰ αλΆ ¥β n-λ© ΅¨β
+Function SetBitZero(a,n:byte):byte;                      { Γ¦Γ­Ξ±Γ΅ΓΞ΄Γ³Γ΅Γ‘Ξ“ n-Ξ΄β Γ­ΒΏΞ“
 }
 Begin
     SetBitZero:=a and (not(1 shl n));
 End;
 
-Function SetBitOne(a,n:byte):byte;                    { “αβ ­ Ά«¨Ά ¥β n-λ© ΅¨β
+Function SetBitOne(a,n:byte):byte;                    { Γ΄ΓΞ“Γ΅Β΅Γ΅Γ³Β½ΒΏΓ³Γ΅Γ‘Ξ“ n-Ξ΄β Γ­ΒΏΞ“
 }
 Begin
     SetBitOne:=a or (1 shl n);

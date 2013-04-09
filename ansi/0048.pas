@@ -23,10 +23,10 @@
   History:
     v1.00: 01/15/97-01/20/97
       - Features:
-        þ Object oriented code
-        þ Error handling
-        þ Buffered output (for scrolling)
-        þ Also supports direct video output
+        â–  Object oriented code
+        â–  Error handling
+        â–  Buffered output (for scrolling)
+        â–  Also supports direct video output
     v1.01: 01/21/97
       - FIXED: cursor positioning errors
       - FIXED: error handling errors
@@ -49,10 +49,10 @@
         single video screen size constant.
     v1.04: 01/28/97-01/31/97
       - Features:
-        þ ANSI routines for both input and output.  These routines
+        â–  ANSI routines for both input and output.  These routines
           can be used for converting an image -> ANSI code or ANSI
           codes -> an image!
-        þ Much faster routines for faster loading and displaying!
+        â–  Much faster routines for faster loading and displaying!
       - UPDATED: Changed 'VirtualScreenObj.WriteCh' to support
         CR/LF characters.
       - FIXED: WriteCh (ansi) didn't support the 'H' or 'f' commands

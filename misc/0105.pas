@@ -1,8 +1,8 @@
 {
-³ Now, just to bring this home, I want to make it take over the
-³ debugging interrupts.  (INT 3, is it?)  I am just wondering if this
-³ has been done and if anyone has some TP/TASM code already created for
-³ this purpose.
+â”‚ Now, just to bring this home, I want to make it take over the
+â”‚ debugging interrupts.  (INT 3, is it?)  I am just wondering if this
+â”‚ has been done and if anyone has some TP/TASM code already created for
+â”‚ this purpose.
 
 in case the debugger executes an int1 or int 3, all you will get is the
 message "OOPS". not really secure, but for most cases QUITE good enough.

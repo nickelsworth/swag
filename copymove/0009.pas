@@ -1,6 +1,6 @@
-{³o³ I want to make my buffer For the BlockRead command as       ³oº
-³o³ large as possible. When I make it above 11k, I get an       ³oº
-³o³ error telling me "too many Variables."                      ³oº
+{â”‚oâ”‚ I want to make my buffer For the BlockRead command as       â”‚oâ•‘
+â”‚oâ”‚ large as possible. When I make it above 11k, I get an       â”‚oâ•‘
+â”‚oâ”‚ error telling me "too many Variables."                      â”‚oâ•‘
 Use dynamic memory, as in thanks a heap.
 }
 

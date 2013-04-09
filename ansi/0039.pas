@@ -7,7 +7,7 @@ see clearly what I mean, on the other hand you can use your imagination :-)
 The following subroutine is from a program that I am having trouble with.
 In big block letters I have formed the word TEST. When I run the following
 code the last line of TEST which is :
-         '      €€      €€€€€€€€‹   ﬂ€€€€€€€ﬂ        €€';
+         '      ‚ñà‚ñà      ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñÑ   ‚ñÄ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñÄ        ‚ñà‚ñà';
 does not show up in the turbo vision dialog box when running the program.
 If you do not yet know what I mean, and you would like to help, please
 adapt the following subroutine to a simple turbo vision application.
@@ -37,12 +37,12 @@ begin
     Dec(R.B.Y);
     Insert(New(PStaticText, Init(R,
     #13 +
-    '  ﬁ€€€€€€€€›  €€€€€€€€ﬂ   ‹€€€€€€€€ﬂ   €€€€€€€€€€'#13+
-    '      €€      €€          €€               €€    '#13+
-    '      €€      €€‹‹‹‹‹‹    €€‹‹‹‹‹‹‹        €€    '#13+
-    '      €€      €€ﬂﬂﬂﬂﬂﬂ            €€       €€    '#13+
-    '      €€      €€                  €€       €€    '#13+
-    '      €€      €€€€€€€€‹   ﬂ€€€€€€€ﬂ        €€    ')));
+    '  ‚ñê‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñå  ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñÄ   ‚ñÑ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñÄ   ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà'#13+
+    '      ‚ñà‚ñà      ‚ñà‚ñà          ‚ñà‚ñà               ‚ñà‚ñà    '#13+
+    '      ‚ñà‚ñà      ‚ñà‚ñà‚ñÑ‚ñÑ‚ñÑ‚ñÑ‚ñÑ‚ñÑ    ‚ñà‚ñà‚ñÑ‚ñÑ‚ñÑ‚ñÑ‚ñÑ‚ñÑ‚ñÑ        ‚ñà‚ñà    '#13+
+    '      ‚ñà‚ñà      ‚ñà‚ñà‚ñÄ‚ñÄ‚ñÄ‚ñÄ‚ñÄ‚ñÄ            ‚ñà‚ñà       ‚ñà‚ñà    '#13+
+    '      ‚ñà‚ñà      ‚ñà‚ñà                  ‚ñà‚ñà       ‚ñà‚ñà    '#13+
+    '      ‚ñà‚ñà      ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñÑ   ‚ñÄ‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñà‚ñÄ        ‚ñà‚ñà    ')));
 
 
     R.Assign(21, 10, 31, 12);

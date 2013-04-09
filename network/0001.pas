@@ -1,12 +1,12 @@
 {
-±i'm trying to find a method by which i can, from within a TP Program,
-±detect whether or not the NetWare shell has been loaded (Net3, NetX, or
-±whatever); i've figured out how to determine if IPX is running, but
-±can't seem to nail down the shell; the general idea is to detect IPX,
-±detect the shell, determine whether or not the user is logged in, and if
-±not, give them the oppurtUnity to do so; i've got most of the rest
-±figured out, but can't find the shell; any help would be greatly
-±appreciated
+â–’i'm trying to find a method by which i can, from within a TP Program,
+â–’detect whether or not the NetWare shell has been loaded (Net3, NetX, or
+â–’whatever); i've figured out how to determine if IPX is running, but
+â–’can't seem to nail down the shell; the general idea is to detect IPX,
+â–’detect the shell, determine whether or not the user is logged in, and if
+â–’not, give them the oppurtUnity to do so; i've got most of the rest
+â–’figured out, but can't find the shell; any help would be greatly
+â–’appreciated
 
 Try Interrupt 21h, Function EAh, GetShellVersion;
 }

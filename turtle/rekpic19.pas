@@ -1,9 +1,9 @@
-(* ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Programated by Vladimir Zahoransky                        ³
-   ³                Vladko software                            ³
-   ³ Contact      : zahoran@cezap.ii.fmph.uniba.sk             ³
-   ³ Program tema : Squards in squard - norekusion             ³
-   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ *)
+(* â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Programated by Vladimir Zahoransky                        â”‚
+   â”‚                Vladko software                            â”‚
+   â”‚ Contact      : zahoran@cezap.ii.fmph.uniba.sk             â”‚
+   â”‚ Program tema : Squards in squard - norekusion             â”‚
+   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ *)
 
 {
      This is very popular effekt to present rekusion. This version
@@ -13,13 +13,13 @@
  one trick - rekpic20.pas), but for no rekusion version stay a big
  difficult problem. For N=1 it is bigest squard.  For N=2 it is :
 
-   ÚÄÄÄÂÄÄÄÂÄÄÄ¿    And here is a problem. In N=1 it is ONE squard,
-   ³   ³   ³   ³  but in N=2 are there 4 small squards, for N=3 ... .
-   ÃÄÄÄÙ   ÀÄÄÄ´  This problem is not difficult, if you change this
-   ³           ³  problem for Ostack. (Object stack for turtle graphic)
-   ÃÄÄÄ¿   ÚÄÄÄ´  It is very easy for all who undestand Ostack. (statical
-   ³   ³   ³   ³  and dynamical) We work with v - rekusive variable,
-   ÀÄÄÄÁÄÄÄÁÄÄÄÙ  N - level of rekusion and a (s) - it is direction.
+   â”Œâ”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”    And here is a problem. In N=1 it is ONE squard,
+   â”‚   â”‚   â”‚   â”‚  but in N=2 are there 4 small squards, for N=3 ... .
+   â”œâ”€â”€â”€â”˜   â””â”€â”€â”€â”¤  This problem is not difficult, if you change this
+   â”‚           â”‚  problem for Ostack. (Object stack for turtle graphic)
+   â”œâ”€â”€â”€â”   â”Œâ”€â”€â”€â”¤  It is very easy for all who undestand Ostack. (statical
+   â”‚   â”‚   â”‚   â”‚  and dynamical) We work with v - rekusive variable,
+   â””â”€â”€â”€â”´â”€â”€â”€â”´â”€â”€â”€â”˜  N - level of rekusion and a (s) - it is direction.
 
  This program (for easy version) is good to work in parts.
  Part1 : vhere is primitive part (nathing)

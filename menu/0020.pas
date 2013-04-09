@@ -11,10 +11,10 @@
   Or write me:
 
   SQS 113 Bl "G" Apto 102
-  Brazil - Bras°lia - DF
+  Brazil - Bras√≠lia - DF
   Cep: 70.376-070
 
-  Written By ZÓU$ - Rodrigo M. Silveira - Brazil -  Brasilia
+  Written By ZŒµU$ - Rodrigo M. Silveira - Brazil -  Brasilia
 *)
 
 Program Light_bar;
@@ -142,4 +142,4 @@ Begin { Start of the program }
   Asm mov ax,$3;int $10;end;
   Write('Option ',ab,' Selected');
 end.
-{ Written By ZÓU$ - Rodrigo M. Silveira - Brasil - Brasilia }
+{ Written By ZŒµU$ - Rodrigo M. Silveira - Brasil - Brasilia }

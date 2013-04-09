@@ -14,11 +14,11 @@
  ** (c) 1994 by Dirk Paessler, given to the public domain            **
  ** if you change anything please note; leave my name in here!!      **
  ** if you have questions or suggestions, please contact me          **
-ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-³ Dirk Paessler     ³             ³ E-Mail:       FIDO 2:2490/1145.15 ³
-³ Laerchenweg 8     ³Fax          ³ CIS 100114,42      2:2490/2091.5  ³
-³ D-91058 Erlangen  ³+499131601169³ internet 100114.42@compuserve.com ³
-ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Dirk Paessler     â”‚             â”‚ E-Mail:       FIDO 2:2490/1145.15 â”‚
+â”‚ Laerchenweg 8     â”‚Fax          â”‚ CIS 100114,42      2:2490/2091.5  â”‚
+â”‚ D-91058 Erlangen  â”‚+499131601169â”‚ internet 100114.42@compuserve.com â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
  usage:
 
@@ -190,7 +190,7 @@ END;
 PROCEDURE PutStrProfile(name,wert:STRING);
   VAR MyFil,my2fil,my3fil:TEXT;a,myname,altwert,Mywert:STRING; WasIt:BOOLEAN;
 BEGIN
-  altwert:=getStrProfile(name,'#*„”');
+  altwert:=getStrProfile(name,'#*Ã¤Ã¶Ã¼');
   IF altwert=wert THEN exit;
   
   IF NOT Fileexist('astro5.ini') THEN

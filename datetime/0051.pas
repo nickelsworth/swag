@@ -8,7 +8,7 @@ it's true! :) plus some other useful(?) related functions.
 
 unit DayUtil;
 { some useful date&time related functions }
-{ PD by Bj”rn Felten @ 2:203/208 -- Nov 1994 }
+{ PD by BjÃ¶rn Felten @ 2:203/208 -- Nov 1994 }
 
 {$g+} { three shift instructions need this }
 
@@ -133,18 +133,18 @@ end;
    be that difficult to work out your own, country specific,
    modifications to get the workDay function working properly...)
 
-   F”r svenska f”rh†llanden g„ller f”ljande betr„ffande helgdagar:
+   FÃ¶r svenska fÃ¶rhÃ¥llanden gÃ¤ller fÃ¶ljande betrÃ¤ffande helgdagar:
 
-       Sun:=(WeekDay='S') or   {S”ndag}
-      (ThisDate='01 Jan') or   {Ny†rsdagen}
+       Sun:=(WeekDay='S') or   {SÃ¶ndag}
+      (ThisDate='01 Jan') or   {NyÃ¥rsdagen}
       (ThisDate='06 Jan') or   {Trettondedagen}
       (ThisDate='01 May') or   {1:sta maj}
       (ThisDate='25 Dec') or   {Juldagen}
       (ThisDate='26 Dec');     {Annandag jul}
 
-       EFri:=EasternDay-2;     {L†ngfredag}
-       EMon:=EFri+3;           {Annandag p†sk}
-       ADay:=EMon+38;          {Kristi himmelsf„rdsdag}
+       EFri:=EasternDay-2;     {LÃ¥ngfredag}
+       EMon:=EFri+3;           {Annandag pÃ¥sk}
+       ADay:=EMon+38;          {Kristi himmelsfÃ¤rdsdag}
        WMon:=ADay+11;          {Annandag pingst}
 *)
 
@@ -153,15 +153,15 @@ var dn,ed:word;
 begin
   dn:=dayNo(Ye,Mo,Da); ed:=easternDay(Ye);
   workDay:=not
-       ((Wd= 0) or(Wd= 6)  or   {S”ndag eller L”rdag}
-       ((Da= 1)and(Mo= 1)) or   {Ny†rsdagen}
+       ((Wd= 0) or(Wd= 6)  or   {SÃ¶ndag eller LÃ¶rdag}
+       ((Da= 1)and(Mo= 1)) or   {NyÃ¥rsdagen}
        ((Da= 6)and(Mo= 1)) or   {Trettondedagen}
        ((Da= 1)and(Mo= 5)) or   {1:sta maj}
        ((Da=25)and(Mo=12)) or   {Juldagen}
        ((Da=26)and(Mo=12)) or   {Annandag jul}
-        (dn=ed- 2)         or   {L†ngfredag}
-        (dn=ed+ 1)         or   {Annandag p†sk}
-        (dn=ed+39)         or   {Kristi himmelsf„rdsdag}
+        (dn=ed- 2)         or   {LÃ¥ngfredag}
+        (dn=ed+ 1)         or   {Annandag pÃ¥sk}
+        (dn=ed+39)         or   {Kristi himmelsfÃ¤rdsdag}
         (dn=ed+50))             {Annandag pingst}
 end;
 

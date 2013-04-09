@@ -72,6 +72,6 @@ end;
 install this handler as usual. It also traps function 6Ch, DOS 4.0+
 extended open/create. Very few programs use it, but why not...
 ---
- * Faster-Than-Light (FTL) þ Atlanta, GA þ 404-292-8761/299-3930
+ * Faster-Than-Light (FTL) â–  Atlanta, GA â–  404-292-8761/299-3930
  * PostLink(tm) v1.06  FTL (#93) : RelayNet (tm)
 

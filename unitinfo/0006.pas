@@ -115,10 +115,10 @@ ASM
  MOV  BX,n              { BH = nummer n }
  XCHG BL,BH
  MOV  BL,delim          { trenner }
- CLD                    { aufw꼛ts geht's }
+ CLD                    { aufw채rts geht's }
  XOR CX,CX
  XOR DL,DL              { Counter Result }
- MOV CL,DS:[SI]         { L꼗ge s }
+ MOV CL,DS:[SI]         { L채nge s }
  CMP CL,0
  JZ @ready              { leer: raus }
  MOV AH,1               { result default: TRUE }
@@ -133,7 +133,7 @@ ASM
  JZ @copy0              { =0: jetzt copy }
 @lend:
  LOOP @loop
- { Hier L꼗ge erreicht }
+ { Hier L채nge erreicht }
  JMP @ready
 @copy0:
  DEC CL                { 1- wegen keine LOOP }
@@ -145,11 +145,11 @@ ASM
  CMP AL,BL             { trenner }
  JZ @ready             { ja: fertig }
  STOSB                 { Store und INC DI }
- INC DL                { L꼗ge }
+ INC DL                { L채nge }
  LOOP @cloop
 @ready:
  POP DI                 { ES:DI -> Result }
- MOV ES:[DI],DL         { l꼗ge Ziel }
+ MOV ES:[DI],DL         { l채nge Ziel }
  POP DS
 END; { piece }
 
@@ -159,7 +159,7 @@ ASM
  PUSH DS
  LDS SI,s
  LES DI,@result
- CLD          { aufw꼛ts gehts }
+ CLD          { aufw채rts gehts }
  MOV AL,len
  STOSB        { new len }
  CMP AL,0

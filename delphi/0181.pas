@@ -15,7 +15,7 @@
 {  still being updated.                                                   }
 {                                                                         }
 {  Some parts Copyright Boralnd International.                            }
-{  Copyright © UK. Dave Rowlands 1993 - 1995.                             }
+{  Copyright ‚åê UK. Dave Rowlands 1993 - 1995.                             }
 {                  All Rights Reserved.                                   }
 {                                                                         }
 {-------------------------------------------------------------------------}

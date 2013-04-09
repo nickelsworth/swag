@@ -15,11 +15,11 @@ Unit PCSDial;
 
    BTW, it ain't 100% sure that this works with all the numbers.
 
-   This unit was written by G”ran Weinholt. It is very welcome in
+   This unit was written by GÃ¶ran Weinholt. It is very welcome in
    the SWAG. If you use this in a creation of your own, please give
    me credit.
 
-    - G”ran Weinholt <weinholt@usa.net>
+    - GÃ¶ran Weinholt <weinholt@usa.net>
 *)
 
 Interface

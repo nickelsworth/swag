@@ -72,10 +72,10 @@ BEGIN
   TEXTCOLOR (FGErr);
   TEXTBACKGROUND (BGErr);
   GOTOXY (1, 1);
-  WRITELN ('����������������  Critical Error  ��������������Ŀ');
+  WRITELN ('┌───────────────  Critical Error  ───────────────┐');
     FOR i := 1 TO 5 DO
-  WRITELN ('�                                                �');
-  WRITE  ('��������������������������������������������������');
+  WRITELN ('│                                                │');
+  WRITE  ('└────────────────────────────────────────────────┘');
 END;{box}
 
 FUNCTION DosVer : INTEGER;

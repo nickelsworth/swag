@@ -53,13 +53,13 @@ End;
 
 
 {
-ReadOnly     ³  $01
-Hidden       ³  $02
-SysFile      ³  $04
-VolumeID     ³  $08
-Directory    ³  $10
-Archive      ³  $20
-AnyFile      ³  $3F
+ReadOnly     â”‚  $01
+Hidden       â”‚  $02
+SysFile      â”‚  $04
+VolumeID     â”‚  $08
+Directory    â”‚  $10
+Archive      â”‚  $20
+AnyFile      â”‚  $3F
 }
 
 Procedure DoAttrib;

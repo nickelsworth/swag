@@ -111,12 +111,12 @@ var barpos,maxpos : word;
 begin
   dspat(#30,barxpos,barypos,colattr);
   dspat(#31,barxpos,barypos+scrlen-1,colattr);
-  filltext('±',barxpos,barypos+1,barxpos,barypos+scrlen-2,colattr);
+  filltext('â–’',barxpos,barypos+1,barxpos,barypos+scrlen-2,colattr);
   if nofitems >= 1 then begin
     maxpos := scrlen-3;
     if nofitems <> 1 then barpos := round(((curpos-1)/(nofitems-1))*maxpos)
     else barpos := 0;
-    dspat('þ',barxpos,barypos+barpos+1,colattr);
+    dspat('â– ',barxpos,barypos+barpos+1,colattr);
   end;
 end; { ScrollBar }
 

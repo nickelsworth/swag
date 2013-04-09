@@ -17,7 +17,7 @@ Program SBPlay;
 {------------------------------------
  SB compatible digital sound routines
 
-      Copyright Tapio Žij„l„ 1994.
+      Copyright Tapio Ã„ijÃ¤lÃ¤ 1994.
 
      Use and distribute freely, but
     please notice me in somewhere on

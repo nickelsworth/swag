@@ -1,7 +1,7 @@
 {
 Hi. This is a little program I made. It will make a plain text file into a
 nice, fancy one. It will make plain text like... ABCDEF to fancy letters like
-... ’á€ëäŸ. Hope you like it. Bye.
+... Ã†ÃŸÃ‡Î´Î£Æ’. Hope you like it. Bye.
 }
 Program TextChanger;
 Uses

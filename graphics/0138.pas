@@ -16,7 +16,7 @@ begin                {              9323767@info.umoncton.ca               }
   asm   mov ax, 13h  {         wrote of course), if you want something     }
         int 10h      {         e-mail me (i never get mail), maybe i have  }
   end;               {         what you want.                              }
-  for x := 1 to 32 do{                               keith degrƒce         }
+  for x := 1 to 32 do{                               keith degrÃ¢ce         }
    begin             {                               moncton, n.-b. canada }
     setrgb(x, (x shl 1)-1, 0, 0 );
     setrgb(x+32, 63, (x shl 1)-1, 0 );

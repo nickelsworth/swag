@@ -46,7 +46,7 @@ function StrToInt(Str : PChar) : longint;
 
 function StrToIntDef(Str : PChar; DefV : longint) : longint;
   {- Restituisce il valore intero rappresentato dalla stringa decimale Str.
-     Se Str è nil o è vuota o non è corretta viene restituito DefV.}
+     Se Str Î¦ nil o Î¦ vuota o non Î¦ corretta viene restituito DefV.}
 
 function StrToReal(Str : PChar) : real;
   {- Restituisce il valore reale rappresentato dalla stringa decimale Str.}
@@ -123,12 +123,12 @@ const
                         di AParent.}
 
 function MsgPtr(MsgH : word) : PChar;
-  {- Restituisce il messaggio di codice MsgH. Il messaggio non può essere lungo più
+  {- Restituisce il messaggio di codice MsgH. Il messaggio non puâ‰¥ essere lungo piâˆ™
      di 80 caratteri.}
 
 function MessageBoxH(AParent : PWindowsObject; MsgH,TitleH : word; BoxType : word) : integer;
   {- Visualizza un message box con caption di codice TitleH e messaggio di codice MsgH.
-     BoxType è il tipo del message box da creare. Viene restituito il codice restituito dal
+     BoxType Î¦ il tipo del message box da creare. Viene restituito il codice restituito dal
      message box.}
 
 procedure ErrorMsg(AParent : PWindowsObject; MsgH,TitleH : word);

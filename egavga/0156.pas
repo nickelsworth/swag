@@ -24,7 +24,7 @@ Unit LF;
 { (c)1994 Chris Lautenbach                                                   }
 {                                                                            }
 { Date         Revision     Description                                      }
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 { Sep 07 94         1.0     Wrote real mode routines                         }
 { Sep 09 94         1.1     Added protected mode versions                    }
 
@@ -101,7 +101,7 @@ Type LongRec = record
 ... Viper: The offline mail reader for the best of us.
 ___ Viper v2.0 [0004] * Multi-part message, 1 of 3 *
 ---
- ş RoseMail 2.55á: NANet - Toronto Twilight (416)663-1103 - 7 Nodes
+ â–  RoseMail 2.55ÃŸ: NANet - Toronto Twilight (416)663-1103 - 7 Nodes
                                        
 {SWAG=???.SWG,CHRIS LAUTENBACH,VGA Fonts, they work[2/3]}
 

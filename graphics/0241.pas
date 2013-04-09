@@ -18,7 +18,7 @@ var   regs: Registers;
 procedure SetVideoMode (vMode: byte);
 
 begin
-  regs.ax := vMode;      {Bit 7 = 1: RAM nicht lîschen}
+  regs.ax := vMode;      {Bit 7 = 1: RAM nicht l√∂schen}
   Intr ($10,regs);
 end;
 {--------------------------------------------------------}

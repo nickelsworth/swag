@@ -25,7 +25,7 @@ fashion 286'es or worse... :)
 program PiCalc;  { The fastest PI calculator you'll ever find... :) }
 
 { From bits and pieces picked up mainly from the FidoNet PASCAL echo }
-{ Collected, optimized, unitized, etc. by Bjîrn Felten @ 2:203:208 }
+{ Collected, optimized, unitized, etc. by Bj√∂rn Felten @ 2:203:208 }
 { Public Domain  --  Nov 1994 }
 
 { SWAG Note: The HugeUtil in this unit is in the NUMBERS.SWG Packet

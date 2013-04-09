@@ -1,9 +1,9 @@
 {
-  Calculate and make the graphic of an quadratic equation type axý + bx + c
+  Calculate and make the graphic of an quadratic equation type axÂ² + bx + c
 
 
 Written By:
-  Rodrigo Moreira Silveira - ZîU$ - BRASIL
+  Rodrigo Moreira Silveira - ZÎµU$ - BRASIL
 
 You can Find me at:
   InterNet :
@@ -11,7 +11,7 @@ You can Find me at:
 
   Adress :
     SQS 113 Bl "G" Apto 102
-    Bras¡lia - DF - BRASIL
+    BrasÃ­lia - DF - BRASIL
     Cep : 70.376-070
 
 }
@@ -96,7 +96,7 @@ end;
 
 begin
   TEXTMODE(co80);
-  Writeln('This Prorgam will calculate and make a graphic of an equation axý + bx + c');
+  Writeln('This Prorgam will calculate and make a graphic of an equation axÂ² + bx + c');
   WriteLn;WriteLn;
   Write('Type a Real equivalence to "a" : ');
   readln(a);

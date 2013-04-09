@@ -121,6 +121,6 @@ begin
 
 How's that, o evil masters?
 ---
- þ KingQWK 1.05 # 182 þ "Bob" -- the Doc Savage of holy men
- þ RoseMail 2.10á: ILink: PC-Ohio * Cleveland, OH * 216-381-3320
+ â–  KingQWK 1.05 # 182 â–  "Bob" -- the Doc Savage of holy men
+ â–  RoseMail 2.10ÃŸ: ILink: PC-Ohio * Cleveland, OH * 216-381-3320
 

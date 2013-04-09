@@ -1,23 +1,23 @@
 {
-   ษออออออออออออออออออออออออออออออ X L A T ออออออออออออออออออออออออออออออป
-   บ                                                                     บ
-   บ         Case Translation Routines for Turbo/Borland Pascal          บ
-   บ                                                                     บ
-   บ                            Version 1.00                             บ
-   บ                                                                     บ
-   บ  Copyright (c) 1994, John O'Harrow F.I.A.P. - All Rights Reserved   บ
-   บ                                                                     บ
-   บ  This unit provides a library of very highly optimised routines     บ
-   บ  for the translating of strings into upper/lower case.              บ
-   บ                                                                     บ
-   บ  The majority of the routines are coded in assembler, and are       บ
-   บ  contained in the file XLAT.OBJ, which is linked into this unit.    บ
-   บ                                                                     บ
-   บ  The file XLAT.ASM contains the full source code for all of the     บ
-   บ  assembly code routines (This file is designed for assembling with  บ
-   บ  TASM, but may be assembled using MASM with minor modification).    บ
-   บ                                                                     บ
-   ศอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+   โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ• X L A T โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+   โ•‘                                                                     โ•‘
+   โ•‘         Case Translation Routines for Turbo/Borland Pascal          โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘                            Version 1.00                             โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘  Copyright (c) 1994, John O'Harrow F.I.A.P. - All Rights Reserved   โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘  This unit provides a library of very highly optimised routines     โ•‘
+   โ•‘  for the translating of strings into upper/lower case.              โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘  The majority of the routines are coded in assembler, and are       โ•‘
+   โ•‘  contained in the file XLAT.OBJ, which is linked into this unit.    โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘  The file XLAT.ASM contains the full source code for all of the     โ•‘
+   โ•‘  assembly code routines (This file is designed for assembling with  โ•‘
+   โ•‘  TASM, but may be assembled using MASM with minor modification).    โ•‘
+   โ•‘                                                                     โ•‘
+   โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 }
 {$S-} {Disable Stack Checking to Increase Speed and Reduce Size}
 

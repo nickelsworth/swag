@@ -497,10 +497,10 @@ begin
     begin
       if (mat[i1,zl] and bit)=0 then
       begin
-        (* Wei· *)
+        (* Wei√ü *)
         if iswhite then inc(white)
         else
-        begin  (* Schwarz abschlie·en *)
+        begin  (* Schwarz abschlie√üen *)
           AddBlackToFax(black);
           inc(sw,black);
           iswhite := true;
@@ -512,7 +512,7 @@ begin
         (* Schwarz *)
         if not iswhite then inc(black)
         else
-        begin (* Wei· abschlie·en *)
+        begin (* Wei√ü abschlie√üen *)
           AddWhiteToFax(white);
           inc(sw,white);
           iswhite := false;

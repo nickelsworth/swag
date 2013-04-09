@@ -145,7 +145,7 @@ asm
         mov dx,hi
         call @Push
 
-@QS:    mov ax,es:[4]                   { ¨Stack empty? }
+@QS:    mov ax,es:[4]                   { Â¿Stack empty? }
         and ax,ax
         jz @Empty
 

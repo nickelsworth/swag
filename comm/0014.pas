@@ -1,16 +1,16 @@
 {
-³    Does anyone have a few minutes to help a novice?   I'm new to Pascal
-³  and have just added a new dimension to my Programming interests
-³  through the purchase of Borland's Pascal With Objects 7.0 and as I
-³  struggle through the 3000 odd pages of documentation I find I'm
-³  missing some of the basics.   For example, I'm trying to Write a
-³  little phone dialer as an exercise in using OOP and am having trouble
-³  talking to the modem With the following:
-³  Assign(Port,COM1);   ReWrite(Port);    Write(Port,ATDT);
-³    This works fine only if I run my dialer Program after having using
-³  another comms Program With my modem. if I try to run it cold I  get
-³  Error 160: Device Write fault.  There is obviously some initialization
-³  I need to do to "WAKEUP" the modem.
+â”‚    Does anyone have a few minutes to help a novice?   I'm new to Pascal
+â”‚  and have just added a new dimension to my Programming interests
+â”‚  through the purchase of Borland's Pascal With Objects 7.0 and as I
+â”‚  struggle through the 3000 odd pages of documentation I find I'm
+â”‚  missing some of the basics.   For example, I'm trying to Write a
+â”‚  little phone dialer as an exercise in using OOP and am having trouble
+â”‚  talking to the modem With the following:
+â”‚  Assign(Port,COM1);   ReWrite(Port);    Write(Port,ATDT);
+â”‚    This works fine only if I run my dialer Program after having using
+â”‚  another comms Program With my modem. if I try to run it cold I  get
+â”‚  Error 160: Device Write fault.  There is obviously some initialization
+â”‚  I need to do to "WAKEUP" the modem.
 
 
 ...Here's some routines to initialize/manipulates the RS-232 port.

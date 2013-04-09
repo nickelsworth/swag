@@ -1,8 +1,8 @@
 {
-   ÝIs there an easy way to time functions and/or procedures??  I'm trying
-   Ýto compare a couple functions that do the samething and I would like to
-   Ýtime them.  I've tried using the GetTime procedure but the hundredths of
-   Ýseconds isn't fast enough.  Can any one help?
+   â–ŒIs there an easy way to time functions and/or procedures??  I'm trying
+   â–Œto compare a couple functions that do the samething and I would like to
+   â–Œtime them.  I've tried using the GetTime procedure but the hundredths of
+   â–Œseconds isn't fast enough.  Can any one help?
 
    I think this unit may help you:
 

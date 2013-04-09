@@ -48,7 +48,7 @@ begin
 end;
 
 This is a fairly straight forward version (as compared with the PChar
-version).  We look for the break string.  If we donít find it at all,
+version).  We look for the break string.  If we don√Üt find it at all,
 then we just assign it to the TStringList and go on our merry way.
 (Note:  The TStringList must be created outside the function or there
 will be problems when the variable goes out of scope.)  If we do find it,
@@ -60,15 +60,15 @@ one.
 
 Let me answer some questions that I hear you asking.
 
-1.  Why didnít I make this a procedure?  It is true that the TStringList
+1.  Why didn√Üt I make this a procedure?  It is true that the TStringList
 would reflect all changes without a value returned, but I left it as a
 function because it allows for use in another function that uses the
 TStringList.  I use the function in this way later in the article.
 
 E.g.  Listbox1.items.assign(sBreakApart(...));
 
-2.  It doesnít interfere with calling it as if it was a procedure.
-(I.e. You donít need to catch the result if you donít want to code it that
+2.  It doesn√Üt interfere with calling it as if it was a procedure.
+(I.e. You don√Üt need to catch the result if you don√Üt want to code it that
 way.)
 
 Now that we have seen that it does something, how about if we have it do
@@ -106,7 +106,7 @@ It replaces all occurrences of edit2.text in edit1.text with edit3.text.
 I told you that this was simple and useful!
 
 Now lets take a look at the PChar version.  Since we have an idea of how
-this works now, Iíll show the code first.
+this works now, I√Üll show the code first.
 
 function pBreakApart(BaseString, BreakString: PChar; StringList: TStringList): TStringList;
 var
@@ -166,7 +166,7 @@ end;
 This example requires a form that has a listbox and a pushbutton. It reads
 the autoexec.bat file into memory in a single gulp using Blockread().
 There is just enough memory allocated to get the job done.  This is done
-by using the fileís size as the basis.  The PChar version is called and
+by using the file√Üs size as the basis.  The PChar version is called and
 assigned directly, and the file is "broken apart" by carriage return/line
 feed.  (Note:  I know that a LoadFromFile() will do this also, but this is
 an exercise in memory juggling.)  Then memory clean up is performed.

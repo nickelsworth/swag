@@ -17,7 +17,7 @@ Until GotKey;
 Menu:=InKey;
 If Inkey=#27 then Begin
                   ClrScr;
-                  WriteLnColor('`8Ä`4Ä`@Ä ESC Ä`4Ä`8Ä');
+                  WriteLnColor('`8â”€`4â”€`@â”€ ESC â”€`4â”€`8â”€');
                   End;
 End;
 

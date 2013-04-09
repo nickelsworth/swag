@@ -814,13 +814,13 @@ asm
       xchg		al,cl             {exchange frames}
       xchg		bx,dx             {exchange seconds & minutes}
 @SubMin:
-			sub			bh,dh             {subtract src's minutes from dest's, ò 0}
+			sub			bh,dh             {subtract src's minutes from dest's, â‰¥ 0}
       cmp			bl,dl             {compare dest's seconds to src's}
       jae			@SubSec           {below/above/equal: jump if above or equal}
       add			bl,60             {below: add 1 minute by 60 seconds}
       dec			bh                {below: subtract 1 minute (minutes were > 0)}
 @SubSec:
-			sub			bl,dl             {subtract src's seconds from dest's, ò 0}
+			sub			bl,dl             {subtract src's seconds from dest's, â‰¥ 0}
       cmp			al,cl             {compare dest's minutes to src's}
       jae			@SubFrm           {below/above/equal: jump if above or equal}
       add			al,75             {below: add 1 second by 75 frames}
@@ -829,7 +829,7 @@ asm
       mov			bl,59             {negative (-1): make 59 seconds}
       dec			bh                {negative (-1): subtract 1 minute (were > 0)}
 @SubFrm:
-			sub			al,cl             {subtract src's frames from dest's, ò 0}
+			sub			al,cl             {subtract src's frames from dest's, â‰¥ 0}
 @Return:
 			mov			es:[di],al        {copy: Frm}
       mov			es:[di+1],bx      {copy: Sec, Min (never touch the Trk field)}

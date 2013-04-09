@@ -483,12 +483,12 @@ begin
   begin
     WriteLn('USAGE: FLIPLAY <options> <Filename>');
     WriteLn('                   '+#24+'         '+#24);
-    WriteLn('                   ³         ÀÄÄ  Filename of .FLI File');
-    WriteLn('                   ÀÄÄÄÄÄÄÄÄÄÄÄÄ  -d   = Do not use XMS');
+    WriteLn('                   â”‚         â””â”€â”€  Filename of .FLI File');
+    WriteLn('                   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  -d   = Do not use XMS');
     WriteLn('                                  -i   = InFormation about the Program');
     WriteLn('                                  -n   = No checking of MCGA mode support');
     WriteLn('                                  -sNN = Set playspeed to NN video ticks (0-99)');
-    WriteLn('                                         ( NN=70 ÷ frame Delay of 1 second )');
+    WriteLn('                                         ( NN=70 â‰ˆ frame Delay of 1 second )');
     Halt(0);
   end;
 

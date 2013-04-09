@@ -101,7 +101,7 @@ BEGIN
   ClrScr;
   TextAttr := StatBarColor;
   ClrEol;
-  Write('TEST PROGRAM FOR hooking timer interrupt, written by Mark Klaamas ²');
+  Write('TEST PROGRAM FOR hooking timer interrupt, written by Mark Klaamas â–“');
   GotoXY(1, 15);
   TextAttr := $07;
   Write('INPUT HERE PLEASE!!!  ');

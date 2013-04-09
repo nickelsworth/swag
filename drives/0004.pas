@@ -1,6 +1,6 @@
-{³o³  How do I detect active drives in Pascal?  My Program would ³oº
-³o³  crash if you Typed in a non-existent drive as either       ³oº
-³o³  source or destination.                                     ³oº
+{â”‚oâ”‚  How do I detect active drives in Pascal?  My Program would â”‚oâ•‘
+â”‚oâ”‚  crash if you Typed in a non-existent drive as either       â”‚oâ•‘
+â”‚oâ”‚  source or destination.                                     â”‚oâ•‘
 }
 Uses Dos;
 Var sr : SearchRec;

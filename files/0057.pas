@@ -3,7 +3,7 @@
            =====================================================
            Breaking the 64K barrier for BlockRead and BlockWrite
            =====================================================
-                 Copyright (c) 1992,1994 by Jos‚ Campione
+                 Copyright (c) 1992,1994 by JosÃ© Campione
                    Ottawa-Orleans Personal Systems Group
                           Fidonet: 1:163/513.3
 

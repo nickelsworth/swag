@@ -1,23 +1,23 @@
 UNIT PKTDRVR;
 {
-ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÑÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»
-º Filename       : PKTDRVR.PAS   ³  Program / Unit : [U]               º
-º Description    : Turbo Pascal  ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¶
-º                  Object to interface with Crynrware packet drivers.  º
-º                                                                      º
-ÇÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¶
-º Compiler       : Turbo Pascal 7.0                                    º
-º OS-Version     : MS-DOS 6.0                                          º
-º Last edit      : 08-Oct-93                                           º
-º Version        : 1.0                                                 º
-ÇÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¶
-º Author         : Oliver Rehmann                                      º
-º Copyright      : (C) 1993 Oliver Rehmann                             º
-º                                                                      º
-º Released to public domain.                                           º
-º The author can not be held responsible for any damages resulting     º
-º from the use of this software.                                       º
-ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼
+â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•¤â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+â•‘ Filename       : PKTDRVR.PAS   â”‚  Program / Unit : [U]               â•‘
+â•‘ Description    : Turbo Pascal  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¢
+â•‘                  Object to interface with Crynrware packet drivers.  â•‘
+â•‘                                                                      â•‘
+â•Ÿâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¢
+â•‘ Compiler       : Turbo Pascal 7.0                                    â•‘
+â•‘ OS-Version     : MS-DOS 6.0                                          â•‘
+â•‘ Last edit      : 08-Oct-93                                           â•‘
+â•‘ Version        : 1.0                                                 â•‘
+â•Ÿâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¢
+â•‘ Author         : Oliver Rehmann                                      â•‘
+â•‘ Copyright      : (C) 1993 Oliver Rehmann                             â•‘
+â•‘                                                                      â•‘
+â•‘ Released to public domain.                                           â•‘
+â•‘ The author can not be held responsible for any damages resulting     â•‘
+â•‘ from the use of this software.                                       â•‘
+â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 }
 
 INTERFACE
@@ -389,7 +389,7 @@ BEGIN
 END;
 
 PROCEDURE TPKTDRVR.GetParameters(VAR pktParams : TPKTPARAMS);
-(* Description   : ³ Gets specific parameters from the driver. *)
+(* Description   : â”‚ Gets specific parameters from the driver. *)
 (* Not all drivers support this function.                      *)
 VAR b : Byte;
 BEGIN

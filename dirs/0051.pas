@@ -1,16 +1,16 @@
 PROGRAM YATP; { Free DOS utility: Yet Another "Tree" Program. }
 (*   I got much of the code for this program, particularly
      the "DisplayDir" and "ReadFiles" Procedures, from:
-   ษออออออออออออออออออออออออออออออออออออออออออออออออออออออป
-   บ  VTree2                                              บ
-   บ  Version 1.6, 7-16-90 -- Public Domain by John Land  บ
-   บ  (Found in SWAG, in the DIRS library)                บ
-   ศออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+   โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+   โ•‘  VTree2                                              โ•‘
+   โ•‘  Version 1.6, 7-16-90 -- Public Domain by John Land  โ•‘
+   โ•‘  (Found in SWAG, in the DIRS library)                โ•‘
+   โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 *)
 {$M 32768,0,655360} { Allow a HUGE stack because of heavy recursion. }
-{  ฺฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฟ
-   ณ USES AND GLOBAL VARIABLES & CONSTANTS              ณ
-   ภฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤู  }
+{  โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+   โ” USES AND GLOBAL VARIABLES & CONSTANTS              โ”
+   โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”  }
 
 USES
   Crt, DOS;
@@ -185,7 +185,7 @@ END;
 PROCEDURE DisplayHeader;
 BEGIN
   WriteLn ('             File size   Files   Directory name');
-  WriteLn ('อออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออ');
+  WriteLn ('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
 END;
 
 PROCEDURE CalculateWaste (VAR SR: SEARCHREC);
@@ -230,27 +230,27 @@ BEGIN
   ELSE
   BEGIN                                        { Level 1+ routines        }
     IF SubNumVar2 = NumSubsVar2 THEN           { if last node in subtree, }
-    BEGIN                                      { use ภฤ symbol & set flag }
-      BegLine     := 'ภฤ';                     { padded With blanks       }
+    BEGIN                                      { use โ””โ”€ symbol & set flag }
+      BegLine     := 'โ””โ”€';                     { padded With blanks       }
       Flag [Levl] := Blank + Blank;
     END
-    ELSE                                       { otherwise, use รฤ symbol }
+    ELSE                                       { otherwise, use โ”โ”€ symbol }
     BEGIN                                      { & set flag padded With   }
-      BegLine     := 'รฤ';                     { blanks                   }
-      Flag [Levl] := 'ณ' + Blank;
+      BegLine     := 'โ”โ”€';                     { blanks                   }
+      Flag [Levl] := 'โ”' + Blank;
     END;
 
     FlagStr := '';
-    FOR FlagIndex := 1 TO Levl - 1 DO          { Insert ณ & blanks as     }
+    FOR FlagIndex := 1 TO Levl - 1 DO          { Insert โ” & blanks as     }
       FlagStr := FlagStr + Flag [FlagIndex];   { needed, based on level   }
     BegLine := FlagStr + BegLine;
 
-    WrtStr := BegLine + 'ฤฤ' + DirN;
+    WrtStr := BegLine + 'โ”€โ”€' + DirN;
     IF (NumSubsVar3 <> 0) THEN                 { if cur. level has subs   }
       IF Levl < LevelMax THEN                  { then change to "T" off   }
-        WrtStr [Length (BegLine) + 1] := 'ย'
+        WrtStr [Length (BegLine) + 1] := 'โ”ฌ'
       ELSE                                     { if levelMax, special end }
-        WrtStr := WrtStr + 'ฤ>';               { to indicate more levels  }
+        WrtStr := WrtStr + 'โ”€>';               { to indicate more levels  }
   END;                                         { end level 1+ routines    }
 
   IF Odd (ColorCnt) THEN
@@ -372,7 +372,7 @@ VAR
   WasteSpace,
   TotalSpace  : LONGINT;
 BEGIN
-  WriteLn ('อออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออ');
+  WriteLn ('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
   WriteLn ('Totals:', Format (Bytetotal): 15, Format (Filetotal): 8, '(': 4, Dirstotal, ' directories)');
 
   TotalSpace := (TotalClusters * ClusterSize);
@@ -388,9 +388,9 @@ BEGIN
   WriteDriveInfo;
 END;
 
-{  ฺฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฟ
-   ณ Main Program                                       ณ
-   ภฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤู  }
+{  โ”โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”
+   โ” Main Program                                       โ”
+   โ””โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”€โ”  }
 
 BEGIN
 
@@ -408,7 +408,7 @@ BEGIN
   DisplayTally;                                { Display totals           }
 
   IF tooDeep THEN
-    WriteLn (NL, NL, '': 21, 'ฏ CANNOT DISPLAY MORE THAN ', LevelMax, ' LEVELS ฎ', NL);
+    WriteLn (NL, NL, '': 21, 'ยป CANNOT DISPLAY MORE THAN ', LevelMax, ' LEVELS ยซ', NL);
                                                { if ReadFiles detects > 16}
                                                { levels, tooDeep flag set }
 

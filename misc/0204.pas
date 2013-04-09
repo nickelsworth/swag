@@ -742,7 +742,7 @@ function ShortPath(s:string):string;
  if length(s)>30 then
   begin
   a:=lastslash;
-  t:=copy(s,1,pos('\',s))+'ùùù'+copy(s,a,length(s));
+  t:=copy(s,1,pos('\',s))+'âˆ™âˆ™âˆ™'+copy(s,a,length(s));
   shortpath:=t;
   end
  else shortpath:=s;

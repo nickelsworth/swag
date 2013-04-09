@@ -3,17 +3,17 @@ UNIT business;
   {$N+}
 
  (*  DESCRIPTION :
-   I.  Financial functions from spreadsheet - Fonctions financiŠres.
+   I.  Financial functions from spreadsheet - Fonctions financiÃ¨res.
        Name of functions , number and order of arguments are based upon
        Lotus 1-2-3 and Quattro , which are different from Excel.
   II.  Conversion : anglo-saxon measure unit <---->  metric measure unit
-       Conversion entre mesures anglo-saxonnes et m‚triques.
+       Conversion entre mesures anglo-saxonnes et mÃ©triques.
  III.  Percentage calculation - Calcul de pourcentage .
 
      RELEASE     :  2.0
      DATE        :  27/02/94
      AUTHOR      :  Fernand LEMOINE
-                    rue du CollŠge 34
+                    rue du CollÃ¨ge 34
                     B-6200 CHATELET
                     BELGIQUE
      All code granted to the public domain
@@ -48,30 +48,30 @@ PROCEDURE WriteCurrency(width : Byte; value : Currency);
    Interest Rate is expressed as a decimal number, not as a percent.
    The Rate period must match the payment period.                     *)
 
-  (* Straight line depreciation - Amortissement lin‚aire                *)
+  (* Straight line depreciation - Amortissement linÃ©aire                *)
 FUNCTION Sln(InitialValue, Residue : real; Time : Byte) : Currency;
-  (* Sum of the year digits depreciation - Amortissement d‚gressif      *)
+  (* Sum of the year digits depreciation - Amortissement dÃ©gressif      *)
 FUNCTION Syd(InitialValue, Residue : real; Period, Time : Byte) : Currency;
-  (* Number of compounding periods - Dur‚e de capitalisation            *)
+  (* Number of compounding periods - DurÃ©e de capitalisation            *)
 FUNCTION Cterm(Rate : Real; FutureValue, PresentValue : real) : Real;
-  (* Number of payments - Nombre de p‚riodes                            *)
+  (* Number of payments - Nombre de pÃ©riodes                            *)
 FUNCTION Term(Payment : real; Rate : Real; FutureValue : real) : Real;
   (* Payment - Remboursement                                            *)
 FUNCTION Pmt(Principal : real; Rate : Real; Term : Byte) : Currency;
-  (* Periodic interest Rate - Taux d'int‚rˆt                            *)
+  (* Periodic interest Rate - Taux d'intÃ©rÃªt                            *)
 FUNCTION Rate(FutureValue, PresentValue : real; Term : Byte) : Real;
-  (* Present value - Valeur actualis‚e                                  *)
+  (* Present value - Valeur actualisÃ©e                                  *)
 FUNCTION Pv(Payment : real; Rate : Real; Term : Byte) : Currency;
-  (* Net present value  - Valeur actualis‚e d'une s‚rie                 *)
+  (* Net present value  - Valeur actualisÃ©e d'une sÃ©rie                 *)
 FUNCTION Npv(Rate : Real; Series : SeriesPmt) : Currency;
-  (* Future value - Valeur … terme                                      *)
+  (* Future value - Valeur Ã  terme                                      *)
 FUNCTION Fv(Payment : real; Rate : Real; Term : Byte) : Currency;
 
   (*  II - Conversion : anglo-saxon measure unit <--> metric measure unit ---*)
 
-  (* ø Celsius to ø Fahrenheit  *)
+  (* Â° Celsius to Â° Fahrenheit  *)
 FUNCTION CelsToFahr(value : Real) : Real;
-  (* ø Fahrenheit to ø Celsius  *)
+  (* Â° Fahrenheit to Â° Celsius  *)
 FUNCTION FahrToCels(value : Real) : Real;
   (*  US Gallons  to litres  *)
 FUNCTION GalToL(value : Real) : Real;

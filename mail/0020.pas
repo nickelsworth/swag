@@ -5,7 +5,7 @@ PROGRAM NMembers;               { May 16/94, Greg Estabrooks.           }
 USES
      DOS;
 CONST
-     Ver      = 'V0.2á';        { Current Version of program.           }
+     Ver      = 'V0.2ÃŸ';        { Current Version of program.           }
      ProgTitle= 'NMem '+Ver+'- Conference Member Tracking Program. ';
      Author   = 'CopyRight (C) 1994, Greg Estabrooks.';
 TYPE
@@ -357,7 +357,7 @@ BEGIN
    END;
 
   IF (Result = '') OR (Pos('ILink:',Result) = 0) THEN
-   Result := ' þ Origin Line Unavailable þ ';
+   Result := ' â–  Origin Line Unavailable â–  ';
 
   GetOrigin := Result;          { Return proper result.                 }
 END;

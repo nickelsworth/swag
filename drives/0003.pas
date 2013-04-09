@@ -5,9 +5,9 @@ From: LEE BARKER                      Read: NO
 Subj: Current Drive                 Status: PUBLIC MESSAGE
 Conf: R-TP (552)                 Read Type: GENERAL (A) (+)
 
-ÚÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ    Ioannis Hadjiioannou    ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄ·
-³o³ How can I find which drive is  the default drive?        ³oº
-ÔÍÏÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÏÍ¼
+â”Œâ”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€    Ioannis Hadjiioannou    â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â•–
+â”‚oâ”‚ How can I find which drive is  the default drive?        â”‚oâ•‘
+â•˜â•â•§â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•§â•â•
 While X may mark the spot, period marks/inhibits the drive.
 
 Uses Dos;
@@ -18,7 +18,7 @@ end.
 As For getting the drive Label look up findfirst With an
 attribute of "directory".
 ---
- ş Tags ç Us ş  Operator! Trace this call and tell me where I am
+ â–  Tags Ï„ Us â–   Operator! Trace this call and tell me where I am
  * Suburban Software - Home of King of the Board(tm) - 708-636-6694
  * PostLink(tm) v1.05  SUBSOFT (#715) : RelayNet(tm) Hub
 

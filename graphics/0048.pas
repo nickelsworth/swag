@@ -1,7 +1,7 @@
 {
 > Can you post the gif source and any other graphic source for doing this
 
-Here is gif format (it doesn't get to full 768ú1024ú256)
+Here is gif format (it doesn't get to full 768Â·1024Â·256)
 or even less, but it is ok.
 }
 

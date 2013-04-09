@@ -307,8 +307,8 @@ end;
 procedure statbar(snum,bnum:longint;x,y,fc,ec:byte);
 const
   magic=2; { 100/magic(2) = 50 }
-  empty='±'; { #177 }
-  full='Û';  { #219 }
+  empty='â–’'; { #177 }
+  full='â–ˆ';  { #219 }
 var
   p1,p2:word;
   s:string;

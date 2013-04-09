@@ -80,25 +80,25 @@ procedure display_screen;
 begin
   loadchar;
   fastwrite(1,1,$1F,'         CHAREDIT - By Michael S. Hoenie         ');
-  fastwrite(1,2, $7,'      12345678   ÚÄÄÄÄÄData');
-  fastwrite(1,3, $7,'     ÜÜÜÜÜÜÜÜÜÜ  ³');
-  fastwrite(1,4, $7,'   1 Û        Û 000');
-  fastwrite(1,5, $7,'   2 Û        Û 000 Single:  °');
-  fastwrite(1,6, $7,'   3 Û        Û 000');
-  fastwrite(1,7, $7,'   4 Û        Û 000 Multiple:');
-  fastwrite(1,8, $7,'   5 Û        Û 000');
-  fastwrite(1,9, $7,'   6 Û        Û 000     °°°°°°');
-  fastwrite(1,10,$7,'   7 Û        Û 000     °°°°°°');
-  fastwrite(1,11,$7,'   8 Û        Û 000     °°°°°°');
-  fastwrite(1,12,$7,'   9 Û        Û 000                    U            ');
-  fastwrite(1,13,$7,'  10 Û        Û 000 f1=paint spot      ³    MOVEMENT');
-  fastwrite(1,14,$7,'  11 Û        Û 000 f2=erase spot   LÄÄÅÄÄR         ');
-  fastwrite(1,15,$7,'  12 Û        Û 000  S=save char       ³            ');
-  fastwrite(1,16,$7,'  13 Û        Û 000  Q=quit editor     D');
-  fastwrite(1,17,$7,'  14 Û        Û 000  C=reset char    r=scroll-right');
-  fastwrite(1,18,$7,'  15 Û        Û 000  l=scroll-left');
-  fastwrite(1,19,$7,'  16 Û        Û 000  r=scroll-right');
-  fastwrite(1,20,$7,'     ßßßßßßßßßß      u=scroll-up');
+  fastwrite(1,2, $7,'      12345678   â”Œâ”€â”€â”€â”€â”€Data');
+  fastwrite(1,3, $7,'     â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„  â”‚');
+  fastwrite(1,4, $7,'   1 â–ˆ        â–ˆ 000');
+  fastwrite(1,5, $7,'   2 â–ˆ        â–ˆ 000 Single:  â–‘');
+  fastwrite(1,6, $7,'   3 â–ˆ        â–ˆ 000');
+  fastwrite(1,7, $7,'   4 â–ˆ        â–ˆ 000 Multiple:');
+  fastwrite(1,8, $7,'   5 â–ˆ        â–ˆ 000');
+  fastwrite(1,9, $7,'   6 â–ˆ        â–ˆ 000     â–‘â–‘â–‘â–‘â–‘â–‘');
+  fastwrite(1,10,$7,'   7 â–ˆ        â–ˆ 000     â–‘â–‘â–‘â–‘â–‘â–‘');
+  fastwrite(1,11,$7,'   8 â–ˆ        â–ˆ 000     â–‘â–‘â–‘â–‘â–‘â–‘');
+  fastwrite(1,12,$7,'   9 â–ˆ        â–ˆ 000                    U            ');
+  fastwrite(1,13,$7,'  10 â–ˆ        â–ˆ 000 f1=paint spot      â”‚    MOVEMENT');
+  fastwrite(1,14,$7,'  11 â–ˆ        â–ˆ 000 f2=erase spot   Lâ”€â”€â”¼â”€â”€R         ');
+  fastwrite(1,15,$7,'  12 â–ˆ        â–ˆ 000  S=save char       â”‚            ');
+  fastwrite(1,16,$7,'  13 â–ˆ        â–ˆ 000  Q=quit editor     D');
+  fastwrite(1,17,$7,'  14 â–ˆ        â–ˆ 000  C=reset char    r=scroll-right');
+  fastwrite(1,18,$7,'  15 â–ˆ        â–ˆ 000  l=scroll-left');
+  fastwrite(1,19,$7,'  16 â–ˆ        â–ˆ 000  r=scroll-right');
+  fastwrite(1,20,$7,'     â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€      u=scroll-up');
 end;
 
 procedure calculate_char;
@@ -110,14 +110,14 @@ begin
     fastwrite(7, x + 3, $4F, char_map[x]);
     incom := char_map[x];
       y := 0;
-    if copy(incom, 1, 1) = 'Û' then y := y + 1;
-    if copy(incom, 2, 1) = 'Û' then y := y + 2;
-    if copy(incom, 3, 1) = 'Û' then y := y + 4;
-    if copy(incom, 4, 1) = 'Û' then y := y + 8;
-    if copy(incom, 5, 1) = 'Û' then y := y + 16;
-    if copy(incom, 6, 1) = 'Û' then y := y + 32;
-    if copy(incom, 7, 1) = 'Û' then y := y + 64;
-    if copy(incom, 8, 1) = 'Û' then y := y + 128;
+    if copy(incom, 1, 1) = 'â–ˆ' then y := y + 1;
+    if copy(incom, 2, 1) = 'â–ˆ' then y := y + 2;
+    if copy(incom, 3, 1) = 'â–ˆ' then y := y + 4;
+    if copy(incom, 4, 1) = 'â–ˆ' then y := y + 8;
+    if copy(incom, 5, 1) = 'â–ˆ' then y := y + 16;
+    if copy(incom, 6, 1) = 'â–ˆ' then y := y + 32;
+    if copy(incom, 7, 1) = 'â–ˆ' then y := y + 64;
+    if copy(incom, 8, 1) = 'â–ˆ' then y := y + 128;
     char[x] := y;
   end;
   for x := 1 to 16 do
@@ -173,7 +173,7 @@ begin
           ';' :
           begin { F1 }
             delete(char_map[ypos], xpos, 1);
-            insert('Û', char_map[ypos], xpos);
+            insert('â–ˆ', char_map[ypos], xpos);
             calculate_char;
           end;
 

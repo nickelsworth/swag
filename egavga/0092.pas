@@ -4,12 +4,12 @@
 }
 
 UNIT uVesa;                                    { (c) 1993 by NEBULA-Software }
-     { UnterstÅtzung des VESA-Standards      } { Olaf Bartelt & Oliver Carow }
+     { Unterst√ºtzung des VESA-Standards      } { Olaf Bartelt & Oliver Carow }
 
 INTERFACE                                      { Interface-Teil der Unit     }
 
 
-TYPE tVesa = OBJECT                            { Objekt fÅr VESA             }
+TYPE tVesa = OBJECT                            { Objekt f√ºr VESA             }
                xmax, ymax : WORD;
                page       : WORD;
                switch_ptr : POINTER;
@@ -34,7 +34,7 @@ IMPLEMENTATION                                 { Implementation-Teil d. Unit }
 USES DOS, CRT;                                 { Units einbinden             }
 
 
-VAR regs   : REGISTERS;                        { benîtigte Variablen         }
+VAR regs   : REGISTERS;                        { ben√∂tigte Variablen         }
 
 
 FUNCTION vesa_installed : BOOLEAN;             { VESA-Treiber vorhanden?     }

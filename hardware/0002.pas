@@ -68,7 +68,7 @@ end.
                                                         Eric
 
 ---
-(63 min left), (H)elp, More?  þ OLX 2.1 TD þ It's only a hobby ... only a hobby ... only a
+(63 min left), (H)elp, More?  â–  OLX 2.1 TD â–  It's only a hobby ... only a hobby ... only a
  * Casino Bulletin Board * Hammonton/Atlantic City NJ U.S.A. 1-609-561-3377
  * PostLink(tm) v1.05  CASINO (#18) : RelayNet(tm)
 

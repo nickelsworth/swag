@@ -1,17 +1,17 @@
 {
-   ษออออออออออออออออออออออออออออออ X L A T ออออออออออออออออออออออออออออออป
-   บ                                                                     บ
-   บ      Case Translation Routines for Turbo/Borland Pascal Strings     บ
-   บ                                                                     บ
-   บ                            Version 2.00                             บ
-   บ                                                                     บ
-   บ  Copyright (c) 1995, John O'Harrow F.I.A.P. - All Rights Reserved   บ
-   บ                   EMAIL john.oharrow@paradise.org                   บ
-   บ                                                                     บ
-   บ  This unit provides a library of very highly optimised routines     บ
-   บ     for the translation of strings into upper/lower case etc.       บ
-   บ                                                                     บ
-   ศอออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออออผ
+   โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ• X L A T โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+   โ•‘                                                                     โ•‘
+   โ•‘      Case Translation Routines for Turbo/Borland Pascal Strings     โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘                            Version 2.00                             โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘  Copyright (c) 1995, John O'Harrow F.I.A.P. - All Rights Reserved   โ•‘
+   โ•‘                   EMAIL john.oharrow@paradise.org                   โ•‘
+   โ•‘                                                                     โ•‘
+   โ•‘  This unit provides a library of very highly optimised routines     โ•‘
+   โ•‘     for the translation of strings into upper/lower case etc.       โ•‘
+   โ•‘                                                                     โ•‘
+   โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 }
 
 UNIT XLAT;

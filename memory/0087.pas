@@ -9,7 +9,7 @@ PROGRAM MemMap;
   listed below:
 
   Jose Antonio Noda
-  Urb: 80 Viviendas, B-5ง, 1ง Izq.
+  Urb: 80 Viviendas, B-5ยบ, 1ยบ Izq.
   35620 - Gran Tarajal
   Fuerteventura - (Islas Canarias)
   Spain

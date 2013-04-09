@@ -101,7 +101,7 @@ extension)
        if not(existe_arch(f1)) then
          BEGIN
            TextColor(RED);
-           WriteLn(' ญ No existe el fichero ORIGEN ! ');
+           WriteLn(' ยก No existe el fichero ORIGEN ! ');
            TextColor(WHITE);
            writeLn;
            Halt(3);

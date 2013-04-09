@@ -1,6 +1,6 @@
 {
-DL> When i redefine a character as "Ä", i don't get a smooth line, but one
-DL> pixel left blank between every character, so "---" instead of "ÄÄÄ".
+DL> When i redefine a character as "â”€", i don't get a smooth line, but one
+DL> pixel left blank between every character, so "---" instead of "â”€â”€â”€".
 
 With EGA, everything used to be so simple: all characters are 8x16 bits.
 
@@ -18,7 +18,7 @@ an additional vertical line; no problem.  The truly ingenious touch (as the
 lesser-known Harry Stottle of the celebrated IBM Vertical Line Team said,
 "Eureka!") is how this addition line is actually a copy of the 8th.
 
-Ie., to make a horizontal line ('Ä'), use any of the characters 192-216 and
+Ie., to make a horizontal line ('â”€'), use any of the characters 192-216 and
 activate 8 bits from left to right.  The 8th bit is copied to the 9th, and
 you've got a horizontal line.
 
@@ -29,15 +29,15 @@ last oral tradition of the cybernetic age.
 Lest we forget.
 
 DL>      1 2 3 4 5 6 7 8    I believe the way to get this right, is to
-DL>     ÚÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄ¿   repeat column 8 (x).
-DL>    1³ ³ ³ ³ ³ ³ ³ ³x³   However, i don't know how to do this...
-DL>    2³ ³ ³ ³ ³ ³ ³ ³x³
-DL>    3³ ³ ³ ³ ³ ³ ³ ³x³
-DL>    4³ ³ ³ ³ ³ ³ ³ ³x³
+DL>     â”Œâ”€â”¬â”€â”¬â”€â”¬â”€â”¬â”€â”¬â”€â”¬â”€â”¬â”€â”   repeat column 8 (x).
+DL>    1â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚xâ”‚   However, i don't know how to do this...
+DL>    2â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚xâ”‚
+DL>    3â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚xâ”‚
+DL>    4â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚xâ”‚
 DL>     : : : : : : : : :
-DL>   15³ ³ ³ ³ ³ ³ ³ ³x³
-DL>   16³ ³ ³ ³ ³ ³ ³ ³x³   Please help,
-DL>     ÀÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÙ   Dirk Loeckx. [@]
+DL>   15â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚xâ”‚
+DL>   16â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚ â”‚xâ”‚   Please help,
+DL>     â””â”€â”´â”€â”´â”€â”´â”€â”´â”€â”´â”€â”´â”€â”´â”€â”˜   Dirk Loeckx. [@]
 
 Don't forget, too: use IN/OUT or Port/PortW to program the video card.  If
 you use the BIOS routines, you'll generate flicker (even on a VGA card) and

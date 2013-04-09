@@ -36,12 +36,12 @@ label start;
 
 begin
   textcolor(3);
-  gotoxy(26,6);write('Ú');write('ÄÄÄÄÄÄÄÄÄÄÄÄÄ');write('¿');
+  gotoxy(26,6);write('â”Œ');write('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');write('â”');
   for p :=7 to 12 do begin
-    gotoxy(26,p);write('³');
-    gotoxy(40,p);write('³');
+    gotoxy(26,p);write('â”‚');
+    gotoxy(40,p);write('â”‚');
   end;
-  gotoxy(26,13);write('À');write('ÄÄÄÄÄÄÄÄÄÄÄÄÄ');write('Ù');
+  gotoxy(26,13);write('â””');write('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');write('â”˜');
 
   for y :=1 to 6 do asci_tekst(28,y+6,afspr[y],6,0);
   ascihor(27,7,13,219,7);asci_tekst(28,7,afspr[1],0,7);

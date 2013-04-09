@@ -94,7 +94,7 @@ PARAMETERS -> PROGRAM
 
 -nofilth      No effect - there aren't any rude words in this game. If you
 	      want the hardcore, uncut all singing all dancing :)
-	      version, send œ4000 used notes in Sterling to:
+	      version, send Â£4000 used notes in Sterling to:
 
 		       Kojak Van Damme
 		       Somewhere in Dunfermline

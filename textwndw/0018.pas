@@ -74,31 +74,31 @@ begin
         end;
     end;
     gotoxy(x1,y1);
-    write('…');
+    write('‚ïî');
     for c1:=x1+1 to x2-1 do
-        write('Õ');
-    write('ª');
+        write('‚ïê');
+    write('‚ïó');
     for c1:=y1+1 to y2-1 do
     begin
         gotoxy(x1,c1);
-        write('∫');
+        write('‚ïë');
         gotoxy(x2,c1);
-        write('∫');
+        write('‚ïë');
     end;
     gotoxy(x1,y2);
-    write('»');
+    write('‚ïö');
     for c1:=x1+1 to x2-1 do
-        write('Õ');
-    write('º');
+        write('‚ïê');
+    write('‚ïù');
     if (title<>'') and (length(title)<x2-x1-4) then
     begin
         gotoxy(x1+1,y1);
-        write('π '+title+' Ã');
+        write('‚ï£ '+title+' ‚ï†');
     end;
     if (bottom<>'') and (length(bottom)<x2-x1-9) then
     begin
         gotoxy(x1+((x2-x1) div 2 - length(bottom) div 2 - 2),y2);
-        write('π '+bottom+' Ã');
+        write('‚ï£ '+bottom+' ‚ï†');
     end;
     gotoxy(x1+1,y1+1);
     showcursor;

@@ -8,9 +8,9 @@
 
 {
   GetCPU                             Byte
-  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Ermittelt den arbeitenden CPU-Typ.  Der
-  zurckgelieferte Code entspricht:
+  zurÃ¼ckgelieferte Code entspricht:
 
      0 - Intel 8088
      1 - Intel 8086

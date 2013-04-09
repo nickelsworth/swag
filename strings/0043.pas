@@ -43,7 +43,7 @@ asm
   loop @1
 end;
 ---
- þ RM 1.2 00308 þ C program run.  C program crash.  C programmer quit
+ â–  RM 1.2 00308 â–  C program run.  C program crash.  C programmer quit
  * Midnight Sun BBS, Norway +47 81 84545 HST/DS, 9 Gb
  * PostLink(tm) v1.07  MIDNIGHT (#602) : RelayNet(tm)
 ===========================================================================
@@ -53,10 +53,10 @@ From: PHIL NICKELL                 Refer#: NONE
   To: KURTIS LINDQVIST              Recvd: NO
 Subj: Longint to HEX                 Conf: (552) R-TP
 ---------------------------------------------------------------------------
-KL³Allright, I have been struggling with this problem for awhile but I give up.
-  ³A friend of mine wrote a unit that would convert a longint to a HEX number in
-  ³string. This is for a program that stores one file for each user (it's an ord
-  ³door), the name of the file is equal to the HEX number representing the
+KLâ”‚Allright, I have been struggling with this problem for awhile but I give up.
+  â”‚A friend of mine wrote a unit that would convert a longint to a HEX number in
+  â”‚string. This is for a program that stores one file for each user (it's an ord
+  â”‚door), the name of the file is equal to the HEX number representing the
 
  I'll include two functions named HEXLONG that produce identical
  results.  The first is pure classic Turbo Pascal, the second is a Turbo
@@ -120,9 +120,9 @@ begin
   Writeln( Hexlong($1234ABCD) );
 end.
 ---
- þ SLMR 2.1a þ doesn't take a rocket scientist to be a rocket scientist
- þ KMail 3.00d Twin Peaks (303)-651-0225 þ Home of KMail þ
- þ RNET 2.00b: þ Twin Peaks BBS þ (303)-651-0225, Longmont, Co.
+ â–  SLMR 2.1a â–  doesn't take a rocket scientist to be a rocket scientist
+ â–  KMail 3.00d Twin Peaks (303)-651-0225 â–  Home of KMail â– 
+ â–  RNET 2.00b: â–  Twin Peaks BBS â–  (303)-651-0225, Longmont, Co.
  * The DC Information Exchange (703)836-0748
  * PostLink(tm) v1.07  DCINFO (#16) : MetroLink(tm)
 

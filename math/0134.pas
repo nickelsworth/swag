@@ -64,7 +64,7 @@
    -----------------
    Recursive trapezium approximation formulae:
                           2^(J-1)
-     T(J) = T(J-1)/2 + h *   ä   f(X    )       for j > 0
+     T(J) = T(J-1)/2 + h *   Î£   f(X    )       for j > 0
                             k=1     2k-1
 
      Where h = (b-a) / 2^J  and Xi = a + ih
@@ -137,7 +137,7 @@ end;
 {
   Recursive trapezium approximation formulae:
                           2^(J-1)
-     T(J) = T(J-1)/2 + h *   ä   f(X    )       for j > 0
+     T(J) = T(J-1)/2 + h *   Î£   f(X    )       for j > 0
                             k=1     2k-1
 
      Where h = (b-a) / 2^J  and Xi = a + ih

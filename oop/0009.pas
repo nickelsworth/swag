@@ -45,7 +45,7 @@ begin
   GetExtent(R);
   R.B.Y := R.A.Y + 1;
   MenuBar := New (PMenuBar, Init(R, NewMenu (
-    NewSubMenu ('~ð~', hcNoConText, NewMenu (
+    NewSubMenu ('~â‰¡~', hcNoConText, NewMenu (
       NewItem ('~A~bout LA-Copy...', '', kbNoKey, cmQuit, hcNoConText,
       NewLine (
       NewItem ('~D~OS Shell', '', kbNoKey, cmQuit, hcNoConText,

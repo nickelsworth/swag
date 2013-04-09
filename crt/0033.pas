@@ -49,9 +49,9 @@ IMPLEMENTATION
 USES OPkey, OPcrt;
 
 CONST BoxCharArray: ARRAY[-1..1, -2..2] OF char
-      = ('зддд©',
-         'Ё * Ё',
-         'юддды');
+      = ('Б■▄Б■─Б■─Б■─Б■░',
+         'Б■┌ * Б■┌',
+         'Б■■Б■─Б■─Б■─Б■≤');
       Choice : STRING[3] = ' * ';
 
 VAR YL       : byte; { -- Coordinates of color window. }

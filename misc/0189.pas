@@ -390,7 +390,7 @@ Begin
 
      TextColor(White);
      Gotoxy(1,1);
-     Writeln('SPACE LORDS 7.1.2.3.5.2.9.«  (C) 1994,5 Scott Tunstall.  Lauder College Version');
+     Writeln('SPACE LORDS 7.1.2.3.5.2.9.Â½  (C) 1994,5 Scott Tunstall.  Lauder College Version');
      Writeln;
      Writeln;
      TextBackGround(Black);
@@ -681,7 +681,7 @@ Begin
 
            SelectFont(6);
 
-           TextXY(92,8,'SPACE LORDS 7«');
+           TextXY(92,8,'SPACE LORDS 7Â½');
 
            SelectFont(1);
            TextXY(32,70, 'PROGRAMMING BY : Scott Tunstall');

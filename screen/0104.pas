@@ -207,9 +207,9 @@ function up(ch:char):char;
 var cc:char;
 begin
  case ch of
-  'Ñ':cc:='é';
-  'î':cc:='ô';
-  'Å':cc:='ö';
+  '√§':cc:='√Ñ';
+  '√∂':cc:='√ñ';
+  '√º':cc:='√ú';
  else cc:=upcase(ch);
  end;
  up:=cc;
@@ -255,12 +255,12 @@ BEGIN
   r.ax:=$1a00; {Funktion 26 des Interrupts 16 (Bildschirmsteuerung).}
   intr($10,r);
   VGA:=(r.al=$1a) AND (r.bl in [4,5,7,8]);
-  {Gibt die Funktion 26 zurÅck, ist eine EGA/VGA Karte vorhanden.
-   Die Werte 4,5,7,8 geben an, ob ein Schwaz/Wei· ode Farbbilschirm
+  {Gibt die Funktion 26 zur√ºck, ist eine EGA/VGA Karte vorhanden.
+   Die Werte 4,5,7,8 geben an, ob ein Schwaz/Wei√ü ode Farbbilschirm
    angeschlossen ist.}
   IF VGA THEN
     {Ist eine EGA/VGA da, gilt: bei Werten 5 und 7 existiert ein
-     Schwarz/Wei· - Monitor.}
+     Schwarz/Wei√ü - Monitor.}
     MONO:=((r.bl=5) OR (r.bl=7))
   ELSE
     {Ist keine VGA da, bedeutet LASTMODE=7: Monochrommonitor}
@@ -414,16 +414,16 @@ procedure hwin(nr,typ,rahmen,l,o,br,ho,raf,arbf,shadf,titf:byte;titel:s80;shadow
 var ro:byte;oho,lrm:byte; titlepos,dc:byte;
 const rahf:array[0..4,0..10] of char=
       ((' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '),
-       ('…','Õ','ª','∫','»','º','Ã','π','«','∂','ƒ'),
-       ('’','Õ','∏','≥','‘','æ','∆','µ','√','¥','ƒ'),
-       ('÷','ƒ','∑','∫','”','Ω','«','∂','Ã','π','Õ'),
-       ('⁄','ƒ','ø','≥','¿','Ÿ','√','¥','∆','µ','Õ'));
+       ('‚ïî','‚ïê','‚ïó','‚ïë','‚ïö','‚ïù','‚ï†','‚ï£','‚ïü','‚ï¢','‚îÄ'),
+       ('‚ïí','‚ïê','‚ïï','‚îÇ','‚ïò','‚ïõ','‚ïû','‚ï°','‚îú','‚î§','‚îÄ'),
+       ('‚ïì','‚îÄ','‚ïñ','‚ïë','‚ïô','‚ïú','‚ïü','‚ï¢','‚ï†','‚ï£','‚ïê'),
+       ('‚îå','‚îÄ','‚îê','‚îÇ','‚îî','‚îò','‚îú','‚î§','‚ïû','‚ï°','‚ïê'));
 
 begin
   dec(br);dec(ho);
   titlepos:=o;oho:=o+ho;lrm:=l+br;
   print(nr,l,o,vcol(raf),rahf[rahmen,0]+rp(rahf[rahmen,1],pred(br))+rahf[rahmen,2]);
-  if rahmen>0 then print(nr,l+2,o,raf and $f7,'  ');
+  if rahmen>0 then print(nr,l+2,o,raf and $f7,' ‚â° ');
   for ro:=succ(o) to o+pred(ho) do begin
    print(nr,l,ro,vcol(raf),rahf[rahmen,3]);print(nr,l+br,ro,vcol(raf),rahf[rahmen,3]);
    print(nr,succ(l),ro,vcol(arbf),rp(' ',pred(br)))
@@ -434,7 +434,7 @@ begin
   if (titel<>'') and (br>length(titel)+4) then
   case typ of
    0:print(nr,l+(br shr 1)-succ(length(titel) shr 1)+1,titlepos,titf,' '+ups(titel)+' ');
-   1:begin  {Titel in Zeile 2 und Rahmen ÃÕπ}
+   1:begin  {Titel in Zeile 2 und Rahmen ‚ï†‚ïê‚ï£}
        inc(titlepos);if ho>2 then
        print(nr,l,succ(titlepos),raf,rahf[rahmen,6]+rp(rahf[rahmen,1],
        pred(br))+rahf[rahmen,7]);
@@ -443,7 +443,7 @@ begin
        print(nr,l+(br shr 1)-succ(length(titel) shr 1)+1,titlepos,$ff,' '+ups(titel)+' ')
       end
      end;
-   2:begin {Titel in Zeile 2 und Rahmen «ƒ∂}
+   2:begin {Titel in Zeile 2 und Rahmen ‚ïü‚îÄ‚ï¢}
       inc(titlepos);if ho>2 then
        print(nr,l,succ(titlepos),vcol(raf),rahf[rahmen,8]+rp(rahf[rahmen,10],
        pred(br))+rahf[rahmen,9]);
@@ -452,7 +452,7 @@ begin
        print(nr,l+(br shr 1)-succ(length(titel) shr 1)+1,titlepos,$ff,' '+ups(titel)+' ')
       end
      end;
-   3:begin {Titel in Zeile 2 und Rahmen ∫ Õ ∫}
+   3:begin {Titel in Zeile 2 und Rahmen ‚ïë ‚ïê ‚ïë}
        inc(titlepos);if ho>2 then
        print(nr,succ(l),succ(titlepos),raf,' '+rp(rahf[rahmen,1],br-3)+' ');
       if ho>1 then begin
@@ -460,7 +460,7 @@ begin
        print(nr,l+(br shr 1)-succ(length(titel) shr 1)+1,titlepos,$ff,' '+ups(titel)+' ')
       end
      end;
-   4:begin {Titel in Zeile 2 und Rahmen ∫ ƒ ∫}
+   4:begin {Titel in Zeile 2 und Rahmen ‚ïë ‚îÄ ‚ïë}
        inc(titlepos);if ho>2 then
        print(nr,succ(l),succ(titlepos),raf,' '+rp(rahf[rahmen,10],br-3)+' ');
       if ho>1 then begin
@@ -490,17 +490,17 @@ end;
 procedure window(anr,nr:byte);
 var ro,brr,hoh,oho,lrm:byte; titlepos,dc:byte;
 const rahf:array[0..3,0..10] of char=
-      (('…','Õ','ª','∫','»','º','Ã','π','«','∂','ƒ'),
-       ('’','Õ','∏','≥','‘','æ','∆','µ','√','¥','ƒ'),
-       ('÷','ƒ','∑','∫','”','Ω','«','∂','Ã','π','Õ'),
-       ('⁄','ƒ','ø','≥','¿','Ÿ','√','¥','∆','µ','Õ'));
+      (('‚ïî','‚ïê','‚ïó','‚ïë','‚ïö','‚ïù','‚ï†','‚ï£','‚ïü','‚ï¢','‚îÄ'),
+       ('‚ïí','‚ïê','‚ïï','‚îÇ','‚ïò','‚ïõ','‚ïû','‚ï°','‚îú','‚î§','‚îÄ'),
+       ('‚ïì','‚îÄ','‚ïñ','‚ïë','‚ïô','‚ïú','‚ïü','‚ï¢','‚ï†','‚ï£','‚ïê'),
+       ('‚îå','‚îÄ','‚îê','‚îÇ','‚îî','‚îò','‚îú','‚î§','‚ïû','‚ï°','‚ïê'));
 
 begin
  with winds[anr]^do begin
   brr:=pred(br);hoh:=pred(ho);oho:=o+hoh;lrm:=l+brr;
   titlepos:=o;
   print(nr,l,o,raf,rahf[rahmen,0]+rp(rahf[rahmen,1],pred(brr))+rahf[rahmen,2]);
-  if rahmen>0 then print(nr,closerpos,o,raf and $f7,'  ');
+  if rahmen>0 then print(nr,closerpos,o,raf and $f7,' ‚â° ');
   for ro:=succ(o) to o+pred(hoh) do begin
    print(nr,l,ro,raf,rahf[rahmen,3]);print(nr,l+brr,ro,vcol(raf),rahf[rahmen,3]);
    print(nr,succ(l),ro,arbf,rp(' ',pred(brr)))
@@ -511,7 +511,7 @@ begin
   if (titel<>'') and (br>length(titel)+4) then
   case typ of
    0:print(nr,l+(brr shr 1)-succ(length(titel) shr 1)+1,titlepos,titf,' '+ups(titel)+' ');
-   1:begin  {Titel in Zeile 2 und Rahmen ÃÕπ}
+   1:begin  {Titel in Zeile 2 und Rahmen ‚ï†‚ïê‚ï£}
        inc(titlepos);if hoh>2 then
        print(nr,l,succ(titlepos),raf,rahf[rahmen,6]+rp(rahf[rahmen,1],
        pred(brr))+rahf[rahmen,7]);
@@ -520,7 +520,7 @@ begin
        print(nr,l+1+(brr shr 1)-succ(length(titel) shr 1),titlepos,$ff,' '+ups(titel)+' ')
       end
      end;
-   2:begin {Titel in Zeile 2 und Rahmen «ƒ∂}
+   2:begin {Titel in Zeile 2 und Rahmen ‚ïü‚îÄ‚ï¢}
       inc(titlepos);if hoh>2 then
        print(nr,l,succ(titlepos),raf,rahf[rahmen,8]+rp(rahf[rahmen,10],
        pred(brr))+rahf[rahmen,9]);
@@ -529,7 +529,7 @@ begin
        print(nr,l+1+(brr shr 1)-succ(length(titel) shr 1),titlepos,$ff,' '+ups(titel)+' ')
       end
      end;
-   3:begin {Titel in Zeile 2 und Rahmen ∫ Õ ∫}
+   3:begin {Titel in Zeile 2 und Rahmen ‚ïë ‚ïê ‚ïë}
        inc(titlepos);if hoh>2 then
        print(nr,succ(l),succ(titlepos),raf,' '+rp(rahf[rahmen,1],brr-3)+' ');
       if hoh>1 then begin
@@ -537,7 +537,7 @@ begin
        print(nr,l+1+(brr shr 1)-succ(length(titel) shr 1),titlepos,$ff,' '+ups(titel)+' ')
       end
      end;
-   4:begin {Titel in Zeile 2 und Rahmen ∫ ƒ ∫}
+   4:begin {Titel in Zeile 2 und Rahmen ‚ïë ‚îÄ ‚ïë}
        inc(titlepos);if hoh>2 then
        print(nr,succ(l),succ(titlepos),raf,' '+rp(rahf[rahmen,10],brr-3)+' ');
       if hoh>1 then begin
@@ -600,7 +600,7 @@ begin
  readin:=false; {Erstmal auf FALSCH setzen, das spart.}
  zmax:=0; {noch keine Zeile gelesen.}
  assign(tf,f); {Der Textdatei einen Namen geben...}
- {$i-}reset(tf);{$i+} {ôffnen (nicht neu anlegen).}
+ {$i-}reset(tf);{$i+} {√ñffnen (nicht neu anlegen).}
  if ioresult<>0 then goto raus;
  while not(eof(tf)) do begin  {Lesen, bis Datei zuende.}
   {$i-}readln(tf,st);{$i+}
@@ -610,10 +610,10 @@ begin
   end;
   if zmax<tmaxzeilen then begin {Wenn weniger als 10 000 Zeilen}
    inc(zmax); {Zeilen:=Zeilen+1}
-   new(ze[zmax]);ze[zmax]^:=st; {Platz fÅr neue Zeile holen und mit St fÅllen.}
+   new(ze[zmax]);ze[zmax]^:=st; {Platz f√ºr neue Zeile holen und mit St f√ºllen.}
   end else {goto raus;}break;
  end;
- readin:=true; {Wenn alles ok, dann TRUE zurÅckgeben.}
+ readin:=true; {Wenn alles ok, dann TRUE zur√ºckgeben.}
 raus:
  {$i-}close(tf);{$i+} if ioresult<>0 then ;
  {Datei wieder zu.}
@@ -628,9 +628,9 @@ end;
 
 
 procedure cleanup;
-{Wird nur intern benîtigt, um den geholten Speicher ordentlich
- wieder freizugeben (nÑmlich RöCKWéRTS!).}
-var az:integer; {ZÑhlvariable}
+{Wird nur intern ben√∂tigt, um den geholten Speicher ordentlich
+ wieder freizugeben (n√§mlich R√úCKW√ÑRTS!).}
+var az:integer; {Z√§hlvariable}
 begin
  for az:=zmax downto 1 do dispose(ze[az]);
 end;
@@ -658,16 +658,16 @@ end;
 procedure display(nr,pxpos,x,ys,zrange,color:byte;mitxor:boolean);
 {Hier kann man nun die ganze Datei angucken. Mit Cursosteuerung...}
 var repaint:boolean;maxl:byte;
-{REPAINT sagt, ob neu angezeigt werden mu·. Hat ja keinen Sinn,
- wenn einer 1000x HOME drÅckt, da rumzuflackern... }
+{REPAINT sagt, ob neu angezeigt werden mu√ü. Hat ja keinen Sinn,
+ wenn einer 1000x HOME dr√ºckt, da rumzuflackern... }
 
 procedure hilfe;
 begin
  if nr<9 then begin
   copyscn(nr,succ(nr));
   hwin(succ(nr),0,1,15,7,50,8,$9b,$9e,$80,$9f,'Steuerungshilfe',true);
-  print(succ(nr),18,9, $9e,'VorwÑrts und rÅckwÑrts:  und  , Pos1/Ende');
-  print(succ(nr),18,10,$9e,'Seitenweise blÑttern  : Bild und Bild');
+  print(succ(nr),18,9, $9e,'Vorw√§rts und r√ºckw√§rts:  und  , Pos1/Ende');
+  print(succ(nr),18,10,$9e,'Seitenweise bl√§ttern  : Bild und Bild');
   print(succ(nr),18,11,$9e,'Horizontal verschieben: <- und ->');
   print(succ(nr),18,12,$9e,'Schnell links / rechts: Strg+<- und Strg+->');
   print(succ(nr),18,13,$9e,'Programmteil abbrechen: ESC');
@@ -785,7 +785,7 @@ uses dos,crt,vscreen;
 var c:char;wc:byte;msx,msy:integer;mxs,mys,mbs:string[5];mis:boolean;
 const fenstring:string=
 'Das hier ist ein ziemlich langer Satz. Der wird im Fenster angezeigt und am Rahmen umgebrochen, wie das ja so sein soll.'+
-'Dieser Satz kann maximal 255 Zeichen lang sein. Pa·t er nicht, wird er abgeschnitten... SCHNAPP.';
+'Dieser Satz kann maximal 255 Zeichen lang sein. Pa√üt er nicht, wird er abgeschnitten... SCHNAPP.';
 
 begin
  cursor(false);

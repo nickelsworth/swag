@@ -280,11 +280,11 @@ those are continuous double lines <ASCII codes>):
 What dimension number do you want for a table? 4
 
      1   2   3   4
-  ษออออออออออออออออ
- 1บ  1   2   3   4
- 2บ  2   4   6   8
- 3บ  3   6   9  12
- 4บ  4   8  12  16
+  โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
+ 1โ•‘  1   2   3   4
+ 2โ•‘  2   4   6   8
+ 3โ•‘  3   6   9  12
+ 4โ•‘  4   8  12  16
 
 Note how I have the numbers lined up in the table.  Your program should do
 this as well.  If a dimension is greater than 9, your program should allow

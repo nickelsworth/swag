@@ -91,15 +91,15 @@ TmpVar : Array [1..10] of Integer;
  WinSet : Array [1..WinSets,1..WinComponents] of Char;
 
 Begin
-          Winset[1,01]:='Û'; {Top left}
-          Winset[1,02]:='ß'; {Top}
-          Winset[1,03]:='Û'; {Top right}
-          Winset[1,04]:='Ý'; {Left side}
-          Winset[1,05]:='Þ'; {Right side}
-          Winset[1,06]:='Û'; {Bottom Left}
-          Winset[1,07]:='Ü'; {Bottom}
-          Winset[1,08]:='Û'; {Bottom Right}
-          Winset[1,09]:='±'; {Shadow}
+          Winset[1,01]:='â–ˆ'; {Top left}
+          Winset[1,02]:='â–€'; {Top}
+          Winset[1,03]:='â–ˆ'; {Top right}
+          Winset[1,04]:='â–Œ'; {Left side}
+          Winset[1,05]:='â–'; {Right side}
+          Winset[1,06]:='â–ˆ'; {Bottom Left}
+          Winset[1,07]:='â–„'; {Bottom}
+          Winset[1,08]:='â–ˆ'; {Bottom Right}
+          Winset[1,09]:='â–’'; {Shadow}
 TextColor(FGCol);
 TextBackGround(BGCol);
 GotoXY(X1,Y1);
@@ -156,7 +156,7 @@ Begin
 ClrScr;
 TextColor(FG);
 TextBackGround(BG);
-For CNT:=1 to 125 do write('±±±±±±±±±±±±±±±±');
+For CNT:=1 to 125 do write('â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’â–’');
 End;
 
 
@@ -170,16 +170,16 @@ Uses CRT,Tui;
 Var Selected : Byte;
 CNT      : Integer;
 Begin
-Shade(13,0,'±');
+Shade(13,0,'â–’');
 WinD(2,2,4,24,9,0);
 GotoXY(3,3);
 TextColor(10);
 WriteLn('                    ');
 Repeat
-Item[1]:='.ùúÄÄÄÄÄÄ¯>Item 1<®ÄÄÄÄÄÄùú.';
-Item[2]:='.ùúÄÄÄÄÄÄ¯>Item 2<®ÄÄÄÄÄÄùú.';
-Item[3]:='.ùúÄÄÄÄÄÄ¯>Item 3<®ÄÄÄÄÄÄùú.';
-Item[4]:='.ùúÄÄÄÄÄÄ¯>Item 4<®ÄÄÄÄÄÄùú.';
+Item[1]:='.âˆ™Â·â”€â”€â”€â”€â”€â”€Â»>Item 1<Â«â”€â”€â”€â”€â”€â”€âˆ™Â·.';
+Item[2]:='.âˆ™Â·â”€â”€â”€â”€â”€â”€Â»>Item 2<Â«â”€â”€â”€â”€â”€â”€âˆ™Â·.';
+Item[3]:='.âˆ™Â·â”€â”€â”€â”€â”€â”€Â»>Item 3<Â«â”€â”€â”€â”€â”€â”€âˆ™Â·.';
+Item[4]:='.âˆ™Â·â”€â”€â”€â”€â”€â”€Â»>Item 4<Â«â”€â”€â”€â”€â”€â”€âˆ™Â·.';
 Selected:=WindMen(4,14,3,15,1,13,1,30,5);
 If Selected<255 then Begin
                            GotoXY(3,3);
@@ -218,7 +218,7 @@ around your menu items :)...
 And for the last one:
 Shade(FG,BG,CHAR);
 Just use it like to shade in magenta with a green background <YUCK!> do
-Shade(13,2,'±');
+Shade(13,2,'â–’');
 
 If you use it please give me credit and maybe a registered version of the
 program?

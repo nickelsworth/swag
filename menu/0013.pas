@@ -21,15 +21,15 @@ INTERFACE
 
 TYPE
 
-   { D‚finition d'un type procedure }
+   { DÃ©finition d'un type procedure }
 
    TProcedure     = Procedure;
 
-   { RŠglemente la longueur d'une option d'un menu. }
+   { RÃ¨glemente la longueur d'une option d'un menu. }
 
    TMenuOption    = String[25];
 
-   { Les menus d‚roulants sont pr‚vus pour fonctionner en mode texte 80*25 ou
+   { Les menus dÃ©roulants sont prÃ©vus pour fonctionner en mode texte 80*25 ou
      en mode graphique 640*480 }
 
    cgVideoMode = (cgTextMod, cgGraphMod);
@@ -37,12 +37,12 @@ TYPE
 
 CONST
 
-   { C'est cette variable qui d‚terminera la fin du menu.  Le meilleur
+   { C'est cette variable qui dÃ©terminera la fin du menu.  Le meilleur
      emploi est dans un menu File; option Exit }
 
    bEXIT : Boolean = FALSE;
 
-   { D‚clare au programme que le menu doit se faire en mode texte 80*25 }
+   { DÃ©clare au programme que le menu doit se faire en mode texte 80*25 }
 
    cgMode : cgVideoMode = cgTextMod;
 
@@ -54,59 +54,59 @@ CONST
 
    cgMainMenuAttrS : Byte = 116;
 
-   { Attribut couleur des sous-menus lorsqu'ils sont s‚lectionn‚s }
+   { Attribut couleur des sous-menus lorsqu'ils sont sÃ©lectionnÃ©s }
 
    cgSubMenuAttr   : Byte = 33;
 
-   { Attribut couleur des sous-menus lorsqu'ils sont s‚lectionn‚s :
+   { Attribut couleur des sous-menus lorsqu'ils sont sÃ©lectionnÃ©s :
      Lettre surbrillance }
 
    cgSubMenuAttrS  : Byte = 44;
 
 VAR
 
-   { Cette variable servira … stocker le nom du sous-menu qui est
-     actuellement d‚pli‚ afin de ne pas le d‚plier … nouveau lorsqu'on
-     s‚lectionne une autre option dans ce mˆme sous-menu. }
+   { Cette variable servira Ã  stocker le nom du sous-menu qui est
+     actuellement dÃ©pliÃ© afin de ne pas le dÃ©plier Ã  nouveau lorsqu'on
+     sÃ©lectionne une autre option dans ce mÃªme sous-menu. }
 
    cgActualSubMenu   : TMenuOption;
 
-   { Cette variable servira … stocker le nom de l'option qui est
-     actuellement s‚lectionn‚e afin de remettre son attribut couleur en
+   { Cette variable servira Ã  stocker le nom de l'option qui est
+     actuellement sÃ©lectionnÃ©e afin de remettre son attribut couleur en
      cgSubMenuAttr. }
 
    cgActualOption    : Byte;
 
-   { Tableau global: contient le nom de toutes les options du menu g‚n‚ral,
-     c'est-…-dire qu'il contient tous les lib‚ll‚s des diff‚rents sous-menus
-     pr‚sents. }
+   { Tableau global: contient le nom de toutes les options du menu gÃ©nÃ©ral,
+     c'est-Ã -dire qu'il contient tous les libÃ©llÃ©s des diffÃ©rents sous-menus
+     prÃ©sents. }
 
    cgMenu            : Array[1..11,0..25] of TMenuOption;
 
-   { Pr‚sentation sous forme de tableau du menu principal. Ce tableau sera
-     compl‚t‚ dynamiquement lors du RUNTIME par le contenu de la constante
-     cgMainMenu o— les diff‚rents sous-menus sont s‚par‚s par des blancs. }
+   { PrÃ©sentation sous forme de tableau du menu principal. Ce tableau sera
+     complÃ©tÃ© dynamiquement lors du RUNTIME par le contenu de la constante
+     cgMainMenu oÃ¹ les diffÃ©rents sous-menus sont sÃ©parÃ©s par des blancs. }
 
    cgSubMenu         : Array[1..11] OF TMenuOption;
 
-   { Message qui viendra s'‚crire dans la ligne de statut pour chacune des
+   { Message qui viendra s'Ã©crire dans la ligne de statut pour chacune des
      options ou chacun des sous-menus. }
 
    cgMessage         : Array[1..11,0..25] OF ^String;
 
    { Nombre de sous-menu apparraissant dans le menu principal.  Cette valeur
-     est automatiquement calcul‚ par le programme. }
+     est automatiquement calculÃ© par le programme. }
 
    cgSubMenuNumber  : Byte;
 
-   { Tableau global: contient toutes les proc‚dures pour tous les sous-menus
-     du menu g‚n‚ral.  C'est via ce tableau que l'on pourra acc‚der aux
-     handler des diff‚rentes options pr‚sentes dans le menu g‚n‚ral. }
+   { Tableau global: contient toutes les procÃ©dures pour tous les sous-menus
+     du menu gÃ©nÃ©ral.  C'est via ce tableau que l'on pourra accÃ©der aux
+     handler des diffÃ©rentes options prÃ©sentes dans le menu gÃ©nÃ©ral. }
 
    cgMenuProc        : Array[1..11,1..25] of TProcedure;
 
-   { Contiendra, pour un sous-menu donn‚, la liste de toutes les proc‚dures
-     qui sont associ‚s aux options de ce sous-menu. }
+   { Contiendra, pour un sous-menu donnÃ©, la liste de toutes les procÃ©dures
+     qui sont associÃ©s aux options de ce sous-menu. }
 
    cgSubMenuProc     : Array[1..11] OF TProcedure;
 
@@ -127,36 +127,36 @@ USES Crt, uMouse;  { FOUND IN MOUSE.SWG}
 
 CONST
 
-   { Sauvegarde du nombre de handler nouvellement ajout‚ afin de pouvoir les
-     retirer lorsque l'on passera … un autre sous-menu. }
+   { Sauvegarde du nombre de handler nouvellement ajoutÃ© afin de pouvoir les
+     retirer lorsque l'on passera Ã  un autre sous-menu. }
 
    OldNumberHandler : Byte = 0;
 
 VAR
 
-   { Menu principal.  Obligatoirement inf‚rieur ou ‚gal … 100 caractŠres.
-     Th‚oriquement, cette taille devrait ˆtre de 80 caractŠres mais comme
-     il se peut que l'on utilise des '&' pour pr‚fixer certaines lettres,
+   { Menu principal.  Obligatoirement infÃ©rieur ou Ã©gal Ã  100 caractÃ¨res.
+     ThÃ©oriquement, cette taille devrait Ãªtre de 80 caractÃ¨res mais comme
+     il se peut que l'on utilise des '&' pour prÃ©fixer certaines lettres,
      on devra alors tenir compte d'une taille plus grande que 80. }
 
    cgMainMenu        : String[100];
    cgMainMenu2       : String[100];
 
-   { Cette variable servira … stocker le nom du sous-menu qui est
-     actuellement d‚pli‚ afin de ne pas le d‚plier … nouveau lorsqu'on
-     s‚lectionne une autre option dans ce mˆme sous-menu. }
+   { Cette variable servira Ã  stocker le nom du sous-menu qui est
+     actuellement dÃ©pliÃ© afin de ne pas le dÃ©plier Ã  nouveau lorsqu'on
+     sÃ©lectionne une autre option dans ce mÃªme sous-menu. }
 
    cgOldSubMenu      : TMenuOption;
 
-   { Cette variable servira … stocker le nom de l'option qui est
-     actuellement s‚lectionn‚e afin de remettre son attribut couleur en
+   { Cette variable servira Ã  stocker le nom de l'option qui est
+     actuellement sÃ©lectionnÃ©e afin de remettre son attribut couleur en
      cgSubMenuAttr. }
 
    cgOldOption       : TMenuOption;
 
 
 { ************************************************************************ }
-{ * Sauvegarde la page ‚cran source dans la page ‚cran destination.      * }
+{ * Sauvegarde la page Ã©cran source dans la page Ã©cran destination.      * }
 { ************************************************************************ }
 
 PROCEDURE CopyPage (Source, Cible : Byte);
@@ -168,9 +168,9 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Lorsque le clic de la souris se fait dans une surface non d‚limit‚e, * }
-{ * on peut associer une proc‚dure qui sera charg‚e de rafraŒchir l'‚cran* }
-{ * ou tout autre chose.  Dans ce cas, le sous-menu sera repli‚.         * }
+{ * Lorsque le clic de la souris se fait dans une surface non dÃ©limitÃ©e, * }
+{ * on peut associer une procÃ©dure qui sera chargÃ©e de rafraÃ®chir l'Ã©cran* }
+{ * ou tout autre chose.  Dans ce cas, le sous-menu sera repliÃ©.         * }
 { ************************************************************************ }
 
 PROCEDURE OtherArea;
@@ -182,7 +182,7 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Ote les blancs se trouvant devant et derriŠre un mot                 * }
+{ * Ote les blancs se trouvant devant et derriÃ¨re un mot                 * }
 { ************************************************************************ }
 
 FUNCTION AllTrim (s : String) : String;
@@ -200,14 +200,14 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Proc‚dure bidon: assign‚e par d‚faut … toutes les nouvelles options  * }
-{ * cr‚‚es ou … tous nouveaux sous-menus.                                * }
+{ * ProcÃ©dure bidon: assignÃ©e par dÃ©faut Ã  toutes les nouvelles options  * }
+{ * crÃ©Ã©es ou Ã  tous nouveaux sous-menus.                                * }
 { ************************************************************************ }
 
 PROCEDURE hNULL;  FAR; BEGIN END;
 
 { ************************************************************************ }
-{ * Affiche le texte fournit comme paramŠtre … la position courante du   * }
+{ * Affiche le texte fournit comme paramÃ¨tre Ã  la position courante du   * }
 { * curseur en prenant soin de retirer tous les "&".                     * }
 { ************************************************************************ }
 
@@ -222,14 +222,14 @@ BEGIN
 
     OldAttr := TextAttr;
 
-    { Masque le curseur de la souris afin de ne pas ‚crire dessus. }
+    { Masque le curseur de la souris afin de ne pas Ã©crire dessus. }
 
     Mouse_Hide;
 
     IF NOT (Pos('&', S) = 0) THEN
        BEGIN
 
-          { Il faut traiter les diff‚rents '&' pr‚sents dans le texte. }
+          { Il faut traiter les diffÃ©rents '&' prÃ©sents dans le texte. }
 
           REPEAT
 
@@ -238,7 +238,7 @@ BEGIN
                 TextAttr := OldAttr;
                 Write (Copy (S, 1, Pos('&', S)-1));
 
-                { Ecriture de la lettre pr‚fix‚e par le '&' dans une autre
+                { Ecriture de la lettre prÃ©fixÃ©e par le '&' dans une autre
                   couleur. }
 
                 IF OldAttr = cgMainMenuAttr THEN
@@ -262,14 +262,14 @@ BEGIN
     ELSE
        Write (S);
 
-    { R‚affiche le curseur de la souris. }
+    { RÃ©affiche le curseur de la souris. }
 
     Mouse_Show;
 
 END;
 
 { ************************************************************************ }
-{ * Retourne une chaŒne de caractŠres sans les  "&".                     * }
+{ * Retourne une chaÃ®ne de caractÃ¨res sans les  "&".                     * }
 { ************************************************************************ }
 
 FUNCTION Remove_Ampersand (s : String) : String;
@@ -304,7 +304,7 @@ BEGIN
 
     ShowText (cgMainMenu);
 
-    { Affiche la barre d'‚tat }
+    { Affiche la barre d'Ã©tat }
 
     GotoXy (1,25);
     Mouse_Hide;
@@ -314,9 +314,9 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Cette fonction retourne la position du sous-menu dans la chaŒne      * }
-{ * cgMainMenu. Elle sera utile uniquement pour d‚terminer la colonne o— * }
-{ * d‚bute le sous-menu … l'‚cran.                                       * }
+{ * Cette fonction retourne la position du sous-menu dans la chaÃ®ne      * }
+{ * cgMainMenu. Elle sera utile uniquement pour dÃ©terminer la colonne oÃ¹ * }
+{ * dÃ©bute le sous-menu Ã  l'Ã©cran.                                       * }
 { ************************************************************************ }
 
 FUNCTION GetPosSubMenu (cgSubMenu : TMenuOption) : Byte;
@@ -332,8 +332,8 @@ END;
 
 { ************************************************************************ }
 { * Cette fonction va retourner 1 si c'est le tout premier sous-menu de  * }
-{ * la barre de menus, 2 si c'est le second, ... ind‚pendamment du X     * }
-{ * (colonne) dans cette mˆme barre.                                     * }
+{ * la barre de menus, 2 si c'est le second, ... indÃ©pendamment du X     * }
+{ * (colonne) dans cette mÃªme barre.                                     * }
 { ************************************************************************ }
 
 FUNCTION GetOrderSubMenu (cgSubMenu : TMenuOption) : Byte;
@@ -382,8 +382,8 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Cette fonction va retourner 1 si c'est la toute premiŠre option du   * }
-{ * sous-menu, 2 si c'est la seconde, ... ind‚pendamment du X (colonne). * }
+{ * Cette fonction va retourner 1 si c'est la toute premiÃ¨re option du   * }
+{ * sous-menu, 2 si c'est la seconde, ... indÃ©pendamment du X (colonne). * }
 { ************************************************************************ }
 
 FUNCTION GetOrderOptionMenu (cgSubMenu, cgOption : TMenuOption) : Byte;
@@ -416,7 +416,7 @@ BEGIN
                 cgMenu[GetOrderSubMenu(cgSubMenu[GetOrderSubMenu(cgActualSubMenu)]),cgActualOption],
                 cgMessage[GetOrderSubMenu(cgActualSubMenu),cgActualOption]);
 
-   { Il ne faudra ex‚cuter le code que si l'utilisateur a relƒch‚ le bouton
+   { Il ne faudra exÃ©cuter le code que si l'utilisateur a relÃ¢chÃ© le bouton
      gauche de la souris et pas autrement. }
 
    IF NOT Mouse_ReleaseButton (cgMouse_Left) THEN
@@ -424,9 +424,9 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * D‚plie un sous-menu.  Si le paramŠtre cgOption est sp‚cifi‚ (diff‚-  * }
-{ * rent de ''), alors le sous-menu est d‚pli‚ et l'option donn‚e est    * }
-{ * s‚lectionn‚e.                                                        * }
+{ * DÃ©plie un sous-menu.  Si le paramÃ¨tre cgOption est spÃ©cifiÃ© (diffÃ©-  * }
+{ * rent de ''), alors le sous-menu est dÃ©pliÃ© et l'option donnÃ©e est    * }
+{ * sÃ©lectionnÃ©e.                                                        * }
 { ************************************************************************ }
 
 PROCEDURE ShowSubMenu (cgSubMenu, cgOption : TMenuOption; cgMessage : Pointer);
@@ -443,7 +443,7 @@ VAR
 
 BEGIN
 
-   { On va faire un rafraichissement de l'‚cran uniquement s'il y a lieu d'en
+   { On va faire un rafraichissement de l'Ã©cran uniquement s'il y a lieu d'en
      faire un. }
 
 
@@ -494,7 +494,7 @@ BEGIN
                IF NOT (Nbr = 0) THEN
                   BEGIN
 
-                     { Affichage des diff‚rentes options }
+                     { Affichage des diffÃ©rentes options }
 
                      TextAttr := cgMainMenuAttr;
 
@@ -514,10 +514,10 @@ BEGIN
                         ELSE
                            GotoXy (GetPosSubMenu (cgSubMenu), 2);
 
-                     FillChar(s, Max+4, 'Ä');
+                     FillChar(s, Max+4, 'â”€');
                      s[0] := Chr(Max+4);
-                     s[1] :=  'Ú';
-                     s[Length(s)] := '¿';
+                     s[1] :=  'â”Œ';
+                     s[Length(s)] := 'â”';
                      Mouse_Hide;
                      Write (S);
                      Mouse_Show;
@@ -536,7 +536,7 @@ BEGIN
                               ELSE
                                  GotoXy (GetPosSubMenu (cgSubMenu), I+2);
 
-                           IF NOT (cgMenu[GetOrderSubMenu (cgSubMenu),I] = 'Ä') THEN
+                           IF NOT (cgMenu[GetOrderSubMenu (cgSubMenu),I] = 'â”€') THEN
                               BEGIN
 
                                  IF Pos('&', cgMenu[GetOrderSubMenu (cgSubMenu),I]) > 0 THEN
@@ -544,14 +544,14 @@ BEGIN
                                  ELSE
                                     FillChar(s, Max+4, ' ');
 
-                                 s := '³ '+cgMenu[GetOrderSubMenu (cgSubMenu),I];
+                                 s := 'â”‚ '+cgMenu[GetOrderSubMenu (cgSubMenu),I];
 
                                  IF Pos('&', cgMenu[GetOrderSubMenu (cgSubMenu),I]) > 0 THEN
                                     s[0] := Chr(Max+5)
                                  ELSE
                                     s[0] := Chr(Max+4);
 
-                                 s[Length(s)] := '³';
+                                 s[Length(s)] := 'â”‚';
 
                                  IF (GetPosSubMenu (cgSubMenu) + Max > 80) THEN
                                     Mouse_AddHandler (80 - (Max + 2), 80, I+1, I+1, hAllOption)
@@ -562,18 +562,18 @@ BEGIN
                               END
                            ELSE
                               BEGIN
-                                 FillChar(s, Max+4, 'Ä');
-                                 s := 'Ã'+cgMenu[GetOrderSubMenu (cgSubMenu),I];
+                                 FillChar(s, Max+4, 'â”€');
+                                 s := 'â”œ'+cgMenu[GetOrderSubMenu (cgSubMenu),I];
                                  s[0] := Chr(Max+4);
-                                 s[Length(s)] := '´';
+                                 s[Length(s)] := 'â”¤';
                              END;
                            ShowText (s);
                         END;
 
-                     FillChar(s, Max+4, 'Ä');
+                     FillChar(s, Max+4, 'â”€');
                      s[0] := Chr(Max+4);
-                     s[1] :=  'À';
-                     s[Length(s)] := 'Ù';
+                     s[1] :=  'â””';
+                     s[Length(s)] := 'â”˜';
 
                      { Se positionne correctement pour l'affichage }
 
@@ -608,8 +608,8 @@ BEGIN
                      IF Max < Length (cgMenu[GetOrderSubMenu (cgSubMenu),I]) THEN
                         Max := Length (cgMenu[GetOrderSubMenu (cgSubMenu),I]);
 
-                  { R‚tablit l'attribut de l'option anciennement
-                    s‚lectionn‚e }
+                  { RÃ©tablit l'attribut de l'option anciennement
+                    sÃ©lectionnÃ©e }
 
                   TextAttr := cgMainMenuAttr;
 
@@ -706,7 +706,7 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Appel la proc‚dure correspondant au sous-menu s‚lectionn‚.           * }
+{ * Appel la procÃ©dure correspondant au sous-menu sÃ©lectionnÃ©.           * }
 { ************************************************************************ }
 
 PROCEDURE HighLigthMainMenu (st : TMenuOption);
@@ -725,7 +725,7 @@ BEGIN
        NOT (GetOrderSubMenu (st) > cgSubMenuNumber) THEN
        BEGIN
 
-          { D‚plie le sous-menu }
+          { DÃ©plie le sous-menu }
 
           cgActualSubMenu := cgSubMenu[GetOrderSubMenu (st)];
 
@@ -733,7 +733,7 @@ BEGIN
                        '',cgMessage[GetOrderSubMenu(cgActualSubMenu),0]);
 
           { Appel au code qui se trouve sous le sous-menu uniquement si
-            l'utilisateur a relƒch‚ le bouton de gauche de la souris }
+            l'utilisateur a relÃ¢chÃ© le bouton de gauche de la souris }
 
           IF NOT Mouse_ReleaseButton (cgMouse_Left) THEN
              cgSubMenuProc[GetOrderSubMenu (st)];
@@ -745,7 +745,7 @@ END;
 
 { ************************************************************************ }
 { * Fournit le nom du sous-menu suivant (dans l'ordre de position) du    * }
-{ * sous-menu dont le nom est fournit comme paramŠtre.                   * }
+{ * sous-menu dont le nom est fournit comme paramÃ¨tre.                   * }
 { ************************************************************************ }
 
 FUNCTION GetNextSubMenu (OldSubMenu : TMenuOption) : TMenuOption;
@@ -780,7 +780,7 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Fournit le nombre de sous-menu pr‚sent dans le menu principal.       * }
+{ * Fournit le nombre de sous-menu prÃ©sent dans le menu principal.       * }
 { ************************************************************************ }
 
 FUNCTION GetSubMenuNumber : Byte;
@@ -811,8 +811,8 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Cette proc‚dure va se charger de lire le fichier MENU.INC afin de    * }
-{ * compl‚ter ses tableaux.                                              * }
+{ * Cette procÃ©dure va se charger de lire le fichier MENU.INC afin de    * }
+{ * complÃ©ter ses tableaux.                                              * }
 { ************************************************************************ }
 
 
@@ -848,9 +848,9 @@ BEGIN
             S := Alltrim(s);
             cgMenu[cgSubMenuNumber,I] := S;
 
-            { Par d‚faut, lorsque l'utilisateur cliquera sur cette option,
-              la proc‚dure hNULL -c…d qui ne fait absolument rien- sera
-              appel‚e. }
+            { Par dÃ©faut, lorsque l'utilisateur cliquera sur cette option,
+              la procÃ©dure hNULL -cÃ d qui ne fait absolument rien- sera
+              appelÃ©e. }
 
             cgMenuProc[cgSubMenuNumber,I] := hNULL;
 
@@ -880,7 +880,7 @@ BEGIN
 
          BEGIN
 
-            { Sauvegarde le nombre d'options appartenant … ce sous-menu en
+            { Sauvegarde le nombre d'options appartenant Ã  ce sous-menu en
               position 0. }
 
             IF NOT (cgSubMenuNumber = 0) THEN
@@ -892,7 +892,7 @@ BEGIN
             S := Alltrim(s);
             cgSubMenu[cgSubMenuNumber] := S;
 
-            { Associe par d‚faut le clic sur ce sous-menu … la proc‚dure
+            { Associe par dÃ©faut le clic sur ce sous-menu Ã  la procÃ©dure
               hNULL }
 
             cgSubMenuProc[cgSubMenuNumber] := hNULL;
@@ -903,7 +903,7 @@ BEGIN
 
    UNTIL Eof (fMenu);
 
-   { Sauvegarde le nombre d'options appartenant … ce sous-menu en
+   { Sauvegarde le nombre d'options appartenant Ã  ce sous-menu en
      position 0. }
 
    IF NOT (cgSubMenuNumber = 0) THEN
@@ -911,14 +911,14 @@ BEGIN
 
    Close (fMenu);
 
-   { Cr‚e la ligne de sous-menu. }
+   { CrÃ©e la ligne de sous-menu. }
 
    cgMainMenu := '';
 
    FOR I := 1 TO cgSubMenuNumber DO
       cgMainMenu := cgMainMenu + cgSubMenu[I] + '  ';
 
-   { Cr‚e la ligne de sous-menus en prenant soin de retirer tous les '&'. }
+   { CrÃ©e la ligne de sous-menus en prenant soin de retirer tous les '&'. }
 
    cgMainMenu2 := cgMainMenu;
 
@@ -928,9 +928,9 @@ BEGIN
 END;
 
 { ************************************************************************ }
-{ * Proc‚dure de gestion du menu d‚roulant.  C'est elle qui sera appel‚e * }
-{ * lorsque le clic de la souris se fera sur la toute premiŠre ligne de  * }
-{ * l'‚cran.                                                             * }
+{ * ProcÃ©dure de gestion du menu dÃ©roulant.  C'est elle qui sera appelÃ©e * }
+{ * lorsque le clic de la souris se fera sur la toute premiÃ¨re ligne de  * }
+{ * l'Ã©cran.                                                             * }
 { ************************************************************************ }
 
 PROCEDURE MainMenuHandle;
@@ -972,7 +972,7 @@ ASM
 END;
 
 { ************************************************************************ }
-{ * R‚tablit le curseur en mode texte.                                   * }
+{ * RÃ©tablit le curseur en mode texte.                                   * }
 { ************************************************************************ }
 
 PROCEDURE Cursor_Show;  ASSEMBLER;
@@ -987,10 +987,10 @@ ASM
 END;
 
 { ************************************************************************ }
-{ * Run_Menu va se faire fort de simplifier au MAXIMUM l'‚criture d'un   * }
+{ * Run_Menu va se faire fort de simplifier au MAXIMUM l'Ã©criture d'un   * }
 { * menu puisqu'il suffira d'associer dans le programme une association  * }
-{ * entre l'option et la proc‚dure ad'hoc.  Une fois que les liens ont   * }
-{ * ‚t‚ ‚tabli, il suffit d'appeler cette proc‚dure.                     * }
+{ * entre l'option et la procÃ©dure ad'hoc.  Une fois que les liens ont   * }
+{ * Ã©tÃ© Ã©tabli, il suffit d'appeler cette procÃ©dure.                     * }
 { ************************************************************************ }
 
 PROCEDURE Run_Menu;
@@ -1005,11 +1005,11 @@ BEGIN
 
    Cursor_Hide;
 
-   { Signale que nous allons travailler avec des donn‚es de type caractŠre }
+   { Signale que nous allons travailler avec des donnÃ©es de type caractÃ¨re }
 
    cgCoordonnees := cgCharacter;
 
-   { Ajoute un handler … celui de la souris.  La r‚gion d‚limit‚e est celle
+   { Ajoute un handler Ã  celui de la souris.  La rÃ©gion dÃ©limitÃ©e est celle
      de la barre de menus. }
 
    Mouse_AddHandler (0, 79, 0, 0, MainMenuHandle);
@@ -1134,27 +1134,27 @@ BEGIN
    wOldAttr := TextAttr;
    TextAttr := 18;
    GotoXy (25,5);
-   Write ('ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
+   Write ('â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
    GotoXy (25,6);
-   Write ('º                            º°');
+   Write ('â•‘                            â•‘â–‘');
    GotoXy (25,7);
-   Write ('º    AVONTURE CHRISTOPHE     º°');
+   Write ('â•‘    AVONTURE CHRISTOPHE     â•‘â–‘');
    GotoXy (25,8);
-   Write ('º        AVC  SOFTWARE       º°');
+   Write ('â•‘        AVC  SOFTWARE       â•‘â–‘');
    GotoXy (25,9);
-   Write ('º   BD EDMOND MACHTENS 157   º°');
+   Write ('â•‘   BD EDMOND MACHTENS 157   â•‘â–‘');
    GotoXy (25,10);
-   Write ('º       BOITE 53             º°');
+   Write ('â•‘       BOITE 53             â•‘â–‘');
    GotoXy (25,11);
-   Write ('º      B-1080 BRUXELLES      º°');
+   Write ('â•‘      B-1080 BRUXELLES      â•‘â–‘');
    GotoXy (25,12);
-   Write ('º         BELGIQUE           º°');
+   Write ('â•‘         BELGIQUE           â•‘â–‘');
    GotoXy (25,13);
-   Write ('º                            º°');
+   Write ('â•‘                            â•‘â–‘');
    GotoXy (25,14);
-   Write ('ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼°');
+   Write ('â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â–‘');
    GotoXy (25,15);
-   Write ('°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°');
+   Write ('â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘');
    GotoXy (20,18);
    Write ('This program has been written by AVONTURE Christophe.');
    GotoXy (20,19);
@@ -1201,7 +1201,7 @@ BEGIN
 
    Writeln ('Christophe.AVONTURE@is.belgacom.be');
    Writeln ('');
-   Writeln (' Try the ''ş'' menu and ''About the author'' option.');
+   Writeln (' Try the ''â– '' menu and ''About the author'' option.');
    Writeln ('');
    Writeln (' You can quit this program by File|Exit or right clic.');
    Writeln ('');
@@ -1232,20 +1232,20 @@ BEGIN
      The cgSubMenu[x] will return the indice of the menu option and the
      xx returns the submenu option.  The xxx is the name of the procedure.
 
-     So, if you tried this examples, the first menu option is 'ş' and the
+     So, if you tried this examples, the first menu option is 'â– ' and the
      second is 'File'.
 
-     In the 'ş' menu, there are two submenu option : 'About' and 'About the
-     author'.  So If I want access to the first submenu option of the 'ş'
+     In the 'â– ' menu, there are two submenu option : 'About' and 'About the
+     author'.  So If I want access to the first submenu option of the 'â– '
      menu option, I only need to call the
         cgMenuProc[GetOrderSubMenu (cgSubMenu[1]),1]
 
-     The cgSubMenu[1] indentifies the 'ş' menu option and the last 1
+     The cgSubMenu[1] indentifies the 'â– ' menu option and the last 1
      identifies the submenu option.
 
      OK, if you have understand, the following assignation
         cgMenuProc[GetOrderSubMenu (cgSubMenu[1]),2] := hAboutMe;
-     tells to the menu engine that you assign to the 'ş' "About the author"
+     tells to the menu engine that you assign to the 'â– ' "About the author"
      the procedure hAboutMe.
 
    }
@@ -1269,7 +1269,7 @@ END.
 
 { -------------------   CUT  ---------------------- }
 { -------  SAVE AS MENU.INC -------- }
-&ş
+&â– 
  -System box
   &About
  -Show general informations about this program
@@ -1287,7 +1287,7 @@ END.
  -Save the current file under a different name
   Save a&ll
  -Save all modified files
-  Ä
+  â”€
   &Change dir...
  -Choose a new default directory
   &Print
@@ -1304,7 +1304,7 @@ END.
  -Undo the previous editor operation
   &Redo
  -Redo the previous editor operation
-  Ä
+  â”€
   Cu&t
  -Remove the selected text and put in into the clipboard
   &Copy
@@ -1313,7 +1313,7 @@ END.
  -Insert selected text from the clipboard at the cursor position
   C&lear
  -Delete the selected text
-  Ä
+  â”€
   &Show clipboard
  -Open the clipboard window
 &Search
@@ -1324,7 +1324,7 @@ END.
  -Search for text and replace it with new text
   &Search again
  -Repeat the last Find or Replace command
-  Ä
+  â”€
   &Go to line number...
  -Move the cursor to a specified line number
   S&how last compile error
@@ -1355,14 +1355,14 @@ END.
  -Rebuild source file and all other files that have been modified
   &Build
  -Rebuild source file and all other files
-  Ä
+  â”€
   &Destination Memory
  -Specify wheter source file is compiled to memory or disk
   &Primary file...
  -Define the file that is the focus of Make or Build
   C&lear primary file
  -Clear the file previously set with Primary file
-  Ä
+  â”€
   &Information...
  -Show status information
 &Debug
@@ -1379,7 +1379,7 @@ END.
  -Open the Output window
   &User screen
  -Swithc to the full-screen user output
-  Ä
+  â”€
   &Evaluate/Modify...
  -Evaluate a variable or expression and display or modify the value
   &Add watch...
@@ -1394,7 +1394,7 @@ END.
  -Go to the next source position
   &Go to previous
  -Go to the previous source position
-  Ä
+  â”€
   &Grep
  -User installed tool
 &Options
@@ -1411,10 +1411,10 @@ END.
  -Set path for units, inlude files, OBJs, and generated files
   &Tools...
  -Create or change tools
-  Ä
+  â”€
   &Environment
  -Specify environment settings
-  Ä
+  â”€
   &Open...
  -Load options previously create with Save Options
   &Save
@@ -1431,7 +1431,7 @@ END.
  -Close all windows on desktop
   &Refresh display
  -Redraw the screen
-  Ä
+  â”€
   &Size/Move
  -Change the size or position of the active window
   &Zoom
@@ -1442,7 +1442,7 @@ END.
  -Make the previous window active
   &Close
  -Close the active window
-  Ä
+  â”€
   &List...
  -Show a list of all open windows
 &Help
@@ -1451,7 +1451,7 @@ END.
  -Show table of contents for online help
   &Index
  -Show index for online help
-  Ä
+  â”€
   &Topic search
  -Display help on the word at the cursor
   &Previous topic
@@ -1460,7 +1460,7 @@ END.
  -How to use online help
   &Files...
  -Add or delete installated help files
-  Ä
+  â”€
   Compiler &directives
  -Display help above the compiler directives
   &Reserved word
@@ -1471,7 +1471,7 @@ END.
  -Display help about Turbo Pascal language
   &Error messages
  -Display help about the error messages
-  Ä
+  â”€
   &About...
  -Show version and copyright information
 

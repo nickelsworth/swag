@@ -4,7 +4,7 @@
 {
 (*===================================================================*)
 (*                              ANSI.PAS                             *)
-(*    Die Unit stellt ein Inferface zum ANSI-Treiber zur VerfÅgung   *)
+(*    Die Unit stellt ein Inferface zum ANSI-Treiber zur Verf√ºgung   *)
 (*===================================================================*)
 
 UNIT ANSI;
@@ -14,16 +14,16 @@ INTERFACE
 VAR
   CON: Text;
 
-(*   öberprÅfung, ob ein ANSI-Treiber installiert ist                *)
+(*   √úberpr√ºfung, ob ein ANSI-Treiber installiert ist                *)
 FUNCTION AnsiSys: BOOLEAN;
 
-(* öbergabe von beliebigen Werten an den ANSI-Treiber                *)
+(* √úbergabe von beliebigen Werten an den ANSI-Treiber                *)
 PROCEDURE AnsiOut(s: SHORTINT);
 
 (* ANSI-Farbeinschaltung: Attribut 7 = grau                          *)
 PROCEDURE AnsiGray;
 
-(* ANSI-Farbeinschaltung: Attribut 15 = wei·                         *)
+(* ANSI-Farbeinschaltung: Attribut 15 = wei√ü                         *)
 PROCEDURE AnsiWhite;
 
 (* ANSI-Farbeinschaltung: Attribut 14 = gelb                         *)
@@ -39,8 +39,8 @@ CONST
   ansiinstalled: BOOLEAN = FALSE;
 
 FUNCTION AnsiSys: BOOLEAN;
-(* Test ob ANSI.SYS installiert ist; da alle Ausgaben Åber die       *)
-(* Standard-Ausgabe gehen, mÅssen die Bildschirmfarben Åber ANSI-Se- *)
+(* Test ob ANSI.SYS installiert ist; da alle Ausgaben √ºber die       *)
+(* Standard-Ausgabe gehen, m√ºssen die Bildschirmfarben √ºber ANSI-Se- *)
 (* quenzen gesteuert werden. Ist ANSI.SYS nicht installiert, werden  *)
 (* keine ANSI-Steuerbefehle vom Programm ausgegeben.                 *)
 VAR
@@ -55,7 +55,7 @@ BEGIN
   IF posnew = posold THEN AnsiSys := TRUE;(*Sequenz wurde verarbeitet*)
 
   GotoXY(1, WhereY);                             (* evtl. vorhandene *)
-  ClrEoL;                                        (* Zeichen lîschen  *)
+  ClrEoL;                                        (* Zeichen l√∂schen  *)
 END;
 
 (*-------------------------------------------------------------------*)

@@ -51,7 +51,7 @@ S:='';
       Begin 
        Ch2:=#0;
        GotoXy(12+Idx,PosY); 
-       Write('°');
+       Write('â–‘');
       End;
      Until Ord(Ch)=13;
     WriteLn;
@@ -67,13 +67,13 @@ Begin
     Write('Password : ');
     X:=WhereX;
     Y:=WhereY;
-    WriteLn('°°°°°°°°');
+    WriteLn('â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘');
     I:=0;
     EnterPw(Pw,I,X,Y);
     Write('Password : ');
     X:=WhereX;
     Y:=WhereY;
-    WriteLn('°°°°°°°° (for verifying purposes)');
+    WriteLn('â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘ (for verifying purposes)');
     I:=0;
     EnterPw(PwV,I,X,Y);
     If UpStr(Pw)<>Upstr(PwV) Then WriteLn('Verifying password

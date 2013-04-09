@@ -1,13 +1,13 @@
-{AM±Hi everyone, I have a question. I need to know if there is some simple
-AM±way to do the following. I want to pass as a parameter to a Procedure
-AM±that will indicate what keypresses are valid. I am doing this already
-AM±for regular keys, but I need to be able to list regular keys as well as
-AM±extended key(mostly Function keys).
+{AMâ–’Hi everyone, I have a question. I need to know if there is some simple
+AMâ–’way to do the following. I want to pass as a parameter to a Procedure
+AMâ–’that will indicate what keypresses are valid. I am doing this already
+AMâ–’for regular keys, but I need to be able to list regular keys as well as
+AMâ–’extended key(mostly Function keys).
 
-AM±I do like so,
+AMâ–’I do like so,
 
-AM±Command_Keys : Set of Char ['Q', 'A', 'K'];
-AM±Is there a way to add extended keys to the above.
+AMâ–’Command_Keys : Set of Char ['Q', 'A', 'K'];
+AMâ–’Is there a way to add extended keys to the above.
 
 Declare extended scan codes, then format them into an Array:
 }

@@ -17,7 +17,7 @@ will compile and work correctly. I have done my best to make sure that all the
 information contained in this document is correct. If any mistakes are found 
 please could you notify me be email.
 
-If someone who has a computer that doesnít have a VGA card/monitor could you 
+If someone who has a computer that doesn√Üt have a VGA card/monitor could you 
 please compile the code on P29 that checks what graphics the computer can handle 
 and tell me if it returned DX as 0. 
 
@@ -32,7 +32,7 @@ be notified. If you would like any other help or have suggestions for a later ve
 this document.	     
 
 Firstly you will need a suitable assembler to compile your programs. All examples have 
-been tested with two compilers: A86 and Turbo Assembler‚  ver 4. A86 is a very 
+been tested with two compilers: A86 and Turbo AssemblerŒì  ver 4. A86 is a very 
 good shareware assembler capable of producing code up to 80286. This can be found 
 on your local simtel mirror (try ftp.demon.co.uk or ftp.cdrom.com) under 
 simtel/msdos/asmutil called A86V322.ZIP. 
@@ -177,7 +177,7 @@ With tlink you can make a .COM file by using a /t switch.
 
 ;THIS IS A SIMPLE PROGRAM TO DISPLAY A MESSAGE ON THE 
 ;SCREEN. SHOULD OUTPUT This is a message! TO SCREEN AND 
-;RETURN WITH NO ERRORLEVEL. THIS CANíT BE MADE INTO A 
+;RETURN WITH NO ERRORLEVEL. THIS CAN√ÜT BE MADE INTO A 
 .COM FILE WITH TLINK AS IT GENERATES AN ERROR.
 	
 	.MODEL SMALL ;Ignore the first two lines
@@ -265,7 +265,7 @@ DX.
 
 
 The way we entered the address of the message we wanted to print was a bit 
-cumbersome. It took three lines and it isnít the easiest thing to remember
+cumbersome. It took three lines and it isn√Üt the easiest thing to remember
 
 	mov dx,OFFSET MyMessage						
 	mov ax,SEG MyMessage						
@@ -429,7 +429,7 @@ TheEnd:
 ;0Dh,0Ah adds a enter at the beginning
 
 StartUpMessage DB "A Simple Input Program$"     
-Instructions  DB 0Dh,0Ah,"Just press a Y to continue...$î                  
+Instructions  DB 0Dh,0Ah,"Just press a Y to continue...$√∂                  
 ThanksMsg      DB 0Dh,0Ah,"Thanks for pressing Y!$"    
 GoodBye        DB 0Dh,0Ah,"Have a nice day!$"
 
@@ -454,7 +454,7 @@ ENDP AProcedure
 You can specify how you want the procedure to be called by adding a FAR or a 
 NEAR after the procedure name. Otherwise it defaults to the memory model you are 
 using. For now you are better off not doing this until you become more experianced. I 
-usually add a NEAR in as compilers canít decide between a near and a far very well. 
+usually add a NEAR in as compilers can√Üt decide between a near and a far very well. 
 This means if the jump needs to be far the compiler will warn you and you can change 
 it.
 
@@ -522,7 +522,7 @@ This means that both procedures and variables are FAR. You have to point at both
 segment and offset addresses.
 
 Flat:
-This isnít used much as it is for 32 bit unsegmented memory space. For this you need a 
+This isn√Üt used much as it is for 32 bit unsegmented memory space. For this you need a 
 dos extender. This is what you would have to use if you were writing a program to 
 interface with a C/C++ program that used a dos extender such as DOS4GW or 
 PharLap.
@@ -535,7 +535,7 @@ Macros:
 documentation or look in the A86 macro example later in this document).
 
 Macros are very useful for doing something that is done often but for which a 
-procedure canít be use. Macros are substituted when the program is compiled to the 
+procedure can√Üt be use. Macros are substituted when the program is compiled to the 
 code which they contain.
 
 This is the syntax for defining a macro:
@@ -582,7 +582,7 @@ declaring names inside macros.
 
 Syntax:
 	LOCAL name 
-Where ìnameî is the name of a local variable or label.
+Where √¥name√∂ is the name of a local variable or label.
 
 If you have comments in a macro everytime you use that macro the comments will be 
 added again into your source code. This means that it will become unesescarily long. 
@@ -699,7 +699,7 @@ for example the first few lines of this program is shown as:
 (This might be slighly different than is shown on your screen but hopefully you will get 
 the main idea)
  
-This diagram shows what the Turbo Debugger‚  screen looks like
+This diagram shows what the Turbo DebuggerŒì  screen looks like
 
 The numbers that are moved into the registers are different that the ones that we typed 
 in because they are represented in their hex form (base 16) as this is the easiest base to 
@@ -790,11 +790,11 @@ MOV reg/mem16,imm16
 2/3
 4/10
 
-These timings are taking from the ëBorland‚ Turbo Assembler‚ Quick Referenceí
+These timings are taking from the √¶BorlandŒì Turbo AssemblerŒì Quick Reference√Ü
 
 This shows that on the 8086 using variables in memory can make the instuction four 
 times as slow. This means that you should avoid using too many variables 
-unnecessarily. On the 486 it doesnít matter as both instructions take the same amount 
+unnecessarily. On the 486 it doesn√Üt matter as both instructions take the same amount 
 of time.
 
 The method actually used is nearly identical to passing parameters in registers. This 
@@ -1154,14 +1154,14 @@ Error:
      jmp ReturnToDOS ;lets end this now
 
 .DATA                            
-StartMessage    DB "This program creates a file calledî, 
-			    ìNEW.TXT in the C: directory.$"
-EndMessage      DB 0Ah,0Dh,"File create OK, look atî, 	
-			    ìfile to be sure.$"
+StartMessage    DB "This program creates a file called√∂, 
+			    √¥NEW.TXT in the C: directory.$"
+EndMessage      DB 0Ah,0Dh,"File create OK, look at√∂, 	
+			    √¥file to be sure.$"
 Handle          DW ? ;variable to store file handle   
 ErrorMessage    DB "An error has occurred!$"
-WriteMe         DB "HELLO, THIS IS A TEST, HAS ITî, 	
-			    ìWORKED?",0 ;ASCIIZ 
+WriteMe         DB "HELLO, THIS IS A TEST, HAS IT√∂, 	
+			    √¥WORKED?",0 ;ASCIIZ 
 FileName        DB "C:\new.txt",0 					
 END
 
@@ -1194,7 +1194,7 @@ changed the version. This returns the major version in BL and the minor version 
 Fast string print:
 
 We have been using a DOS service, function 9 of interrupt 21h to print a string on the 
-screen. This isnít too fast nor does it allow us to use different colours or position the 
+screen. This isn√Üt too fast nor does it allow us to use different colours or position the 
 text. There is another way to print a string to the screen - direct to memory. This is 
 harder as you have to set up everything manually but it has a lot of benifits mainly 
 speed. 
@@ -1284,13 +1284,13 @@ SHL operand1,operand2
 Note: The 8086 cannot have the value of opperand2 other than 1. 286/386 cannot 
 have operand2 higher than 31.
 
-Using shifts is a lot faster than using MULís and DIVís.
+Using shifts is a lot faster than using MUL√Üs and DIV√Üs.
 
 
 
 Loops:
 
-Using Loop is a better way of making a loop then using JMPís. You place the amount 
+Using Loop is a better way of making a loop then using JMP√Üs. You place the amount 
 of times you want it to loop in the CX register and every time it reackes the loop 
 statement it decrements CX (CX-1) and then does a short jump to the label indicated. 
 A short jum means that it can only 128 bytes before or 127 bytes after the LOOP 
@@ -1316,15 +1316,15 @@ CheckMode13h:
 	int 10h        	;Get Display Combination Code
 	cmp al,1Ah    		;Is VGA or MCGA present?
 	je Mode13hSupported ;mode 13h is supported
-	xor dx,dx			;mode 13h isnít supported dx=0
+	xor dx,dx			;mode 13h isn√Üt supported dx=0
 Mode13hSupported:	
 	mov dx,1			;return mode13h supported 
 
 Just use this to check if mode 13h is supported at the beginning of your program to 
 make sure that you can go into that mode.
 
-Note: I have not tested this on a computer that doesnít hav VGA as I donít have any. 
-In theory this should work but you should test this on computers that donít have VGA 
+Note: I have not tested this on a computer that doesn√Üt hav VGA as I don√Üt have any. 
+In theory this should work but you should test this on computers that don√Üt have VGA 
 and see if it works this out.
 
 
@@ -1387,7 +1387,7 @@ the screen you would have to call this procedure 64,000 times (320 x 200).
 
 Some optimizations:
 
-This method isnít too fast and we could make it a lot faster. How? By writing direct to 
+This method isn√Üt too fast and we could make it a lot faster. How? By writing direct to 
 video memory. This is done quite easily. 
 
 The VGA memory starts at 0A000h. To work out where each pixel goes you use this 
@@ -1409,7 +1409,7 @@ PutPixel PROC
 ;		CL=colour
 ;OUTPUT:  None
 ;========================================================
-;this can be optimized by not pushing ax if you donít 
+;this can be optimized by not pushing ax if you don√Üt 
 ;need to save it. For A86 change push ds es ax to push 
 ;ds,es,ax and do the same thing with pop.
 	push ds es ax		;save ds,es and ax 
@@ -1434,7 +1434,7 @@ Gavin Estey 19/2/95
 
 
 
-Gavinís Introduction to Assembly		Page 1
+Gavin√Üs Introduction to Assembly		Page 1
 
 
 

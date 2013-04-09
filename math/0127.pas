@@ -354,15 +354,15 @@ begin
                     inc(Count)
                  end;
               writeln;
-              write('  ÚÄ');
+              write('  â”Œâ”€');
               for Loop := 1 to Count do
-                 write('ÄÄ');
+                 write('â”€â”€');
               writeln;
               Temp := G;
               while Temp <> nil do
                  begin
                     Temp2 := G;
-                    write(Temp^.Name,' ³');
+                    write(Temp^.Name,' â”‚');
                     while Temp2 <> nil do
                        begin
                           if adjacent( Temp,Temp2 )

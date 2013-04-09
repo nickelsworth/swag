@@ -1,4 +1,4 @@
-{SWAG=DOS.SWG,BJ™RN FELTEN,TRUENAME (BASM)}
+{SWAG=DOS.SWG,BJÃ–RN FELTEN,TRUENAME (BASM)}
 
 { Updated DOS.SWG on August 24, 1994 }
 
@@ -10,7 +10,7 @@ function TrueName(var P: string): string; assembler;
 { returns TrueName just like the DOS command does }
 { if error, returns a zero length string }
 { will probably crash for DOS versions < 3.0 }
-{ donated to the Public Domain by Bj”rn Felten @ 2:203/208 }
+{ donated to the Public Domain by BjÃ¶rn Felten @ 2:203/208 }
 asm
    push  ds
    lds   si,P

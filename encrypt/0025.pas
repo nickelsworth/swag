@@ -55,51 +55,51 @@ Techniques"  of Herbert Schildt (1987)
         BEGIN             { Menu }
          Clrscr;
          TextColor(white);
-         GotoXY( 1, 1);Write('…ÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕª');
-         GotoXY( 1, 2);Write('∫       …ÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕª    ∫');
-         GotoXY( 1, 3);Write('∫       ∫           UTILIDAD DE ENCRIPACION / DESENCRIPTACION             ∫    ∫');
-         GotoXY( 1, 4);Write('∫       ∫ Por: Javier PÇrez-Vigo 1993                                     ∫    ∫');
-         GotoXY( 1, 5);Write('∫       »ÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕº    ∫');
-         GotoXY( 1, 6);Write('∫                                                                              ∫');
-         GotoXY( 1, 7);Write('∫       …ÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕª    ∫');
-         GotoXY( 1, 8);Write('∫       ∫ ˘Nombre del archivo a des/encriptar :                           ∫    ∫');
+         GotoXY( 1, 1);Write('‚ïî‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïó');
+         GotoXY( 1, 2);Write('‚ïë       ‚ïî‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïó    ‚ïë');
+         GotoXY( 1, 3);Write('‚ïë       ‚ïë           UTILIDAD DE ENCRIPACION / DESENCRIPTACION             ‚ïë    ‚ïë');
+         GotoXY( 1, 4);Write('‚ïë       ‚ïë Por: Javier P√©rez-Vigo 1993                                     ‚ïë    ‚ïë');
+         GotoXY( 1, 5);Write('‚ïë       ‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù    ‚ïë');
+         GotoXY( 1, 6);Write('‚ïë                                                                              ‚ïë');
+         GotoXY( 1, 7);Write('‚ïë       ‚ïî‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïó    ‚ïë');
+         GotoXY( 1, 8);Write('‚ïë       ‚ïë ‚àôNombre del archivo a des/encriptar :                           ‚ïë    ‚ïë');
                                   {Name of the file to de/encript}
 
          GotoXY(60,8);TextColor(red);Write('? ');
          GotoXY(60,8);TextColor(red);Write(Paramstr(1));
          TextColor(white);
-         GotoXY( 1, 9);Write('∫       ∫                                                                 ∫    ∫');
-         GotoXY( 1,10);Write('∫       ∫ ˘Nombre del archivo des/encriptado  :                           ∫    ∫');
+         GotoXY( 1, 9);Write('‚ïë       ‚ïë                                                                 ‚ïë    ‚ïë');
+         GotoXY( 1,10);Write('‚ïë       ‚ïë ‚àôNombre del archivo des/encriptado  :                           ‚ïë    ‚ïë');
 
                                   {Name of the to de/encripted file}
 
          GotoXY(60,10);TextColor(red);Write('? ');
          GotoXY(60,10);TextColor(red);Write(paramstr(2));
          TextColor(white);
-         GotoXY( 1,11);Write('∫       ∫                                                                 ∫    ∫');
-         GotoXY( 1,12);Write('∫       ∫ ˘Clave de encriptaci¢n:                                         ∫    ∫');
+         GotoXY( 1,11);Write('‚ïë       ‚ïë                                                                 ‚ïë    ‚ïë');
+         GotoXY( 1,12);Write('‚ïë       ‚ïë ‚àôClave de encriptaci√≥n:                                         ‚ïë    ‚ïë');
                                     {Password}
 
          GotoXY(60,12);TextColor(red);Write('? ');
          GotoXY(60,12);TextColor(red);Write(paramstr(3));
          TextColor(white);
-         GotoXY( 1,13);Write('∫       ∫                                                                 ∫    ∫');
-         GotoXY( 1,14);Write('∫       ÃÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕπ    ∫');
-         GotoXY( 1,15);Write('∫       ∫                                                                 ∫    ∫');
-         GotoXY( 1,16);Write('∫       »ÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕº    ∫');
-         GotoXY( 1,17);Write('∫                                                                              ∫');
-         GotoXY( 1,18);Write('∫                                                                              ∫');
-         GotoXY( 1,19);Write('∫                                                                              ∫');
-         GotoXY( 1,20);Write('∫                                                                              ∫');
-         GotoXY( 1,21);Write('∫                                                                              ∫');
-         GotoXY( 1,22);Write('»ÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕÕº');
+         GotoXY( 1,13);Write('‚ïë       ‚ïë                                                                 ‚ïë    ‚ïë');
+         GotoXY( 1,14);Write('‚ïë       ‚ï†‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ï£    ‚ïë');
+         GotoXY( 1,15);Write('‚ïë       ‚ïë                                                                 ‚ïë    ‚ïë');
+         GotoXY( 1,16);Write('‚ïë       ‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù    ‚ïë');
+         GotoXY( 1,17);Write('‚ïë                                                                              ‚ïë');
+         GotoXY( 1,18);Write('‚ïë                                                                              ‚ïë');
+         GotoXY( 1,19);Write('‚ïë                                                                              ‚ïë');
+         GotoXY( 1,20);Write('‚ïë                                                                              ‚ïë');
+         GotoXY( 1,21);Write('‚ïë                                                                              ‚ïë');
+         GotoXY( 1,22);Write('‚ïö‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïù');
 END;
      PROCEDURE FIN;
        BEGIN
          MENU;
          TextColor(YELLOW);           {Clave [origin] [destination] [password number] }
          GotoXY( 6,17);
-         WriteLn ('                    Clave  [origen]    [destino]   [nß clave]');
+         WriteLn ('                    Clave  [origen]    [destino]   [n¬∫ clave]');
          TextColor(RED);
          GotoXY( 6,18);
          WriteLn('=======================================');
@@ -126,7 +126,7 @@ END;
              if largo3=0 then Par3:=' CLAVE';
              GotoXY(10,15);
              TextColor(red);
-             Write(' ≠ Introduzca los par†metros ≠ :   ',PAR1,PAR2,PAR3);
+             Write(' ¬° Introduzca los par√°metros ¬° :   ',PAR1,PAR2,PAR3);
 
                                         {introduce the parameters}
 
@@ -139,7 +139,7 @@ END;
               Fin;
               GotoXY(10,15);
               TextColor(RED);
-              Write(' ≠ Introduzca distintos ficheros ORIGEN y DESTINO ! ');
+              Write(' ¬° Introduzca distintos ficheros ORIGEN y DESTINO ! ');
               TextColor(WHITE);
 
                {origin and destination are the same file}
@@ -157,7 +157,7 @@ END;
            FIN;
            GotoXY(10,15);
            TextColor(RED);
-           Write(' ≠ No existe el fichero ORIGEN ! ');
+           Write(' ¬° No existe el fichero ORIGEN ! ');
 
            {The origin file don't exist}
 
@@ -181,7 +181,7 @@ END;
              TextColor(LightGreen);
              Write(' > existe');
              GotoXY(9,20);
-             Write('® Quiere SOBREESCRIBIRLO ? ');
+             Write('¬ø Quiere SOBREESCRIBIRLO ? ');
 
              {rewrite it?}
 
@@ -197,7 +197,7 @@ END;
                  FIN;
                  GotoXY(10,15);
                  TextColor(Red);
-                 Write(' ≠ Escriba un nuevo nombre de fichero DESTINO !');
+                 Write(' ¬° Escriba un nuevo nombre de fichero DESTINO !');
                  TextColor(White);
 
                  {write a new name for destination file}
@@ -221,7 +221,7 @@ END;
           FOR F:=1 TO LEIDOS DO
              Buffer[F] := Buffer[F] XOR RANDOM(255);
              TextColor((a div 60)+1);
-             Write('ﬁ');
+             Write('‚ñê');
              a:=a+1;
              if  (a mod 60 =0)  then GotoXY(13,15);
           BlockWrite(DESTINO,BUFFER,LEIDOS);

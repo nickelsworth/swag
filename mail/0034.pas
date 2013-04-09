@@ -171,7 +171,7 @@ For a:=1 To 5 Do
     Begin
     GotoXY(6,a);Write(fields[a]);
     End;
-TextColor(White);WriteLn(Crlf,FillSTR('Ä',79),CrLf);
+TextColor(White);WriteLn(Crlf,FillSTR('â”€',79),CrLf);
 End;
 
 Procedure ReadMsg(n:LongInt);

@@ -241,7 +241,7 @@ VAR  Name : String[30];
      Touche_haut : Boolean;
      Touche_insert : boolean;
 {----------------------------------------------------------------------------}
-Procedure CursorInsert;     { Curseur formÇ de 7 lignes(de pixels)#1 }
+Procedure CursorInsert;     { Curseur form√© de 7 lignes(de pixels)#1 }
   VAR
     Regs : registers;
   BEGIN
@@ -253,7 +253,7 @@ Procedure CursorInsert;     { Curseur formÇ de 7 lignes(de pixels)#1 }
       intr($10,Regs);
   END;
 {----------------------------------------------------------------------------}
-Procedure Normalcursor;     { Curseur formÇ de 2 lignes(de pixels)#6 }
+Procedure Normalcursor;     { Curseur form√© de 2 lignes(de pixels)#6 }
   VAR
     Regs : registers;
   BEGIN
@@ -280,10 +280,10 @@ Procedure Effacecursor;         { Pour effacer le curseur }
 Procedure fin (Erreur:Boolean);         { Quitte le programme principal }
 
   Begin  { Procedure Fin }
-    Window (1, 1, 80, 25);      {CrÇation de fenetre (1, 1) Ö (80, 25)}
-    Textcolor (7);              {Couleur du texte Ö la sortie Lightgray}
+    Window (1, 1, 80, 25);      {Cr√©ation de fenetre (1, 1) √† (80, 25)}
+    Textcolor (7);              {Couleur du texte √† la sortie Lightgray}
     TextBackground (0);         {Couleur du background black}
-    ClrScr;                     { Pour effacer l'Çcran }
+    ClrScr;                     { Pour effacer l'√©cran }
     NormalCursor;
     Gotoxy(3,2); Writeln('Thank you to choose The CD-ROM Master''s');
     Halt(1)
@@ -292,12 +292,12 @@ Procedure fin (Erreur:Boolean);         { Quitte le programme principal }
 Procedure BoitePourQuitter(Var ChoixMenuPrecedent : Char);
  Begin
    EffaceCursor;
-   Window (32, 20, 73, 20);    {CrÇation de fenetre (28, 5) Ö (74, 6)}
+   Window (32, 20, 73, 20);    {Cr√©ation de fenetre (28, 5) √† (74, 6)}
    Textbackground (1);       { Couleur de la boite bleu }
-   Clrscr;                      { Pour effacer l'Çcran }
+   Clrscr;                      { Pour effacer l'√©cran }
    TextColor (15);                  { Couleur du texte blanc }
    Write ('Do you really want to Quit? (Y)es or (N)o');
-   Textcolor (14);                    {Couleur des rÇponses yellow}
+   Textcolor (14);                    {Couleur des r√©ponses yellow}
    Gotoxy (30, 1);   Write ('Y');
    Gotoxy (39, 1);   Write ('N');
    Repeat
@@ -322,23 +322,23 @@ Begin
   If LigneContour = true then
   Begin
     TextColor (LigneContourDroite);
-    Gotoxy(1,1); Write('⁄');
+    Gotoxy(1,1); Write('‚îå');
     For I := 2 to (x2-x1) do
-    Begin Gotoxy(I,1); Write('ƒ'); end;
+    Begin Gotoxy(I,1); Write('‚îÄ'); end;
     Writeln;
     For J := 2 to (y2-y1) do
-    Begin Gotoxy(1,J); Write('≥'); end;
+    Begin Gotoxy(1,J); Write('‚îÇ'); end;
     Writeln;
-    Gotoxy(1,y2-y1+1); Write('¿');
+    Gotoxy(1,y2-y1+1); Write('‚îî');
     TextColor (LigneContourGauche);
-    Gotoxy(x2-x1+1,1); Write('ø');
+    Gotoxy(x2-x1+1,1); Write('‚îê');
     For J := 2 to (y2-y1) do
-    Begin Gotoxy(x2-x1+1,J); Write('≥'); end;
+    Begin Gotoxy(x2-x1+1,J); Write('‚îÇ'); end;
     Writeln;
     For I := 2 to (x2-x1) do
-    Begin Gotoxy(I,y2-y1+1); Write('ƒ'); end;
+    Begin Gotoxy(I,y2-y1+1); Write('‚îÄ'); end;
     Writeln;
-    Gotoxy(x2-x1+1,y2-y1+1); Write('Ÿ');
+    Gotoxy(x2-x1+1,y2-y1+1); Write('‚îò');
   end;
 
   If Shadow = true then
@@ -346,12 +346,12 @@ Begin
     Window (x1,y1,x2+2,y2+1);
     TextColor (0);
     TextBackground(ShadowBackgroundDroite);
-    Gotoxy (x2-x1+2,1); Write ('‹');
+    Gotoxy (x2-x1+2,1); Write ('‚ñÑ');
     For J := 2 to (y2-y1+1) do
-    Begin Gotoxy(x2-x1+2,J); Write ('€'); end;
+    Begin Gotoxy(x2-x1+2,J); Write ('‚ñà'); end;
     TextBackground(ShadowBackgroundBas);
     For I := 2 to (x2-x1+2) do
-    Begin Gotoxy(I,y2-y1+2); Write ('ﬂ'); end;
+    Begin Gotoxy(I,y2-y1+2); Write ('‚ñÄ'); end;
   end;
 end;
 {----------------------------------------------------------------------------}
@@ -384,7 +384,7 @@ En_attente_de_commande:
       TextColor(14);
       Window (x1,y1,x2,y2);
       Textbackground (Background);
-      ClrScr;                          { Pour effacer l'Çcran }
+      ClrScr;                          { Pour effacer l'√©cran }
       K := 1;
       If (KindData='Letter') then
       Begin Repeat
@@ -1148,7 +1148,7 @@ end;
 
 Procedure Write_Space_Disk;
 begin
-  If Destination_Drive <> 'Ì' then
+  If Destination_Drive <> 'œÜ' then
   Begin
     I := 1;
     For I := 1 to ((Length(SpaceDiskString))-2) do
@@ -1167,7 +1167,7 @@ end;
 Begin
 If (Destination_drive_Access = False) then Begin
    Window(26,18,30,18); TextBackground(3); Clrscr; TextColor(14);
-   If (Destination_drive='Ì') then Write('---')
+   If (Destination_drive='œÜ') then Write('---')
    Else Write(Destination_drive,':\');
    Window(50,20,70,20); TextBackground(3); Clrscr; TextColor(14);
    DiskNumber := ord(Upcase(Destination_drive)) - 64;
@@ -1176,7 +1176,7 @@ If (Destination_drive_Access = False) then Begin
    EffaceCursor; Write_Space_Disk; NormalCursor; end;
 If (Destination_directory_Access = False) then Begin
    Window(30,19,72,19); TextBackground(3); Clrscr; TextColor(14);
-   If (Destination_directory='Ì') then Write('--------')
+   If (Destination_directory='œÜ') then Write('--------')
    Else Write(Destination_directory); end;
 
 SourceDrive:
@@ -1231,10 +1231,10 @@ DestinationDirectory:
    EffaceCursor;
    Window (7, 16, 61, 16);
    Textbackground (3);
-   Clrscr;                      { Pour effacer l'Çcran }
+   Clrscr;                      { Pour effacer l'√©cran }
    TextColor (15);                  { Couleur du texte blanc }
    Write ('Are you ready to start the installation? (Y)es or (N)o');
-   Textcolor (14);                    {Couleur des rÇponses yellow}
+   Textcolor (14);                    {Couleur des r√©ponses yellow}
    Gotoxy (43, 1);   Write ('Y');
    Gotoxy (52, 1);   Write ('N');
    Repeat
@@ -1250,7 +1250,7 @@ DestinationDirectory:
           Begin Message_Erreur(5,3); Erreur:=True; end
   Else If (Destination_directory = '') and (Destination_directory=#0) then
           Begin Message_Erreur(6,3); Erreur:=True; end
-  Else If ((SpaceDisk div 100) < Megs) and (Destination_drive <> 'Ì') then
+  Else If ((SpaceDisk div 100) < Megs) and (Destination_drive <> 'œÜ') then
           Begin Message_Erreur(3,3); Erreur := True; end
   Else Menu_Texte; end;
   'N' : Begin Clrscr; Fill_The_Blanks end;

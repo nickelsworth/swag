@@ -1,6 +1,6 @@
 {*********************************************************}
 {*                   ANSICOLR.PAS 1.0                    *}
-{*            Copyright (c) í áETATech í 1991.           *}
+{*            Copyright (c) Ï† ÃŸETATech Ï† 1991.           *}
 {*                 All rights reserved.                  *}
 {*********************************************************}
 { Wed  12-18-1991 v1.0                                    }
@@ -36,7 +36,7 @@
 { keep the unit up to date.  I can be reached at the      }
 { places listed below:                                    }
 {                                                         }
-{ áETATech Computer Consulting           The Paradigm BBS }
+{ ÃŸETATech Computer Consulting           The Paradigm BBS }
 { P. O. Box 566742                           404/671-1581 }
 { Atlanta, GA  30356-6013                  1200-19200 HST }
 {*********************************************************}

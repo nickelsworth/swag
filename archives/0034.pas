@@ -13,7 +13,7 @@ Begin
      ' <archive.zip> <path to pkunzip.exe> <ra home dir> ',11,15,254);
      Write('Working...');
      If fileexist(ParamStr(2) + 'PKUNZIP.EXE') = false then
-        err('þ','cannot find archiver.',12,15,1);
+        err('â– ','cannot find archiver.',12,15,1);
      If fileexist(ParamStr(1)) = true then
      begin
 swapvectors;
@@ -25,7 +25,7 @@ RenameFile(ParamStr(3) + 'FILE_ID.DIZ', ParamStr(3) + 'RAMGRBUF.$00');
      end
      else
      begin
-          Err('þ','target not found failure.',12,15,2);
+          Err('â– ','target not found failure.',12,15,2);
      end;
     Writeln('Done!');
 end.

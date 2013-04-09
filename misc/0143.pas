@@ -157,7 +157,7 @@ BEGIN
             ELSE BEGIN END;
       END;
     END;
-    At(20, 13, LzS(RecordNumber,0)+' Datens„tze kopiert...');
+    At(20, 13, LzS(RecordNumber,0)+' DatensÃ¤tze kopiert...');
     Inc(RecordNumber);
   UNTIL RecordNumber > RecCount;
   BlockWrite(OutFile,EndeSatz,5);
@@ -175,7 +175,7 @@ VAR  oldSelect  : BYTE;
 
 BEGIN
   DatVar := '';
-  SelectFile('*.DBF','dBase-Datei w„hlen',true);
+  SelectFile('*.DBF','dBase-Datei wÃ¤hlen',true);
   FSplit(DatVar, d, n, e);
   WKSVar := d+n+'.WKS';
   PushWindow(16, 11, 60, 18);

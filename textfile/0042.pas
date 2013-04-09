@@ -13,7 +13,7 @@ environments -- with FileMode set to $40).
 
 unit FileUtil; { unit for fast reading of large textfiles }
 
-{ Donated to the PD by Bjîrn Felten @ 2:203/208 -- Nov 1994 }
+{ Donated to the PD by Bj√∂rn Felten @ 2:203/208 -- Nov 1994 }
 { From the package BF_UTIL.ZIP }
 
 interface

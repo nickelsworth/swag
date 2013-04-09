@@ -1,6 +1,6 @@
 ==============================================================================
  BBS: The Sand Box BBS - SourceNet Central HUB
-  To: JUD MCCRANIE                 Date: 12-17Ä92 (16:42)
+  To: JUD MCCRANIE                 Date: 12-17â”€92 (16:42)
 From: TREVOR CARLSEN             Number: 531    [87] FD-Pascal
 Subj: BP 7 DIFFERENCE            Status: Public
 ------------------------------------------------------------------------------

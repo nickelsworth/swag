@@ -130,27 +130,27 @@ begin
   Regs.cx:=$2000;
   Regs.ah:=1;
   Intr($10,Regs);
-  Gotoxy(20,2);Write('ษออออออออออออออออออออออออออออออออออออออออออออออออป');
-  Gotoxy(20,3);Write('บ           - Memory Information -               บ');
-  Gotoxy(20,4);Write('ศออออออออออออออออออออออออออออออออออออออออออออออออผ');
+  Gotoxy(20,2);Write('โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—');
+  Gotoxy(20,3);Write('โ•‘           - Memory Information -               โ•‘');
+  Gotoxy(20,4);Write('โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•');
   Gotoxy(6,5);Write(' RAM      ');
   FractionFree := AvailRAM / TotalRAM;
   FractionUsed := 1-FractionFree;
   m := Max;
   for i := 1 to m do
   begin
-    Gotoxy(16+i,6);Write('Û');
+    Gotoxy(16+i,6);Write('โ–');
     Delay(4);
   end;
   m := Round(Max*FractionUsed);
   for i := 1 to m do
   begin
-    Gotoxy(16+i,6);Write('ฑ');
+    Gotoxy(16+i,6);Write('โ–’');
     Delay(5);
   end;
-  Gotoxy(10,8);Write('ฑฑฑ');
+  Gotoxy(10,8);Write('โ–’โ–’โ–’');
   Write('  Used');
-  Gotoxy(10,10);Write('ÛÛÛ');
+  Gotoxy(10,10);Write('โ–โ–โ–');
   Write('  Free');
   Gotoxy(40,8 );Write('Total system RAM   : - '+StrLF(TotalRAM,3)+' Kbytes');
   Gotoxy(40,9 );Write('Used RAM           : - '+StrLF(TotalRAM-AvailRAM,3)+' Kbytes');
@@ -175,15 +175,15 @@ begin
   m := Max;
   for i := 1 to m do
   begin
-    Gotoxy(16+i,14);Write('Û');
-    {WriteStr(15,17+i,Blue+BlackBG,'Ü');
-    WriteStr(14,17+i,Blue+BlackBG,'฿');}
+    Gotoxy(16+i,14);Write('โ–');
+    {WriteStr(15,17+i,Blue+BlackBG,'โ–');
+    WriteStr(14,17+i,Blue+BlackBG,'โ–€');}
     Delay(4);
   end;
   m := Round(Max*FractionUsed);
   for i := 1 to m do
   begin
-    Gotoxy(16+i,14);Write('ฑ');
+    Gotoxy(16+i,14);Write('โ–’');
     Delay(5);
   end;
   Gotoxy(40,17);Write('EMM Version : LIM '+EXPVersion);

@@ -1,9 +1,9 @@
 {
 LAWRENCE JOHNSTONE
 
-³Can someone give me some code (in TP) that recognizes all Sub-dirs
-³and Sub-sub-dirs, etc. in drive C and changes into every single one
-³of them one at a time?
+â”‚Can someone give me some code (in TP) that recognizes all Sub-dirs
+â”‚and Sub-sub-dirs, etc. in drive C and changes into every single one
+â”‚of them one at a time?
 }
 
 PROGRAM EveryDir;

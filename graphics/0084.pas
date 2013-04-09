@@ -149,7 +149,7 @@ BEGIN
     '-' : sseg:=[d];
     '^' : sseg:=[a];
     ':' : sseg:=[dl,dh];
-    'ð' : sseg:=[a,d,g];
+    'â‰¡' : sseg:=[a,d,g];
     '.' : sseg:=[dp];
   ELSE sseg:=[];
   END;

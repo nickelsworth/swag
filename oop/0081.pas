@@ -80,7 +80,7 @@
    R      : TRect ;
    B      : TDrawBuffer ;
   begin
-   MoveChar( B, '±', GetColor( 1 ), Size.X ) ;
+   MoveChar( B, 'â–’', GetColor( 1 ), Size.X ) ;
    MoveChar( B, #0 , GetColor( 2 ), NumBlock ) ;
    WriteLine( 0, 0, Size.X, Size.Y, B ) ;
   end ;

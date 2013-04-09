@@ -87,7 +87,7 @@ Begin
   WriteLn ('        Hidden, System and ReadOnly files.');
   WriteLn;
   WriteLn ('Usage:  ZNDEL [/Y] [filespec (filespec) ]  delete all but filespecs & archives');
-  WriteLn ('                ÀÄÄ>   assume YES on all prompting');
+  WriteLn ('                â””â”€â”€>   assume YES on all prompting');
   WriteLn ('        ZNDEL /S       show current settings');
   WriteLn ('        ZNDEL /?       show this help text');
   WriteLn;
@@ -585,7 +585,7 @@ End.
  Usage:
 
      ZNDEL [/Y] [filespec (filespec) ]  delete all but filespecs & archives
-             ÀÄÄ>   assume YES on all prompting (useful in batch files)
+             â””â”€â”€>   assume YES on all prompting (useful in batch files)
 
      ZNDEL /S                           show current workdir assignments
      ZNDEL /W  [workdir (workdir) ]     assign working directories

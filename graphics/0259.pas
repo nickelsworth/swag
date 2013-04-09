@@ -30,7 +30,7 @@
  
   Any comments, suggestions, whatever, _please_ mail.
  
-  Salฃ,
+  Salรบ,
     Tom.
  
  
@@ -39,7 +39,7 @@
        Anyway I think the code should be easy to understand. O:)
        And please oversee my tarzan-style english ;)
  
-^`ง:;,.,;:ง'^`ง:;,.,;:ง'^`ง:;,.,;:ง'^`ง:;,.,;:ง'^`ง:;,.,;:ง'^`ง:;,.,;:ง'^`ง:;,.
+^`ยบ:;,.,;:ยบ'^`ยบ:;,.,;:ยบ'^`ยบ:;,.,;:ยบ'^`ยบ:;,.,;:ยบ'^`ยบ:;,.,;:ยบ'^`ยบ:;,.,;:ยบ'^`ยบ:;,.
 }
  
  
@@ -198,7 +198,7 @@ PROGRAM Startrek;                         { Yeah, God save the enterprise! }
 {
  BEGIN
   WHILE (PORT[$3da] AND 8)<>0 DO;
-  WHILE (PORT[$3da] AND 8)=0 DO;   { sta es la implementaciขn pascal   }
+  WHILE (PORT[$3da] AND 8)=0 DO;   { รsta es la implementaciรณn pascal   }
 { END;}
  
 {............................................................................}
@@ -523,27 +523,27 @@ PROGRAM Startrek;                         { Yeah, God save the enterprise! }
     Escribo ('Simulador de Campo de Estrellas',True);
     Escribo ('(Starfield Simulator)',True);
     Escribo ('---------------------------------',True);
-    Escribo ('1996 ๚ Tomas Laurenzo ๚ tlaure@lsa.lsa.com.uy',True);
+    Escribo ('1996 ยท Tomas Laurenzo ยท tlaure@lsa.lsa.com.uy',True);
     WriteLn;
     Escribo ('Teclas (keys):',True);
     WriteLn;
-    Escribo (' ? : Esta pantalla          ๚ This screen     ',True);
-    Escribo (' + : Aumenta la velocidad   ๚ Increases speed ',True);
-    Escribo (' - : Disminuye la velocidad ๚ Decreases speed ',True);
-    Escribo (' 0 : Rota los colores       ๚ Rotate colors   ',True);
-    Escribo (' 1 : Lluvia                 ๚ Rain            ',True);
-    Escribo (' 5 : Modo radar             ๚ Radar mode      ',True);
-    Escribo (' 4 : Modo normal            ๚ Normal mode     ',True);
-    Escribo ('  spc : Rebote                 ๚ Bounce             ',True);
-    Escribo (' * : Flor de Big Bang ;)   ๚ Big Bang Flower',True);
+    Escribo (' ? : Esta pantalla          ยท This screen     ',True);
+    Escribo (' + : Aumenta la velocidad   ยท Increases speed ',True);
+    Escribo (' - : Disminuye la velocidad ยท Decreases speed ',True);
+    Escribo (' 0 : Rota los colores       ยท Rotate colors   ',True);
+    Escribo (' 1 : Lluvia                 ยท Rain            ',True);
+    Escribo (' 5 : Modo radar             ยท Radar mode      ',True);
+    Escribo (' 4 : Modo normal            ยท Normal mode     ',True);
+    Escribo ('  spc : Rebote                 ยท Bounce             ',True);
+    Escribo (' * : Flor de Big Bang ;)   ยท Big Bang Flower',True);
     WriteLn;
     Escribo ('Archivos (files):',True);
     Escribo ('CAMPO.EXE | CAMPO.TXT',True);
     WriteLn;
-    Escribo ('Tomas Laurenzo ๚ tlaure@lsa.lsa.com.uy ๚ Montevideo - Uruguay',True);
+    Escribo ('Tomas Laurenzo ยท tlaure@lsa.lsa.com.uy ยท Montevideo - Uruguay',True);
     WriteLn;   Escribo (' IF Speed < -1 THEN Quite_A_Bug (ON)  a.k.a.  Good Bye mon T.V.',True);
     WriteLn;
-    Escribo ('^`ง:;,.,;:ง''^`ง:;,.,;:ง''^`ง:;,.,;:ง''^`ง:;,.,;:ง''^`ง:;,.,;:ง''^`ง:;,.,;:ง''^`ง:;,.',False);
+    Escribo ('^`ยบ:;,.,;:ยบ''^`ยบ:;,.,;:ยบ''^`ยบ:;,.,;:ยบ''^`ยบ:;,.,;:ยบ''^`ยบ:;,.,;:ยบ''^`ยบ:;,.,;:ยบ''^`ยบ:;,.',False);
     ApagaCursor;
     Delay (500);
    UNTIL keypressed;

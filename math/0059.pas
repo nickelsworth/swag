@@ -1,7 +1,7 @@
 {
-³ I've written a pwoerfull formula evaluator which can be extended
-³ during run-time by adding fuctions, vars and strings containing
-³ Because its not very small post me a message if you want to receive it.
+â”‚ I've written a pwoerfull formula evaluator which can be extended
+â”‚ during run-time by adding fuctions, vars and strings containing
+â”‚ Because its not very small post me a message if you want to receive it.
 
 Here it goes. It's a unit and an example/demo of some features.
 
@@ -189,7 +189,7 @@ BEGIN
 
   Newchar;
 
-{----Correct ñ.xx to ñ0.xx}
+{----Correct Â±.xx to Â±0.xx}
   IF (LENGTH(temp)=1) AND (Temp[1] IN ['+','-']) AND (Nextchar='.')
     THEN Temp:=Temp+'0';
 
@@ -199,7 +199,7 @@ BEGIN
       IF (Nextchar='E')
         THEN
           BEGIN
-          {----Correct ñxxx.E to ñxxx.0E}
+          {----Correct Â±xxx.E to Â±xxx.0E}
             IF (Temp[LENGTH(Temp)-1]='.')
               THEN INSERT('0',Temp,LENGTH(Temp));
             Newchar;
@@ -218,7 +218,7 @@ BEGIN
     THEN WHILE (Line[lp]=' ') DO INC(lp);
   nextchar:=line[lp];
 
-{----Correct ñxx. to ñxx.0 but NOT ñxxEñyy.}
+{----Correct Â±xx. to Â±xx.0 but NOT Â±xxEÂ±yy.}
   IF (temp[LENGTH(temp)]='.') AND
      (POS('E',temp)=0)
     THEN Temp:=Temp+'0';
@@ -407,7 +407,7 @@ BEGIN
                                                 (temps[1]='.')
                                                THEN Insert('0',temps,1);
 
-                                           {----Correct ñ.xx to ñ0.xx}
+                                           {----Correct Â±.xx to Â±0.xx}
                                              IF (LENGTH(temps)>=2) AND
                                                 (LENGTH(temps)<255) AND
                                                 (temps[1] IN ['+','-']) AND
@@ -423,7 +423,7 @@ BEGIN
                                              IF (Pos('.e',temps)>0) AND
                                                 (Length(temps)<255)
                                                THEN Insert('0',temps,Pos('.e',temps));
-                                           {----Correct ñxx. to ñxx.0 but NOT ñ}
+                                           {----Correct Â±xx. to Â±xx.0 but NOT Â±}
                                              IF (temps[LENGTH(temps)]='.') AND
                                                 (POS('E',temps)=0) AND
                                                 (POS('e',temps)=0) AND

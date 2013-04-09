@@ -1,25 +1,25 @@
-³I'm writing a Program that draws equations.  It's fairly easy if you put
-³the equation in a pascal Variable like Y := (X+10) * 2, but I would like
-³the user to enter the equation, but I don't see any possible way to do
-³it.
+â”‚I'm writing a Program that draws equations.  It's fairly easy if you put
+â”‚the equation in a pascal Variable like Y := (X+10) * 2, but I would like
+â”‚the user to enter the equation, but I don't see any possible way to do
+â”‚it.
 
 
       ...One way of doing it is by using an "expression trees". Suppose
-you have the equation Y := 20 ö 2 + 3. In this equation, you can represent
-the expression 20 ö 2 + 3 by using "full" binary trees as such:
+you have the equation Y := 20 Ã· 2 + 3. In this equation, you can represent
+the expression 20 Ã· 2 + 3 by using "full" binary trees as such:
 
 
-figure 1                 a  ÚÄ¿
-                            ³+³    <----- root of your expression
-                            ÀÄÙ
+figure 1                 a  â”Œâ”€â”
+                            â”‚+â”‚    <----- root of your expression
+                            â””â”€â”˜
                     b     /     \
-                      ÚÄ¿        ÚÄ¿ e
-                      ³ö³        ³3³
-                      ÀÄÙ        ÀÄÙ
+                      â”Œâ”€â”        â”Œâ”€â” e
+                      â”‚Ã·â”‚        â”‚3â”‚
+                      â””â”€â”˜        â””â”€â”˜
                       /  \
-                c ÚÄÄ¿    ÚÄ¿ d
-                  ³20³    ³2³
-                  ÀÄÄÙ    ÀÄÙ
+                c â”Œâ”€â”€â”    â”Œâ”€â” d
+                  â”‚20â”‚    â”‚2â”‚
+                  â””â”€â”€â”˜    â””â”€â”˜
 
 
 (Note: a  "leaf" is a node With no left or right children - ie: a value )
@@ -28,7 +28,7 @@ figure 1                 a  ÚÄ¿
 operators are written in between the things on which they operate.
 
 In our example, the nodes are visited in the order c, d, b, e, a,  and
-their Labels in this order are 20, 2, ö, 3, +.
+their Labels in this order are 20, 2, Ã·, 3, +.
 
 
 Function Evaluate(p: node): Integer;
@@ -49,7 +49,7 @@ begin
       Case op of
         '+': Evaluate := (T1 + T2);
         '-': Evaluate := (T1 - T2);
-        'ö': Evaluate := (T1 div T2);
+        'Ã·': Evaluate := (T1 div T2);
         '*': Evaluate := (T1 * T2);
       end;
     end
@@ -58,13 +58,13 @@ end;
 
 ...Thus, using figure 1, we have:
 
-              ÚÄÄ           ÚÄÄ
-              ³             ³ Evaluate(c) = 20
-              ³ Evaluate(b) ³ Evaluate(d) = 2
-              ³             ³ ApplyOp('ö',20,2) = 10
-   Evaluate(a)³             ÀÄÄ
-              ³ Evaluate(e) = 3
-              ³
-              ³ ApplyOp('+',10,3) = 13
-              ÀÄ
+              â”Œâ”€â”€           â”Œâ”€â”€
+              â”‚             â”‚ Evaluate(c) = 20
+              â”‚ Evaluate(b) â”‚ Evaluate(d) = 2
+              â”‚             â”‚ ApplyOp('Ã·',20,2) = 10
+   Evaluate(a)â”‚             â””â”€â”€
+              â”‚ Evaluate(e) = 3
+              â”‚
+              â”‚ ApplyOp('+',10,3) = 13
+              â””â”€
 

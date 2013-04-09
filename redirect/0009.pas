@@ -87,24 +87,24 @@ begin
   textbackground(Blue);
   clrscr;
   window(1,1,80,20);
-  write('…');
+  write('‚ïî');
   for x := 2 to 80-1 do
-    write('Õ');
-  write('ª');
+    write('‚ïê');
+  write('‚ïó');
   for x := 2 to 20-1 do
   begin
-    write('∫');
+    write('‚ïë');
     for y := 2 to 80-1 do
       write(' ');
-    write('∫');
+    write('‚ïë');
   end;
 
-  write('»');
+  write('‚ïö');
   for x := 2 to 80-1 do
-    write('Õ');
+    write('‚ïê');
 
   inc(WindMax);
-  write('º');
+  write('‚ïù');
   dec(WindMax);
   textcolor(White);
   textbackground(Black);

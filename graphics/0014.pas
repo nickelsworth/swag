@@ -5,7 +5,7 @@ MICHAEL NICOLAI
 The basic formula (and quickest) For drawing a circle is: x^2 + y^2 = r^2.
 The r stands For radius (half the diameter). You know this formula, i am
 sure. A guy called Phytagoras set i up very long ago to calculate the
-hypotenuse of a given triangle. (there has to be a 90ø angel between a and b)
+hypotenuse of a given triangle. (there has to be a 90Â° angel between a and b)
 
 
                    |\

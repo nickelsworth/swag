@@ -9,10 +9,10 @@ can pass like this, but you can no receive.  You must use Var R,G,B:Byte;
 
 >I want to do thgis, but in assembler:
 
->³³   PORT[$3C8] := Color;
->³³   Red        := PORT[$3C9];
->³³   Green      := PORT[$3C9];
->³³   Blue       := PORT[$3C9];
+>â”‚â”‚   PORT[$3C8] := Color;
+>â”‚â”‚   Red        := PORT[$3C9];
+>â”‚â”‚   Green      := PORT[$3C9];
+>â”‚â”‚   Blue       := PORT[$3C9];
 
 >but in assembler....argh, any ideas?
 }

@@ -24,9 +24,9 @@ Program Sig;
 {
 ; CyberSig configuration file example:
 @1
- ÚÄÄÄÄÄÄÄÄÄÄÄ¿
- ³ Light Ray ³
- ÀÄÄÄÄÄÄÄÄÄÄÄÙ
+ â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ â”‚ Light Ray â”‚
+ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 @2
  Tobin T. Fricke
  TobinTech Engineering
@@ -58,7 +58,7 @@ begin
   If Pos('/SIG',UPSTRING(S))=1
    then
     begin
-     Write('  `Bş`3 Found '+S);
+     Write('  `Bâ– `3 Found '+S);
      Rep:=False;
      Reset(F[ConfigF]);
      B:=0;

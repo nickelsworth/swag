@@ -1,10 +1,10 @@
 {
 CHRIS LAUTENBACH
 
-º I understand basically what you're saying - have a TSR/ISR define
-º Variables Within itself, then have any child processes hook into those
-º Variables via an interupt inquiry. However, I'm still a bit fuzzy on it.
-º Could you provide an example, or a better definition?
+â•‘ I understand basically what you're saying - have a TSR/ISR define
+â•‘ Variables Within itself, then have any child processes hook into those
+â•‘ Variables via an interupt inquiry. However, I'm still a bit fuzzy on it.
+â•‘ Could you provide an example, or a better definition?
 
     Here's an example of how to hook an interrupt....
 }

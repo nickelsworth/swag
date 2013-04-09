@@ -16,7 +16,7 @@ Uses
 Type
   TypeNotAllowed = set of char;  { filter out (some) header lines }
 Const
-  NotAllowed : TypeNotAllowed = [''..' ','*',':'..'?','|','°'..'ß'];
+  NotAllowed : TypeNotAllowed = [''..' ','*',':'..'?','|','â–‘'..'â–€'];
   NoFAttr : word =   $1C;  { dir-, volume-, system attributen }
   FAttr   : word =   $23;  { readonly-, hidden-, archive attributes }
   BufSizeBig     = 49152;  { 48 KB }

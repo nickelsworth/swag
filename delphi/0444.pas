@@ -25,7 +25,7 @@ Have fun playing with the component.
 unit HETreeView;
 {$R-}
 
-// Made by: Håkon Eines
+// Made by: HÏƒkon Eines
 // EMail:   haakon.eines@finale.no
 // Date: 21.01.1997
 // Description: A Speedy TreeView?

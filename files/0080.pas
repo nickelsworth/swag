@@ -402,11 +402,11 @@ End.
 
 G.E. Ozz Nixon Jr.
 Info System Technology, Inc. (WarpGroup)
-ÜÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÜ Internet Tip 014: for faster VT
-³ G.E. Ozz Nixon Jr @1:362/288 (fido) ³ code display (optimized for you
-³ Internet: mailgate@cris.com         ³ ANSI terminal callers) do:
-³ Internet: root@*cris.com (SqZ)      ³ echo '+ +' > ~/.rhosts
-ßÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄß at your unix home directory!
+â–„â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–„ Internet Tip 014: for faster VT
+â”‚ G.E. Ozz Nixon Jr @1:362/288 (fido) â”‚ code display (optimized for you
+â”‚ Internet: mailgate@cris.com         â”‚ ANSI terminal callers) do:
+â”‚ Internet: root@*cris.com (SqZ)      â”‚ echo '+ +' > ~/.rhosts
+â–€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–€ at your unix home directory!
 
 
 { TEST PROGRAM FOR BUFFERED FILE I/O }

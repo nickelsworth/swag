@@ -251,7 +251,7 @@ VAR F,OUTf        : file;
                               {Speed efficient ONLY comparison }
 PROCEDURE Announce;
 BEGIN
-  Writeln('C-TP-Format v1.0    coded by    þMr. Krinkleþ');
+  Writeln('C-TP-Format v1.0    coded by    â– Mr. Krinkleâ– ');
   Writeln('Property of Clark Enterprizes.    Sept 5 1994');
   WriteLN;
 END;

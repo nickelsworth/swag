@@ -1,5 +1,5 @@
 
-From: Jukka Palomäki <jukpalom@utu.fi>
+From: Jukka PalomÎ£ki <jukpalom@utu.fi>
 
 This is how I have solved the problem:
 

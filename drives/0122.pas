@@ -8,7 +8,7 @@ me the results...
 PROGRAM Space; {...the final frontier...}
 USES Crt, Dos;
 
-CONST Title                     = 'SPACE v2.4 (c) 22-MAR-97 re’per, no rights reserved';
+CONST Title                     = 'SPACE v2.4 (c) 22-MAR-97 reÃ†per, no rights reserved';
 
 VAR DriveL                      : string[2];
     DriveN                      : shortint;
@@ -130,7 +130,7 @@ BEGIN
   writeln('USAGE: SPACE [drive1] [drive2] [drive3] etc; etc;');
   writeln('EXMPL: SPACE C: D: F: H: Z:');
   writeln;
-  writeln('*** Portions (c) re’per/VOiD and misc routines are from SWAG.');
+  writeln('*** Portions (c) reÃ†per/VOiD and misc routines are from SWAG.');
   writeln;
   writeln('GREETZ: Silva,Dopey Druid, Cyber-Mage, Mixa, Eternal Dreams,');
   writeln('        Valcan, Indigo, Chris, NACC, everybody,');
@@ -151,15 +151,15 @@ BEGIN
   clrscr;
   textattr:=$e; writeln(Title); textattr:=$7;
   if paramcount = 0 then help;
-  textattr:=$7;write  ('Ä=[ DISK SPACE ]=ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
-  gotoxy(62,2);write('Â');
+  textattr:=$7;write  ('â”€=[ DISK SPACE ]=â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
+  gotoxy(62,2);write('â”¬');
   for z := 3 to paramcount + 2 do
   begin
-    gotoxy(62,z);write('³');
+    gotoxy(62,z);write('â”‚');
   end;
-    gotoxy(1,z+1);write ('ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
-    if paramcount <=2 then write('ÄÄÄÄÙ');
-    if paramcount > 2 then write('ÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ');
+    gotoxy(1,z+1);write ('â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
+    if paramcount <=2 then write('â”€â”€â”€â”€â”˜');
+    if paramcount > 2 then write('â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   gotoxy(1,3);
   for tmp := 1 to paramcount do begin
 {-- main ------------------------------------------------------------------}
@@ -186,12 +186,12 @@ BEGIN
       textattr:=$7;
       tmp3 := str2int(calc_p1(free,size)) div 10;
       gotoxy(45,whereY);
-      write('[');textattr:=$c;      write('ú');textattr:=$c;
-      write('ú');textattr:=$e;      write('ú');textattr:=$e;
-      write('ú');textattr:=$e;      write('ú');textattr:=$e;
-      write('ú');textattr:=$a;      write('ú');textattr:=$a;
-      write('ú');textattr:=$a;      write('ú');textattr:=$a;
-      write('ú');textattr:=$7;      write(']');
+      write('[');textattr:=$c;      write('Â·');textattr:=$c;
+      write('Â·');textattr:=$e;      write('Â·');textattr:=$e;
+      write('Â·');textattr:=$e;      write('Â·');textattr:=$e;
+      write('Â·');textattr:=$a;      write('Â·');textattr:=$a;
+      write('Â·');textattr:=$a;      write('Â·');textattr:=$a;
+      write('Â·');textattr:=$7;      write(']');
       if tmp3 = 10 then textattr:=$a;
       if tmp3 = 9  then textattr:=$a;
       if tmp3 = 8  then textattr:=$a;
@@ -204,7 +204,7 @@ BEGIN
       if tmp3 = 1  then textattr:=$c;
       gotoxy(46,wherey);
        for tmp2 := 1 to tmp3 do begin
-                                write('ş');
+                                write('â– ');
                                end;
       writeln;
       textattr:=$7;
@@ -229,17 +229,17 @@ Enjoy...
 Jonathan
 
 
-     ÛßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßÛ
-     Û Jonathan C. Watridge             "Moonlight creeping around the Û
-     Û ~~~~~~~~~~~~~~~~~~~~              corners of our lawn,  when we Û
-     Û E-MAŒL:  jonathan@connx.co.za     see the early signs that day- Û
-     Û véiCE :  +27 (031) 25 8104        light's fading, we leave just Û
-     Û FAX   :  +27 (031) 25 8104 (ask)  before it's gone."            Û
-     Û BBS   :  ...under construction                                  Û
-     Û                                                                 Û
-     Û                                            words by Adam Duritz Û
-     Û #incluse <disclaimer.h>                   of the Counting Crows Û
-     Ûğ=ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ=ğÛ
-     Û re’per/VíŒD - "CUTTiNG äD€ä PRODUCTiOïS"                (z) '97 Û
-     ÛÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÛ
+     â–ˆâ–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–ˆ
+     â–ˆ Jonathan C. Watridge             "Moonlight creeping around the â–ˆ
+     â–ˆ ~~~~~~~~~~~~~~~~~~~~              corners of our lawn,  when we â–ˆ
+     â–ˆ E-MAÃ®L:  jonathan@connx.co.za     see the early signs that day- â–ˆ
+     â–ˆ vÎ˜iCE :  +27 (031) 25 8104        light's fading, we leave just â–ˆ
+     â–ˆ FAX   :  +27 (031) 25 8104 (ask)  before it's gone."            â–ˆ
+     â–ˆ BBS   :  ...under construction                                  â–ˆ
+     â–ˆ                                                                 â–ˆ
+     â–ˆ                                            words by Adam Duritz â–ˆ
+     â–ˆ #incluse <disclaimer.h>                   of the Counting Crows â–ˆ
+     â–ˆâ‰¡=â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€=â‰¡â–ˆ
+     â–ˆ reÃ†per/VÏ†Ã®D - "CUTTiNG Î£DÃ‡Î£ PRODUCTiOâˆ©S"                (z) '97 â–ˆ
+     â–ˆâ–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–„â–ˆ
 

@@ -1,4 +1,4 @@
-Type Fijo=Record                {estructura de un nﬂ de coma fija}
+Type Fijo=Record                {estructura de un n‚ñÄ de coma fija}
             Mantisa,
             Decimal:Integer
           End;
@@ -10,7 +10,7 @@ Const Decimal_Max=100;            {2 decimales}
       Decimal_Stellen=2;
 
 Function Strg(NumF:Fijo):String;
-{convierte un nﬂ de coma fija en una cadena}
+{convierte un n‚ñÄ de coma fija en una cadena}
 Var Decimal_Str,                  {cadena para formar los decimales}
     Mantisa_Str:String;            {cadena para formar la mantisa}
     i:Word;
@@ -26,16 +26,16 @@ Begin
 End;
 
 Procedure Convert(RZahl:Real;Var NumF:Fijo);
-{convierta real RZahl en nﬂ coma fija NumF}
+{convierta real RZahl en n‚ñÄ coma fija NumF}
 Begin
   NumF.Mantisa:=Trunc(RZahl);
     {determinar parte mantisa}
   NumF.Decimal:=Trunc(Round(Frac(RZahl)*Decimal_Max));
-    {determinar parte decimal y guardar como nﬂ entero}
+    {determinar parte decimal y guardar como n‚ñÄ entero}
 End;
 
 Procedure Adjust(Var NumF:Fijo);
-{devuelve el n£mero de coma fija en formato legal}
+{devuelve el n√∫mero de coma fija en formato legal}
 Begin
   If NumF.Decimal > Decimal_Max Then Begin
     Dec(NumF.Decimal,Decimal_Max); {si parte decimal ha rebasado positivo}
@@ -96,7 +96,7 @@ Begin
     {formar contador}
   Resultado:=Resultado * Decimal_Max div
 (NumF2.Mantisa*Decimal_Max+NumF2.Decimal);
-    {dividir por el divisor, antes disponer de m›s decimales}
+    {dividir por el divisor, antes disponer de m‚ñås decimales}
   Cociente.Mantisa:=Resultado div Decimal_Max;
     {extraer parte decimal y mantisa}
   Cociente.Decimal:=Resultado mod Decimal_Max;
@@ -104,10 +104,10 @@ End;
 
 Begin
   WriteLn;
-  Convert(-10.2,Var1);          {cargar dos n£meros de demo}
+  Convert(-10.2,Var1);          {cargar dos n√∫meros de demo}
   Convert(25.3,Var2);
 
-  {c›lculos propios para demostraci¢n:}
+  {c‚ñålculos propios para demostraci√≥n:}
 
   Write(Strg(Var1),'*',Strg(Var2),'= ');
   Mul(Var1,Var1,Var2);

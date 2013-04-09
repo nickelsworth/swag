@@ -28,7 +28,7 @@ Begin {Main}
       TextMode(c80);
       ClrScr;
       Writeln('Source file with 128 character strings:');
-      Write(' þ '); Readln(Str127);
+      Write(' â–  '); Readln(Str127);
       If not(FileExist(Str127)) then
          Begin {If not(FileExist(Str127))}
                Writeln;
@@ -39,7 +39,7 @@ Begin {Main}
       Reset(File128);
       Writeln;
       Writeln('Destination file for 127 character strings:');
-      Write(' þ '); Readln(Str127);
+      Write(' â–  '); Readln(Str127);
       If FileExist(Str127) then
          Begin {If FileExist(Str127)}
                Writeln;
@@ -84,5 +84,5 @@ I hope this is what you were looking for.
 Michael J. Church
 MC Squared Computing Technologies
 ---
- þ RNet 1.08R:þ NANET þ After Five' BBS þ Elkhart, IN þ (219) 262-1370
+ â–  RNet 1.08R:â–  NANET â–  After Five' BBS â–  Elkhart, IN â–  (219) 262-1370
  

@@ -103,9 +103,9 @@ end;
 {!} procedure quietbuf
      ( var bufr : buffer; var chknext : boolean ; var noises : word );
 const
-     noisea  = 'Ê';
+     noisea  = '¬µ';
      noiseb  = 'a';
-     NOPChar = 'ê';
+     NOPChar = '√â';
 var
      bf_indx  : word ;
 begin
@@ -136,8 +136,8 @@ begin
              extra_char := true ;
              if nextchar = 'a' then begin
                 noises := noises + 1 ;
-                buf [ sizeof ( buf ) ] := 'ê';
-                nextchar := 'ê';
+                buf [ sizeof ( buf ) ] := '√â';
+                nextchar := '√â';
              end;
           end
           else extra_char := false ;
@@ -247,7 +247,7 @@ QUIET will maintain the original date and time of the file(s).
 
                              How it works:
 
-QUIET simply replaces the two-byte sequence: Êa  with: êê
+QUIET simply replaces the two-byte sequence: ¬µa  with: √â√â
 In hex, that is:   E6 61   and:   90  90.
 In decimal it is: 230 97   and:  144 144.
 
@@ -270,6 +270,6 @@ you have told the watch dog program to monitor.
 Note: other errors are mentioned by the program when it encounters them.
 
 ---
- ˛ SLMR 2.1a ˛
- ˛ RNET 2.00m: ILink: Channel 1(R) ˛ Cambridge, MA ˛ 617-354-7077
+ ‚ñ† SLMR 2.1a ‚ñ†
+ ‚ñ† RNET 2.00m: ILink: Channel 1(R) ‚ñ† Cambridge, MA ‚ñ† 617-354-7077
 

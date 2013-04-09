@@ -258,7 +258,7 @@ asm                                     { Procedure Polygon }
         sub ax,bx
         mov divi,ax                     { divi:=y2-y1 }
 
-        cmp bx,cx                       { ¨y1=y2? }
+        cmp bx,cx                       { Â¿y1=y2? }
 
         pushf                           { Calculate pointer to xpos[y,dir] }
         mov y,bx                        { y:=y1 }

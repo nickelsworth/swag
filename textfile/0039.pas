@@ -19,7 +19,7 @@ I've also added an overwrite switch to ignore the output file.
 And could the kind soul(s) who donated the previous version to SWAG please
 make sure this replaces the old version in the next upgrade?  Thanks!
 
- þ Done! - Kerry þ
+ â–  Done! - Kerry â– 
 }
 program SConvert;
 

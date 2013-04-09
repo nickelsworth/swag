@@ -35,7 +35,7 @@ Begin (* Main Program *)
 End.
 
 ---
- þ RM 1.0  þ Eval Day 4 þ Programmer's do it with bytes and nybbles....
+ â–  RM 1.0  â–  Eval Day 4 â–  Programmer's do it with bytes and nybbles....
  * Channel 1(R) * 617-354-7077 * Cambridge MA * 85 lines
  * PostLink(tm) v1.06  CHANNEL1 (#15) : RelayNet(tm)
 

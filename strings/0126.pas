@@ -35,7 +35,7 @@ begin
      OutCh:=Chr(Ord(Ch) - $20)           { convert "a...z" to "A...Z"}
   else if (Ch>=#160) and (Ch<=#175) then
      OutCh:=Chr(Ord(Ch) - $20)           { convert the first russian portion}
-  else if (Ch>='Ò' {rus}) and (Ch<='Ñ') then
+  else if (Ch>='â•¥' {rus}) and (Ch<='â•¤') then
      OutCh:=Chr(Ord(Ch) - $50)           { convert the second Russian portion}
   else if (Ch=#241) then Ch:=#240;       { convert Russian umlaut }
  Upper:=OutCh;

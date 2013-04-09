@@ -509,7 +509,7 @@ IMPLEMENTATION
 
                              {complex Bessel functions of order zero}
   PROCEDURE CI0   (VAR sum:  Complex; z:  Complex);  {sum = I0(z)}
-    {I0(z) = ä ( (¬z^2)^k / (k!)^2 ), k=0,1,2,...,ì}
+    {I0(z) = Î£ ( (Â¼z^2)^k / (k!)^2 ), k=0,1,2,...,âˆž}
     VAR
       i      :  BYTE;
       SizeSqr:  RealType;
@@ -520,7 +520,7 @@ IMPLEMENTATION
     sum := Cone;                       {term 0}
     Cmult (zSQR25, z,z);
     zSQR25.x := 0.25 * zSQR25.x;
-    zSQR25.y := 0.25 * zSQR25.y;       {¬z^2}
+    zSQR25.y := 0.25 * zSQR25.y;       {Â¼z^2}
     term := zSQR25;
     CAdd (sum, sum,zSQR25);            {term 1}
     i := 1;
@@ -535,7 +535,7 @@ IMPLEMENTATION
   END {CI0};
 
   PROCEDURE CJ0   (VAR sum:  Complex; z:  Complex);  {sum = J0(z)}
-    {J0(z) = ä ( (-1)^k * (¬z^2)^k / (k!)^2 ), k=0,1,2,...,ì}
+    {J0(z) = Î£ ( (-1)^k * (Â¼z^2)^k / (k!)^2 ), k=0,1,2,...,âˆž}
     VAR
       addflag:  BOOLEAN;
       i      :  BYTE;
@@ -547,7 +547,7 @@ IMPLEMENTATION
     sum := Cone;                       {term 0}
     Cmult (zSQR25, z,z);
     zSQR25.x := 0.25 * zSQR25.x;
-    zSQR25.y := 0.25 * zSQR25.y;       {¬z^2}
+    zSQR25.y := 0.25 * zSQR25.y;       {Â¼z^2}
     term := zSQR25;
     CSub (sum, sum,zSQR25);            {term 1}
     addflag := FALSE;
@@ -569,9 +569,9 @@ IMPLEMENTATION
     {This is the approximation used in the National Bureau of
      Standards "Table of the Gamma Function for Complex Arguments,"
      Applied Mathematics Series 34, 1954.  The NBS table was created
-     using this approximation over the area  9 ó Re(z) ó 10 and
-     0 ó Im(z) ó 10.  Other table values were computed using the
-     relationship ln â(z+1) = ln z + ln â(z).}
+     using this approximation over the area  9 â‰¤ Re(z) â‰¤ 10 and
+     0 â‰¤ Im(z) â‰¤ 10.  Other table values were computed using the
+     relationship ln Î“(z+1) = ln z + ln Î“(z).}
     CONST
       c:  ARRAY[1..8] OF RealType
        =  (1/12, -1/360, 1/1260, -1/1680, 1/1188, -691/360360,
@@ -629,7 +629,7 @@ IMPLEMENTATION
         CLnGamma (temp,a);
         CSub (z, temp,lna)
       END
-      ELSE CApproxLnGamma (z,a)  {NBS table range:  9 ó Re(z) ó 10}
+      ELSE CApproxLnGamma (z,a)  {NBS table range:  9 â‰¤ Re(z) â‰¤ 10}
     END
   END {CLnGamma};
 

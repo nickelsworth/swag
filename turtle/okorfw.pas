@@ -1,9 +1,9 @@
-(* ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Programated by Vladimir Zahoransky                        ³
-   ³                Vladko software                            ³
-   ³ Contact      : zahoran@cezap.ii.fmph.uniba.sk             ³
-   ³ Program tema : Unit - turtle graphic with untypefiles     ³
-   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ *)
+(* â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Programated by Vladimir Zahoransky                        â”‚
+   â”‚                Vladko software                            â”‚
+   â”‚ Contact      : zahoran@cezap.ii.fmph.uniba.sk             â”‚
+   â”‚ Program tema : Unit - turtle graphic with untypefiles     â”‚
+   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ *)
 
 {    Well this is very usefull unit. This unit can write all turtle
   work and then can read it. If you want to save your work, you have
@@ -28,38 +28,38 @@
 
     Here is a table for prepare a file for work :
 
-   ÚÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Code ³ File type work                  ³
-   ÃÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
-   ³  0   ³ Rewrite(f,Flenght);             ³
-   ³  1   ³ Append file with Flenght        ³
-   ³  2   ³ Reset file if exist with Flengt ³
-   ÀÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+   â”Œâ”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Code â”‚ File type work                  â”‚
+   â”œâ”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+   â”‚  0   â”‚ Rewrite(f,Flenght);             â”‚
+   â”‚  1   â”‚ Append file with Flenght        â”‚
+   â”‚  2   â”‚ Reset file if exist with Flengt â”‚
+   â””â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
      This code table is a table for update the files for ower work :
     (All codes are value for CX register. (this is for all who know
      assembler))
 
-   ÚÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Code ³ File type      ³
-   ÃÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
-   ³  0   ³ Normal    file ³
-   ³  1   ³ ReadOnly  file ³
-   ³  2   ³ Hide      file ³
-   ³  4   ³ System    file ³
-   ÀÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+   â”Œâ”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Code â”‚ File type      â”‚
+   â”œâ”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+   â”‚  0   â”‚ Normal    file â”‚
+   â”‚  1   â”‚ ReadOnly  file â”‚
+   â”‚  2   â”‚ Hide      file â”‚
+   â”‚  4   â”‚ System    file â”‚
+   â””â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
      Good is if you have some commands for work with files. I am giveing
   you this :
 
-   ÚÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³ Code ³ File type   ³
-   ÃÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄ´
-   ³  0   ³ Exist  file ³
-   ³  1   ³ Copy   file ³
-   ³  2   ³ Rename file ³
-   ³  3   ³ Delete file ³
-   ÀÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+   â”Œâ”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚ Code â”‚ File type   â”‚
+   â”œâ”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+   â”‚  0   â”‚ Exist  file â”‚
+   â”‚  1   â”‚ Copy   file â”‚
+   â”‚  2   â”‚ Rename file â”‚
+   â”‚  3   â”‚ Delete file â”‚
+   â””â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
     How to use this commands ? In my programing life unpraktic to know a lot
   of commands. A lot of programers want to know a good parameter then names.
@@ -77,13 +77,13 @@
 
    And here is dictionary :
 
-   ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-   ³    Name     ³ In English  ³
-   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄ´
-   ³ Zmaz1       ³ ClearScreen ³
-   ³ Cakaj       ³ Wait        ³
-   ³ CakajKlaves ³ Wait key    ³
-   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+   â”‚    Name     â”‚ In English  â”‚
+   â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+   â”‚ Zmaz1       â”‚ ClearScreen â”‚
+   â”‚ Cakaj       â”‚ Wait        â”‚
+   â”‚ CakajKlaves â”‚ Wait key    â”‚
+   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
      Good modification is if you have source of your metod (or tpu) and
   you write to file only imput parameters and in file viewer will read

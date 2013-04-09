@@ -67,20 +67,20 @@ begin
     begin
        xystar[loop]:=' ';
     end;
-    if ((random(80)<5) and (xystar[loop]='ù')) then
+    if ((random(80)<5) and (xystar[loop]='âˆ™')) then
     begin
        xystar[loop]:=chr(15);
     end;
-    if ((random(80)<5) and (xystar[loop]='ú')) then
+    if ((random(80)<5) and (xystar[loop]='Â·')) then
     begin
-       xystar[loop]:='ù';
+       xystar[loop]:='âˆ™';
     end;
     if ((random(80)<20) and (xystar[loop]=' ') and (x[loop]=0) and
 (y[loop]=0)) then
     begin
        x[loop]:=random(rows);
        y[loop]:=random(columns);
-       xystar[loop]:='ú';
+       xystar[loop]:='Â·';
     end;
  end;
  for loop:=1 to 30 do

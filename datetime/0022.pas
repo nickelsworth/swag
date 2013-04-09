@@ -5,8 +5,8 @@ From: KELLY SMALL                  Refer#: 744
   To: STEPHEN WHITIS                Recvd: NO  
 Subj: DATE CALCULATIONS              Conf: (232) T_Pascal_R
 ---------------------------------------------------------------------------
- SW³ Does anyone know where I can find an algorithm, or better yet TP
- SW³ 5.5 code, to calculate the day of the week for a give date?
+ SWâ”‚ Does anyone know where I can find an algorithm, or better yet TP
+ SWâ”‚ 5.5 code, to calculate the day of the week for a give date?
 
 Give this a whirl:
 
@@ -46,12 +46,12 @@ begin
   else FindDayOfWeek := dw;
 end;
 
-      ô/elly
-      õmall
+      âŒ /elly
+      âŒ¡mall
 
 ---
- þ JABBER v1.2 #18 þ Bigamy: too many wives. Monogamy: see Bigamy
-                                            þ KMail 2.94  The Wish Book BBS (60
+ â–  JABBER v1.2 #18 â–  Bigamy: too many wives. Monogamy: see Bigamy
+                                            â–  KMail 2.94  The Wish Book BBS (60
 2)258-7113 (6+ nodes, ring down)
  * The Wish Book 602-258-7113(6 lines)10+ GIGs/The BEST board in Arizona!
  * PostLink(tm) v1.06  TWB (#1032) : RelayNet(tm)

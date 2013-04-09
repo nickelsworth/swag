@@ -1,6 +1,6 @@
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: DOUGLAS BAKER                Date: 11-11Ä91 (20:18)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: DOUGLAS BAKER                Date: 11-11â”€91 (20:18)
 From: WILBERT VAN.LEIJEN         Number: 2147   [101] PASCAL
 Subj: 256 TEXT COLORS?           Status: Public
 ------------------------------------------------------------------------------

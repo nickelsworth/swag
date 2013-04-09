@@ -1,5 +1,5 @@
 {
-³  Post more code so we can see where you're going wrong.
+â”‚  Post more code so we can see where you're going wrong.
 
 I'm just posting things that are relevant, i.e. no error trapping code
 and such. Also I've deleted the original comments, as they are in

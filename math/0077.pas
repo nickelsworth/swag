@@ -12,24 +12,24 @@ won't help much :-(
 }
 
 (* ----------------------------------------------------------------------- *)
-(* RabinTest prÅft, ob eine Zahl eine Primzahl ist                         *)
+(* RabinTest pr√ºft, ob eine Zahl eine Primzahl ist                         *)
 (* ----------------------------------------------------------------------- *)
 
-{$M 65000, 0, 655360}                          (* Stack auf maximale Grî·e *)
+{$M 65000, 0, 655360}                          (* Stack auf maximale Gr√∂√üe *)
 
 PROGRAM RabinTest;
 
 USES Crt,                                         (* Ein/Ausgabefunktionen *)
      Extend,                                (* erweiterte I/O - Funktionen *)
-     MyCalc;               (* Funktionen fÅr das Rechnen mit gro·en Zahlen *)
+     MyCalc;               (* Funktionen f√ºr das Rechnen mit gro√üen Zahlen *)
 
 (* ----------------------------------------------------------------------- *)
 
 FUNCTION Expt(zahl : Real; hoch : INTEGER) : Real;
-    (* Berechnung des Exponenten einer Realzahl (einfach, weil nur fÅr die *)
-                                       (* Berechnung von AnzahlTests nîtig *)
-VAR i     : INTEGER;                                       (* ZÑhlvariable *)
-    hilfe : Real;                        (* Hilfsvariable fÅr das Ergebnis *)
+    (* Berechnung des Exponenten einer Realzahl (einfach, weil nur f√ºr die *)
+                                       (* Berechnung von AnzahlTests n√∂tig *)
+VAR i     : INTEGER;                                       (* Z√§hlvariable *)
+    hilfe : Real;                        (* Hilfsvariable f√ºr das Ergebnis *)
 BEGIN
   IF hoch = 0 THEN                                         (* Hochzahl = 0 *)
     Expt := 1                                           (* => Ergebnis = 1 *)
@@ -38,37 +38,37 @@ BEGIN
       hilfe := 1;                         (* Ergebnis mit 1 initialisieren *)
       FOR i := 1 TO hoch DO hilfe := hilfe * zahl;
                            (* Zahl hoch mal mit sich selbst multiplizieren *)
-      Expt := hilfe;                             (* Ergebnis zurÅckliefern *)
+      Expt := hilfe;                             (* Ergebnis zur√ºckliefern *)
     END;
 END;
 
 (* ----------------------------------------------------------------------- *)
 
 FUNCTION AnzahlTests(wahrscheinlichkeit : Real) : INTEGER;
-        (* ermittelt die Anzahl Tests, welche nîtig sind um die gewÅnschte *)
+        (* ermittelt die Anzahl Tests, welche n√∂tig sind um die gew√ºnschte *)
                                         (* Wahrscheinlichkeit zu erreichen *)
-VAR anzahl : INTEGER;                          (* Anzahl der nîtigen Tests *)
+VAR anzahl : INTEGER;                          (* Anzahl der n√∂tigen Tests *)
 BEGIN
   anzahl := 0;                              (* Anzahl mit 0 initialisieren *)
   REPEAT
-    INC(anzahl);                                    (* Anzahl um 1 erhîhen *)
+    INC(anzahl);                                    (* Anzahl um 1 erh√∂hen *)
   UNTIL ((1/(Expt(4,anzahl))) < wahrscheinlichkeit);
                                    (* solange wiederholen, bis W > (1/4)^x *)
-  AnzahlTests := anzahl;                       (* Anzahl Tests zurÅckgeben *)
+  AnzahlTests := anzahl;                       (* Anzahl Tests zur√ºckgeben *)
 END;
 
 (* ----------------------------------------------------------------------- *)
 
 FUNCTION EvenString(zahl : STRING) : BOOLEAN;
-                                        (* prÅft, on ein String gerade ist *)
+                                        (* pr√ºft, on ein String gerade ist *)
 BEGIN
   EvenString := NOT Odd(Ord(zahl[Length(zahl)]) - 48);
-END;                 (* prÅft, ob die letzte Stelle des Strings gerade ist *)
+END;                 (* pr√ºft, ob die letzte Stelle des Strings gerade ist *)
 
 (* ----------------------------------------------------------------------- *)
 
 FUNCTION Div5(zahl : STRING) : BOOLEAN;
-                           (* prÅft, ob ein String durch 5 dividierbar ist *)
+                           (* pr√ºft, ob ein String durch 5 dividierbar ist *)
 VAR last : BYTE;                                 (* letzte Stelle von zahl *)
 BEGIN
   last := Ord(zahl[Length(zahl)]) - 48;         (* letzte Stelle ermitteln *)
@@ -76,18 +76,18 @@ BEGIN
     Div5 := TRUE                       (* ist die Zahl durch 5 dividierbar *)
   ELSE
     Div5 := FALSE;                                          (* sonst nicht *)
-END;                 (* prÅft, ob die letzte Stelle des Strings gerade ist *)
+END;                 (* pr√ºft, ob die letzte Stelle des Strings gerade ist *)
 
 (* ----------------------------------------------------------------------- *)
 
 FUNCTION Div3(zahl : STRING) : BOOLEAN;
-                           (* prÅft, ob ein String durch 5 dividierbar ist *)
+                           (* pr√ºft, ob ein String durch 5 dividierbar ist *)
 VAR ziffernSumme : WORD;                       (* Ziffernsumme des Strings *)
     laenge       : BYTE;                             (* Laenge des Strings *)
-    i            : BYTE;                                   (* ZÑhlvariable *)
+    i            : BYTE;                                   (* Z√§hlvariable *)
 BEGIN
   ziffernSumme := 0;                        (* Ziffernsumme initialisieren *)
-  laenge := Length(zahl);                   (* LÑnge des Strings ermitteln *)
+  laenge := Length(zahl);                   (* L√§nge des Strings ermitteln *)
   FOR i := 1 TO laenge DO                        (* ZiffernSumme ermitteln *)
     BEGIN
       ziffernSumme := ziffernSumme + (Ord(zahl[i]) - 48);
@@ -100,7 +100,7 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* Bedingung 1 beim Rabintest: b^v1 mod p                                 *)
+(* Bedingung 1 beim Rabintest: b^v‚â°1 mod p                                 *)
 
 FUNCTION Bedingung1(b, v, p, pMinus1, EINS : CalcStr) : BOOLEAN;
 VAR hilfe : CalcStr;                                    (* HilfsCalcString *)
@@ -110,27 +110,27 @@ BEGIN
   Write('b^v mod p = '); PrintCalcStr(hilfe);
 
   IF EqualCalcStr(hilfe, EINS) THEN                  (* Falls Ergebnis = 1 *)
-    Bedingung1 := TRUE                              (* Bedingung 1 erfÅllt *)
+    Bedingung1 := TRUE                              (* Bedingung 1 erf√ºllt *)
   ELSE
     IF EqualCalcStr(hilfe, pMinus1) THEN
-      Bedingung1 := TRUE                    (* Bedingung 2 mit r=0 erfÅllt *)
+      Bedingung1 := TRUE                    (* Bedingung 2 mit r=0 erf√ºllt *)
     ELSE
-      Bedingung1 := FALSE;          (* sonst ist Bedingung 1 nicht erfÅllt *)
+      Bedingung1 := FALSE;          (* sonst ist Bedingung 1 nicht erf√ºllt *)
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* Bedingung 2 beim Rabintest: b^(v^(2r))  -1 mod p                       *)
+(* Bedingung 2 beim Rabintest: b^(v^(2r)) ‚â° -1 mod p                       *)
 
 FUNCTION Bedingung2(VAR b, v, u, p, pMinus1, EINS : CalcStr) : BOOLEAN;
 VAR r      : CalcStr;                       (* zu durchlaufende Hochzahlen *)
-    ZWEI   : CalcStr;            (* konstante CalcString-Darstellung fÅr 2 *)
+    ZWEI   : CalcStr;            (* konstante CalcString-Darstellung f√ºr 2 *)
     hilfe1 : CalcStr;                                   (* HilfsCalcString *)
     hilfe2 : CalcStr;                                   (* HilfsCalcString *)
 BEGIN
   InitCalcStr(r);                                      (* r initialisieren *)
   r.stellen := 1;                 (* r hat 1 Stelle, diese ist zu Beginn 0 *)
-  r.zahl[1] := 1;    (* r lÑuft von 1 weg, weil Bedingung mit r=0 schon in *)
-                                               (* Bedingung 1 geprÅft wird *)
+  r.zahl[1] := 1;    (* r l√§uft von 1 weg, weil Bedingung mit r=0 schon in *)
+                                               (* Bedingung 1 gepr√ºft wird *)
   WordToCalcStr(2, ZWEI);             (* Zahl zwei in CalcString ermitteln *)
   WHILE LessCalcStr(r, u) DO                              (* solange r < u *)
     BEGIN
@@ -145,27 +145,27 @@ BEGIN
 
       IF EqualCalcStr(hilfe1, pMinus1) THEN         (* Falls Ergebnis = -1 *)
         BEGIN
-          Bedingung2 := TRUE;                       (* Bedingung 2 erfÅllt *)
+          Bedingung2 := TRUE;                       (* Bedingung 2 erf√ºllt *)
           EXIT;
         END;
-      AddCalcStr(r, EINS, hilfe2);                       (* r um 1 erhîhen *)
+      AddCalcStr(r, EINS, hilfe2);                       (* r um 1 erh√∂hen *)
       r := hilfe2;                                    (* r wieder zuweisen *)
     END;
-  Bedingung2 := FALSE;                       (* 2. Bedingung nicht erfÅllt *)
+  Bedingung2 := FALSE;                       (* 2. Bedingung nicht erf√ºllt *)
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* Rabin prÅft eine Zahl mit Hilfe des RabinTests                          *)
+(* Rabin pr√ºft eine Zahl mit Hilfe des RabinTests                          *)
 
 FUNCTION Rabin(primzahl : STRING; anzahl : INTEGER) : BOOLEAN;
 VAR p       : CalcStr;                        (* zu untersuchende Primzahl *)
     pMinus1 : CalcStr;                                     (* Primzahl - 1 *)
-    EINS    : CalcStr;                            (* konstanter Wert fÅr 1 *)
+    EINS    : CalcStr;                            (* konstanter Wert f√ºr 1 *)
     u       : CalcStr;                         (* p-1 = 2^u*v (v ungerade) *)
     v       : CalcStr;                         (* p-1 = 2^u*v (v ungerade) *)
     b       : CalcStr;                           (* Basis bei Primzahltest *)
     hilfe   : CalcStr;                                  (* HilfsCalcString *)
-    i       : BYTE;                                        (* ZÑhlvariable *)
+    i       : BYTE;                                        (* Z√§hlvariable *)
 BEGIN
   StrToCalcStr(primzahl, p);        (* Primzahl ins 65536-System umwandeln *)
   WordToCalcStr(1, EINS);                   (* CalcStringdarstellung von 1 *)
@@ -174,7 +174,7 @@ BEGIN
   u.stellen := 1;                      (* u besitzt 1 Stellen, diese ist 0 *)
   v := pMinus1;                                     (* v ist zu Beginn p-1 *)
   REPEAT
-    AddCalcStr(u, EINS, hilfe);                (* 2^u, Potenz um 1 erhîhen *)
+    AddCalcStr(u, EINS, hilfe);                (* 2^u, Potenz um 1 erh√∂hen *)
     u := hilfe;                                   (* und wieder u zuweisen *)
     Div2CalcStr(v);                                (* v durch 2 dividieren *)
   UNTIL OddCalcStr(v);                      (* solange, bis v ungerade ist *)
@@ -183,25 +183,25 @@ BEGIN
   Write('u = '); PrintCalcStr(u);
   Write('v = '); PrintCalcStr(v);
 
-  FOR i := 1 TO anzahl DO                      (* Anzahl Tests durchfÅhren *)
+  FOR i := 1 TO anzahl DO                      (* Anzahl Tests durchf√ºhren *)
     BEGIN
-      RandomCalcStr(p, b);                    (* zufÑllige Basis ermitteln *)
+      RandomCalcStr(p, b);                    (* zuf√§llige Basis ermitteln *)
 
       Write('b = '); PrintCalcStr(b);
 
       IF (Bedingung1(b, v, p, pMinus1, EINS) = FALSE) THEN
-                                                    (* 1. Bedingung prÅfen *)
+                                                    (* 1. Bedingung pr√ºfen *)
         IF (Bedingung2(b, v, u, p, pMinus1, EINS) = FALSE) THEN
-          BEGIN                                     (* 2. Bedingung prÅfen *)
+          BEGIN                                     (* 2. Bedingung pr√ºfen *)
             Rabin := FALSE;
-            EXIT;     (* beide Bedingungen nicht erfÅllt => keine Primzahl *)
+            EXIT;     (* beide Bedingungen nicht erf√ºllt => keine Primzahl *)
           END;
     END;
   Rabin := TRUE;                                    (* Rabintest bestanden *)
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* PrimeTest prÅft, ob Zahl eine Primzahl ist                              *)
+(* PrimeTest pr√ºft, ob Zahl eine Primzahl ist                              *)
 
 FUNCTION PrimeTest(zahl : STRING; anzahlTests : INTEGER; VAR meldung : STRING)
 : BOOLEAN;
@@ -209,27 +209,27 @@ BEGIN
   IF EvenString(zahl) THEN                 (* Zahl ist durch 2 dividierbar *)
     BEGIN
       PrimeTest := FALSE;                             (* => keine Primzahl *)
-      meldung := 'gerade Zahl';                     (* Meldung zurÅckgeben *)
+      meldung := 'gerade Zahl';                     (* Meldung zur√ºckgeben *)
     END
   ELSE
     IF Div5(zahl) THEN               (* Falls Zahl durch 5 dividierbar ist *)
       BEGIN
         PrimeTest := FALSE;                              (* => keine Primzahl
 *)
-        meldung := 'Zahl durch 5 dividierbar';      (* Meldung zurÅckgeben *)
+        meldung := 'Zahl durch 5 dividierbar';      (* Meldung zur√ºckgeben *)
       END
     ELSE
       IF Div3(zahl) THEN                       (* Zahl durch 3 dividierbar *)
         BEGIN
           PrimeTest := FALSE;                         (* => keine Primzahl *)
-          meldung := 'Zahl durch 3 dividierbar';    (* Meldung zurÅckgeben *)
+          meldung := 'Zahl durch 3 dividierbar';    (* Meldung zur√ºckgeben *)
         END
       ELSE
         BEGIN
           IF NOT Rabin(zahl, anzahlTests) THEN  (* Falls Rabintest negativ *)
             BEGIN
               PrimeTest := FALSE;                        (* keine Primzahl *)
-              meldung := 'Rabintest';               (* Meldung zurÅckgeben *)
+              meldung := 'Rabintest';               (* Meldung zur√ºckgeben *)
             END
           ELSE
             PrimeTest := TRUE;                  (* sonst ist Zahl Primzahl *)
@@ -246,7 +246,7 @@ VAR anzahl             : INTEGER;              (* Anzahl notwendiger Tests *)
     meldung            : STRING;          (* Meldung, warum keine Primzahl *)
     prim               : BOOLEAN;           (* ist sie Primzahl oder nicht *)
 BEGIN
-  ClrScr;                                            (* Bildschirm lîschen *)
+  ClrScr;                                            (* Bildschirm l√∂schen *)
   Frame(27, 1, 53, 3, 1, '', TRUE);                     (* Rahmen ausgeben *)
   WriteXY(29, 2, 'Primzahltest nach Rabin');
   GotoXY(1, 6);
@@ -292,7 +292,7 @@ CONST MAXCALCSTR = 500;                         (* maximal 500 Word-Zahlen *)
 
 TYPE CalcStr = RECORD
                  stellen    : WORD;         (* Anzahl der belegten Stellen *)
-                 zahl       : ARRAY[1..MAXCALCSTR] OF WORD;  (* gro·e Zahl *)
+                 zahl       : ARRAY[1..MAXCALCSTR] OF WORD;  (* gro√üe Zahl *)
                END;
 
 PROCEDURE InitCalcStr(VAR calcZahl : CalcStr);
@@ -334,7 +334,7 @@ USES Crt;                                         (* Ein/Ausgabefunktionen *)
 
 VAR EMPTYCALCSTR : CalcStr;                           (* leerer CalcString *)
     i            : WORD;
-                      (* ZÑhlvariable zur Initialisierung von EMPTYCALCSTR *)
+                      (* Z√§hlvariable zur Initialisierung von EMPTYCALCSTR *)
 
 (* ======================================================================= *)
 (* Bitmanipulationen                                                       *)
@@ -345,76 +345,76 @@ VAR EMPTYCALCSTR : CalcStr;                           (* leerer CalcString *)
 FUNCTION SetBit(zahl : WORD; bitNr : BYTE): WORD;
 BEGIN
   SetBit := zahl OR (1 SHL bitNr)
-               (* BitNr Stellen nach links shiften und mit oder verknÅpfen *)
+               (* BitNr Stellen nach links shiften und mit oder verkn√ºpfen *)
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* TestBit prÅft, ob das BitNr.te Bit in Zahl gesetzt ist                  *)
+(* TestBit pr√ºft, ob das BitNr.te Bit in Zahl gesetzt ist                  *)
 
 FUNCTION TestBit(zahl : WORD; bitNr: BYTE): BOOLEAN;
 BEGIN
   TestBit := (((zahl SHR bitNr) AND 1) = 1)
              (* Bit ist dann gesetzt, falls an der BitNr. Stelle bei einer *)
-                              (* Und-VerknÅpfung wieder 1 das Ergebnis ist *)
+                              (* Und-Verkn√ºpfung wieder 1 das Ergebnis ist *)
 END;
 
 (* ======================================================================= *)
-(* Hilfsfunktionen fÅr Strings                                             *)
+(* Hilfsfunktionen f√ºr Strings                                             *)
 
 (* ----------------------------------------------------------------------- *)
-(* TestString prÅft, ob im String eine gÅltige Zahl enthalten ist          *)
+(* TestString pr√ºft, ob im String eine g√ºltige Zahl enthalten ist          *)
 
 FUNCTION TestString(zeichenkette : STRING) : BOOLEAN;
-VAR laenge : BYTE;                               (* LÑnge der Zeichenkette *)
-    i      : BYTE;                                         (* ZÑhlvariable *)
+VAR laenge : BYTE;                               (* L√§nge der Zeichenkette *)
+    i      : BYTE;                                         (* Z√§hlvariable *)
 BEGIN
-  laenge := Length(zeichenkette);      (* LÑnge der Zeichenkette ermitteln *)
+  laenge := Length(zeichenkette);      (* L√§nge der Zeichenkette ermitteln *)
   FOR i := 1 TO laenge DO
     IF (NOT (zeichenkette[i] IN ['0'..'9'])) THEN            (* keine Zahl *)
       BEGIN
-        TestString := FALSE;                        (* String ist ungÅltig *)
+        TestString := FALSE;                        (* String ist ung√ºltig *)
         EXIT;                                        (* Funktion verlassen *)
       END;
   TestString := TRUE;
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* OddString prÅft, ob ein String ungerade ist                             *)
+(* OddString pr√ºft, ob ein String ungerade ist                             *)
 
 FUNCTION OddString(zeichenkette : STRING) : BOOLEAN;
 VAR zahl   : BYTE;                          (* Bytedarstellung von Zeichen *)
-    dummy  : INTEGER;  (* dient zur öberprÅfung von zeichen bei Umwandlung *)
+    dummy  : INTEGER;  (* dient zur √úberpr√ºfung von zeichen bei Umwandlung *)
     last   : CHAR;                      (* letztes Zeichen in zeichenkette *)
-    laenge : BYTE;                               (* LÑnge der Zeichenkette *)
+    laenge : BYTE;                               (* L√§nge der Zeichenkette *)
 BEGIN
-  laenge := Length(zeichenkette);        (* LÑnge mu· neu ermittelt werden *)
+  laenge := Length(zeichenkette);        (* L√§nge mu√ü neu ermittelt werden *)
   last := zeichenkette[laenge];                         (* letztes Zeichen *)
   Val(last, zahl, dummy);             (* letztes Zeichen in zahl umwandeln *)
-  oddString := Odd(zahl);                  (* prÅfen, ob zahl ungerade ist *)
+  oddString := Odd(zahl);                  (* pr√ºfen, ob zahl ungerade ist *)
 END;
 
 (* ----------------------------------------------------------------------- *)
 (* StrDiv2 dividiert einen String durch 2                                  *)
 
 FUNCTION StrDiv2(zeichenkette : STRING) : STRING;
-VAR hilfe      : STRING;                   (* Hilfsstring fÅr das Ergebnis *)
-    index      : BYTE;               (* Index fÅr Position in zeichenkette *)
-    laenge     : BYTE;                           (* LÑnge der Zeichenkette *)
+VAR hilfe      : STRING;                   (* Hilfsstring f√ºr das Ergebnis *)
+    index      : BYTE;               (* Index f√ºr Position in zeichenkette *)
+    laenge     : BYTE;                           (* L√§nge der Zeichenkette *)
     zahl       : BYTE;                          (* zu dividierender Faktor *)
     zeichen    : CHAR;                      (* Zeichendarstellung von Zahl *)
     dummy      : INTEGER;
-                       (* dient zur öberprÅfung von zeichen bei Umwandlung *)
-    uebertrag  : BOOLEAN;                  (* ist ein öbertrag aufgetreten *)
+                       (* dient zur √úberpr√ºfung von zeichen bei Umwandlung *)
+    uebertrag  : BOOLEAN;                  (* ist ein √úbertrag aufgetreten *)
 BEGIN
   hilfe := '';                                     (* hilfe initialisieren *)
-  laenge := Length(zeichenkette);                (* LÑnge der zeichenkette *)
+  laenge := Length(zeichenkette);                (* L√§nge der zeichenkette *)
   IF oddString(zeichenkette) THEN           (* falls die Zahl ungerade ist *)
     DEC(zeichenkette[laenge]);                 (* Zahl um 1 dekrementieren *)
-  uebertrag := FALSE;                                     (* kein öbertrag *)
+  uebertrag := FALSE;                                     (* kein √úbertrag *)
   IF zeichenkette[1] = '1' THEN               (* falls an 1.Stelle ein 1er *)
     BEGIN
       index := 2;                              (* an 2.Stelle weitermachen *)
-      zahl := 10;                     (* öbertrag an 1.Stelle => zahl = 10 *)
+      zahl := 10;                     (* √úbertrag an 1.Stelle => zahl = 10 *)
     END
   ELSE
     BEGIN
@@ -424,16 +424,16 @@ BEGIN
   REPEAT
     zahl := zahl + Ord(zeichenkette[index]) - 48;        (* Zahl ermitteln *)
     IF (zahl AND 1) = 1 THEN uebertrag := TRUE;
-                                              (* ungerade zahl => öbertrag *)
+                                              (* ungerade zahl => √úbertrag *)
     zahl := zahl SHR 1;                         (* zahl durch 2 dividieren *)
     zeichen := Chr(zahl + 48);   (* Zahl wieder in ASCII-Zeichen umwandeln *)
-    hilfe := hilfe + zeichen;                     (* und an hilfe anhÑngen *)
-    INC(index);                                      (* Index um 1 erhîhen *)
-    IF uebertrag THEN                                          (* öbertrag *)
-      zahl := 10                               (* öbertrag in zahl sichern *)
+    hilfe := hilfe + zeichen;                     (* und an hilfe anh√§ngen *)
+    INC(index);                                      (* Index um 1 erh√∂hen *)
+    IF uebertrag THEN                                          (* √úbertrag *)
+      zahl := 10                               (* √úbertrag in zahl sichern *)
     ELSE
       zahl := 0;                                         (* sonst zahl = 0 *)
-    uebertrag := FALSE;                          (* Annahme: kein öbertrag *)
+    uebertrag := FALSE;                          (* Annahme: kein √úbertrag *)
   UNTIL index > laenge;               (* keine Zeichen mehr zum dividieren *)
   StrDiv2 := hilfe;                             (* Ergebnis steht in Hilfe *)
 END;
@@ -443,35 +443,35 @@ END;
 
 FUNCTION StrMul2(zeichenkette : STRING) : STRING;
 VAR laenge     : BYTE;                          (* Laenge der zeichenkette *)
-    i          : BYTE;                                     (* ZÑhlvariable *)
-    hilfe      : STRING;                       (* Hilfsstring fÅr Ergebnis *)
+    i          : BYTE;                                     (* Z√§hlvariable *)
+    hilfe      : STRING;                       (* Hilfsstring f√ºr Ergebnis *)
     dummyStr   : STRING;           (* dient zur Umwandlung Zahl -> Zeichen *)
-    uebertrag  : BOOLEAN;                              (* öbertrag ja/nein *)
+    uebertrag  : BOOLEAN;                              (* √úbertrag ja/nein *)
     zeichen    : CHAR;                                (* aktuelles Zeichen *)
     zahl       : BYTE;                     (* Byte-Darstellung von zeichen *)
-    dummy      : INTEGER;  (* dient zur PrÅfung von zeichen bei Umwandlung *)
+    dummy      : INTEGER;  (* dient zur Pr√ºfung von zeichen bei Umwandlung *)
 BEGIN
-  laenge := Length(zeichenkette);                       (* LÑnge ermitteln *)
-  uebertrag := FALSE;                            (* Annahme: kein öbertrag *)
+  laenge := Length(zeichenkette);                       (* L√§nge ermitteln *)
+  uebertrag := FALSE;                            (* Annahme: kein √úbertrag *)
   hilfe := '';                               (* Hilfsstring initialisieren *)
-  FOR i := laenge DOWNTO 1 DO        (* zeichenkette rÅckwÑrts durchlaufen *)
+  FOR i := laenge DOWNTO 1 DO        (* zeichenkette r√ºckw√§rts durchlaufen *)
     BEGIN
       zeichen := zeichenkette[i];           (* aktuelles Zeichen ermitteln *)
       zahl := Ord(zeichen) - 48;                 (* in eine Zahl umwandeln *)
       zahl := zahl SHL 1;                     (* Zahl mit 2 multiplizieren *)
-      IF uebertrag THEN INC(zahl);              (* bei öbertrag 1 addieren *)
+      IF uebertrag THEN INC(zahl);              (* bei √úbertrag 1 addieren *)
       IF (zahl >= 10) THEN                             (* falls Zahl >= 10 *)
         BEGIN
-          uebertrag := TRUE;                       (* öbertrag aufgetreten *)
-          zahl := zahl - 10;                      (* öbertrag wegschneiden *)
+          uebertrag := TRUE;                       (* √úbertrag aufgetreten *)
+          zahl := zahl - 10;                      (* √úbertrag wegschneiden *)
         END
       ELSE
-        uebertrag := FALSE;                         (* sonst kein öbertrag *)
+        uebertrag := FALSE;                         (* sonst kein √úbertrag *)
       zeichen := Chr(zahl + 48);              (* zahl in Zeichen umwandeln *)
-      hilfe := zeichen + hilfe;                   (* und an Hilfe anhÑngen *)
+      hilfe := zeichen + hilfe;                   (* und an Hilfe anh√§ngen *)
     END;
   IF uebertrag THEN hilfe := '1' + hilfe;
-                               (* restlichen öbertrag noch berÅcksichtigen *)
+                               (* restlichen √úbertrag noch ber√ºcksichtigen *)
   StrMul2 := hilfe;                                   (* Ergebnis zuweisen *)
 END;
 
@@ -487,11 +487,11 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* CalcStrLength liefert die LÑnge des CalcStrings zurÅck                  *)
+(* CalcStrLength liefert die L√§nge des CalcStrings zur√ºck                  *)
 
 FUNCTION CalcStrLength(VAR calcZahl : CalcStr) : WORD;
 BEGIN
-  CalcStrLength := calcZahl.stellen;   (* LÑnge ist in stellen gespeichert *)
+  CalcStrLength := calcZahl.stellen;   (* L√§nge ist in stellen gespeichert *)
 END;
 
 (* ----------------------------------------------------------------------- *)
@@ -499,12 +499,12 @@ END;
 
 PROCEDURE ReverseCalcStr(VAR ergebnis : CalcStr);
 VAR laenge : WORD;                         (* Anzahl Stellen im CalcString *)
-    i      : WORD;                                         (* ZÑhlvariable *)
-    anzahl : WORD;                                (* benîtigte Schrittzahl *)
+    i      : WORD;                                         (* Z√§hlvariable *)
+    anzahl : WORD;                                (* ben√∂tigte Schrittzahl *)
     hilfe  : WORD;                                     (* Zwischenspeicher *)
 BEGIN
-  laenge := CalcStrLength(ergebnis);    (* LÑnge des CalcStrings ermitteln *)
-  anzahl := laenge DIV 2;            (* man benîtigt nur laenge/2 Schritte *)
+  laenge := CalcStrLength(ergebnis);    (* L√§nge des CalcStrings ermitteln *)
+  anzahl := laenge DIV 2;            (* man ben√∂tigt nur laenge/2 Schritte *)
   WITH ergebnis DO                                    (* Record abarbeiten *)
     BEGIN
       FOR i := 1 TO anzahl DO
@@ -521,7 +521,7 @@ END;
 (* SwapCalcStr vertauscht zwei CalcStrings                                 *)
 
 PROCEDURE SwapCalcStr(VAR zahl1, zahl2 : CalcStr);
-VAR hilfe : CalcStr;                       (* HilfsString fÅr Vertauschung *)
+VAR hilfe : CalcStr;                       (* HilfsString f√ºr Vertauschung *)
 BEGIN
   hilfe := zahl1;                                (* Hilfe auf Zahl1 setzen *)
   zahl1 := zahl2;                                (* Zahl1 auf Zahl2 setzen *)
@@ -532,9 +532,9 @@ END;
 (* PrintCalcStr gibt einen CalcString als Vektor auf dem Bildschirm aus    *)
 
 PROCEDURE PrintCalcStr(VAR calcZahl : CalcStr);
-VAR i : WORD;                                              (* ZÑhlvariable *)
+VAR i : WORD;                                              (* Z√§hlvariable *)
 BEGIN
-  ReverseCalcStr(calcZahl);               (* calcZahl mu· umgedreht werden *)
+  ReverseCalcStr(calcZahl);               (* calcZahl mu√ü umgedreht werden *)
   WITH calcZahl DO                              (* Recordtyp als Grundlage *)
     BEGIN
       IF stellen > 0 THEN                        (* Zahl darf nicht 0 sein *)
@@ -546,12 +546,12 @@ BEGIN
               Write(',');                       (* durch Beistrich trennen *)
             END;
           Write(zahl[stellen]);                    (* letzte Zahl ausgeben *)
-          WriteLn(')');                   (* Klammer des Vektors schlie·en *)
+          WriteLn(')');                   (* Klammer des Vektors schlie√üen *)
         END
       ELSE
         WriteLn('(0)');                                (* sonst 0 ausgeben *)
     END;
-  ReverseCalcStr(calcZahl);        (* calcZahl mu· wieder umgedreht werden *)
+  ReverseCalcStr(calcZahl);        (* calcZahl mu√ü wieder umgedreht werden *)
 END;
 
 (* ----------------------------------------------------------------------- *)
@@ -560,14 +560,14 @@ END;
 PROCEDURE StrToCalcStr(zeichenkette : STRING; VAR ergebnis : CalcStr);
 VAR index  : WORD;                          (* Index im ErgebnisCalcString *)
     bitnr  : BYTE;                        (* Nummer des zu setzenden Bit's *)
-    laenge : BYTE;                               (* LÑnge der Zeichenkette *)
+    laenge : BYTE;                               (* L√§nge der Zeichenkette *)
 BEGIN
   ergebnis := EMPTYCALCSTR;               (* ErgebnisString initialisieren *)
   index := 1;                              (* erstes Element im CalcString *)
-  ergebnis.stellen := 1;       (* LÑnge des CalcStrings wird auf 1 gesetzt *)
+  ergebnis.stellen := 1;       (* L√§nge des CalcStrings wird auf 1 gesetzt *)
   bitnr := 0;                (* zu Beginn wird Bit 0 gesetzt/nicht gesetzt *)
-  laenge := Length(zeichenkette);      (* LÑnge der Zeichenkette ermitteln *)
-  IF TestString(zeichenkette) THEN   (* ist zeichenkette eine gÅltige Zahl *)
+  laenge := Length(zeichenkette);      (* L√§nge der Zeichenkette ermitteln *)
+  IF TestString(zeichenkette) THEN   (* ist zeichenkette eine g√ºltige Zahl *)
     WITH ergebnis DO                               (* Record als Grundlage *)
       BEGIN
         REPEAT
@@ -576,12 +576,12 @@ BEGIN
           zeichenkette := StrDiv2(zeichenkette);       (* Zeichenkette / 2 *)
           IF zeichenkette <> '0' THEN           (* falls noch nicht fertig *)
             BEGIN
-              INC(bitnr);                            (* BitNr um 1 erhîhen *)
+              INC(bitnr);                            (* BitNr um 1 erh√∂hen *)
               IF bitnr >= 16 THEN                 (* falls 1 Word voll ist *)
                 BEGIN
                   bitnr := 0;                       (* BitNr wird wieder 0 *)
                   INC(index);          (* ein Element im CalcString weiter *)
-                  INC(stellen);  (* LÑnge des CalcStrings wird um 1 erhîht *)
+                  INC(stellen);  (* L√§nge des CalcStrings wird um 1 erh√∂ht *)
                 END;
             END;
         UNTIL zeichenkette = '0';      (* bis zeichenkette auf 0 reduziert *)
@@ -590,33 +590,33 @@ END;
 
 (* ----------------------------------------------------------------------- *)
 (* CalcStrToStr wandelt eine CalcString um, falls er sich als String       *)
-(* darstellen lÑ·t                                                         *)
+(* darstellen l√§√üt                                                         *)
 
 FUNCTION CalcStrToStr(VAR calcZahl : CalcStr; VAR ergebnis : STRING) : BOOLEAN;
-VAR i      : WORD;                                         (* ZÑhlvariable *)
+VAR i      : WORD;                                         (* Z√§hlvariable *)
     BitNr  : BYTE;                            (* Nummer des aktuellen Bits *)
     anzahl : WORD;                         (* Anzahl Stellen im CalcString *)
-    laenge : BYTE;                            (* LÑnge des Ergebnisstrings *)
+    laenge : BYTE;                            (* L√§nge des Ergebnisstrings *)
 BEGIN
-  IF calcZahl.Stellen > 50 THEN         (* StringlÑnge wÅrde Åberschritten *)
-    CalcStrToStr := FALSE                                (* StringÅberlauf *)
+  IF calcZahl.Stellen > 50 THEN         (* Stringl√§nge w√ºrde √ºberschritten *)
+    CalcStrToStr := FALSE                                (* String√ºberlauf *)
   ELSE
-    BEGIN                                     (* Zahl pa·t in einen String *)
+    BEGIN                                     (* Zahl pa√üt in einen String *)
       ergebnis := '0';                   (* Ergebnisstring ist zu Beginn 0 *)
-      anzahl := CalcStrLength(calcZahl);          (* LÑnge des CalcStrings *)
+      anzahl := CalcStrLength(calcZahl);          (* L√§nge des CalcStrings *)
       FOR i := anzahl DOWNTO 1 DO
                                (* alle Element des CalcStrings durchlaufen *)
-        FOR BitNr := 15 DOWNTO 0 DO                    (* alle Bits prÅfen *)
+        FOR BitNr := 15 DOWNTO 0 DO                    (* alle Bits pr√ºfen *)
           BEGIN
             ergebnis := StrMul2(ergebnis);   (* ErgebnisString mit 2 mult. *)
             IF TestBit(calcZahl.zahl[i], BitNr) THEN
                                                   (* Ist das Bit gesetzt ? *)
               BEGIN
-                laenge := Length(ergebnis);             (* LÑnge ermitteln *)
-                INC(ergebnis[laenge]);     (* letztes Zeichen um 1 erhîhen *)
+                laenge := Length(ergebnis);             (* L√§nge ermitteln *)
+                INC(ergebnis[laenge]);     (* letztes Zeichen um 1 erh√∂hen *)
               END;
           END;
-      CalcStrToStr := TRUE;                         (* Umwandlung geglÅckt *)
+      CalcStrToStr := TRUE;                         (* Umwandlung gegl√ºckt *)
     END;
 END;
 
@@ -636,20 +636,20 @@ END;
 FUNCTION CalcStrToWord(VAR calcZahl : CalcStr; VAR ergebnis : WORD) : BOOLEAN;
 BEGIN
   IF (calcZahl.Stellen > 1) THEN
-            (* Zahl mit mehr als 1 Stelle kînnen nicht  umgewandelt werden *)
+            (* Zahl mit mehr als 1 Stelle k√∂nnen nicht  umgewandelt werden *)
     CalcStrToWord := FALSE                             (* keine Umwandlung *)
   ELSE
     BEGIN
-      ergebnis := calcZahl.zahl[1];                (* Ergebnis zurÅckgeben *)
-      CalcStrToWord := TRUE;                        (* Umwandlung geglÅckt *)
+      ergebnis := calcZahl.zahl[1];                (* Ergebnis zur√ºckgeben *)
+      CalcStrToWord := TRUE;                        (* Umwandlung gegl√ºckt *)
     END;
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* EqualCalcStr prÅft, ob ein CalcStr1 = CalcStr2                          *)
+(* EqualCalcStr pr√ºft, ob ein CalcStr1 = CalcStr2                          *)
 
 FUNCTION EqualCalcStr(VAR zahl1, zahl2 : CalcStr) : BOOLEAN;
-VAR i : WORD;                                              (* ZÑhlvariable *)
+VAR i : WORD;                                              (* Z√§hlvariable *)
 BEGIN
   IF (zahl1.stellen <> zahl2.stellen) THEN
     EqualCalcStr := FALSE               (* unterschiedliche Anzahl Stellen *)
@@ -666,10 +666,10 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* GreaterCalcStr prÅft, ob ein CalcStr1 > CalcStr2                        *)
+(* GreaterCalcStr pr√ºft, ob ein CalcStr1 > CalcStr2                        *)
 
 FUNCTION GreaterCalcStr(VAR zahl1, zahl2 : CalcStr) : BOOLEAN;
-VAR i     : WORD;                                          (* ZÑhlvariable *)
+VAR i     : WORD;                                          (* Z√§hlvariable *)
     hilfe : BOOLEAN;                                      (* Hilfsvariable *)
 BEGIN
   IF (zahl1.stellen > zahl2.stellen) THEN    (* Zahl1 besitzt mehr Stellen *)
@@ -699,7 +699,7 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* GreaterEqual prÅft, ob Zahl1 >= Zahl2                                   *)
+(* GreaterEqual pr√ºft, ob Zahl1 >= Zahl2                                   *)
 
 FUNCTION GreaterEqual(VAR zahl1, zahl2 : CalcStr) : BOOLEAN;
 BEGIN
@@ -708,10 +708,10 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* LessCalcStr prÅft, on Zahl1 < Zahl2                                     *)
+(* LessCalcStr pr√ºft, on Zahl1 < Zahl2                                     *)
 
 FUNCTION LessCalcStr(VAR zahl1, zahl2 : CalcStr) : BOOLEAN;
-VAR i     : WORD;                                          (* ZÑhlvariable *)
+VAR i     : WORD;                                          (* Z√§hlvariable *)
     hilfe : BOOLEAN;                                      (* Hilfsvariable *)
 BEGIN
   IF (zahl1.stellen < zahl2.stellen) THEN (* Zahl1 besitzt weniger Stellen *)
@@ -740,16 +740,16 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* LessEqual prÅft, ob Zahl1 <= Zahl2                                      *)
+(* LessEqual pr√ºft, ob Zahl1 <= Zahl2                                      *)
 
 FUNCTION LessEqual(VAR zahl1, zahl2 : CalcStr) : BOOLEAN;
 BEGIN
   LessEqual := NOT GreaterCalcStr(zahl1, zahl2);
-                  (* Zahl1 <= Zahl2, wenn Zahl1 nicht grî·er als Zahl2 ist *)
+                  (* Zahl1 <= Zahl2, wenn Zahl1 nicht gr√∂√üer als Zahl2 ist *)
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* EvenCalcStr prÅft, ob ein CalcString gerade ist                         *)
+(* EvenCalcStr pr√ºft, ob ein CalcString gerade ist                         *)
 
 FUNCTION EvenCalcStr(VAR calcZahl : CalcStr) : BOOLEAN;
 BEGIN
@@ -758,7 +758,7 @@ BEGIN
 END;
 
 (* ----------------------------------------------------------------------- *)
-(* OddCalcStr prÅft, ob ein CalcString ungerade ist                        *)
+(* OddCalcStr pr√ºft, ob ein CalcString ungerade ist                        *)
 
 FUNCTION OddCalcStr(VAR calcZahl : CalcStr) : BOOLEAN;
 BEGIN
@@ -770,39 +770,39 @@ END;
 (* AddCalcStr addiert zwei CalcStrings                                     *)
 
 PROCEDURE AddCalcStr(VAR zahl1, zahl2 : CalcStr; VAR ergebnis : CalcStr);
-VAR anzahl    : WORD;                       (* Anzahl Stellen fÅr Addition *)
-    i         : WORD;                                      (* ZÑhlvariable *)
-    summe     : LongInt;      (* Hilfsvariable zur PrÅfung eines öbertrags *)
-    ueberlauf : BYTE;                   (* öberlauf = 1, kein öberlauf = 0 *)
-    addition  : BOOLEAN;        (* kînnen Zahlen addiert werden oder nicht *)
+VAR anzahl    : WORD;                       (* Anzahl Stellen f√ºr Addition *)
+    i         : WORD;                                      (* Z√§hlvariable *)
+    summe     : LongInt;      (* Hilfsvariable zur Pr√ºfung eines √úbertrags *)
+    ueberlauf : BYTE;                   (* √úberlauf = 1, kein √úberlauf = 0 *)
+    addition  : BOOLEAN;        (* k√∂nnen Zahlen addiert werden oder nicht *)
 BEGIN
-  {$Q-}                                     (* öberlaufprÅfung ausschalten *)
+  {$Q-}                                     (* √úberlaufpr√ºfung ausschalten *)
   ergebnis := EMPTYCALCSTR;                     (* Ergebnis initialisieren *)
-  anzahl := zahl1.stellen;                   (* Annahme: Zahl 1 ist grî·er *)
-  IF zahl2.stellen > anzahl THEN          (* Falls doch 2. Zahl grî·er ist *)
-    anzahl := zahl2.stellen;     (* so viele Stellen mÅssen addiert werden *)
-  ueberlauf := 0;                               (* zu Beginn kein öberlauf *)
+  anzahl := zahl1.stellen;                   (* Annahme: Zahl 1 ist gr√∂√üer *)
+  IF zahl2.stellen > anzahl THEN          (* Falls doch 2. Zahl gr√∂√üer ist *)
+    anzahl := zahl2.stellen;     (* so viele Stellen m√ºssen addiert werden *)
+  ueberlauf := 0;                               (* zu Beginn kein √úberlauf *)
   FOR i := 1 TO anzahl DO                     (* anzahl Stellen abarbeiten *)
     BEGIN
       ergebnis.zahl[i] := zahl1.zahl[i] + zahl2.zahl[i] + ueberlauf;
                  (* ergebnis ist die Summe der beiden Zahlen (kann einfach *)
-                 (* addiert werden, weil öberlaufprÅfung ausgeschaltet ist *)
+                 (* addiert werden, weil √úberlaufpr√ºfung ausgeschaltet ist *)
       summe := LongInt(zahl1.zahl[i]) + LongInt(zahl2.zahl[i]) + ueberlauf;
-                                                    (* Summe ohne öberlauf *)
-      IF (summe > ergebnis.zahl[i]) THEN   (* ist ein öberlauf aufgetreten *)
-        ueberlauf := 1                      (* ja -> öberlauf auf 1 setzen *)
+                                                    (* Summe ohne √úberlauf *)
+      IF (summe > ergebnis.zahl[i]) THEN   (* ist ein √úberlauf aufgetreten *)
+        ueberlauf := 1                      (* ja -> √úberlauf auf 1 setzen *)
       ELSE
-        ueberlauf := 0;                          (* nein -> öberlauf ist 0 *)
+        ueberlauf := 0;                          (* nein -> √úberlauf ist 0 *)
     END;
-  IF (ueberlauf = 1) THEN           (* letzter öberlauf mu· geprÅft werden *)
+  IF (ueberlauf = 1) THEN           (* letzter √úberlauf mu√ü gepr√ºft werden *)
     BEGIN
-      ergebnis.stellen := anzahl + 1;    (* letzter öberlauf belegt 1 Feld *)
+      ergebnis.stellen := anzahl + 1;    (* letzter √úberlauf belegt 1 Feld *)
       ergebnis.zahl[anzahl + 1] := 1;      (* Zahl 1 steht im letzten Feld *)
     END
   ELSE
     ergebnis.stellen := anzahl;
-                              (* gleich viele Stellen wie die lÑngere Zahl *)
-  {$Q+}                              (* öberlaufprÅfung wieder einschalten *)
+                              (* gleich viele Stellen wie die l√§ngere Zahl *)
+  {$Q+}                              (* √úberlaufpr√ºfung wieder einschalten *)
 END;
 
 (* ----------------------------------------------------------------------- *)
@@ -810,21 +810,21 @@ END;
 
 PROCEDURE SubCalcStr(VAR zahl1, zahl2 : CalcStr; VAR ergebnis : CalcStr);
 VAR swapped   : BOOLEAN;            (* wurden Zahl1 und Zahl2 vertauscht ? *)
-    i         : WORD;                                      (* ZÑhlvariable *)
-    uebertrag : BYTE;                     (* öbertrag: 1, kein öbertrag: 0 *)
+    i         : WORD;                                      (* Z√§hlvariable *)
+    uebertrag : BYTE;                     (* √úbertrag: 1, kein √úbertrag: 0 *)
 BEGIN
   ergebnis := EMPTYCALCSTR;                     (* Ergebnis initialisieren *)
   swapped := FALSE;                      (* Zahlen wurden nicht vertauscht *)
-  uebertrag := 0;                                         (* kein öbertrag *)
+  uebertrag := 0;                                         (* kein √úbertrag *)
   IF GreaterCalcStr(zahl2, zahl1) THEN EXIT;              (* Zahl2 > Zahl1 *)
   FOR i := 1 TO zahl1.stellen DO                (* alle Stellen abarbeiten *)
     BEGIN
       IF (zahl1.zahl[i] >= (zahl2.zahl[i] + uebertrag)) THEN
-                (* Zahl1[i] >= Zahl2[i] mit BerÅcksichtigung des öbertrags *)
+                (* Zahl1[i] >= Zahl2[i] mit Ber√ºcksichtigung des √úbertrags *)
         BEGIN
           ergebnis.zahl[i] := zahl1.zahl[i] - (zahl2.zahl[i] + uebertrag);
                                          (* Differenz der Zahlen ermitteln *)
-          uebertrag := 0;                                 (* kein öbertrag *)
+          uebertrag := 0;                                 (* kein √úbertrag *)
         END
       ELSE
         BEGIN
@@ -843,7 +843,7 @@ END;
 (* Mul2CalcStr multipliziert einen CalcString mit 2                        *)
 
 PROCEDURE Mul2CalcStr(VAR calcZahl : CalcStr);
-VAR i : WORD;                                              (* ZÑhlvariable *)
+VAR i : WORD;                                              (* Z√§hlvariable *)
 BEGIN
   WITH calcZahl DO                                 (* Record als Grundlage *)
     IF ((stellen = 1) AND (zahl[1] = 0)) OR (stellen = 0) THEN
@@ -851,14 +851,14 @@ BEGIN
       BEGIN                                     (* Sonst ist Ergebnis <> 0 *)
         IF (zahl[stellen] AND 32768) > 0 THEN
           BEGIN                 (* Ist 16.Bit der letzten Stelle gesetzt ? *)
-            INC(stellen);                      (* Stellenzahl um 1 erhîhen *)
+            INC(stellen);                      (* Stellenzahl um 1 erh√∂hen *)
             zahl[stellen] := 0;                (* und mit 0 initialisieren *)
           END;
         FOR i := (stellen - 1) DOWNTO 1 DO              (* Zahl abarbeiten *)
           BEGIN
             zahl[i + 1] := zahl[i + 1] SHL 1;           (* Zahl[i + 1] * 2 *)
             IF (zahl[i] AND 32768) > 0 THEN INC(zahl[i + 1]);
-          END;          (* Bei öberlauf bei Zahl[i] => Zahl[i + 1] erhîhen *)
+          END;          (* Bei √úberlauf bei Zahl[i] => Zahl[i + 1] erh√∂hen *)
         zahl[1] := zahl[1] SHL 1;          (* 1. Zahl mit 2 multiplizieren *)
       END;
 END;
@@ -867,7 +867,7 @@ END;
 (* Div2CalcStr dividiert einen CalcString durch 2                          *)
 
 PROCEDURE Div2CalcStr(VAR calcZahl : CalcStr);
-VAR i : WORD;                                              (* ZÑhlvariable *)
+VAR i : WORD;                                              (* Z√§hlvariable *)
 BEGIN
   WITH calcZahl DO
     IF ((stellen = 1) AND (zahl[1] = 0)) OR (stellen = 0) THEN
@@ -893,7 +893,7 @@ PROCEDURE MulCalcStr(VAR zahl1, zahl2 : CalcStr; VAR ergebnis : CalcStr);
 VAR hilfe       : CalcStr;                              (* HilfsCalcString *)
     hilfe1      : CalcStr;                              (* HilfsCalcString *)
     hilfe2      : CalcStr;                              (* HilfsCalcString *)
-    i, j        : WORD;                                   (* ZÑhlvariablen *)
+    i, j        : WORD;                                   (* Z√§hlvariablen *)
     wert        : WORD;               (* Wert von Zahl an der i.ten Stelle *)
 BEGIN
   IF LessCalcStr(zahl1, zahl2) THEN                 (* Falls zahl1 < zahl2 *)
@@ -926,9 +926,9 @@ THEN
                 END;
               wert := wert SHR 1;                            (* Wert DIV 2 *)
               Mul2CalcStr(hilfe2);                           (* Hilfe2 * 2 *)
-              INC(j);                                    (* j um 1 erhîhen *)
+              INC(j);                                    (* j um 1 erh√∂hen *)
             END;
-          INC(i);                                        (* i um 1 erhîhen *)
+          INC(i);                                        (* i um 1 erh√∂hen *)
         END;
       wert := hilfe1.zahl[hilfe1.stellen];      (* letzte Stelle behandeln *)
       WHILE wert > 0 DO                  (* Solange noch 1 Bit gesetzt ist *)
@@ -954,10 +954,10 @@ VAR hilfe       : CalcStr;                              (* HilfsCalcString *)
 
     hilfe1      : CalcStr;                              (* HilfsCalcString *)
     hilfe2      : CalcStr;                              (* HilfsCalcString *)
-    EINS        : CalcStr;                 (* konstanter HilfsString fÅr 1 *)
+    EINS        : CalcStr;                 (* konstanter HilfsString f√ºr 1 *)
 BEGIN
   IF ((zahl2.stellen = 1) AND (zahl2.zahl[1] = 0)) OR (zahl2.stellen = 0) THEN
-    DivCalcStr := FALSE                  (* Division durch 0 nicht mîglich *)
+    DivCalcStr := FALSE                  (* Division durch 0 nicht m√∂glich *)
   ELSE
     BEGIN
       EINS := EMPTYCALCSTR;                         (* Eins initialisieren *)
@@ -994,10 +994,10 @@ BOOLEAN;
 VAR hilfe       : CalcStr;                              (* HilfsCalcString *)
     hilfe1      : CalcStr;                              (* HilfsCalcString *)
     hilfe2      : CalcStr;                              (* HilfsCalcString *)
-    EINS        : CalcStr;                 (* konstanter HilfsString fÅr 1 *)
+    EINS        : CalcStr;                 (* konstanter HilfsString f√ºr 1 *)
 BEGIN
   IF ((zahl2.stellen = 1) AND (zahl2.zahl[1] = 0)) OR (zahl2.stellen = 0) THEN
-    ModCalcStr := FALSE                  (* Division durch 0 nicht mîglich *)
+    ModCalcStr := FALSE                  (* Division durch 0 nicht m√∂glich *)
   ELSE
     BEGIN
       EINS := EMPTYCALCSTR;                         (* Eins initialisieren *)
@@ -1038,7 +1038,7 @@ END;
 PROCEDURE ExptCalcStr(VAR basis, exponent: CalcStr; VAR ergebnis : CalcStr);
 VAR hilfe  : CalcStr;                                   (* HilfsCalcString *)
     hilfe1 : CalcStr;                                   (* HilfsCalcString *)
-    i, j   : WORD;                                        (* ZÑhlvariablen *)
+    i, j   : WORD;                                        (* Z√§hlvariablen *)
     wert   : WORD;              (* Wert des Exponenten an der i.ten Stelle *)
 BEGIN
   ergebnis := EMPTYCALCSTR;                     (* Ergebnis initialisieren *)
@@ -1053,7 +1053,7 @@ BEGIN
       WHILE (i <= (exponent.stellen - 1)) DO      (* Exponenten abarbeiten *)
         BEGIN
           wert := exponent.zahl[i];          (* i.te Stelle des Exponenten *)
-          INC(i);                                        (* i um 1 erhîhen *)
+          INC(i);                                        (* i um 1 erh√∂hen *)
           j := 1;                            (* j wird mit 1 initialisiert *)
           WHILE (j <= 16) DO                       (* alle Bits abarbeiten *)
             BEGIN
@@ -1081,16 +1081,16 @@ END;
 (* RandomCalcStr liefert eine Zufallszahl < calcZahl                       *)
 
 PROCEDURE RandomCalcStr(VAR calcZahl: CalcStr; VAR ergebnis : CalcStr);
-VAR i : WORD;                                              (* ZÑhlvariable *)
+VAR i : WORD;                                              (* Z√§hlvariable *)
 BEGIN
   ergebnis := EMPTYCALCSTR;                     (* Ergebnis initialisieren *)
   ergebnis.stellen := calcZahl.stellen; (* Annahme: Stellenzahl ist gleich *)
   FOR i := 1 TO (calcZahl.stellen - 1) DO
-    ergebnis.zahl[i] := Random(65535);           (* zufÑllige Zahl < 65535 *)
+    ergebnis.zahl[i] := Random(65535);           (* zuf√§llige Zahl < 65535 *)
   ergebnis.zahl[ergebnis.stellen] := Random(calcZahl.zahl[calcZahl.stellen]);
-                              (* letzte Zahl mu· kleiner Ausgangszahl sein *)
+                              (* letzte Zahl mu√ü kleiner Ausgangszahl sein *)
   WHILE (ergebnis.zahl[ergebnis.stellen] = 0) AND (ergebnis.stellen > 1) DO
-    DEC(ergebnis.stellen);                  (* fÅhrende Nullen abschneiden *)
+    DEC(ergebnis.stellen);                  (* f√ºhrende Nullen abschneiden *)
   IF ((ergebnis.stellen = 1) AND (ergebnis.zahl[1] = 0)) OR (ergebnis.stellen =
 0) THEN
     BEGIN                                    (* Ergebnis darf nicht 0 sein *)
@@ -1104,7 +1104,7 @@ END;
 
 PROCEDURE MulModCalcStr(VAR zahl1, zahl2, modul : CalcStr; VAR ergebnis :
 CalcStr);
-VAR i, j   : WORD;                                        (* ZÑhlvariablen *)
+VAR i, j   : WORD;                                        (* Z√§hlvariablen *)
     wert   : WORD;                        (* Wert von Zahl an i.ter Stelle *)
     hilfe  : CalcStr;                                   (* HilfsCalcString *)
     hilfe1 : CalcStr;                                   (* HilfsCalcString *)
@@ -1123,7 +1123,7 @@ BEGIN
   ergebnis := EMPTYCALCSTR;           (* ErgebnisCalcString initialisieren *)
   IF ((hilfe1.stellen = 1) AND (hilfe1.zahl[1] = 0)) OR (hilfe1.stellen = 0)
 THEN
-                                             (* Hilfe1 mu· ungleich 0 sein *)
+                                             (* Hilfe1 mu√ü ungleich 0 sein *)
   ELSE
     BEGIN
       i := 1;                                    (* i mit 1 initialisieren *)
@@ -1142,9 +1142,9 @@ THEN
                 END;
               wert := wert SHR 1;               (* Wert durch 2 dividieren *)
               Mul2CalcStr(hilfe2);          (* Hilfe2 mit 2 multiplizieren *)
-              INC(j);                                    (* j um 1 erhîhen *)
+              INC(j);                                    (* j um 1 erh√∂hen *)
             END;
-          INC(i);                                        (* i um 1 erhîhen *)
+          INC(i);                                        (* i um 1 erh√∂hen *)
         END;
       wert := hilfe1.zahl[hilfe1.stellen];
                                         (* letzte Zahl gesondert behandeln *)
@@ -1169,7 +1169,7 @@ END;
 
 PROCEDURE ExptModCalcStr(VAR basis, exponent, modul : CalcStr; VAR ergebnis :
 CalcStr);
-VAR i, j   : WORD;                                        (* ZÑhlvariablen *)
+VAR i, j   : WORD;                                        (* Z√§hlvariablen *)
     wert   : WORD;                        (* Wert von Zahl an i.ter Stelle *)
     hilfe  : CalcStr;                                   (* HilfsCalcString *)
     hilfe1 : CalcStr;                                   (* HilfsCalcString *)
@@ -1200,9 +1200,9 @@ BEGIN
               MulModCalcStr(hilfe1, hilfe1, modul, hilfe);
                                                 (* Hilfe1*Hilfe1 MOD Modul *)
               hilfe1 := hilfe;               (* und wieder Hilfe1 zuweisen *)
-              INC(j);                                    (* j um 1 erhîhen *)
+              INC(j);                                    (* j um 1 erh√∂hen *)
             END;
-          INC(i);                                        (* 1 um 1 erhîhen *)
+          INC(i);                                        (* 1 um 1 erh√∂hen *)
         END;
       wert := exponent.zahl[exponent.stellen];
                                         (* letzte Zahl gesondert behandeln *)
@@ -1231,7 +1231,7 @@ BEGIN
   (* Initialiseren eines globalen Leerstrings *)
   WITH EMPTYCALCSTR DO                             (* Recordtyp abarbeiten *)
     BEGIN
-      stellen := 0;                                         (* LÑnge ist 0 *)
+      stellen := 0;                                         (* L√§nge ist 0 *)
       FOR i := 1 TO MAXCALCSTR DO zahl[i] := 0;     (* zahl initialisieren *)
     END;
   (* Ende der Initialisierung *)

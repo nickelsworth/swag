@@ -3,7 +3,7 @@ Date: 09-18-93 (23:25)
 From: MIKE DICKSON
 Subj: EXEC ()
 ---------------------------------------------------------------------------
-[MM]  ± I've written my own EXEC function that performs an FSearch() on the
+[MM]  â–’ I've written my own EXEC function that performs an FSearch() on the
 [MM] Well, that's great. (Why don't you post it!).
 
 Okay...here's an illustrative little program... }

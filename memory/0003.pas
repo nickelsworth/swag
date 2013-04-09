@@ -79,7 +79,7 @@
 
  Mar.03.1993.Toronto.Canada.         greg.vigneault@bville.gts.org
 ---
- þ QNet3á þ City2City / 1/0/11 / Baudeville BBS / Toronto / 416-283-0114
+ â–  QNet3ÃŸ â–  City2City / 1/0/11 / Baudeville BBS / Toronto / 416-283-0114
 <<<>>>
 
 

@@ -54,24 +54,24 @@ begin
  textbackground(0);window(25,7,55,18);clrscr;inc(windmax);
  for cnt:=1 to 7 do
  begin
-  gotoxy(1,cnt+1);textcolor(11);write('Û');
-  gotoxy(31,cnt+4);textcolor(9);write('Û');
+  gotoxy(1,cnt+1);textcolor(11);write('โ–');
+  gotoxy(31,cnt+4);textcolor(9);write('โ–');
  end;
  textcolor(11);
- gotoxy(1,1);write('ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ');
- textcolor(3);write('Ü');
- gotoxy(1,12);write('฿');
- textcolor(9);write('฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿฿');
- textbackground(3);gotoxy(1,9);textcolor(11);write('ฒ');
- gotoxy(1,10);write('ฑ');gotoxy(1,11);write('ฐ');
- gotoxy(31,4);textcolor(9);write('ฒ');
- gotoxy(31,3);write('ฑ');gotoxy(31,2);write('ฐ');
+ gotoxy(1,1);write('โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–โ–');
+ textcolor(3);write('โ–');
+ gotoxy(1,12);write('โ–€');
+ textcolor(9);write('โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€โ–€');
+ textbackground(3);gotoxy(1,9);textcolor(11);write('โ–“');
+ gotoxy(1,10);write('โ–’');gotoxy(1,11);write('โ–‘');
+ gotoxy(31,4);textcolor(9);write('โ–“');
+ gotoxy(31,3);write('โ–’');gotoxy(31,2);write('โ–‘');
  window(26,8,54,17);clrscr;
  textcolor(11);gotoxy(9,2);write('Shine FX Test');
- textcolor(8);gotoxy(6,3);write('ฤอออออออออออออออออฤ');
+ textcolor(8);gotoxy(6,3);write('โ”€โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ”€');
  textcolor(12);gotoxy(12,4);write('Code by');
  textcolor(1);gotoxy(7,5);write('Christopher J. C.');
- textcolor(8);gotoxy(6,6);write('ฤอออออออออออออออออฤ');
+ textcolor(8);gotoxy(6,6);write('โ”€โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ”€');
  textcolor(11);gotoxy(3,7);write('Add a little shine to the');
  gotoxy(5,8);write('usually boring screen');
  textcolor(12);gotoxy(12,9);write('Enjoy!!');

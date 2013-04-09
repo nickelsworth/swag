@@ -223,34 +223,34 @@ BEGIN
 {$IFDEF USEQWIK}
   { draw horizontal line }
   FOR I:=(C1-1) TO (C2+1) DO BEGIN
-    qwrite(R1-1,I,BORDATTR,'ƒ');
-    qwrite(R2+1,I,BORDATTR,'ƒ');
+    qwrite(R1-1,I,BORDATTR,'‚îÄ');
+    qwrite(R2+1,I,BORDATTR,'‚îÄ');
   END;
   { draw vertical line }
   FOR I:=(R1-1) TO (R2+1) DO BEGIN
-    QWRITE(I,C1-1,BORDATTR,'≥');
-    QWRITE(I,C2+1,BORDATTR,'≥');
+    QWRITE(I,C1-1,BORDATTR,'‚îÇ');
+    QWRITE(I,C2+1,BORDATTR,'‚îÇ');
   END;
-  QWRITE(R1-1,C1-1,BORDATTR,'⁄');
-  QWRITE(R2+1,C1-1,BORDATTR,'¿');
-  QWRITE(R1-1,C2+1,BORDATTR,'ø');
-  QWRITE(R2+1,C2+1,BORDATTR,'Ÿ');
+  QWRITE(R1-1,C1-1,BORDATTR,'‚îå');
+  QWRITE(R2+1,C1-1,BORDATTR,'‚îî');
+  QWRITE(R1-1,C2+1,BORDATTR,'‚îê');
+  QWRITE(R2+1,C2+1,BORDATTR,'‚îò');
 {$ELSE}
   TEXTATTR:=BORDATTR;
   { draw horizontal line }
   FOR I:=(C1-1) TO (C2+1) DO BEGIN
-    GOTOXY(I,R1-1); WRITE('ƒ');
-    GOTOXY(I,R2+1); WRITE('ƒ');
+    GOTOXY(I,R1-1); WRITE('‚îÄ');
+    GOTOXY(I,R2+1); WRITE('‚îÄ');
   END;
   { draw vertical line }
   FOR I:=(R1-1) TO (R2+1) DO BEGIN
-    GOTOXY(C1-1,I); WRITE('≥');
-    GOTOXY(C2+1,I); WRITE('≥');
+    GOTOXY(C1-1,I); WRITE('‚îÇ');
+    GOTOXY(C2+1,I); WRITE('‚îÇ');
   END;
-  GOTOXY(c1-1,r1-1); WRITE('⁄');
-  GOTOXY(c1-1,r2+1); WRITE('¿');
-  GOTOXY(c2+1,r1-1); WRITE('ø');
-  GOTOXY(c2+1,r2+1); WRITE('Ÿ');
+  GOTOXY(c1-1,r1-1); WRITE('‚îå');
+  GOTOXY(c1-1,r2+1); WRITE('‚îî');
+  GOTOXY(c2+1,r1-1); WRITE('‚îê');
+  GOTOXY(c2+1,r2+1); WRITE('‚îò');
   TEXTATTR:=NORMATTR;
 {$ENDIF}
 END;

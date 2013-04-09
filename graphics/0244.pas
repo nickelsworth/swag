@@ -161,7 +161,7 @@ BEGIN
           OldX := GetX - TextWidth(S[Length(S)]);
           MoveTo(OldX, GetY);
           setcolor(dele);
-          OutText('Û');
+          OutText('â–ˆ');
           SetColor(refresh);
           MoveTo(OldX, GetY);
           Delete(S, Length(S), 1);

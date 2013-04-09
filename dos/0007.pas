@@ -185,8 +185,8 @@ handle overhead in half.
 --- ME2
  * Origin: The Doctor's Tardis, A point in time!! (Fidonet 1:240/1.4)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: BUTCH ADAMS                  Date: 12-10Ä91 (18:00)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: BUTCH ADAMS                  Date: 12-10â”€91 (18:00)
 From: RUSS PARKS                 Number: 3982   [101] PASCAL
 Subj: EXEC()                     Status: Public
 ------------------------------------------------------------------------------
@@ -215,8 +215,8 @@ Russ
 ---
  * Origin: Objectively.Speak('Turbo Pascal 6.0, YEAH!'); (1:170/212)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: BUTCH ADAMS                  Date: 12-10Ä91 (21:07)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: BUTCH ADAMS                  Date: 12-10â”€91 (21:07)
 From: MIKE COPELAND              Number: 4000   [101] PASCAL
 Subj: EXEC()                     Status: Public
 ------------------------------------------------------------------------------
@@ -255,8 +255,8 @@ Exec, the $M parameter, and all the stuff you don't understand here...
 --- msged 2.07
  * Origin: Hello, Keyboard, my old friend... (1:114/18.10)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: ANDREW PARK                  Date: 12-10Ä91 (21:15)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: ANDREW PARK                  Date: 12-10â”€91 (21:15)
 From: MIKE COPELAND              Number: 4001   [101] PASCAL
 Subj: PASCAL                     Status: Public
 ------------------------------------------------------------------------------
@@ -293,8 +293,8 @@ problems occurred.
 --- msged 2.07
  * Origin: Hello, Keyboard, my old friend... (1:114/18.10)
 ==============================================================================
- BBS: ®® The Information and Technology Exchan
-  To: KEVIN HIGGINS                Date: 01-04Ä92 (09:58)
+ BBS: Â«Â« The Information and Technology Exchan
+  To: KEVIN HIGGINS                Date: 01-04â”€92 (09:58)
 From: MARK OUELLET               Number: 4088   [101] PASCAL
 Subj: RE: HEAP KNOWLEDGE         Status: Public
 ------------------------------------------------------------------------------
@@ -393,8 +393,8 @@ have enough memory to run them from DOS to begin with ;-) )
 --- ME2
  * Origin: BaseBall for Windows, use the disks as bases ;-) (Fidonet 1:240/1.4)
 ==============================================================================
- BBS: ®® The Info-Tech BBS ¯¯
-  To: SHANE RUSSO                  Date: 01-24Ä92 (15:00)
+ BBS: Â«Â« The Info-Tech BBS Â»Â»
+  To: SHANE RUSSO                  Date: 01-24â”€92 (15:00)
 From: MIKE COPELAND              Number: 5922   [101] $_PASCAL
 Subj: TP 6.0 -- MEMORY ALLOCATI  Status: Public
 ------------------------------------------------------------------------------

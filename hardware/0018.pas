@@ -1,6 +1,6 @@
 {
-¯ Does anyone know how to get the hard drive type(s) from CMOS ?
-¯ I can't seem to find this information documented anywhere.
+Â» Does anyone know how to get the hard drive type(s) from CMOS ?
+Â» I can't seem to find this information documented anywhere.
 
 This is probably a lot more than you are asking for but. . .
 NOTE: one function (Long2Str) is not defined in this because it comes from

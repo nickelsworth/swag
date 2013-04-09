@@ -39,7 +39,7 @@ end;
 
 begin
   { Room Temperature Test: }
-  Writeln('68øF + 0 Mph Wind Speed: ', WindChill(68, 0) : 0 : 2);
-  Writeln('20øC + 0 Kph Wind Speed: ', MetricWindChill(20, 0) : 0 : 2);
+  Writeln('68Â°F + 0 Mph Wind Speed: ', WindChill(68, 0) : 0 : 2);
+  Writeln('20Â°C + 0 Kph Wind Speed: ', MetricWindChill(20, 0) : 0 : 2);
 
 end.

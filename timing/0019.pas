@@ -104,8 +104,8 @@ BEGIN
  CycleTimeHi16:=microseconds SHR 16;
  CycleTimeLo16:=microseconds AND $FFFF;
  IF (microseconds<>0) AND ATClockAvailable
-  THEN IsAT:=0     {ja, ZeitÅberwachung soll benutzt werden  }
-  ELSE IsAT:=$80   {nein, keine mîglich oder nicht gewÅnscht }
+  THEN IsAT:=0     {ja, Zeit√ºberwachung soll benutzt werden  }
+  ELSE IsAT:=$80   {nein, keine m√∂glich oder nicht gew√ºnscht }
 END;
 
 PROCEDURE Trigger;

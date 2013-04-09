@@ -2,7 +2,7 @@
 { Demo at the end of this unit }
 
 {
-  Program by         Miguel Angel Cand¢n
+  Program by         Miguel Angel CandÃ³n
   Last revision date 09-01-93
   miguel_angel@jet
 }
@@ -676,7 +676,7 @@ begin
   with CualIndex^ do
     begin
       while (donde = Pages[CualPagina].KeysInPage) and (CualPagina > 1) do 
-{ modificar p gina(s) anterior(es) }
+{ modificar pÃ¡gina(s) anterior(es) }
         begin        (***************************)
           BuscaPage := Pages[CualPagina].NPage;
           dec( CualPagina );
@@ -1306,7 +1306,7 @@ move(Clave[5],Pages[PageActual-1].resto[Pages[PageActual-1].OfsResto+4],KeyLengt
         ModPages[0]:=true;
         MiraFirstPage;
         PageActual:=SavePage;
-{ Comprobaci¢n de que las p ginas se puedan juntar con la anterior o
+{ ComprobaciÃ³n de que las pÃ¡ginas se puedan juntar con la anterior o
 siguiente
   siempre y cuando KeysInPage <= MaxKeysInPage div 3 }
         for BuclePage := SavePage downto 2 do
@@ -1317,7 +1317,7 @@ siguiente
             end
           else
             begin
-{ P gina vac¡a }
+{ PÃ¡gina vacÃ­a }
             end;
         MiraFirstPage
       end

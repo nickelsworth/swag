@@ -355,7 +355,7 @@ begin
 
   { Segment 1,2,3 }
   SetBufColor(Buf, $0);
-  MoveStr (Buf, ' þþþþþ', Back);
+  MoveStr (Buf, ' â– â– â– â– â– ', Back);
   if Segment[1] = 1 then
     Buf[1]:= SetColor(Buf[1], Front);
   if Segment[2] = 1 then begin
@@ -368,7 +368,7 @@ begin
 
   { Segment 4,5 }
   SetBufColor(Buf, $0);
-  MoveStr (Buf, ' Û   Û', Back);
+  MoveStr (Buf, ' â–ˆ   â–ˆ', Back);
   if Segment[4] = 1 then
     Buf[1]:= SetColor(Buf[1], Front);
   if Segment[5] = 1 then
@@ -377,7 +377,7 @@ begin
 
   { Segment 6,7,8 }
   SetBufColor(Buf, $0);
-  MoveStr (Buf, ' þþþþþ', Back);
+  MoveStr (Buf, ' â– â– â– â– â– ', Back);
   if Segment[6] = 1 then
     Buf[1]:= SetColor(Buf[1], Front);
   if Segment[7] = 1 then begin
@@ -390,7 +390,7 @@ begin
 
   { Segment 9,10 }
   SetBufColor(Buf, $0);
-  MoveStr (Buf, ' Û   Û', Back);
+  MoveStr (Buf, ' â–ˆ   â–ˆ', Back);
   if Segment[9] = 1 then
     Buf[1]:= SetColor(Buf[1], Front);
   if Segment[10] = 1 then
@@ -399,7 +399,7 @@ begin
 
   { Segment 11,12,13 }
   SetBufColor(Buf, $0);
-  MoveStr (Buf, ' þþþþþ', Back);
+  MoveStr (Buf, ' â– â– â– â– â– ', Back);
   if Segment[11] = 1 then
     Buf[1]:= SetColor(Buf[1], Front);
   if Segment[12] = 1 then begin

@@ -13,7 +13,7 @@ UNIT seq;
      RELEASE     :  1.0
      DATE        :  17/11/91
      AUTHOR      :  Fernand LEMOINE
-                    rue du Colläge 34
+                    rue du Coll√®ge 34
                     B-6200 CHATELET
                     BELGIQUE
      All code granted to the public domain

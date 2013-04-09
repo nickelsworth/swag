@@ -1,7 +1,7 @@
 {
-³ Is if possible For you to post a sample code on how to use xor to
-³ encrypt a File???   I'm shifting ORD value around to do excryptions
-³ and I think your method is better..  So I would like to learn it..
+â”‚ Is if possible For you to post a sample code on how to use xor to
+â”‚ encrypt a File???   I'm shifting ORD value around to do excryptions
+â”‚ and I think your method is better..  So I would like to learn it..
 
 Sure, here's a simple example that reads a user-entered line and
 encrypts it using the xor method.  By XOR-ing it again the line is

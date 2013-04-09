@@ -2,7 +2,7 @@
 From: BRIAN GRAINGER               Refer#: NONE
 Subj: Multiple open files            Conf: (58) Pascal
 ---------------------------------------------------------------------------
-RL±I would like to open 20-50 silumtaneous files (in TP 6.0 or 7.0).
+RLâ–’I would like to open 20-50 silumtaneous files (in TP 6.0 or 7.0).
 
 Two ways that I know of. The first involves sleuthing around in the
 Program Segment Prefix prepended to the memory image of a program's .EXE

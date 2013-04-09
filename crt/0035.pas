@@ -1,6 +1,6 @@
 {
    Direct port access
-   ßßßßßßßßßßßßßßßßßßßß
+   â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€â–€
   For access to the 80x86 CPU data ports, Borland Pascal implements two
   predefined arrays, Port and PortW.
 

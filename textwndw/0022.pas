@@ -11,7 +11,7 @@ Uses CRT,DOS ...
 
 Procedure Cadre (X1,X2,Y1,Y2,FG,BG:Integer);
 
-{ Trace un Cadre entre les CoordonnÇes X1,Y1 et X2,Y2
+{ Trace un Cadre entre les Coordonn√©es X1,Y1 et X2,Y2
   avec FG= Couleur du Cadre , BG= Couleur du Fond }
 
 Var
@@ -25,12 +25,12 @@ Var
 
 
    Begin
-               corner1:='⁄';
-               corner2:='ø';
-               corner3:='¿';
-               corner4:='Ÿ';
-               horizline:='ƒ';
-               vertline:='≥';
+               corner1:='‚îå';
+               corner2:='‚îê';
+               corner3:='‚îî';
+               corner4:='‚îò';
+               horizline:='‚îÄ';
+               vertline:='‚îÇ';
 
         TextColor (FG);                  { Fixe les couleurs }
         TextBackground (BG);
@@ -70,7 +70,7 @@ end;
 
 Procedure Explode_Cadre (X1,X2,Y1,Y2,FG,BG,Delai: Integer);
 
-{ RÇdaction: Explode_Cadre (X1,X2,Y1,Y2,FG,BG,Delai) }
+{ R√©daction: Explode_Cadre (X1,X2,Y1,Y2,FG,BG,Delai) }
 
   Var
 
@@ -80,12 +80,12 @@ Procedure Explode_Cadre (X1,X2,Y1,Y2,FG,BG,Delai: Integer);
   Begin
 
 
-   MilieuX:= (X1+X2) div 2;         { Calcul des paramätres de position }
+   MilieuX:= (X1+X2) div 2;         { Calcul des param√®tres de position }
    gauche:= (X2-X1) div 2;
    droite:= gauche;
    if ((X2-X1) Mod 2) > 0 then Droite:= Droite +1;
 
-                                    { DÇbut du TracÇ }
+                                    { D√©but du Trac√© }
 
    For a:= 1 to Gauche do
     Begin
@@ -101,9 +101,9 @@ Procedure Explode_Cadre (X1,X2,Y1,Y2,FG,BG,Delai: Integer);
 Procedure Scroll (x1,x2,Y:Byte;S:String;fg,bg,vitesse:integer);
 
 { Avec
-      x1 et x2 position x de la fenätre de scrolling
-      Y        position Y de la fenätre de scrolling
-      S        Chaine de caractäres Ö faire dÇfiler
+      x1 et x2 position x de la fen√®tre de scrolling
+      Y        position Y de la fen√®tre de scrolling
+      S        Chaine de caract√®res √† faire d√©filer
       fg       ForeGround (Couleur du Texte)
       bg       BackGround (Couleur du Fond)
       vitesse  Vitesse du scrolling
@@ -171,7 +171,7 @@ et apres la chaine S}  dh:=ch;
 
 Procedure Scroll_No_Exit (x1,x2,Y:Byte;S:String;fg,bg,vitesse:integer);
 
-{ ProcÇdure identique Ö Scroll mais sans possibilitÇ d'Echap.}
+{ Proc√©dure identique √† Scroll mais sans possibilit√© d'Echap.}
 
  Var
     a,b,LonFenetre,LonStr: Byte;
@@ -201,7 +201,7 @@ et apres la chaine S}  ch:= concat(ch,S,ch);
 
 Procedure Scroll_Inverse_No_Exit
 (x1,x2,Y:Byte;S:String;fg,bg,vitesse:integer);
-{ ProcÇdure identique Ö Scroll mais sans possibilitÇ d'Echap.}
+{ Proc√©dure identique √† Scroll mais sans possibilit√© d'Echap.}
 
  Var
     a,b,LonFenetre,LonStr: Byte;

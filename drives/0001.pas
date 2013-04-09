@@ -515,14 +515,14 @@ begin
   With CD do
   if CD_Avail then
   begin
-   WriteLn('þ CD als Laufwerk ',DrvChar,': gefunden!');
-   Write  ('þ Aktuelle CD: ');
+   WriteLn('â–  CD als Laufwerk ',DrvChar,': gefunden!');
+   Write  ('â–  Aktuelle CD: ');
 
    Write('(UPN-CODE:');
    For i := 1 to 7 do Write(Char( (Upn[i] shr 4)  or $30),
                             Char((Upn[i] and $f) or $30));
    WriteLn(#8')');
-   WriteLn('þ Audio-Tracks : ',loautr,'..',hiautr);
+   WriteLn('â–  Audio-Tracks : ',loautr,'..',hiautr);
    WriteLn(' Laufzeiten : ');
    For i := CD.LoAuTr to CD.HiAuTr do
     With VtoC.Titles[i] do

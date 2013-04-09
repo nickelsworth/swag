@@ -41,7 +41,7 @@ end;
 
 constructor TMyBack.Init(var Bounds: TRect);
 begin
-  TBackground.Init(Bounds, '²');{ places ASCII 178 char as    }
+  TBackground.Init(Bounds, 'â–“');{ places ASCII 178 char as    }
                                 { pattern for text on desktop }
 end;
 

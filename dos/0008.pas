@@ -6,11 +6,11 @@ From: BRENDEN WALKER               Refer#: NONE
   To: WAYNE DOYLE                   Recvd: NO
 Subj: DIR. SEARCH                    Conf: (321) Pascal___U
 ---------------------------------------------------------------------------
- WD³ Hi Everyone,
-   ³     I'm interested in finding out how to have the computer search and
-   ³ find all of the available directories on a disk.  I have a program which
-   ³ deletes all of *.BAK files on a disk and I'd like to know how it finds
-   ³ all of the directories.
+ WDâ”‚ Hi Everyone,
+   â”‚     I'm interested in finding out how to have the computer search and
+   â”‚ find all of the available directories on a disk.  I have a program which
+   â”‚ deletes all of *.BAK files on a disk and I'd like to know how it finds
+   â”‚ all of the directories.
 
   The below example code, will kill a directory and all of it's
 sub-directories.  This could be modified to delete all of the .BAK files in

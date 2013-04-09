@@ -36,7 +36,7 @@
   (Feel free to include this in SWAG if you feel like it. I would put it
   in MATH. )
 
-     þ Done! - Kerry þ
+     â–  Done! - Kerry â– 
 
 
   P.S. If you mess with the right value and leave mid alone... (i.e. make

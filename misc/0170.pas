@@ -25,7 +25,7 @@ USES DOS,CRT;
 
 VAR
   OldInt1, OldInt3,        { Die alten Interruptvektoren }
-  ExitSave : POINTER;      { Speicher fÅr die alte Exit-Prozedur }
+  ExitSave : POINTER;      { Speicher f√ºr die alte Exit-Prozedur }
 
 
 PROCEDURE REBOOT;
@@ -48,7 +48,7 @@ END;
 PROCEDURE ResetNoDebug;
 {$F-}
 BEGIN                           { Neue Exit-Prozedur }
-  SetIntVec(1,OldInt1);         { Interruptvektoren zurÅcksetzen }
+  SetIntVec(1,OldInt1);         { Interruptvektoren zur√ºcksetzen }
   SetIntVec(3,OldInt3);
   ExitProc:=ExitSave;           { Zeiger auf alte Exit-Prozedur }
 END;

@@ -27,9 +27,9 @@ Uses
   OpColor;
 
 Const
-  SliderChar    = '²';
-  ScrollBarChar = '°';
-  Frame1        : FrameArray = 'ÚÀ¿ÙÄÄ³³';
+  SliderChar    = 'â–“';
+  ScrollBarChar = 'â–‘';
+  Frame1        : FrameArray = 'â”Œâ””â”â”˜â”€â”€â”‚â”‚';
   Counter       : Word = 1;
 
 Var

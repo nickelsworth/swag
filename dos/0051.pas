@@ -1,4 +1,4 @@
-ÿ
+Â 
 unit CustExit;
 (*--------------------------------------------------------------------------
      Original source code by David Drzyzga, FidoNet 1:2619/209, SysOp of

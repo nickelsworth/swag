@@ -13,16 +13,16 @@
 
 
 
-               ÉÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»
-               º                                        º°
-               º          AVONTURE CHRISTOPHE           º°
-               º              AVC SOFTWARE              º°
-               º     BOULEVARD EDMOND MACHTENS 157/53   º°
-               º           B-1080 BRUXELLES             º°
-               º              BELGIQUE                  º°
-               º                                        º°
-               ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼°
-               °°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°
+               â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+               â•‘                                        â•‘â–‘
+               â•‘          AVONTURE CHRISTOPHE           â•‘â–‘
+               â•‘              AVC SOFTWARE              â•‘â–‘
+               â•‘     BOULEVARD EDMOND MACHTENS 157/53   â•‘â–‘
+               â•‘           B-1080 BRUXELLES             â•‘â–‘
+               â•‘              BELGIQUE                  â•‘â–‘
+               â•‘                                        â•‘â–‘
+               â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â–‘
+               â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘â–‘
 
 
 }
@@ -75,21 +75,21 @@ Begin
           Close (Fich);
           ClrScr;
           Writeln ('');
-          Writeln ('ş AVC Software, Inc.                         (c) Octobre 1994');
-          Writeln ('ş Exe-Head');
+          Writeln ('â–  AVC Software, Inc.                         (c) Octobre 1994');
+          Writeln ('â–  Exe-Head');
           WriteLn ('');
           If (Chr(Header[0]) = 'M') and (Chr(Header[1]) = 'Z') then Begin
             WriteLn ('Signature du fichier                        : ',Chr(Header[0]),Chr(Header[1]));
             WriteLn ('');
-            WriteLn ('Taille de la derniŠre page                  : ' ,Word2Hex((Header[3] shl 8) + Header[2]),'h');
+            WriteLn ('Taille de la derniÃ¨re page                  : ' ,Word2Hex((Header[3] shl 8) + Header[2]),'h');
             WriteLn ('Nombres de pages                            : ' ,Word2Hex((Header[5] shl 8) + Header[4]),'h');
-            WriteLn ('Entr‚es de la table de relocalisation       : ' ,Word2Hex((Header[7] shl 8) + Header[6]),'h');
-            WriteLn ('Paragraphes de l''en-tˆte                    : ',Word2Hex((Header[9] shl 8) + Header[8]),'h');
+            WriteLn ('EntrÃ©es de la table de relocalisation       : ' ,Word2Hex((Header[7] shl 8) + Header[6]),'h');
+            WriteLn ('Paragraphes de l''en-tÃªte                    : ',Word2Hex((Header[9] shl 8) + Header[8]),'h');
             WriteLn ('MINALLOC                                    : ' ,Word2Hex((Header[11] shl 8) + Header[10]),'h');
             WriteLn ('MAXALLOC                                    : ' ,Word2Hex((Header[13] shl 8) + Header[12]),'h');
             WriteLn ('ss initial                                  : ' ,Word2Hex((Header[15] shl 8) + Header[14]),'h');
             WriteLn ('sp initial                                  : ' ,Word2Hex((Header[17] shl 8) + Header[16]),'h');
-            WriteLn ('Total de contr“le                           : ' ,Word2Hex((Header[19] shl 8) + Header[18]),'h');
+            WriteLn ('Total de contrÃ´le                           : ' ,Word2Hex((Header[19] shl 8) + Header[18]),'h');
             WriteLn ('ip initial                                  : ' ,Word2Hex((Header[21] shl 8) + Header[20]),'h');
             WriteLn ('cs initial                                  : ' ,Word2Hex((Header[23] shl 8) + Header[22]),'h');
             WriteLn ('Offset de la table de relocalisation        : ' ,Word2Hex((Header[25] shl 8) + Header[24]),'h');

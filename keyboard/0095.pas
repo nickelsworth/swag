@@ -1,7 +1,7 @@
 (*
-¯Does anyone know how Pascal could recognize two keys pressed at once,
-¯like what might happenhen two players on a game, one using the keypad,
-¯and one the keyboard might do??
+Â»Does anyone know how Pascal could recognize two keys pressed at once,
+Â»like what might happenhen two players on a game, one using the keypad,
+Â»and one the keyboard might do??
 
 Check out this text file and the code will follow.
 

@@ -23,8 +23,8 @@ procedure drawborder (Fg,Bg,ur,lc,lr,rc,lines,page : Word);
  lr is the lower row, rc is the right column,
  lines is:
    0 for clear screen;
-   1 for single lines (Ŀ);
-   2 for double lines (ͻ);
+   1 for single lines (─┐);
+   2 for double lines (═╗);
  page is the screen page to draw the border on}
 
 implementation

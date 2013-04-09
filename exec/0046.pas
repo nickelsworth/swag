@@ -23,7 +23,7 @@ begin
   repeat
     de2:=execute(paspth,' '+info.name+' /q /build -$g+ -$r- -$d-');
     write('Compiled ',info.name,'...');
-    if(de2=0)then writeln('û')else writeln('%');
+    if(de2=0)then writeln('âˆš')else writeln('%');
     findnext(info);
     de:=doserror;
   until(de<>0);

@@ -8,15 +8,15 @@ unit uart;
 
 {---------------------------------------------------------------------------)
    Zu benutzende Schnittstellen sind zuerst mit SetUart zu initialisieren.
-   Anschließend können sie mit ActivateCom aktiviert und mit ReleaseCom
-   wieder freigegeben werden. Beim Aktivieren ist die Größe des COM-Puffers
+   Anschlieâ–€end kÃ·nnen sie mit ActivateCom aktiviert und mit ReleaseCom
+   wieder freigegeben werden. Beim Aktivieren ist die GrÃ·â–€e des COM-Puffers
    anzugeben; werden mehr als BufferSize Bytes empfangen und nicht abgeholt,
-   dann wird der Puffer komplett gelöscht und der Inhalt geht verloren!
-   Das Desaktivieren ist nicht unbedingt nötig, sondern erfolgt falls
-   nötig auch automatisch bei Programmende.
+   dann wird der Puffer komplett gelÃ·scht und der Inhalt geht verloren!
+   Das Desaktivieren ist nicht unbedingt nÃ·tig, sondern erfolgt falls
+   nÃ·tig auch automatisch bei Programmende.
 
    Das Empfangen von Daten erfolgt asynchron im Hintergrund. Mit Receive
-   können empfangene Daten abgeholt werden. Die Funktion liefert FALSE,
+   kÃ·nnen empfangene Daten abgeholt werden. Die Funktion liefert FALSE,
    falls keine Daten vorhanden waren. Wahlweise kann auch mit Received
    getestet werden, ob Daten anliegen, ohne diese zu lesen, oder mit
    Peek ein Byte - falls vorhanden - abgeholt, aber nicht aus dem Puffer
@@ -25,14 +25,14 @@ unit uart;
    Das Senden von Daten erfolgt mit SendByte (ohne CTS-Handshake) oder
    mit HSendByte (mit CTS-Handshake).
 
-   Über die Funktionen RRing und Carrier kann getestet werden, ob ein
+   â–„ber die Funktionen RRing und Carrier kann getestet werden, ob ein
    Klingelzeichen bzw. ein Carrier am Modem anliegt.
 
-   Da für COM3 und COM4 kein Default-IRQ existiert, können mit SetComParams
+   Da fâ¿r COM3 und COM4 kein Default-IRQ existiert, kÃ·nnen mit SetComParams
    Adresse und IRQ einzelner Schnittstellen eingestellt werden. Vor dieser
-   Einstellung werden COM3 und COM4 nicht unterstützt. Default-Adressen
+   Einstellung werden COM3 und COM4 nicht unterstâ¿tzt. Default-Adressen
    sind $3e8 und $2e8. Die Parameter von COM1 und COM2 sind korrekt
-   eingestellt und sollten normalerweise nicht geändert werden.
+   eingestellt und sollten normalerweise nicht geÎ£ndert werden.
 
 (---------------------------------------------------------------------------}
 
@@ -45,7 +45,7 @@ uses dos;
   const Seg0040 = $40;
 {$ENDIF}
 
-const  coms       = 4;     { Anzahl der unterstützten Schnittstellen }
+const  coms       = 4;     { Anzahl der unterstâ¿tzten Schnittstellen }
 
        ua         : array[1..coms] of word = ($3f8,$2f8,$3e8,$2e8);
        datainout  = 0;     { UART-Register-Offsets }
@@ -70,21 +70,21 @@ const  coms       = 4;     { Anzahl der unterstützten Schnittstellen }
        FifoTL8    = $87;
        FifoTL14   = $C7;
 
-type   paritype   = (Pnone,Podd,Pxxxx,Peven);   { mögliche Paritäts-Typen }
+type   paritype   = (Pnone,Podd,Pxxxx,Peven);   { mÃ·gliche ParitÎ£ts-Typen }
 
 
-{ Parameter für Schnittstelle einstellen
+{ Parameter fâ¿r Schnittstelle einstellen
 { no       : Nummer  (1-4)
   address  : I/O-Adresse, 0 -> Adresse wird beibehalten
-  _irq     : Interrupt-Nummer  (z.B. 3 für IRQ3, 4 für IRQ4); 0..15 }
+  _irq     : Interrupt-Nummer  (z.B. 3 fâ¿r IRQ3, 4 fâ¿r IRQ4); 0..15 }
 
 procedure SetComParams(no:byte; address:word; _irq:byte);
 
 { Schnittstellen-Parameter einstellen
   commno   : Nummer der Schnittstelle (1-4)
-  baudrate : Baudrate im Klartext; auch nicht-Standard-Baudraten möglich!
+  baudrate : Baudrate im Klartext; auch nicht-Standard-Baudraten mÃ·glich!
   parity   : s.o.
-  wlength  : Wort-länge (7 oder 8)
+  wlength  : Wort-lÎ£nge (7 oder 8)
   stops    : Stop-Bits (1 oder 2)   }
 
 function ComType(no:byte):byte;     { Typ des UART-Chips ermitteln }
@@ -94,9 +94,9 @@ procedure SetUart(comno:byte; baudrate:longint; parity:paritype;
 
 { Schnittstelle aktivieren
   no         : Nummer der Schnittstelle
-  buffersize : Größe des Puffers
+  buffersize : GrÃ·â–€e des Puffers
   FifoTL     : Falls ein 16550 vorhanden ist, kann man hier die Konstanten
-               für den Triggerlevel einsetzen (s.o.)}
+               fâ¿r den Triggerlevel einsetzen (s.o.)}
 
 procedure ActivateCom(no:byte; buffersize:word; FifoTL:Byte);
 
@@ -105,7 +105,7 @@ procedure ReleaseCom(no:byte);            { Schnitte desakt., Puffer freig. }
 function  receive(no:byte; var b:byte):boolean;   { Byte holen, falls vorh. }
 function  peek(no:byte; var b:byte):boolean; {dito, aber Byte bleibt im Puffer}
 function  received(no:byte):boolean;      { Testen, ob Daten vorhanden }
-procedure flushinput(no:byte);            { Receive-Puffer löschen }
+procedure flushinput(no:byte);            { Receive-Puffer lÃ·schen }
 procedure SendByte(no,b:byte);            { Byte senden }
 procedure hsendbyte(no,b:byte);           { Byte senden, mit CTS-Handshake }
 procedure putbyte(no,b:byte);             { Byte im Puffer hinterlegen }
@@ -242,8 +242,8 @@ end;
 
 { Hinweis: Die Erkennung des 16550A funktioniert nur bei Chips,  }
 {          die weitgehend kompatibel zum Original-16550A von NS  }
-{          sind. Das gilt allerdings für die meisten verwendeten }
-{          16500A's - ich schätze, für ca. 97-99%                }
+{          sind. Das gilt allerdings fâ¿r die meisten verwendeten }
+{          16500A's - ich schÎ£tze, fâ¿r ca. 97-99%                }
 
 function ComType(no:byte):byte;     { Typ des UART-Chips ermitteln }
 var uart        : word;
@@ -331,7 +331,7 @@ begin
     exit;
     end
   else if (no<1) or (no>coms) or (irq[no]=0) then
-    error('Schnittstelle '+strs(no)+' (noch) nicht unterstützt!')
+    error('Schnittstelle '+strs(no)+' (noch) nicht unterstâ¿tzt!')
   else
     active[no]:=true;
 
@@ -460,7 +460,7 @@ begin
   buffer[no]^[bufo[no]]:=b;
 end;
 
-procedure flushinput(no:byte);            { Receive-Puffer löschen }
+procedure flushinput(no:byte);            { Receive-Puffer lÃ·schen }
 begin
   bufo[no]:=bufi[no];
 end;
@@ -499,7 +499,7 @@ begin
 end;
 
 
-{ True -> Modem (oder entsprechendes Gerät)  ist bereit, Daten zu empfangen }
+{ True -> Modem (oder entsprechendes GerÎ£t)  ist bereit, Daten zu empfangen }
 
 function GetCTS(no:byte):boolean;
 begin

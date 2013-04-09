@@ -15,7 +15,7 @@ work on any standard VGA card.
 *)
 
 {Procedure to set 80 columns per 30 rows video mode}
-{Orignial Author: Ignacio Garc°a PÇrez}
+{Orignial Author: Ignacio Garc√≠a P√©rez}
 Procedure Set80x30Mode;
 Var CrtcReg:Array[1..8] of Word;
     Offset:Word;

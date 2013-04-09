@@ -88,7 +88,7 @@ IMPLEMENTATION
 Uses Dos, Crt, Inc;  { cut out INC below !! }
 
 Const
-  SpinChar:Array[1..4] of Char = ('Ä','\','³','/');
+  SpinChar:Array[1..4] of Char = ('â”€','\','â”‚','/');
 
 Var
   Key:Char;

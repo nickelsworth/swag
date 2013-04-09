@@ -1,44 +1,44 @@
 Unit sorter;
-{ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
- ³ This unit provides a tool for sorting arrays                             ³
- ³ The array may be of any data type! all you have to do is to provide      ³
- ³ a 'key function' by which the array elements are compared                ³
- ³ such key functions are provided for the standard data types              ³
- ³ You may write your own key functions in order to sort complex data types ³
- ³ such as records, to reverse the sort order or to create multipile sort   ³
- ³ keys for record elements.                                                ³
- ³ Note: the key function must be compiled with $F+ (far calls on)          ³
- ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
- ³ Written by: Erez Amir CompuServe ID: 100274,701    Fax. (+9723)517-1077  ³
- ³ May be used freely, as long as this notice is kept!                      ³
- ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
- ³           M O D I F I C A T I O N    H I S T O R Y                       ³
- ³                                                                          ³
- ³ Ver   Date        By             what                                    ³
- ³ ---   ------      -------------- -------------------------------         ³
- ³ 1.0   Sep-94      Erez Amir      Written, Debugged                       ³
- ³ Add your update details here...                                          ³
- ³                                                                          ³
- ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
- ³ Examples:                                                                ³
- ³    /* Simple char array */                                               ³
- ³    Var a:array[1..m] of char                                             ³
- ³ ->   Sort(a,n,SizeOf(a[1]),CharComp);                                    ³
- ³                                                                          ³
- ³    Type MyRec=Record Month,Day:integer end;                              ³
- ³         MyRecPtr=^MyRec;                                                 ³
- ³    Var MyArray: array[1..100] of MyRec;                                  ³
- ³    /* have to write your oun key */                                      ³
- ³     Function MyComp(p1,p2:Pointer):Boolean;                              ³
- ³       Var                                                                ³
- ³         v1:MyRecPtr absolute p1;                                         ³
- ³         v2:MyRecPtr absolute p2;                                         ³
- ³       Begin                                                              ³
- ³         MyComp:=(V1^.Month>V2^.Month) or                                 ³
- ³                 (V1^.Month=V2^.Month) and (V1^.Day=V2^.day);             ³
- ³       End;                                                               ³
- ³ ->   Sort(MyArray,100,SizeOf(MyRec),MyComp);                             ³
- ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ}
+{â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ â”‚ This unit provides a tool for sorting arrays                             â”‚
+ â”‚ The array may be of any data type! all you have to do is to provide      â”‚
+ â”‚ a 'key function' by which the array elements are compared                â”‚
+ â”‚ such key functions are provided for the standard data types              â”‚
+ â”‚ You may write your own key functions in order to sort complex data types â”‚
+ â”‚ such as records, to reverse the sort order or to create multipile sort   â”‚
+ â”‚ keys for record elements.                                                â”‚
+ â”‚ Note: the key function must be compiled with $F+ (far calls on)          â”‚
+ â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+ â”‚ Written by: Erez Amir CompuServe ID: 100274,701    Fax. (+9723)517-1077  â”‚
+ â”‚ May be used freely, as long as this notice is kept!                      â”‚
+ â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+ â”‚           M O D I F I C A T I O N    H I S T O R Y                       â”‚
+ â”‚                                                                          â”‚
+ â”‚ Ver   Date        By             what                                    â”‚
+ â”‚ ---   ------      -------------- -------------------------------         â”‚
+ â”‚ 1.0   Sep-94      Erez Amir      Written, Debugged                       â”‚
+ â”‚ Add your update details here...                                          â”‚
+ â”‚                                                                          â”‚
+ â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+ â”‚ Examples:                                                                â”‚
+ â”‚    /* Simple char array */                                               â”‚
+ â”‚    Var a:array[1..m] of char                                             â”‚
+ â”‚ ->   Sort(a,n,SizeOf(a[1]),CharComp);                                    â”‚
+ â”‚                                                                          â”‚
+ â”‚    Type MyRec=Record Month,Day:integer end;                              â”‚
+ â”‚         MyRecPtr=^MyRec;                                                 â”‚
+ â”‚    Var MyArray: array[1..100] of MyRec;                                  â”‚
+ â”‚    /* have to write your oun key */                                      â”‚
+ â”‚     Function MyComp(p1,p2:Pointer):Boolean;                              â”‚
+ â”‚       Var                                                                â”‚
+ â”‚         v1:MyRecPtr absolute p1;                                         â”‚
+ â”‚         v2:MyRecPtr absolute p2;                                         â”‚
+ â”‚       Begin                                                              â”‚
+ â”‚         MyComp:=(V1^.Month>V2^.Month) or                                 â”‚
+ â”‚                 (V1^.Month=V2^.Month) and (V1^.Day=V2^.day);             â”‚
+ â”‚       End;                                                               â”‚
+ â”‚ ->   Sort(MyArray,100,SizeOf(MyRec),MyComp);                             â”‚
+ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜}
 Interface
 Type
   CompFunc=Function(V1,V2:Pointer):Boolean;

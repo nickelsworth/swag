@@ -1,5 +1,5 @@
 unit previnst;
-{Copyright © 1997 Simon Carter.  All Rights Reserved.
+{Copyright ‚åê 1997 Simon Carter.  All Rights Reserved.
 
 This component can be used as freeware in any commercial or private application
 the only request I make is that if it is modified in any way then I have a copy

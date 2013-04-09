@@ -1,5 +1,5 @@
 {
-±> Does anyone know how to make a clock (ie....working second to second)
+â–’> Does anyone know how to make a clock (ie....working second to second)
 
 You can use the clock from the Gadgets unit included with BP7.
 }

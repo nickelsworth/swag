@@ -131,7 +131,7 @@ GREETINGS
         Fernando Cassia
                 The cards were beautiful, and would love to see a video
                 of your country (and maybe you?)
-        Hans-G”ran Andersson
+        Hans-GÃ¶ran Andersson
                 Thanks for the letter, I appreciate it.
         Hans Janson
                 Thanks for mentioning the bug in K-JUNKIE (1.0)

@@ -231,9 +231,9 @@ begin
   for I := 1 to Length(S) do
   begin
     S[I] := Upcase(S[I]);
-    if  S[I] = 'ë' then S[I] := 'í'
-    else if  S[I] = 'õ' then S[I] := 'ù'
-    else if  S[I] = 'Ü' then S[I] := 'è';
+    if  S[I] = '√¶' then S[I] := '√Ü'
+    else if  S[I] = '¬¢' then S[I] := '¬•'
+    else if  S[I] = '√•' then S[I] := '√Ö';
   end;
  UpcaseStr := S;
 end;

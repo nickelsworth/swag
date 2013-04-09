@@ -328,11 +328,11 @@ function DDashStr (const N : Integer): string;
 
 function LineStr (const N : Integer): string;
 
-{ Returns a string composed of N occurrences of 'Ä' (196). }
+{ Returns a string composed of N occurrences of 'â”€' (196). }
 
 function DLineStr (const N : Integer): string;
 
-{ Returns a string composed of N occurrences of 'Í' (205). }
+{ Returns a string composed of N occurrences of 'â•' (205). }
 
 function StarStr (const N : Integer): string;
 

@@ -12,7 +12,7 @@ unit QSort;
 {*********************************************************
  *                     QSORT.PAS                         *
  *           C-like QuickSort implementation             *
- *     Written 931118 by Bjîrn Felten @ 2:203/208        *
+ *     Written 931118 by Bj√∂rn Felten @ 2:203/208        *
  *           After an idea by Pontus Rydin               *
  *********************************************************}
 interface
@@ -91,7 +91,7 @@ end. { of unit }
 
 { A simple testprogram can look like this: }
 
-program QS_Test; {Test QuickSort † la C}
+program QS_Test; {Test QuickSort √° la C}
 uses qsort;
 var v: array[0..9999] of word;
     i: word;

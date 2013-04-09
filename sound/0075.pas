@@ -78,15 +78,15 @@ begin
     repeat
       b := buf[i];
       TextColor(10);
-      if (b and 1 <> 0) then Write('þ');
-      if (b and 2 <> 0) then Write('þ');
-      if (b and 4 <> 0) then Write('þ');
-      if (b and 8 <> 0) then Write('þ');
-      if (b and 16 <> 0) then Write('þ');
-      if (b and 32 <> 0) then Write('þ');
+      if (b and 1 <> 0) then Write('â– ');
+      if (b and 2 <> 0) then Write('â– ');
+      if (b and 4 <> 0) then Write('â– ');
+      if (b and 8 <> 0) then Write('â– ');
+      if (b and 16 <> 0) then Write('â– ');
+      if (b and 32 <> 0) then Write('â– ');
       TextColor(12);
-      if (b and 64 <> 0) then Write('þ');
-      if (b and 128 <> 0) then Write('þ');
+      if (b and 64 <> 0) then Write('â– ');
+      if (b and 128 <> 0) then Write('â– ');
       Write('        '#13);
       delay(40);
       if not (I <= Leng) then

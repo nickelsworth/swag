@@ -69,7 +69,7 @@ Function resetDSP : Boolean;
  Not Mine...
  The Book says:
  - Write a 1 to ResetPort $2x6,
- - Wait 3 MicroSec. (æs)
+ - Wait 3 MicroSec. (Âµs)
  - Write a 0 to ResetPort $2x6
  - Wait until ready byte $0AA at DataPort $2xA
    (it is advisable to check first for a data avaible: Port $22E bit 7 set)

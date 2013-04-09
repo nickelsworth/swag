@@ -61,7 +61,7 @@ begin
     exit
   end;
   if show then
-    __write(x1 + 2 , y, f, b, __rep(x2 - x1 - 3, '°'));
+    __write(x1 + 2 , y, f, b, __rep(x2 - x1 - 3, 'â–‘'));
   tr := 0;
   repeat
     blockread(source, filebuf^, bufsize, bread);
@@ -69,11 +69,11 @@ begin
     nr := tr / fs;
     nr := nr * (x2 - x1 - 3);
     if show then
-      __write(x1 + 2, y, f, b, __rep(trunc(nr), 'Û'));
+      __write(x1 + 2, y, f, b, __rep(trunc(nr), 'â–ˆ'));
     blockwrite(target, filebuf^, bread, bwrite);
   until (bread = 0) or (bread <> bwrite);
   if show then
-    __write(x1 + 2, y, f, b, __rep((x2 - x1 - 3), 'Û'));
+    __write(x1 + 2, y, f, b, __rep((x2 - x1 - 3), 'â–ˆ'));
   close(source);
   close(target);
   if bread <> bwrite then

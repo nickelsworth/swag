@@ -37,9 +37,9 @@ begin;
    write(' Remote Access Security Edit');
    textattr:=$01;
    gotoxy(1,2);
-   for a:=1 to 80 do write('Õ');
+   for a:=1 to 80 do write('‚ïê');
    gotoxy(1,23);
-   for a:=1 to 80 do write('ƒ');
+   for a:=1 to 80 do write('‚îÄ');
    textattr:=15;
    gotoxy(3,24);
    Write('(PgUp) Last User    (PgDn) Next User    (C)hange Security   (ESC)

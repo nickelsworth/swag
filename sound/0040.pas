@@ -1,7 +1,7 @@
 {
-CL±    Come to speak of this...  do you (or anyone) know which ports to zap the
-CL±    data to for the SB to get it to play?  Or better yet, even how to get it
-CL±    to play in DMA transfer mode?
+CLâ–’    Come to speak of this...  do you (or anyone) know which ports to zap the
+CLâ–’    data to for the SB to get it to play?  Or better yet, even how to get it
+CLâ–’    to play in DMA transfer mode?
 
 Try this code.
 }

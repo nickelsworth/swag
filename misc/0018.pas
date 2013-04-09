@@ -82,7 +82,7 @@ Program Memory Requirements
 `----------------------------------------------------'
 
 ---
- þ RoseReader 2.10á P003288 Entered at [ROSE]
+ â–  RoseReader 2.10ÃŸ P003288 Entered at [ROSE]
  * Rose Media, Toronto, Canada : 416-733-2285
  * PostLink(tm) v1.04  ROSE (#1047) : RelayNet(tm)
 

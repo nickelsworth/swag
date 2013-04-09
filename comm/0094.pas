@@ -7,7 +7,7 @@ the local one.    Is there anyone who can help with this one?
 I'm real stuck on this....and would LOVE it if someone could help me.
 
 Thanks,
-±±²²°° David Reilly °°²²±±
+â–’â–’â–“â–“â–‘â–‘ David Reilly â–‘â–‘â–“â–“â–’â–’
 dodo@rip.it.bond.edu.au
 
 }

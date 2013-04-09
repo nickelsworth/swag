@@ -87,7 +87,7 @@ begin
     end else if(ord(input[0])<max)and(ch<>kbbackspace)and
                (ch<>kbenter)then
     begin
-{      input:=venstre+ch+hoejre;     (* indsët karakter *)}
+{      input:=venstre+ch+hoejre;     (* inds√¶t karakter *)}
       temp:=copy(input,1,(xpos-x));
       temp:=temp+ch;
       temp:=temp+copy(input,(xpos-x)+1,length(input));

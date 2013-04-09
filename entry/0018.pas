@@ -50,7 +50,7 @@ procedure data(x,y:integer;ct:boolean; var inp:string; var ret:integer);
 
 IMPLEMENTATION
 
-{ là tecla premida }
+{ l√™ tecla premida }
 function getkey : word;
 var
     ch : char;
@@ -62,7 +62,7 @@ begin
         getkey := ord(ch);   
 end;
 
-{ escreve a string no Çcran }
+{ escreve a string no √©cran }
 procedure writestr(x,y:integer;inp:string;var x1:integer);
 var aux,conta:integer;
 begin
@@ -90,7 +90,7 @@ begin
     gotoxy(x1,y);
 end;
 
-{ salta para a primeira posiáÑo de cursor v†lida, actualiza Çcran }
+{ salta para a primeira posi√ß√§o de cursor v√°lida, actualiza √©cran }
 procedure homekey(x,y:integer; var x1,posic:integer);
 begin
     x1:=x;
@@ -98,7 +98,7 @@ begin
     gotoxy(x1,y);
 end;
 
-{ salta para a £ltima posiá∆o de cursor utilizada, actualiza Çcran }
+{ salta para a √∫ltima posi√ß‚ïûo de cursor utilizada, actualiza √©cran }
 procedure endkey(inp:string;x,y:integer;var x1,posic:integer);
 begin
     case length(inp) of
@@ -115,8 +115,8 @@ begin
     gotoxy(x1,y);
 end;
 
-{ move o cursor uma casa para a esquerda, actualiza Çcran, nÑo ultrapassa o }
-{ limite m†ximo de cursor Ö esquerda }
+{ move o cursor uma casa para a esquerda, actualiza √©cran, n√§o ultrapassa o }
+{ limite m√°ximo de cursor √† esquerda }
 procedure leftkey(x,y:integer; var x1,posic:integer);
 begin
     x1:=x1-1;
@@ -131,8 +131,8 @@ begin
     gotoxy(x1,y);
 end;
 
-{ move o cursor uma casa para a direita, actualiza Çcran, n∆o ultrapassa a }
-{ posiá∆o do £ltimo caracter escrito mais uma posiá∆o }
+{ move o cursor uma casa para a direita, actualiza √©cran, n‚ïûo ultrapassa a }
+{ posi√ß‚ïûo do √∫ltimo caracter escrito mais uma posi√ß‚ïûo }
 procedure rightkey(x,y:integer; inp:string; var x1,posic:integer);
 begin
     x1:=x1+1;
@@ -148,7 +148,7 @@ begin
 end;
 
 { move o cursor para a primeira letra da palavra, ou (caso }
-{ o cursor n∆o se encontre sobre nenhuma palavra, a pr¢xima }
+{ o cursor n‚ïûo se encontre sobre nenhuma palavra, a pr√≥xima }
 procedure ctrll(x,y:integer; inp:string; var x1,posic:integer);
 begin
     if posic<4 then
@@ -182,7 +182,7 @@ begin
     gotoxy(x1,y);
 end;
 
-{ apaga tudo o que est† escrito, actualiza string e ecran }
+{ apaga tudo o que est√° escrito, actualiza string e ecran }
 procedure ctrl_y(x,y:integer; var x1,posic:integer; var inp:string);
 begin
     x1:=x;
@@ -191,7 +191,7 @@ begin
     writestr(x,y,inp,x1);
 end;
 
-{ apaga tudo o que est† escrito Ö direita do cursor, actualiza string e ecran }
+{ apaga tudo o que est√° escrito √† direita do cursor, actualiza string e ecran }
 procedure ctrl_t(x,y:integer; var x1,posic:integer; var inp:string);
 var conta:integer;
 begin
@@ -201,7 +201,7 @@ begin
     writestr(x,y,inp,x1);
 end;
 
-{ liga / desliga o modo de inseráÑo "overwrite" (cursor em bloco) ou normal }
+{ liga / desliga o modo de inser√ß√§o "overwrite" (cursor em bloco) ou normal }
 procedure inskey(var ct:boolean);
 begin
     if ct=true then
@@ -216,7 +216,7 @@ begin
     end;
 end;
 
-{ apaga o caracter Ö direita na string, actualiza Çcran }
+{ apaga o caracter √† direita na string, actualiza √©cran }
 procedure delk(x,y:integer;var x1,posic:integer;var inp:string);
 begin
     if length(inp)>=posic then
@@ -224,8 +224,8 @@ begin
     writestr(x,y,inp,x1);
 end;
 
-{ apaga o caracter Ö esquerda na string, actualiza Çcran, n∆o passa o }
-{ limite m†ximo Ö esquerda }
+{ apaga o caracter √† esquerda na string, actualiza √©cran, n‚ïûo passa o }
+{ limite m√°ximo √† esquerda }
 procedure bsk(x,y:integer;var x1,posic:integer;var inp:string);
 begin
     if x1-1>=x then

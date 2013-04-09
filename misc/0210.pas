@@ -45,7 +45,7 @@
          B W       2M4W       2M4W       2M4W       2M4W     O = Objective
       O    ->    O  1  ->   O  1   ->  O  1   ->  O  11      M = Monigote
                                                              W = Wall
-    No Loop     1¦ Loop         2¦    L   o   o   p.........
+    No Loop     1Âª Loop         2Âª    L   o   o   p.........
 
    Now, What we have?
    ------------------
@@ -68,7 +68,7 @@
    Praise( Ja,Ja ;) )
    ------------------
    It's a Finstro of algorithm !. (Finstro:Word that means nothing in English,
-   and nothing in Spanish ! [ Viva Chiquito de la Calz  :) ])
+   and nothing in Spanish ! [ Viva Chiquito de la CalzÃ¡ :) ])
    Disclaimer
    ----------
      This algorithm was created in 30-8-97, 11:00->4:00(night), so if it
@@ -165,10 +165,10 @@ Begin
           Begin
             GotoXy(i,j);
             Case Fondo[i,j] Of
-               1:Write('°');
+               1:Write('â–‘');
                9:Begin
                    TextColor(RED);
-                   Write('Û');
+                   Write('â–ˆ');
                    TextColor(LIGHTGRAY);
                  End;
             End;
@@ -194,14 +194,14 @@ Begin
         GotoXy(Pos.X,Pos.Y);
         TextColor(DarkGray);
         Case Fondo[Pos.X,Pos.Y] Of
-             1:Write('°');
+             1:Write('â–‘');
         End;
         TextColor(LightGray);
       End;
 End;
 
 (* This function says if I can Step On a Square *)
-Function SiPisar(ActualX,ActualY:ShortInt):Boolean; (* ¨ Puedo Pisar ? *)
+Function SiPisar(ActualX,ActualY:ShortInt):Boolean; (* Â¿ Puedo Pisar ? *)
 Begin
   SiPisar:= (ActualX>0) And (ActualX<=MAXIMO) And
             (ActualY>0) And (ActualY<=MAXIMO) And
@@ -375,7 +375,7 @@ Begin
       EliminoLista(PuntActuales);
       PuntActuales:=SigPunteros;
       SigPunteros:=NIL;
-      (* Salgo al encontrar el 1§ o ninguno *)
+      (* Salgo al encontrar el 1Âº o ninguno *)
       While (PuntActuales<>NIL) And
             ((PosVictoria.X=MAXIMO+1) And (PosVictoria.Y=MAXIMO+1)) Do
         Begin

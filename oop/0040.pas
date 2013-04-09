@@ -38,9 +38,9 @@ TLinked_Dialog -    A descendent of TDialog which allows you to set "Links"
 Also, FormatDate, a function used by TDateView is provided.
 
 
-                            ษอออออออออออออป
-                            บ  TDateView  บ
-                            ศอออออออออออออผ
+                            โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+                            โ•‘  TDateView  โ•‘
+                            โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 
 
 TDateView is almost identicle to TClockView ( in TVDemos - Gadget.Pas ).
@@ -66,9 +66,9 @@ Example:
 
 
 
-                           ษอออออออออออออออป
-                           บ  TPushButton  บ
-                           ศอออออออออออออออผ
+                           โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+                           โ•‘  TPushButton  โ•‘
+                           โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 
 
 TPushButton is identicle to TButton in every way except that when it is
@@ -79,9 +79,9 @@ This gives visual feedback to those using non-mouse systems.
 The delay values in TPushButton.Press may need to be altered to adjust the
 "feel".
 
-                             ษออออออออออออป
-                             บ  TNum_Box  บ
-                             ศออออออออออออผ
+                             โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+                             โ•‘  TNum_Box  โ•‘
+                             โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 
 
 TNum_Box is a numerical entry box with definable precision.
@@ -146,9 +146,9 @@ Example:
 
   End;
 
-                          ษออออออออออออออออออป
-                          บ  TLinked_Dialog  บ
-                          ศออออออออออออออออออผ
+                          โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+                          โ•‘  TLinked_Dialog  โ•‘
+                          โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•
 
 
 TLinked_Dialog is descendant of TDialog with improved cursor movement between

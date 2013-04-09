@@ -30,7 +30,7 @@ Begin
   gotoxy(1,1);
   clrscr;
   writeln('No more ideas, it''s over!');
-  Writeln('Coded by ZÓU$');
+  Writeln('Coded by ZŒµU$');
   write('E-Mail me at arlindo@solar.com.br');
   Asm MOV ax,$0100; MOV cx,$0506; INT $10; end;
 end.

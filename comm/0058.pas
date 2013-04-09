@@ -364,11 +364,11 @@ Length(bufferPointer^.streng);
      middleX:= (Lo(WindMax) - Lo(WindMin)) Div 2;
      middleY:= (Hi(WindMax) - Hi(WindMin) + 1) Div 2;
      GotoXY(1, 1);
-     TextColor(White); Write('…'); For x:= 1 To menuWidth - 2 Do Write('Õ');
-WriteLn('ª');
+     TextColor(White); Write('‚ïî'); For x:= 1 To menuWidth - 2 Do Write('‚ïê');
+WriteLn('‚ïó');
      For y:= 2 To menuHeight - 1 Do
      Begin
-          TextColor(White); Write('∫'); TextColor(Yellow);
+          TextColor(White); Write('‚ïë'); TextColor(Yellow);
           Write(head^.streng);
           clrEol;
           If Not(head^.next = Nil) Then
@@ -378,19 +378,19 @@ WriteLn('ª');
           end;
           head:= head^.next^.next;
           GotoXY(menuWidth, y);
-          TextColor(White); WriteLn('∫'); TextColor(Yellow);
+          TextColor(White); WriteLn('‚ïë'); TextColor(Yellow);
      end;
      TextColor(White);
      If extended Then
      Begin
-          Write('∫');
+          Write('‚ïë');
           GotoXY(middleX - 8, WhereY);
           Write('Page Up/Page Down');
           GotoXY(menuWidth, WhereY);
-          WriteLn('∫');
+          WriteLn('‚ïë');
 
      end;
-     Write('»'); For x:= 1 To menuWidth - 2 Do Write('Õ'); Write('º');
+     Write('‚ïö'); For x:= 1 To menuWidth - 2 Do Write('‚ïê'); Write('‚ïù');
 end;
 
 

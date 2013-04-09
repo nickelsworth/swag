@@ -1,7 +1,7 @@
 
 {-----------------------------------------------------------------------------}
 {                                                                             }
-{ SAISIE.PAS - (c) Rapha‰l VANNEY, 1993                                       }
+{ SAISIE.PAS - (c) RaphaÃ«l VANNEY, 1993                                       }
 {                                                                             }
 { Generic data entry unit.                                                    }
 { Langage : Borland Pascal 7                                                  }
@@ -309,9 +309,9 @@ Begin
           If ToucheValide(Position, Touche) Then Contenu:='' ;
           Premiere:=False ;
           If Not GereTouche(Position, Touche) Then
-          { A-t-on termin‚ ? }
+          { A-t-on terminÃ© ? }
           If (Touche<32) Or (Touche>255) Then Termine:=True ;
-          { Adaptons Decalage … Position }
+          { Adaptons Decalage Ã  Position }
           If Position<Decalage Then Decalage:=Position ;
           If Position>=(Decalage+Largeur) Then Decalage:=Position-Largeur+1 ;
 
@@ -675,7 +675,7 @@ Begin
         (Touche=kbGauche) Then
      Begin
           GereTouche:=True ;
-          If Contenu[2]=' ' Then Contenu[2]:='þ'
+          If Contenu[2]=' ' Then Contenu[2]:='â– '
                             Else Contenu[2]:=' ' ;
      End Else
      Begin
@@ -686,7 +686,7 @@ End ;
 Procedure TChampBooleen.LitResultat ;
 Type PBoolean  = ^Boolean ;
 Begin
-     If PBoolean(Variable)^ Then Contenu:='[þ]'
+     If PBoolean(Variable)^ Then Contenu:='[â– ]'
                             Else Contenu:='[ ]' ;
 End ;
 
@@ -699,7 +699,7 @@ End ;
 End.
 
 { ---------------------    DEMO ----------------------------}
-{ Example for the SAISIE unit. Rapha‰l Vanney, 07/94 }
+{ Example for the SAISIE unit. RaphaÃ«l Vanney, 07/94 }
 
 {$d+,l+,x+}
 

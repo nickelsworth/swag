@@ -1,8 +1,8 @@
 {
-³What would be the best way to find out what Character is at a certain
-³location on the screen.  For example, Lets say I went to location
-³(10,2) and at that location is the letter 'S' now without
-³disturbing the letter S how can I determine if it is there or not?
+â”‚What would be the best way to find out what Character is at a certain
+â”‚location on the screen.  For example, Lets say I went to location
+â”‚(10,2) and at that location is the letter 'S' now without
+â”‚disturbing the letter S how can I determine if it is there or not?
 
 
 A 25-line by 80-column screen has 2,000 possible cursor positions. The

@@ -9,7 +9,7 @@ with the return code of your event - I'm guessing that you want a dialog with
 some ten buttons or something like that ?
 I've designed a dialog decendor that will take up to 16k buttons
 
-Extract from peldialogs - Copyright 1994 PEL-Data Bor†s Sweden
+Extract from peldialogs - Copyright 1994 PEL-Data BorÃ¥s Sweden
 Released for public domain on term that origin of code is mentioned in
 credits part of your program !
 }

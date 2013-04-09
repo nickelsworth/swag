@@ -7,7 +7,7 @@ batch files to branch to a different option depending on the user's
 selection.
 
 
-{  Yes/No Errorlevel returner v.000003432á  }
+{  Yes/No Errorlevel returner v.000003432ÃŸ  }
 { Returns errorlevel depending on the key   }
 { chosen by the end user.                   }
 { by Rick Schaefer                          }

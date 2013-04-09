@@ -1,5 +1,5 @@
 {
-ú    Subject: Word to Roman Numeral
+Â·    Subject: Word to Roman Numeral
 
   OK, here is my second attempt, With error checking and all. Thanks to
 Terry Moore <T.Moore@massey.ac.nz> For encouraging me. The last Function

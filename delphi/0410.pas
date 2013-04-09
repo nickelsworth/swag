@@ -9,7 +9,7 @@
 {   Generated from untitled component definition                     }
 {   on 24 May 1997 at 11:36                                          }
 {                                                                    }
-{   Copyright © 1997 by ...Tangentals Design                         }
+{   Copyright ‚åê 1997 by ...Tangentals Design                         }
 {                                                                    }
 { ****************************************************************** }
 

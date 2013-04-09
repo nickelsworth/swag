@@ -23,21 +23,21 @@ end;
 begin
      textbackground(1); clrscr; textcolor(11);
      gotoxy(1,2); Writeln('    Microsoft Scandisk ');
-     gotoxy(5,3); For Ctr := 1 to 70 do Write('Ä');
-     gotoxy(5,23); For Ctr := 1 to 70 do Write('Ä');
+     gotoxy(5,3); For Ctr := 1 to 70 do Write('â”€');
+     gotoxy(5,23); For Ctr := 1 to 70 do Write('â”€');
      {the below is in my mtbwin.inc ... you can convert it to gotoxy etc..
      button(5, 21, 15, 9, 5,'< Paused >');
      button(18, 21, 15, 9, 5,'< More Info >');
      button(34, 21, 15, 9, 5,'< Exit >');}
      textcolor(7);
      gotoxy(1,5); Writeln('    ScanDisk is now checking the following areas of drive c:');
-     writeln;          {û X}
+     writeln;          {âˆš X}
      cc := 1;
      {the part that controls the starbar/action(s)... }
      Repeat
            Statbar(#219,#176, 14, 14, cc, 1000, 25, 24, true);
            inc(cc, 1);
-           Gotoxy(11, 7); {Pipe('û'); forecolor(7);}
+           Gotoxy(11, 7); {Pipe('âˆš'); forecolor(7);}
            Case cc of
                 150 : Writeln('    DoubleSpace file header          ');
                 250 : Writeln('    Directory structure              ');

@@ -36,8 +36,8 @@ TYPE
                     Next    : FuzzySetList;
                     Color   : Byte;
                     MemberShip : Real;       (* aktueller Wert der   *)
-                                             (* Zugehîrigkeit        *)
-                    Rules   : FuzzyRuleList; (* Regelliste fÅr diese *)
+                                             (* Zugeh√∂rigkeit        *)
+                    Rules   : FuzzyRuleList; (* Regelliste f√ºr diese *)
                                              (* unscharfe Menge      *)
                     Constructor Init( InitName : NameStr;
                                       InitStart, InitHigh,
@@ -60,8 +60,8 @@ TYPE
                     PosX,PosY : WORD;          (* Bildschirmkoordinaten*)
                     StartValue,                (* Anfang und Ende des  *)
                     EndValue,                  (* Koordinatensystems   *)
-                    Scale     : Real;          (* Ma·stabsfaktor       *)
-                    UnitStr   : NameStr;       (* Einheit, z.B. ¯C     *)
+                    Scale     : Real;          (* Ma√üstabsfaktor       *)
+                    UnitStr   : NameStr;       (* Einheit, z.B. ¬∞C     *)
                     CurrentVal: Real;          (* aktueller Wert       *)
                     FuzzySets : FuzzySetList;  (* Liste der unscharfen *)
                                                (* Mengen               *)
@@ -150,13 +150,13 @@ begin
   if A > B then Min := B else Min := A;
 end;
 
-(* MaxMin-Operator fÅr UND *)
+(* MaxMin-Operator f√ºr UND *)
 FUNCTION AND_MaxMin(Set1,Set2,Set3:Real):Real;
 BEGIN
   AND_MaxMin:=Max(Set1,Min(Set2,Set3))
 END;
 
-(* MaxMax-Operator fÅr ODER *)
+(* MaxMax-Operator f√ºr ODER *)
 FUNCTION OR_MaxMax(Set1,Set2,Set3:Real):Real;
 BEGIN
   OR_MaxMax:=Max(Set1,Max(Set2,Set3))
@@ -280,7 +280,7 @@ BEGIN
     CurrentVal:=CurrentVal+Diff;
     DisplayValue(ValueCol);
   END
-  ELSE (* Bereichsgrenzen Åberschritten *)
+  ELSE (* Bereichsgrenzen √ºberschritten *)
   Buzz;
 END;
 
@@ -362,11 +362,11 @@ BEGIN
 END; (* FuzzyVar.Infer *)
 
 PROCEDURE FuzzyVar.Defuzzy;
-(* Bestimmung des FlÑchenschwerpunktes der unscharfen *)
-(* Ergebnismenge durch AuszÑhlen der Pixel            *)
+(* Bestimmung des Fl√§chenschwerpunktes der unscharfen *)
+(* Ergebnismenge durch Ausz√§hlen der Pixel            *)
 
 (* Raster der Rechnergeschwindigkeit anpassen *)
-(* grî·te Rechengenauigkeit bei Raster=1      *)
+(* gr√∂√üte Rechengenauigkeit bei Raster=1      *)
 CONST Raster = 16;
 VAR
   X,Y,XOffSet : WORD;
@@ -383,7 +383,7 @@ BEGIN
   Zaehler :=0;
   Nenner :=0;
   XOffset :=PosX+20;
-  for X := 0 TO 210 DIV Raster DO (* FlÑchenschwerpunkt bestimmen *)
+  for X := 0 TO 210 DIV Raster DO (* Fl√§chenschwerpunkt bestimmen *)
    for Y := PosY + 20 to PosY + 100 do
    if GetPixel(Raster*X+XOffSet,Y) = ResultCol then
    begin
@@ -438,7 +438,7 @@ BEGIN
 END;
 
 BEGIN (* Fuzzy-Logic-Unit *)
-  (* Test auf Herculeskarte wg. Farbe fÅr Ergebnismengen *)
+  (* Test auf Herculeskarte wg. Farbe f√ºr Ergebnismengen *)
   Regs.ah:=15;
   Intr($10,Regs);
   IF Regs.AL=7 THEN (* Hercules-Karte *)
@@ -476,7 +476,7 @@ BEGIN
              +'Inferenz (c''t 3/91 / C.v.Altrock, RWTH Aachen)');
   OutTextXY( 500, 50, 'Eingabe Temperatur: ['+Chr(24)+']' );
   OutTextXY( 500, 65, 'Eingabe Druck: ['+Chr(25)+']' );
-  OutTextXY( 500, 80, 'Erhîhen: ['+Chr(26)+']' );
+  OutTextXY( 500, 80, 'Erh√∂hen: ['+Chr(26)+']' );
   OutTextXY( 500, 95, 'Vermindern: ['+Chr(27)+']' );
   OutTextXY( 500, 110, 'Schrittweite: [Bild'+Chr(24)+Chr(25)+']' );
   Rectangle(400,40,600,120);
@@ -487,7 +487,7 @@ begin (* main *)
 
   (* Definition der linguistischen Variablen "Temperatur" *)
   FuzzyVars[temp]:= new(FuzzyVarList,
-                    Init('Temperatur',20,30,7,400,1000,650,'¯C'));
+                    Init('Temperatur',20,30,7,400,1000,650,'¬∞C'));
   WITH FuzzyVars[temp]^ DO
   BEGIN
     (* Definition und Anzeige der Fuzzy Sets *)
@@ -506,7 +506,7 @@ begin (* main *)
     (* Definition und Anzeige der Fuzzy Sets *)
     DefineSet('unter_normal',-Infinity,39,40,Blue);
     DefineSet('normal',39,40,41,LightGreen);
-    DefineSet('Åber_normal',40,41,Infinity,Red);
+    DefineSet('√ºber_normal',40,41,Infinity,Red);
     DisplaySets; DisplayValue(ValueCol);
   END;
 
@@ -525,10 +525,10 @@ begin (* main *)
          THEN Methanventil ist offen                         *)
     DefineRule('offen',OR_MaxMax, FuzzyVars[temp],'niedrig',
                                   FuzzyVars[press],'unter_normal');
-    (* 2 IF Temperatur ist sehr_hoch OR Druck ist Åber_normal
+    (* 2 IF Temperatur ist sehr_hoch OR Druck ist √ºber_normal
          THEN Methanventil ist gedrosselt                    *)
     DefineRule('gedrosselt',OR_MaxMax, FuzzyVars[temp],'sehr_hoch',
-                                       FuzzyVars[press],'Åber_normal');
+                                       FuzzyVars[press],'√ºber_normal');
     (* 3 IF Temperatur ist hoch AND Druck ist normal
          THEN Methanventil ist halboffen                     *)
     DefineRule('halboffen',AND_MaxMin, FuzzyVars[temp],'hoch',
@@ -545,7 +545,7 @@ begin (* main *)
 
   SetColor( Red );
   OutTextXY( 540, 330, '(Resultat der Inferenz)' );
-  (* Schrittweiten fÅr Druck und Temperatur intitialisieren *)
+  (* Schrittweiten f√ºr Druck und Temperatur intitialisieren *)
   StepWidth[temp]:=25;
   StepWidth[press]:=0.25;
 
@@ -560,10 +560,10 @@ begin (* main *)
     else if (RK=81) then Stepwidth[input]:= StepWidth[input] / 2
     else if (RK=75) OR (RK=77) then
     begin
-      (* 1. Eingangsvariable Ñndern *)
+      (* 1. Eingangsvariable √§ndern *)
       if (RK=75) then FuzzyVars[Input]^.Change(-StepWidth[input])
       ELSE FuzzyVars[Input]^.Change(StepWidth[input]);
-      (* 2. Inferenz durchfÅhren *)
+      (* 2. Inferenz durchf√ºhren *)
       FuzzyVars[valve]^.Infer;
       (* 3. Ergebnismenge defuzzifizieren *)
       FuzzyVars[valve]^.Defuzzy

@@ -141,7 +141,7 @@ Procedure Init(Var T : TRec);
 {----------------------------------------------------------------------------}
 
 Begin   {Main}
-   Fill := '±';
+   Fill := 'â–’';
    Init(T);
    TextBackGround(Blue);
    TextColor(15);

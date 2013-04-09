@@ -1,9 +1,9 @@
 {
 EDWIN CALIMBO
 
-³Can anyone supply me With a routine to determine a Graphics card? I want
-³the Procedure to return a Variable if the user has a Graphics card less
-³than an EGA. Anyone have anything quick?
+â”‚Can anyone supply me With a routine to determine a Graphics card? I want
+â”‚the Procedure to return a Variable if the user has a Graphics card less
+â”‚than an EGA. Anyone have anything quick?
 
 The Function below will detect most Graphics (mono/color) card. It's
 a bit long, but is has all the info on how to detect certain card.

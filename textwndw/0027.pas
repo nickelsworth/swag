@@ -6,7 +6,7 @@ uses crt,Dos;
 Const
   vidseg : Word = $B800;
   ismono : Boolean = False;
-  txt = 'ZÓU$';
+  txt = 'ZŒµU$';
   tx = 'WaS HeRe!';
   t = 'Up ''n'' Down';
 
@@ -147,8 +147,8 @@ end;
 
 begin
   setWindow (NewWindow, 1, 1, 80, 25);
-  Coded := 'CoDeD By ZÓU$';
-  while pos('ZÓU$',coded) = 0 Do
+  Coded := 'CoDeD By ZŒµU$';
+  while pos('ZŒµU$',coded) = 0 Do
   HideCursor;
   textbackground(0);
   textColor(7);

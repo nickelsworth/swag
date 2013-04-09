@@ -32,7 +32,7 @@ unit Crypt32;
 *************************************************************************
 * Modified:     Supports Delphi 1.0 & 2.0                         	*
 *               Overflow checking removed                         	*
-* By:           Martin Djernæs                                    	*
+* By:           Martin DjernÂµs                                    	*
 * e-mail:       djernaes@einstein.ot.dk                           	*
 * web:          einstein.ot.dk/~djernaes                          	*
 *************************************************************************

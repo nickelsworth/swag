@@ -3,16 +3,16 @@
    Very fast screen output in 80*25 mode by direct access to video memory
 
 
-               ษออออออออออออออออออออออออออออออออออออออออป
-               บ                                        บฐ
-               บ          AVONTURE CHRISTOPHE           บฐ
-               บ              AVC SOFTWARE              บฐ
-               บ     BOULEVARD EDMOND MACHTENS 157/53   บฐ
-               บ           B-1080 BRUXELLES             บฐ
-               บ              BELGIQUE                  บฐ
-               บ                                        บฐ
-               ศออออออออออออออออออออออออออออออออออออออออผฐ
-               ฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐฐ
+               โ•”โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•—
+               โ•‘                                        โ•‘โ–‘
+               โ•‘          AVONTURE CHRISTOPHE           โ•‘โ–‘
+               โ•‘              AVC SOFTWARE              โ•‘โ–‘
+               โ•‘     BOULEVARD EDMOND MACHTENS 157/53   โ•‘โ–‘
+               โ•‘           B-1080 BRUXELLES             โ•‘โ–‘
+               โ•‘              BELGIQUE                  โ•‘โ–‘
+               โ•‘                                        โ•‘โ–‘
+               โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ•โ–‘
+               โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘โ–‘
 
 }
 
@@ -83,7 +83,7 @@ End;
 
 Procedure WriteStrXY (X, Y, TAttr, TBack : Word; Text : String);
 
-{ Ecrit sur la page spcifie, le texte donn}
+{ Ecrit sur la page spรฉcifiรฉe, le texte donnรฉ}
 
 Var Offset   : Word;
     I        : Byte;

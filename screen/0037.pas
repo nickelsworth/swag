@@ -27,22 +27,22 @@ Var
 begin
   TextColor(fg);
   TextBackGround(bg);
-  Writexy(x1 + 1, y1, '…');
+  Writexy(x1 + 1, y1, '‚ïî');
 
   For count := x1 + 2 to x2 - 2 do
-    Writexy(count, y1, 'Õ');
+    Writexy(count, y1, '‚ïê');
 
-  Writexy(x2 - 1, y1, 'ª');
+  Writexy(x2 - 1, y1, '‚ïó');
   For count := y1 + 1 to y2 - 1 do
-    Writexy(x1 + 1, count, '∫');
+    Writexy(x1 + 1, count, '‚ïë');
 
-  Writexy(x1 + 1, y2, '»');
+  Writexy(x1 + 1, y2, '‚ïö');
   For count := y1 + 1 to y2 - 1 do
-    Writexy(x2 - 1, count, '∫');
+    Writexy(x2 - 1, count, '‚ïë');
 
-  Writexy(x2 - 1, y2, 'º');
+  Writexy(x2 - 1, y2, '‚ïù');
   For count := x1 + 2 to x2 - 2 do
-    Writexy(count, y2, 'Õ');
+    Writexy(count, y2, '‚ïê');
 end;
 
 Procedure WriteXY(X, Y : Integer; S : String);

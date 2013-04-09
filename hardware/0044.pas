@@ -20,21 +20,21 @@ around here even the latest buys still carry this old but worthy chip.
 From: skolnik@kapsch.co.at (Gerhard Skolnik)
 
 +----------------------------------------------------------------------+
-¦                       CMOS Storage Layout                      more  ¦
+Âª                       CMOS Storage Layout                      more  Âª
 +----------------------------------------------------------------------+
 
 00H-0dH used by real-time clock
 0eH     POST diagnostics status byte
 0fH     shutdown status byte
 10H     diskette drive type      -----+
-11H     reserved                      ¦
-12H     hard disk drive type          ¦
-13H     reserved                      ¦- checksum-protected
-14H     equipment byte                ¦   configuration record (10H-20H)
-15H-16H Base memory size              ¦
-17H-18H extended memory above 1M      ¦
-19H     hard disk 1 type (if > 15)    ¦
-1aH     hard disk 2 type (if > 15)    ¦
+11H     reserved                      Âª
+12H     hard disk drive type          Âª
+13H     reserved                      Âª- checksum-protected
+14H     equipment byte                Âª   configuration record (10H-20H)
+15H-16H Base memory size              Âª
+17H-18H extended memory above 1M      Âª
+19H     hard disk 1 type (if > 15)    Âª
+1aH     hard disk 2 type (if > 15)    Âª
 1bH-2dH reserved                 -----+
 2eH-2fH storage for checksum of CMOS addresses 10H through 20H
 30H-31H extended memory above 1M
@@ -43,7 +43,7 @@ From: skolnik@kapsch.co.at (Gerhard Skolnik)
 34H-3fH reserved
 
 +----------------+
-¦Using CMOS Data ¦
+ÂªUsing CMOS Data Âª
 +----------------+
 To read a byte from CMOS, do an OUT 70H,addr; followed by IN 71H.
 To write a byte to CMOS,  do an OUT 70H,addr; followed by OUT 71H,value.

@@ -1,7 +1,7 @@
 
 (*
                                Mouse Functions
-                               ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+                               â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
           I am relesing this source into the Public Domain. You are
           free to use and/or modify this code as you wish.

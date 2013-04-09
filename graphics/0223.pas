@@ -62,8 +62,8 @@ IMPLEMENTATION
 PROCEDURE UNPACKPCX(PonerPaleta:Boolean;VAR FTE,DST;VAR Paleta);  (*Debe ser
 un 320x200x256*) assembler;ASM
  PUSH DS        (* preservo Data Segment *)
- CLD            (* borro indicador de direcci¢n *)
- XOR CX,CX      (* CX=0, para que en toda la rutina CH estÇ siempre a 0, tal
+ CLD            (* borro indicador de direcci√≥n *)
+ XOR CX,CX      (* CX=0, para que en toda la rutina CH est√© siempre a 0, tal
 *)                (* que CX sea siempre igual a CL *)
  LDS SI,[FTE]   (* DS:SI --> FTE *)
  ADD SI,128     (* Salto cabecera *)
@@ -73,12 +73,12 @@ un 320x200x256*) assembler;ASM
  MOV CL,DS:[SI] (* Tomo valor *)
  AND CL,0C0h
  CMP CL,0C0h    (* >=192 *)
- JZ @COMPRESSED (* si es as° valor comprimido *)
+ JZ @COMPRESSED (* si es as√≠ valor comprimido *)
  MOVSB          (* en caso contrario copio fuente en destino *)
  DEC DX         (* decremento DX pues falta uno menos *)
  JMP @NEXT      (* salto a siguiente *)
 @COMPRESSED:
- MOV CL,DS:[SI] (* Recupero valor (el AND lo machac¢)  *)
+ MOV CL,DS:[SI] (* Recupero valor (el AND lo machac√≥)  *)
  AND CL,03Fh    (* resto 192 *)
  SUB DX,CX      (* quito tantos puntos como contiene CL *)
  INC SI         (* paso a siguiente valor *)
@@ -105,7 +105,7 @@ un 320x200x256*) assembler;ASM
  MOV DS:[SI],AL
  INC SI
  LOOP @LOOP;          (* La divido por 4 , en el fichero PCX los valores de
-                         paleta est†n multiplicados por 4 *)
+                         paleta est√°n multiplicados por 4 *)
 
 
  MOV AL,PonerPaleta  (* Compruebo si he de mostrarla *)

@@ -1,8 +1,8 @@
 PROGRAM NoReset;
 {(c)1993 by Marc van Leeuwen. Fido 2:285/228 == Pascal-Net 115:115/0  }
-{ ÚÄÄÄÄÄÄÄÄÄÄ¿ (c) 1993Use it as you want, it works for me, }
-{ ³SW-Program³ LSharP but it might not work for you, so use}
-{ ÀÄÄÄÄÄÄÄÄÄÄÙ Softwareit as is, and modify the errors yourself!}
+{ â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â” (c) 1993Use it as you want, it works for me, }
+{ â”‚SW-Programâ”‚ LSharP but it might not work for you, so use}
+{ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ Softwareit as is, and modify the errors yourself!}
 Uses Crt,Dos
 {$IFDEF DPMI}
 ,WinAPI

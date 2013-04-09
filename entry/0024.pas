@@ -22,7 +22,7 @@ UNIT Editform;
      RELEASE     :  1.0
      DATE        :  30/09/94
      AUTHOR      :  Fernand LEMOINE
-                    rue du Colläge 34
+                    rue du Coll√®ge 34
                     B-6200 CHATELET
                     BELGIQUE
      All code granted to the public domain
@@ -950,7 +950,7 @@ P := @SymbolStr;
 FalseUserStr := 'Nul';
 TrueUserStr  := 'Rempli';
 DT := sunday;
-S1 := 'SantÇ';
+S1 := 'Sant√©';
 
 Writeln ('DEMO EDITFORM ');
 Writeln ('I1 = -1234  R1 = -1234.56');
@@ -1009,7 +1009,7 @@ writeln('081: ',CurrencyForm(Helpcurrency(6,'81',dos3),C1));
 
 Writeln;
 MoneySign := 'F';
-writeln('Symbole monÇtaire flottant: ',CurrencyForm('$##,###.##+',C1));
+writeln('Symbole mon√©taire flottant: ',CurrencyForm('$##,###.##+',C1));
 Writeln;
 
 Writeln ( 'Convention internationale ');writeln;
@@ -1042,7 +1042,7 @@ writeln('Appuyez sur une touche');
 WCh := Readkey;
 clrscr;
 
-writeln('CharForm et StringForm H1 = "c" ; H2 = #10; S1 := "SantÇ"');
+writeln('CharForm et StringForm H1 = "c" ; H2 = #10; S1 := "Sant√©"');
 writeln;
 writeln('H1 ',CharForm('!',H1));
 writeln('H1 ',CharForm('D',H1));

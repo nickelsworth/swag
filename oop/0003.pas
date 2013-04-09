@@ -1,11 +1,11 @@
 {
-±Hello.  I was toying around With TVision, trying to make derive an Object fr
-±TDialog which would be a simple 'Delay box' (i.e. a message would display, t
-±the box would cmOK itself after two seconds).  I tried a simple Delay() comm
-±in HandleEvent, which seemed to work fine, but when I held down the mouse bu
-±on the menu, it locked up and sometimes my memory manager woudl report crazy
-±error messages.  Can anyone offer a suggestion on how to do this safely?  Th
-±are certain situations when clicking an 'OK' button is just a hassle.  Thank
+â–’Hello.  I was toying around With TVision, trying to make derive an Object fr
+â–’TDialog which would be a simple 'Delay box' (i.e. a message would display, t
+â–’the box would cmOK itself after two seconds).  I tried a simple Delay() comm
+â–’in HandleEvent, which seemed to work fine, but when I held down the mouse bu
+â–’on the menu, it locked up and sometimes my memory manager woudl report crazy
+â–’error messages.  Can anyone offer a suggestion on how to do this safely?  Th
+â–’are certain situations when clicking an 'OK' button is just a hassle.  Thank
 
 Try trapping the mouse events in the HandleEvent method of the dialog
 box.

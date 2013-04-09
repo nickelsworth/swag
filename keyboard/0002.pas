@@ -1,12 +1,12 @@
 {
 EDWIN CALIMBO
 
-º I need to know how I can clear the keyboard buffer.
-º The reason I need to do this is that in a loop I'm reading in
-º one Character and then calling a Procedure which returns to the
-º loop For the next Character to be read.  But sometimes it takes the
-º next Character in the buffer that my have been a result of just holding
-º down a key For to long.
+â•‘ I need to know how I can clear the keyboard buffer.
+â•‘ The reason I need to do this is that in a loop I'm reading in
+â•‘ one Character and then calling a Procedure which returns to the
+â•‘ loop For the next Character to be read.  But sometimes it takes the
+â•‘ next Character in the buffer that my have been a result of just holding
+â•‘ down a key For to long.
 
 
   You can clear any keys in the keyboard buffer by using the following loop:

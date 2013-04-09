@@ -16,9 +16,9 @@ FRANCK DUMONT
 
 ; This module is hereby donated to the public domain.
 
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ;                    Datensegment
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 DATA     SEGMENT BYTE PUBLIC
 
@@ -31,9 +31,9 @@ DATA     SEGMENT BYTE PUBLIC
 
 DATA     ENDS
 
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ;                        Codesegment
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 CODE     SEGMENT BYTE PUBLIC
 
@@ -41,16 +41,16 @@ CODE     SEGMENT BYTE PUBLIC
 
          PUBLIC V24Int
 
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 ;CS-relative Daten
 
 _Turbo_DS DW  DATA                              ; Turbo data segment
       ; (inserted by linkage editor)
 
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ;                    Codebereich
-;ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+;â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ;PROCEDURE V24Int; interrupt;
 ;  this routine is executed whenever a character arrives
 
@@ -107,7 +107,7 @@ END
 ///       This module is hereby donated to the public domain.              ///
 ///                                                                        ///
 ///       Christian Philipps                                               ///
-///       Dsseldorfer Str. 316                                            ///
+///       DÃ¼sseldorfer Str. 316                                            ///
 ///       4130 Moers 1                                                     ///
 ///       West-Germany                                                     ///
 ///                                                                        ///
@@ -139,7 +139,7 @@ CONST
 
 VAR
   V24TP      : WORD; {Buffer Tail-Pointer Im Interface-Teil, da zur
-                      Ereignis-steuerung im Multi-Tasking ben”tigt.}
+                      Ereignis-steuerung im Multi-Tasking benÃ¶tigt.}
   ComBaseAdr : ARRAY [Com1..Com6] OF WORD;
 
 FUNCTION  V24DataAvail : BOOLEAN;
@@ -182,7 +182,7 @@ VAR
   V24HP          : WORD;         {Buffer Head-Pointer                    }
   V24BuffEnd     : WORD;         {Buffer End-Adress                      }
   V24Buff        : ARRAY [0..V24BuffSize] OF BYTE;
-  OExitHandler   : Pointer;    {Save-Area fr Zeiger auf Org.-Exit-Proc}
+  OExitHandler   : Pointer;    {Save-Area fÃ¼r Zeiger auf Org.-Exit-Proc}
 
 
 PROCEDURE V24Int; external;
@@ -305,8 +305,8 @@ END;  {V24ExitProc}
 
 
 BEGIN
-  {Grund-Init, damit irrtmliche Aufrufe von V24DataAvail nicht zu
-   endlosen Ausgaben von Speicherschrott fhren!}
+  {Grund-Init, damit irrtÃ¼mliche Aufrufe von V24DataAvail nicht zu
+   endlosen Ausgaben von Speicherschrott fÃ¼hren!}
   Move(BiosComBaseAdr, ComBaseAdr[Com1], SizeOf(BiosComBaseAdr));
   Move(BiosComBaseAdr, ComBaseAdr[Com3], SizeOf(BiosComBaseAdr));
   Move(BiosComBaseAdr, ComBaseAdr[Com5], SizeOf(BiosComBaseAdr));

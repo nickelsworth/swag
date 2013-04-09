@@ -5,7 +5,7 @@ UNIT nlcs;
  (*  DESCRIPTION :
     National language and country support
       - 18 countries with ISO and DOS convention
-      - 6 languages  English Franáais Deutsch Nederland Espa§ol Italiano
+      - 6 languages  English Fran√ßais Deutsch Nederland Espa√±ol Italiano
         for language name, month name, day name,
             yes/no name, true/false name, compare name
       - 18  currencies  with ISO and DOS convention
@@ -20,7 +20,7 @@ UNIT nlcs;
      RELEASE     :  1.0
      DATE        :  30/09/94
      AUTHOR      :  Fernand LEMOINE
-                    rue du Colläge 34
+                    rue du Coll√®ge 34
                     B-6200 CHATELET
                     BELGIQUE
      All code granted to the public domain
@@ -119,8 +119,8 @@ CONST
    (abrev : 'NEW DELHI'; tzone : 'Y'; offset : + 5.30));
 
   LanguageNames : ARRAY[LanguageType] OF String[10] =
-  ('NoLanguage', 'English', 'Franáais', 'Deutsch', 'Nederland',
-   'Espa§ol', 'Italiano');
+  ('NoLanguage', 'English', 'Fran√ßais', 'Deutsch', 'Nederland',
+   'Espa√±ol', 'Italiano');
 
 
   InternationalMonthString : ARRAY[1..MaxLanguage]
@@ -128,8 +128,8 @@ CONST
 
   (('January', 'February', 'March', 'April', 'May', 'June', 'July',
     'August', 'September', 'October', 'November', 'December'),
-   ('janvier', 'fÇvrier', 'mars', 'avril', 'mai', 'juin', 'juillet',
-    'aoñt', 'septembre', 'octobre', 'novembre', 'dÇcembre'),
+   ('janvier', 'f√©vrier', 'mars', 'avril', 'mai', 'juin', 'juillet',
+    'ao√ªt', 'septembre', 'octobre', 'novembre', 'd√©cembre'),
    ('Januar', 'Februar', 'Marz', 'April', 'Mai', 'Juni', 'Juli',
     'August', 'September', 'Oktober', 'November', 'Dezember'),
    ('Januari', 'Februari', 'Maart', 'April', 'Mei', 'Juni', 'Juli',
@@ -156,11 +156,11 @@ CONST
 
   InternationalCompareString : ARRAY[1..MaxLanguage, 1..3] OF String[8] =
   (('Less', 'Equal', 'Greater'),
-   ('Moins', 'êgal', 'Plus'),
+   ('Moins', '√âgal', 'Plus'),
    ('Minder', 'Gleich', 'Mehr'),
    ('Minder', 'Gelijk', 'Meer'),
-   ('Menos ', 'Igual ', 'M†s'),
-   ('Meno  ', 'Eguale', 'Pió'));
+   ('Menos ', 'Igual ', 'M√°s'),
+   ('Meno  ', 'Eguale', 'Pi√π'));
 
 VAR
   Language : LanguageType;
@@ -655,7 +655,7 @@ var
    begin
       clrscr;
       writeln ('DEMO NLCS');writeln;
-      S1 := 'zone'; S2 := 'ÇtÇ';
+      S1 := 'zone'; S2 := '√©t√©';
       SetLanguage(francais);
       writeln(STUpcase(S1),' ',StUpcase(S2));
       writeln (' Comparaison  correcte avec CompIntString ');
@@ -682,13 +682,13 @@ var
       writeln('Heure Los Angeles : ',TimeStampForm('DTWZS',TS));
       delay(3500);
       CurrentDateTime(r);
-      Writeln('Temps ÇcoulÇ en ms: ',
+      Writeln('Temps √©coul√© en ms: ',
           RealForm('##.#',(R.MilliTm - TS.MilliTM)/1000.0));
 
       writeln;
       writeln('Langage          : ', GetLanguage);
       writeln('Code Page        : ', GetCodePage);
       writeln('Pays  local      : ', GetCountryStr);
-      writeln('Symbole monÇtaire: ', CurrencyLtStr);
+      writeln('Symbole mon√©taire: ', CurrencyLtStr);
       delay(5500);
    end.

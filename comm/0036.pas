@@ -9,7 +9,7 @@ below 3kb, will that do?
 function UART(Port: word): word; assembler;
 { Checks for UART, and, if one is present, what type.         }
 { Returns  0 if no UART,  1 if UART but no 16550,  2 if 16550 }
-{ Donated to the public domain by Bjîrn Felten @ 2:203/208    }
+{ Donated to the public domain by Bj√∂rn Felten @ 2:203/208    }
 { Partly from an asm program by Anders Danielsson @ 2:203/101 }
 asm
    mov  cx,Port          {1..4}

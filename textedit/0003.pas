@@ -1,8 +1,8 @@
 {
-> - How can I get TP to make what ever the user enters in to CAPS or     ³
->   NONCAPS?  Example:                                                   ³
->                     Enter Name -> ChRiS BrAtEnE                        ³
->                     Your name is Chris Bratene? (Y/n)?                 ³
+> - How can I get TP to make what ever the user enters in to CAPS or     â”‚
+>   NONCAPS?  Example:                                                   â”‚
+>                     Enter Name -> ChRiS BrAtEnE                        â”‚
+>                     Your name is Chris Bratene? (Y/n)?                 â”‚
 
 
 I just wrote a routine that does this on the fly, so to speak, For

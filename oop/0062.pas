@@ -739,7 +739,7 @@ begin
   desktop^.insert(g);
   showmouse;
   messagebox(^c'Yes, this is textmode!',nil,mfinformation+mfokbutton);
-  messagebox(^c'GRAFWIN (c) 1994 by'^m^c'Stefan Michel'^m^c'Irisstra·e 12'+
+  messagebox(^c'GRAFWIN (c) 1994 by'^m^c'Stefan Michel'^m^c'Irisstra√üe 12'+
              ^m^c'D-90542 Brand',nil,mfinformation+mfokbutton);
 end;
 

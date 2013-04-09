@@ -198,7 +198,7 @@ by using AND, like this:
 
               01001110      <---  AH
         and   00001110      <---- mask $0E
-        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               00001110      <---- after masking
 
 
@@ -206,7 +206,7 @@ Then shift the bits to the right With SHR,
 
               00001110      <---- after masking
          SHR         1      <---- shift-right one bit position
-         ÄÄÄÄÄÄÄÄÄÄÄÄÄ
+         â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               00000111      <---- result you want
 }
 

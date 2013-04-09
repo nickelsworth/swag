@@ -92,7 +92,7 @@ Begin
      128+64+32+16+8
      128+64+32+16+8+4
      128+64+32+16+8+4+2
-     128+64+32+16+8+4+2+1 (This is equivalent to character 219 'Û')
+     128+64+32+16+8+4+2+1 (This is equivalent to character 219 'â–ˆ')
      }
 
    w:=0;
@@ -165,7 +165,7 @@ Begin
         the line drawing set because animation of character #1
         will be started all over}
      GotoXY(WhereX-1,WhereY);
-     Write('Û');
+     Write('â–ˆ');
     End;
   GotoXY(1,6);
   Cursor(true);

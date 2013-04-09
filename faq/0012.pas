@@ -187,10 +187,10 @@ from other arithmetic instructions. You only need to specify divisor;
 other operands are assumed to be AL, AH or AX, DX registers. This table
 summarizes both DIV variants:
 
-Dividend       ³Divisor    ³Quotient       ³Remainder
-ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅ
-16 bit (AX)    ³8 bit      ³8 bit (AL)     ³8 bit (AH)
-32 bit (DX:AX) ³16 bit     ³16 bit (AX)    ³16 bit (DX)
+Dividend       â”‚Divisor    â”‚Quotient       â”‚Remainder
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼
+16 bit (AX)    â”‚8 bit      â”‚8 bit (AL)     â”‚8 bit (AH)
+32 bit (DX:AX) â”‚16 bit     â”‚16 bit (AX)    â”‚16 bit (DX)
 
 (continued in next message...)
 ---

@@ -21,16 +21,16 @@ function LongMin(A,B : longint) : longint;
   {- Restituisce il minimo tra A e B (longint).}
 
 function InRange(V,A,B : integer) : boolean;
-  {- Restituisce true se V Š compreso tra A e B (estrami inclusi).}
+  {- Restituisce true se V Ã¨ compreso tra A e B (estrami inclusi).}
 
 function OutRange(V,A,B : integer) : boolean;
-  {- Restituisce true se V non Š compreso tra A e B.}
+  {- Restituisce true se V non Ã¨ compreso tra A e B.}
 
 function LongInRange(V,A,B : longint) : boolean;
-  {- Restituisce true se V Š compreso tra A e B (estrami inclusi).}
+  {- Restituisce true se V Ã¨ compreso tra A e B (estrami inclusi).}
 
 function LongOutRange(V,A,B : longint) : boolean;
-  {- Restituisce true se V non Š compreso tra A e B.}
+  {- Restituisce true se V non Ã¨ compreso tra A e B.}
 
 function LongToInt(V : longint) : integer;
   {- Converte da longinteger ad integer, restituendo MaxInt o -MaxInt nel caso

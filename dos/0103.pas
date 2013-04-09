@@ -1,6 +1,6 @@
 { ENVIRON.PAS                                            Revision 1.00 }
 { Written 4 Nov 1994 by Robert B. Clark <rclark@iquest.net>            }
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 { A collection of DOS environment routines for Turbo Pascal v4.0.      }
 { Requires DOS v3.0+.  Tested on 486/P5 MS-DOS 5/6.22/NW 3.11          }
 {                                                                      }
@@ -12,7 +12,7 @@
 {           emulation for your printer if you print this code.         }
 {                                                                      }
 { Last updated: 04 Apr 95                                              }
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 
 UNIT Environ;  { SEE DEMO AT THE BOTTOM ! }
 {$B+ Boolean short-circuit
@@ -28,14 +28,14 @@ Uses Dos
 {$IFDEF UseLib} ,Files    { For FNStrip(), MAXPATHLEN and fileSpecType }
 {$ENDIF}        ;
 
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄStart personal lib interfaceÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€Start personal lib interfaceâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 {$IFNDEF UseLib   Definitions from my FILES.TPU unit }
 
 CONST MAXPATHLEN   = 64;
 TYPE  fileSpecType = string[MAXPATHLEN];
 
 {$ENDIF}
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄEnd personal lib functionsÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€End personal lib functionsâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 
 CONST MAX_EVAR_LEN  = 127;      { Maximum environment variable length }
       MAX_EVAR_BLEN = 32768;    { Maximum size of environment block }
@@ -57,7 +57,7 @@ VAR   MASTER_MCB      : MCBType;
       CURRENT_ENVSEG  : word;
       COMSPEC         : evarType;      { Value of COMSPEC evar }
       PROGRAMNAME     : fileSpecType;  { Name of executing program }
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 
 FUNCTION  EnvSize(envSeg: word): envSizeType;
 FUNCTION  MaxEnvSize(envSeg: word): envSizeType;
@@ -75,11 +75,11 @@ FUNCTION  Shell(prompt: evarType): integer;
 {$IFNDEF UseLib   Normally in Files.TPU }
 FUNCTION FNStrip(s: fileSpecType; specifier: byte): fileSpecType;
 {$ENDIF}
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 
 IMPLEMENTATION
 
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄStart personal lib implementationÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€Start personal lib implementationâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 {$IFNDEF UseLib   Functions from my FILES.TPU unit }
 
 FUNCTION FNStrip(s: fileSpecType; specifier: byte): fileSpecType;
@@ -140,7 +140,7 @@ begin
 end; {FNStrip}
 
 {$ENDIF}
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄEnd personal lib implementationÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€End personal lib implementationâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 
 FUNCTION EnvSize(envSeg: word): envSizeType;
 { Returns current size of environment segment 'envSeg' NOT INCL 2nd 00.}
@@ -492,21 +492,21 @@ begin
       writeln;
                {  Yes, this is ugly.  Sorry. :-) }
 writeln(
-'ÉÍÍµ DOS Shell ÆÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ»');
+'â•”â•â•â•¡ DOS Shell â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—');
 writeln(
-'º                                                                    º');
+'â•‘                                                                    â•‘');
 writeln(
-'º    You are in a temporary DOS Shell.  Do not load any resident     º');
+'â•‘    You are in a temporary DOS Shell.  Do not load any resident     â•‘');
 writeln(
-'º   programs (such as PRINT or DOSKEY) while you are in this shell.  º');
+'â•‘   programs (such as PRINT or DOSKEY) while you are in this shell.  â•‘');
 writeln(
-'º                                                                    º');
+'â•‘                                                                    â•‘');
 writeln(
-'º       When done, type EXITÙ to return to your application.        º');
+'â•‘       When done, type EXITâ”˜ to return to your application.        â•‘');
 writeln(
-'º                                                                    º');
+'â•‘                                                                    â•‘');
 writeln(
-'ÈÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼');
+'â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 
       Exec(COMSPEC,''); rcode:=DosError;       { Needs 64k to load }
       MemW[PrefixSeg:$002C]:=CURRENT_ENVSEG;   { Restore original env }
@@ -520,7 +520,7 @@ writeln(
    else rcode:=-1;
    Shell:=rcode
 end; {Shell}
-{ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ }
+{ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ }
 {
    Initialize public variables:
 

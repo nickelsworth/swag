@@ -39,7 +39,7 @@ Here is another example.  This was the include File -
 and the Text File used by COPYINC -
 
 p:\prog\registed.inc
-This Program is registered toÿ
+This Program is registered toÂ 
 ChkStr     : String =
 CodeChkStr : String =
 1234567890

@@ -3,7 +3,7 @@
              ===============================================
              Hex-encode binary files in debug-script batches
              ===============================================
-                 Copyright (c) 1993,1994 by Jos‚ Campione
+                 Copyright (c) 1993,1994 by JosÃ© Campione
                    Ottawa-Orleans Personal Systems Group
                           Fidonet: 1:163/513.3
 

@@ -5,89 +5,89 @@ that all effects are defined as the current Protracker effects standard. A
 short summary of this standard is provided in the documentation file for the
 Multitracker Module Editor.
 
-ÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-Position³Length³Description
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-0       ³3     ³"MTM" file marker
-3       ³BYTE  ³version number - upper nybble is major version #, lower is
-        ³      ³                 minor version number
-4       ³20    ³ASCIIZ songname
-24      ³WORD  ³number of tracks saved
-26      ³BYTE  ³last pattern number saved
-27      ³BYTE  ³last order number to play (songlength-1)
-28      ³WORD  ³length of extra comment field
-30      ³BYTE  ³number of samples saved (NOS)
-31      ³BYTE  ³attribute byte (currently defined as 0)
-32      ³BYTE  ³beats per track
-33      ³BYTE  ³number of tracks to be played back
-34      ³32    ³voice pan positions
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-66      ³NOS*37³Instrument data:
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-        ³22    ³sample name
-        ³DWORD ³sample length in bytes
-        ³DWORD ³offset of beginning of sample loop in bytes
-        ³DWORD ³offset of end of sample loop in bytes
-        ³BYTE  ³finetune value
-        ³BYTE  ³standard volume of sample
-        ³BYTE  ³attribute byte: bit meaning
-        ³      ³                0   0=8 bit sample 1=16 bit sample
-        ³      ³                1-7 undefined (set to zero)
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-66+     ³128   ³Pattern order data
-(NOS*37)³      ³
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-194+    ³trks* ³Track data:
-(NOS*37)³192   ³Each track is saved independently and takes exactly 192 bytes.
-        ³      ³The tracks are arranged as 64 consecutive 3-byte notes.  These
-        ³      ³notes have the following format:
-        ³      ³
-        ³      ³
-        ³      ³  BYTE 0   BYTE 1   BYTE 2
-        ³      ³ ppppppii iiiieeee aaaaaaaa
-        ³      ³
-        ³      ³ p = pitch value (0=no pitch stated)
-        ³      ³ i = instrument number (0=no instrument number)
-        ³      ³ e = effect number
-        ³      ³ a = effect argument
-        ³      ³
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-194+    ³      ³Track sequencing data
-NOS*37+ ³      ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-trks*192³(last pattern saved + 1)*32 WORDS³
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
-        ³      ³The track sequencing data is really just a listing of which
-        ³      ³track is used as which voice in each saved pattern.  This is
-        ³      ³necessary since one track may be a part of many different
-        ³      ³patterns. (not orders)  Doing this saves much of the memory
-        ³      ³wasted in a normal MOD by repetition of certain tracks over
-        ³      ³and over again throughout the file.
-        ³      ³
-        ³      ³Note that track zero is never saved, but always considered as
-        ³      ³an empty track.  Therefore, track numbering for the saved
-        ³      ³tracks really starts at one.
-        ³      ³
-        ³      ³The data is organized in sets of 32 voices.  First comes a
-        ³      ³WORD representing which track is in pattern 0, voice 0.  The
-        ³      ³next WORD is pattern 0, voice 1, etc.  This is repeated for
-        ³      ³each pattern saved, giving a total track sequencing size of
-        ³      ³32 WORDS per pattern saved.
-        ³      ³
-        ³      ³If your code uses MOD-style memory organization, you can still
-        ³      ³play MTM's.  You merely jump to the track sequencing data, and
-        ³      ³then load each pattern separately by jumping back and forth
-        ³      ³between the track sequences and the actual track data.
-ÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-194+    ³Header³Extra comment field
-NOS*37+ ³says. ³(Length specified in the header)
-trks*192ÀÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-+(last pattern saved + 1)*32*2      ³
-ÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
-194+    ³sample³Raw sample data
-NOS*37+ ³length³(unsigned)
-trks*192ÀÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-+(last pattern saved + 1)*32*2+     ³
-length of extra comment field       ³
-ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Positionâ”‚Lengthâ”‚Description
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+0       â”‚3     â”‚"MTM" file marker
+3       â”‚BYTE  â”‚version number - upper nybble is major version #, lower is
+        â”‚      â”‚                 minor version number
+4       â”‚20    â”‚ASCIIZ songname
+24      â”‚WORD  â”‚number of tracks saved
+26      â”‚BYTE  â”‚last pattern number saved
+27      â”‚BYTE  â”‚last order number to play (songlength-1)
+28      â”‚WORD  â”‚length of extra comment field
+30      â”‚BYTE  â”‚number of samples saved (NOS)
+31      â”‚BYTE  â”‚attribute byte (currently defined as 0)
+32      â”‚BYTE  â”‚beats per track
+33      â”‚BYTE  â”‚number of tracks to be played back
+34      â”‚32    â”‚voice pan positions
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+66      â”‚NOS*37â”‚Instrument data:
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        â”‚22    â”‚sample name
+        â”‚DWORD â”‚sample length in bytes
+        â”‚DWORD â”‚offset of beginning of sample loop in bytes
+        â”‚DWORD â”‚offset of end of sample loop in bytes
+        â”‚BYTE  â”‚finetune value
+        â”‚BYTE  â”‚standard volume of sample
+        â”‚BYTE  â”‚attribute byte: bit meaning
+        â”‚      â”‚                0   0=8 bit sample 1=16 bit sample
+        â”‚      â”‚                1-7 undefined (set to zero)
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+66+     â”‚128   â”‚Pattern order data
+(NOS*37)â”‚      â”‚
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+194+    â”‚trks* â”‚Track data:
+(NOS*37)â”‚192   â”‚Each track is saved independently and takes exactly 192 bytes.
+        â”‚      â”‚The tracks are arranged as 64 consecutive 3-byte notes.  These
+        â”‚      â”‚notes have the following format:
+        â”‚      â”‚
+        â”‚      â”‚
+        â”‚      â”‚  BYTE 0   BYTE 1   BYTE 2
+        â”‚      â”‚ ppppppii iiiieeee aaaaaaaa
+        â”‚      â”‚
+        â”‚      â”‚ p = pitch value (0=no pitch stated)
+        â”‚      â”‚ i = instrument number (0=no instrument number)
+        â”‚      â”‚ e = effect number
+        â”‚      â”‚ a = effect argument
+        â”‚      â”‚
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+194+    â”‚      â”‚Track sequencing data
+NOS*37+ â”‚      â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+trks*192â”‚(last pattern saved + 1)*32 WORDSâ”‚
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+        â”‚      â”‚The track sequencing data is really just a listing of which
+        â”‚      â”‚track is used as which voice in each saved pattern.  This is
+        â”‚      â”‚necessary since one track may be a part of many different
+        â”‚      â”‚patterns. (not orders)  Doing this saves much of the memory
+        â”‚      â”‚wasted in a normal MOD by repetition of certain tracks over
+        â”‚      â”‚and over again throughout the file.
+        â”‚      â”‚
+        â”‚      â”‚Note that track zero is never saved, but always considered as
+        â”‚      â”‚an empty track.  Therefore, track numbering for the saved
+        â”‚      â”‚tracks really starts at one.
+        â”‚      â”‚
+        â”‚      â”‚The data is organized in sets of 32 voices.  First comes a
+        â”‚      â”‚WORD representing which track is in pattern 0, voice 0.  The
+        â”‚      â”‚next WORD is pattern 0, voice 1, etc.  This is repeated for
+        â”‚      â”‚each pattern saved, giving a total track sequencing size of
+        â”‚      â”‚32 WORDS per pattern saved.
+        â”‚      â”‚
+        â”‚      â”‚If your code uses MOD-style memory organization, you can still
+        â”‚      â”‚play MTM's.  You merely jump to the track sequencing data, and
+        â”‚      â”‚then load each pattern separately by jumping back and forth
+        â”‚      â”‚between the track sequences and the actual track data.
+â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+194+    â”‚Headerâ”‚Extra comment field
+NOS*37+ â”‚says. â”‚(Length specified in the header)
+trks*192â””â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
++(last pattern saved + 1)*32*2      â”‚
+â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+194+    â”‚sampleâ”‚Raw sample data
+NOS*37+ â”‚lengthâ”‚(unsigned)
+trks*192â””â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
++(last pattern saved + 1)*32*2+     â”‚
+length of extra comment field       â”‚
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
 }

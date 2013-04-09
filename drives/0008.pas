@@ -1,5 +1,5 @@
-{ JW³ How do I detect active drives in Pascal?  My Program would crash if you
-   ³ Typed in a non-existent drive as either source or destination.
+{ JWâ”‚ How do I detect active drives in Pascal?  My Program would crash if you
+   â”‚ Typed in a non-existent drive as either source or destination.
 
 Here's the method I use:
 }

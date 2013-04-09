@@ -1,7 +1,7 @@
-{RV³ok i would like some info on how to remove a tsr added to memory by a
-  ³i'd like some info on ext. VGA screens. For examplw i know that in
-  ³320x200x256 that one Byte is equal to one pixel. i need this Type of
-  ³info For =< 640x480
+{RVâ”‚ok i would like some info on how to remove a tsr added to memory by a
+  â”‚i'd like some info on ext. VGA screens. For examplw i know that in
+  â”‚320x200x256 that one Byte is equal to one pixel. i need this Type of
+  â”‚info For =< 640x480
 
 Mode $10 (ie 640x350x16)
 -------------------------

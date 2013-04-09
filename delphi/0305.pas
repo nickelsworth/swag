@@ -23,7 +23,7 @@ unit crt32;
 {# Date 18.01.1997}
 {# Author Frank Zimmer}
 {# description
- Copyright © 1997, Frank Zimmer, 100703.1602@compuserve.com
+ Copyright âŒ 1997, Frank Zimmer, 100703.1602@compuserve.com
  Version: 1.0.0119
  Date:    18.01.1997
 
@@ -140,7 +140,7 @@ unit crt32;
 {# Date 18.01.1997}
 {# Author Frank Zimmer}
 {# description
- Copyright © 1997, Frank Zimmer, 100703.1602@compuserve.com
+ Copyright âŒ 1997, Frank Zimmer, 100703.1602@compuserve.com
  Version: 1.0.0119
  Date:    18.01.1997
 
@@ -441,7 +441,7 @@ begin
     if wherex > 1 then writeln;
     textcolor(green);
     setfocus(GetCurrentProcess);
-    if german then write('Bitte eine Taste drücken!')
+    if german then write('Bitte eine Taste drâ¿cken!')
               else write('Press any key!');
     normvideo;
     FlushInputBuffer;

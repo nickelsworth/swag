@@ -1,9 +1,9 @@
 {
-³ In the SWAG archive, there is one good unit to do all that. But ther
-³ is one MAJOR bug: you have to know the device name (e.g. MSCD001, sa
-³ to access the information on the CD, like tracks, durations, etc. I
-³ not found a way to know it by software. If someone knows, well... le
-³ me know.
+â”‚ In the SWAG archive, there is one good unit to do all that. But ther
+â”‚ is one MAJOR bug: you have to know the device name (e.g. MSCD001, sa
+â”‚ to access the information on the CD, like tracks, durations, etc. I
+â”‚ not found a way to know it by software. If someone knows, well... le
+â”‚ me know.
 From: magnush@programmers.bbs.no (Magnus Holm)
 }
 procedure initcd;assembler;

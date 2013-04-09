@@ -60,10 +60,10 @@ Uses Crt;
 { This is all the ASCII codes for all the possible types of frames }
 
            db    020h,020h,020h,020h,020h,020h  { '      ' }
-           db    0dah,0c4h,0bfh,0b3h,0c0h,0d9h  { '�Ŀ���' }
-           db    0c9h,0cdh,0bbh,0bah,0c8h,0bch  { '�ͻ�ȼ' }
-           db    0d6h,0c4h,0b7h,0bah,0d3h,0bdh  { '�ķ�ӽ' }
-           db    0d5h,0cdh,0b8h,0b3h,0d4h,0beh  { '�͸�Ծ' }
+           db    0dah,0c4h,0bfh,0b3h,0c0h,0d9h  { '┌─┐│└┘' }
+           db    0c9h,0cdh,0bbh,0bah,0c8h,0bch  { '╔═╗║╚╝' }
+           db    0d6h,0c4h,0b7h,0bah,0d3h,0bdh  { '╓─╖║╙╜' }
+           db    0d5h,0cdh,0b8h,0b3h,0d4h,0beh  { '╒═╕│╘╛' }
 
 @FrameOfs:
 

@@ -5,7 +5,7 @@ uses Dos;
 const
    id = 'Tansin A Darcos & Company, P O Box 70970, SW DC 20024-0970 ' +
         '"Ask about our software catalog."'+
-        '∞∞±±≤≤€€ In Stereo Where Available €€≤≤±±∞∞  '+
+        '‚ñë‚ñë‚ñí‚ñí‚ñì‚ñì‚ñà‚ñà In Stereo Where Available ‚ñà‚ñà‚ñì‚ñì‚ñí‚ñí‚ñë‚ñë  '+
         'Stolen tagline: "Special favors come in 31 flavors... Pass ' +
         'the mints... I''m out of Life Savers."   Just don''t sue us '  +
         'if you use this. ';

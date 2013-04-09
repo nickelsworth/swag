@@ -1,8 +1,8 @@
 
-şşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşş
-şşşşşşşş    SyNeRgY DeSiGn presents a production by LORD HELMET    şşşşşşşş
-şşşşşşşş                        MODE X                             şşşşşşşş
-şşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşş
+â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– 
+â– â– â– â– â– â– â– â–     SyNeRgY DeSiGn presents a production by LORD HELMET    â– â– â– â– â– â– â– â– 
+â– â– â– â– â– â– â– â–                         MODE X                             â– â– â– â– â– â– â– â– 
+â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– â– 
 
 The purpose of this file is to provide the information necessary for using 
 mode x in your programs. Some knowledge of the VGA card and assembly program-
@@ -39,15 +39,15 @@ allow the use of the second segment, such as the Trident cards), so forget
 about that one. Segment A000h is the important one. Now, when normally using
 this part of memory for graphics output you might think that it is organized as
 follows :
-                        ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
-               OFFSET 0 ³. <- pixel 0           ³
-                        ³                       ³
-                        ³                       ³
-                        ³                       ³
-                        ³                       ³
-                        ³                       ³
-           OFFSET 63999 ³        pixel 63999 ->.³
-                        ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+                        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+               OFFSET 0 â”‚. <- pixel 0           â”‚
+                        â”‚                       â”‚
+                        â”‚                       â”‚
+                        â”‚                       â”‚
+                        â”‚                       â”‚
+                        â”‚                       â”‚
+           OFFSET 63999 â”‚        pixel 63999 ->.â”‚
+                        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
 What this means is : the VGA memory would be organized as one big chunk of
 memory, 64000 bytes long. If you still think this is the case, FORGET IT. 
@@ -55,18 +55,18 @@ The VGA memory ISN'T organized like this, but in bitplanes. Those of you who
 have worked with EGA must surely know what programming with bitplanes means. 
 Let's take a look at how the VGA memory really is organized :
 
-        Bit plane 3     ->       ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿ -
-        Bit plane 2     ->    ÚÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿  ³ |
-        Bit plane 1     -> ÚÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿  ³  ³ | each plane
-        Bit Plane 0  -> ÚÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿  ³  ³  ³ | is 64000
-                        ³                       ³  ³  ³  ³ | bytes long
-                        ³                       ³  ³  ³  ³ |
-                        ³                       ³  ³  ³  ³ |
-                        ³                       ³  ³  ³  ³ |
-                        ³                       ³  ³  ÃÄÄÙ -
-                        ³                       ³  ÃÄÄÙ 
-                        ³                       ÃÄÄÙ
-                        ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+        Bit plane 3     ->       â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â” -
+        Bit plane 2     ->    â”Œâ”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚ |
+        Bit plane 1     -> â”Œâ”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚  â”‚ | each plane
+        Bit Plane 0  -> â”Œâ”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”‚  â”‚  â”‚ | is 64000
+                        â”‚                       â”‚  â”‚  â”‚  â”‚ | bytes long
+                        â”‚                       â”‚  â”‚  â”‚  â”‚ |
+                        â”‚                       â”‚  â”‚  â”‚  â”‚ |
+                        â”‚                       â”‚  â”‚  â”‚  â”‚ |
+                        â”‚                       â”‚  â”‚  â”œâ”€â”€â”˜ -
+                        â”‚                       â”‚  â”œâ”€â”€â”˜ 
+                        â”‚                       â”œâ”€â”€â”˜
+                        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
                         
 So, as you can see, the VGA memory consists of four bit planes of 64000 bytes
 each, just like the EGA. All four bit planes are mapped at adress A0000h. The

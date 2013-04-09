@@ -7,7 +7,7 @@ Here it is :
 
 {                           HP-DESKJET v1.0
                     THE ULTIMATE HP DESKJET UNIT
-          (C)COPYRIGHT 1996 DIMENSION X þ DONE BY BUCKSHAG
+          (C)COPYRIGHT 1996 DIMENSION X â–  DONE BY BUCKSHAG
 
  This unit is made by : John Vd Burg a.k.a. BuCKSHaG from DiMeNSioN X
  The unit has been tested on a HP DESKJET 500 and 520. But i Think it

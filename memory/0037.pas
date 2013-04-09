@@ -1,9 +1,9 @@
 {
-³>anybody know how I can determine the size of the driver in
-³>memory?
-³ I would assume they take the Drivers name and search through the
-³ Memory Control Blocks maintained by DOS and seeing if the driver
-³ owns any of them.  But there might be an easier way.
+â”‚>anybody know how I can determine the size of the driver in
+â”‚>memory?
+â”‚ I would assume they take the Drivers name and search through the
+â”‚ Memory Control Blocks maintained by DOS and seeing if the driver
+â”‚ owns any of them.  But there might be an easier way.
 
 There is.  An undocumented DOS function (52h) gives you the "list of
 lists", which contains the first device driver in a linked list, which

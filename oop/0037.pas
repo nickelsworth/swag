@@ -704,7 +704,7 @@ TYPE
 
         MenuBar:=New(PMenuBar,Init(R,NewMenu(
 
-           NewSubMenu('~ð~ ',hcNoContext,NewMenu(
+           NewSubMenu('~â‰¡~ ',hcNoContext,NewMenu(
              NewItem('~Alt-X~ Exit','',kbAltX,cmQuit,hcNoContext,
            NIL)),
 

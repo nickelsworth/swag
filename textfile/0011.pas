@@ -1,10 +1,10 @@
 {
-³I would like to be able to read a standard ASCII Text File from disk into
-³a section of memory so I would be able to call up the screen later.  How
-³would I accomplish this?  I'm assuming that once I have it in memory I could
-³copy the information into $B800 and so have it display on the screen.  This
-³would actually be useful For an instruction screen so I could scroll one
-³screenful at a time With PgDn.
+â”‚I would like to be able to read a standard ASCII Text File from disk into
+â”‚a section of memory so I would be able to call up the screen later.  How
+â”‚would I accomplish this?  I'm assuming that once I have it in memory I could
+â”‚copy the information into $B800 and so have it display on the screen.  This
+â”‚would actually be useful For an instruction screen so I could scroll one
+â”‚screenful at a time With PgDn.
 
 Sample code For viewing Text File. Feel free to experiment With it. If you
 have any questions, just ask.

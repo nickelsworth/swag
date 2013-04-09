@@ -9,7 +9,7 @@ This is a routine I use to convert the content of a RichEdit to SGML-code. It do
 --------------------------------------------------------------------------------
 
 function rtf2sgml (text : string) : string;
-{Funktion för att konvertera en RTF-rad till SGML-text.}
+{Funktion fÃ·r att konvertera en RTF-rad till SGML-text.}
 var
 temptext : string;
 start : integer;
@@ -41,17 +41,17 @@ text := stringreplaceall (text,'{\f0\fnil MS Sans Serif;}','');{Skall alltid tas
 text := stringreplaceall (text,'{\f1\fnil\fcharset2 Symbol;}','');{Skall alltid tas bort}
 text := stringreplaceall (text,'{\f2\fswiss\fprq2 System;}}','');{Skall alltid tas bort}
 text := stringreplaceall (text,'{\colortbl\red0\green0\blue0;}','');{Skall alltid tas bort}
-{I version 2.01 av Delphi finns inte \cf0 med i RTF-rutan. Tog därför bort
-det efter \fs16 och la istället en egen tvätt av \cf0.}
+{I version 2.01 av Delphi finns inte \cf0 med i RTF-rutan. Tog dÎ£rfÃ·r bort
+det efter \fs16 och la istÎ£llet en egen tvÎ£tt av \cf0.}
 //temptext := hamtastreng (text,'{\rtf1','\deflang');
-//text := stringreplace (text,temptext,''); {Hämta och radera allt från start till deflang}
+//text := stringreplace (text,temptext,''); {HÎ£mta och radera allt frÏƒn start till deflang}
 text := stringreplaceall (text,'\cf0','');
-temptext := hamtastreng (text,'\deflang','\pard');{Plocka från deflang till pard för att få }
-text := stringreplace (text,temptext,'');{oavsett vilken lang det är. Norska o svenska är olika}
-{Här skall vi plocka bort fs och flera olika siffror beroende på vilka alternativ vi godkänner.}
+temptext := hamtastreng (text,'\deflang','\pard');{Plocka frÏƒn deflang till pard fÃ·r att fÏƒ }
+text := stringreplace (text,temptext,'');{oavsett vilken lang det Î£r. Norska o svenska Î£r olika}
+{HÎ£r skall vi plocka bort fs och flera olika siffror beroende pÏƒ vilka alternativ vi godkÎ£nner.}
 //text := stringreplaceall (text,'\fs16','');{8 punkter}
 //text := stringreplaceall (text,'\fs20','');{10 punkter}
-{Nu städar vi istället bort alla tvåsiffriga fontsize.}
+{Nu stÎ£dar vi istÎ£llet bort alla tvÏƒsiffriga fontsize.}
 while pos ('\fs',text) >0 do
   begin
     application.processmessages;

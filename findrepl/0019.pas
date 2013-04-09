@@ -39,7 +39,7 @@ ASM
   @@10:
         mov  si,bx
         lodsw
-        xchg al,ah          { AH=Stringl„nge, AL=Suchchar }
+        xchg al,ah          { AH=StringlÃ¤nge, AL=Suchchar }
         repne scasb
         jne  @@30
         dec  ah

@@ -1,6 +1,6 @@
 {
-MR³ How do you tell the difference between a fixed hard drive, and a
-  ³ removable drive or network drive?  Why? I have a program which reports
+MRâ”‚ How do you tell the difference between a fixed hard drive, and a
+  â”‚ removable drive or network drive?  Why? I have a program which reports
 
 This little demo program contains the answers for most of your
 questions.
