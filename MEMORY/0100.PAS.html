@@ -1,0 +1,879 @@
+<html>
+<head><title> "Variable sized arrays on the heap" by DR E. BUXBAUM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0100.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>UNIT </b></font>Vector<font color="#000080">;
+</font><font color="#008000"><i>{$F+,O+}
+{$DEFINE Englisch}             { language for error messages Englisch/Deutsch }
+
+{ An example how to program variable sized arrays on the heap. Some of the 
+  routines are programmed in 80x87 assembler for speed. (See R. Startz: 
+  8087/80287/80387 for the IBM PC &amp; Compatibles, 3rd ed., New York (Brady) 
+  1988, ISBN 0-13-246604-X for an introduction to 80x87 assembler)
+  
+  Copyright (c) 1997 by Dr. Engelbert Buxbaum. This code may be freely 
+  distributed and used for non-commercial purposes. All other rights reserved. 
+  
+  I have left in calls to some libraries I normally use for IO and error 
+  handling (see USES-clause for details). It should not be difficult to 
+  replace them with your own. } 
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+USES </b></font>CRT<font color="#000080">, 
+     </font>Windows<font color="#000080">,     </font><font color="#008000"><i>{ handle windows for I/O. Source: Chip-Spezial - Das 
+                    Allerbeste, Wuerzburg (Vogel) 1989, ISBN 3-8023-1008-X
+                    Used in WriteVector. Defines also 
+                    FUNCTION Error (Msg : STRING) : CHAR; for error handling.
+                    This function opens a window, prints Msg, waits for a key 
+                    to be pressed, closes the window and returns the key }
+     </i></font>ReadExt<font color="#000080">,     </font><font color="#008000"><i>{ protected keyboard input. Defines functions ReadByte, 
+                    ReadReal ect with their obvious meaning. Argument of 
+                    these function is the number of significant places. Also 
+                    from Chip Special } 
+     </i></font>MathFunc<font color="#000080">;    </font><font color="#008000"><i>{ simple math routines like logarithms ect. }
+
+</i></font><font color="#FF0000"><b>CONST </b></font>MaxVector <font color="#000080">= </font><font color="#800000">8000</font><font color="#000080">;                    </font><font color="#008000"><i>{ so as not to exceed 64 KB }
+
+      </i></font>VectorXPos  <font color="#000080">: </font>WORD <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;              </font><font color="#008000"><i>{ position for screen output }
+      </i></font>VectorYPos  <font color="#000080">: </font>WORD <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+
+      </font>VectorError <font color="#000080">: </font>BOOLEAN <font color="#000080">= </font>FALSE<font color="#000080">;       </font><font color="#008000"><i>{ flag for error handling, can be
+                                             checked and reset by calling unit }
+
+</i></font><font color="#FF0000"><b>TYPE </b></font>VectorStruc <font color="#000080">= </font><font color="#FF0000"><b>RECORD 
+                        </b></font>Column <font color="#000080">: </font>WORD<font color="#000080">; 
+                        </font>Data   <font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxVector<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>DOUBLE<font color="#000080">;
+                   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+     </font>VectorTyp <font color="#000080">= ^</font>VectorStruc<font color="#000080">;
+
+     </font>MedString   <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">14</font><font color="#000080">];             </font><font color="#008000"><i>{ name of I/O device }
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>ReadVector <font color="#000080">(</font>MedStr <font color="#000080">: </font>MedString<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">);
+</font><font color="#008000"><i>{ read vector from device given by MedString. Can be a file, CON or PRN.
+  Vector will be created inside this routine and should not exist when the
+  function is entered. First line contains the number of Vector-elements (may 
+  be preceeded by '#' for compatibility with GnuPlot), followed by each element 
+  on a separate line }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>WriteVector <font color="#000080">(</font>MedStr <font color="#000080">: </font>MedString<font color="#000080">; </font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>Places <font color="#000080">: </font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ Write vector to device. See comment above for details of file format }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>InitVector <font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>len <font color="#000080">: </font>WORD<font color="#000080">);
+</font><font color="#008000"><i>{ create vector, contents will be undefined }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>KillVector <font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">);
+</font><font color="#008000"><i>{ reclaim memory occupied by vector }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>VectorLength <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>GetVectorElement <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>n <font color="#000080">: </font>WORD<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>PutVectorElement <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>n <font color="#000080">: </font>WORD<font color="#000080">; </font>c <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CopyVector <font color="#000080">(</font>Source<font color="#000080">, </font>Target <font color="#000080">: </font>VectorTyp<font color="#000080">);
+</font><font color="#008000"><i>{ use instead of Target := Source to copy contents of vector  }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>LoadConstant <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+</font><font color="#008000"><i>{ load all vector elements with C }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>AddConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+</font><font color="#008000"><i>{ add C to all elements in A and save result in B. A and B may be identical }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SubConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MulConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DivConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>VectorAdd <font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">, </font>C <font color="#000080">: </font>VectorTyp<font color="#000080">);
+</font><font color="#008000"><i>{ Add corresponding elements of A and B, save result in C. A, B and C may
+  be identical. }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>VectorSub <font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">, </font>C <font color="#000080">: </font>VectorTyp<font color="#000080">);
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>VectorInnerProduct <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+</font><font color="#008000"><i>{ Inner product of 2 vectors (sum of the product of corresponding elements) }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>GSum <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+</font><font color="#008000"><i>{ GSum := a[1] + a[2] + ... + a[n]. Divide this sum by Vector.Len to get the
+  arithmetic mean. }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>HarmonicAverage <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+</font><font color="#008000"><i>{ n-th root of the product of all elements, implemented by dividing the sums 
+  of the logarithms of all elements by n. The elements must be &gt; 0 }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>VectorAbsolute <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+</font><font color="#008000"><i>{ Euclidian vector length, sqrt of the sum of the squares of all elements }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Angle <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+</font><font color="#008000"><i>{ arccos(InnerProduct(A, B) / (len(A)*len(B))) }
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+TYPE </b></font>PtrParts <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+                     </b></font>Ofs<font color="#000080">, </font>Seg <font color="#000080">: </font>WORD<font color="#000080">;       </font><font color="#008000"><i>{ Address to which Vector points }
+                </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>ch <font color="#000080">: </font>CHAR<font color="#000080">;                              </font><font color="#008000"><i>{ dummy variable for error handling }
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>InitVector <font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>len <font color="#000080">: </font>WORD<font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}  
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' nicht genuegend (zusammenhaengender) Speicher'</font><font color="#000080">; 
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch} 
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' not enough (continuous) memory'</font><font color="#000080">;               
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>len <font color="#000080">&gt; </font>MaxVector<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>len<font color="#000080">*</font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">)+</font><font color="#800000">4 </font><font color="#000080">&gt; </font>MaxAvail<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>GetMem<font color="#000080">(</font>Vector<font color="#000080">, </font>len<font color="#000080">*</font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">)+</font><font color="#800000">4</font><font color="#000080">);
+    </font>Vector<font color="#000080">^.</font>Column <font color="#000080">:= </font>len<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>KillVector <font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">);
+
+</font><font color="#FF0000"><b>BEGIN
+    </b></font>FreeMem<font color="#000080">(</font>Vector<font color="#000080">, </font>Vector<font color="#000080">^.</font>Column<font color="#000080">*</font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">)+</font><font color="#800000">4</font><font color="#000080">);
+    </font>Vector <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;                         </font><font color="#008000"><i>{ so it may not be used by mistake }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>VectorLength <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    </b></font>VectorLength <font color="#000080">:= </font>Vector<font color="#000080">^.</font>Column<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>GetVectorElement <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>n <font color="#000080">: </font>WORD<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}  
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Lesender Zugriff auf nicht existierendes Vektor-Element'</font><font color="#000080">; 
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch} 
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Attempt to read non-existend vector element'</font><font color="#000080">;             
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>n <font color="#000080">&lt;= </font>Vector<font color="#000080">^.</font>Column<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         </b></font>GetVectorElement <font color="#000080">:= </font>Vector<font color="#000080">^.</font>Data<font color="#000080">[</font>n<font color="#000080">]
+      </font><font color="#FF0000"><b>ELSE
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>PutVectorElement <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>n <font color="#000080">: </font>WORD<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}  
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Schreibender Zugriff auf nicht existierendes Vektor-Element'</font><font color="#000080">; 
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch} 
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Attempt to Write to non-existing vector element'</font><font color="#000080">;             
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>n <font color="#000080">&lt;= </font>Vector<font color="#000080">^.</font>Column<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         </b></font>Vector<font color="#000080">^.</font>Data<font color="#000080">[</font>n<font color="#000080">] := </font>C
+      <font color="#FF0000"><b>ELSE
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CopyVector <font color="#000080">(</font>Source<font color="#000080">, </font>Target <font color="#000080">: </font>VectorTyp<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l<font color="#000080">, </font>m <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>Source<font color="#000080">;
+    </font>q             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>Target<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>Source<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>q<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>m <font color="#000080">:= </font>q<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>InitVector<font color="#000080">(</font>Target<font color="#000080">, </font>Source<font color="#000080">^.</font>Column<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>VectorError <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">PUSH  DS
+      MOV   AX,i                   </font><font color="#008000"><i>{ SizeOf(DOUBLE) into AX    }
+      </i></font><font color="#FF00FF">MOV   ES,k
+      MOV   BX,j                   </font><font color="#008000"><i>{ instead of LES Vector^ }
+      </i></font><font color="#FF00FF">MOV   CX,WORD PTR ES:[BX]    </font><font color="#008000"><i>{ vector length into CX }
+      </i></font><font color="#FF00FF">ADD   BX,2                   </font><font color="#008000"><i>{ ES:[BX] =&gt; Source.Data[1] }
+      </i></font><font color="#FF00FF">MOV   SI,l
+      MOV   DS,m
+      ADD   SI,2                   </font><font color="#008000"><i>{ DS:[SI] = Target.Data[1] }
+</i></font><font color="#FF00FF">@VecLoop:
+      FLD   QWORD PTR ES:[BX]      </font><font color="#008000"><i>{ Copy Source.Data[j] into ST(0) }
+      </i></font><font color="#FF00FF">FSTP  QWORD PTR DS:[SI]      </font><font color="#008000"><i>{ Move ST(0) into Target.Data[j] }
+      </i></font><font color="#FF00FF">ADD   BX,AX                  </font><font color="#008000"><i>{ ES:[BX] to next element of Source }
+      </i></font><font color="#FF00FF">ADD   SI,AX                  </font><font color="#008000"><i>{ DS:[SI] to next element of Target }
+      </i></font><font color="#FF00FF">LOOP  @VecLoop
+      POP   DS
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ 
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ReadVector <font color="#000080">(</font>MedStr <font color="#000080">: </font>MedString<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}
+</i></font><font color="#FF0000"><b>CONST </b></font>TitelStr  <font color="#000080">= </font><font color="#800000">' Vektor einlesen '</font><font color="#000080">;
+      </font>Text1     <font color="#000080">= </font><font color="#800000">' Datei mit Vektor nicht gefunden'</font><font color="#000080">;
+      </font>Text2     <font color="#000080">= </font><font color="#800000">' Vektor zu gross'</font><font color="#000080">;
+      </font>Text3     <font color="#000080">= </font><font color="#800000">' Unbekanntes Datei-Format'</font><font color="#000080">;
+      </font>Namen     <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of string</b></font><font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] = (</font><font color="#800000">'Laenge: '</font><font color="#000080">, </font><font color="#800000">'Element: '</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch}
+</i></font><font color="#FF0000"><b>CONST </b></font>TitelStr <font color="#000080">= </font><font color="#800000">' Read vector '</font><font color="#000080">;
+      </font>Text1    <font color="#000080">= </font><font color="#800000">' File with vector not found'</font><font color="#000080">;
+      </font>Text2    <font color="#000080">= </font><font color="#800000">' Vector too large'</font><font color="#000080">;
+      </font>Text3    <font color="#000080">= </font><font color="#800000">' Unknown file format'</font><font color="#000080">;
+      </font>Namen    <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of string</b></font><font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] = (</font><font color="#800000">'Length: '</font><font color="#000080">, </font><font color="#800000">'Element: '</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>VAR </b></font>j<font color="#000080">, </font>k<font color="#000080">, </font>l <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>code    <font color="#000080">: </font>integer<font color="#000080">;
+    </font>Medium  <font color="#000080">: </font>text<font color="#000080">;
+    </font>Window  <font color="#000080">: </font>WindowType<font color="#000080">;
+    </font>hst     <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">5</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>BEGIN
+    FOR </b></font>k <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>Length<font color="#000080">(</font>MedStr<font color="#000080">) </font><font color="#FF0000"><b>DO
+       </b></font>MedStr<font color="#000080">[</font>k<font color="#000080">] := </font>UpCase<font color="#000080">(</font>MedStr<font color="#000080">[</font>k<font color="#000080">]);
+    </font><font color="#FF0000"><b>IF </b></font>MedStr <font color="#000080">= </font><font color="#800000">'CON'
+      </font><font color="#FF0000"><b>THEN
+         BEGIN 
+             </b></font>Window <font color="#000080">:= </font>Windows<font color="#000080">.</font>NormWindow<font color="#000080">;
+             </font>Window<font color="#000080">.</font>Titel <font color="#000080">:= </font>TitelStr<font color="#000080">;
+             </font>Windows<font color="#000080">.</font>OpenWindowType<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">25</font><font color="#000080">, </font>Window<font color="#000080">);
+             </font>Write<font color="#000080">(</font>Namen<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+             </font>l <font color="#000080">:= </font>ReadExt<font color="#000080">.</font>ReadByte<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">);
+             </font>WriteLn<font color="#000080">;
+         </font><font color="#FF0000"><b>END
+      ELSE
+         BEGIN
+             </b></font>Assign<font color="#000080">(</font>Medium<font color="#000080">, </font>MedStr<font color="#000080">);
+             </font>Reset<font color="#000080">(</font>Medium<font color="#000080">);
+             </font><font color="#FF0000"><b>IF </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0
+               </font><font color="#FF0000"><b>THEN
+                  BEGIN
+                      </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text1<font color="#000080">);
+                      </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+                      </font>EXIT<font color="#000080">;
+                  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+             </font>ReadLn<font color="#000080">(</font>Medium<font color="#000080">, </font>hst<font color="#000080">);
+             </font><font color="#FF0000"><b>if </b></font>hst<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">'#' </font><font color="#FF0000"><b>then </b></font>hst <font color="#000080">:= </font>copy<font color="#000080">(</font>hst<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>length<font color="#000080">(</font>hst<font color="#000080">)); </font><font color="#008000"><i>{ for compatibility with gnuplot }
+             </i></font>Val<font color="#000080">(</font>hst<font color="#000080">, </font>l<font color="#000080">, </font>code<font color="#000080">);
+             </font><font color="#FF0000"><b>if </b></font>code <font color="#000080">&lt;&gt; </font><font color="#800000">0 
+               </font><font color="#FF0000"><b>then
+                  begin
+                      </b></font>VectorError <font color="#000080">:= </font>True<font color="#000080">;
+                      </font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text3<font color="#000080">);
+                      </font>exit<font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>InitVector<font color="#000080">(</font>Vector<font color="#000080">, </font>l<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>VectorError <font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>MedStr <font color="#000080">= </font><font color="#800000">'CON'
+      </font><font color="#FF0000"><b>THEN
+         </b></font>WriteLn<font color="#000080">(</font><font color="#800000">' ----------------- '</font><font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Vector<font color="#000080">^.</font>Column <font color="#000080">&gt; </font>MaxVector<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text2<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font>MedStr <font color="#000080">= </font><font color="#800000">'CON'
+        </font><font color="#FF0000"><b>THEN
+           FOR </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>l <font color="#FF0000"><b>DO
+              BEGIN
+                  </b></font>Write<font color="#000080">(</font>j<font color="#000080">, </font><font color="#800000">'. '</font><font color="#000080">, </font>Namen<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]);
+                  </font>Vector<font color="#000080">^.</font>Data<font color="#000080">[</font>j<font color="#000080">] := </font>ReadExt<font color="#000080">.</font>ReadReal<font color="#000080">(</font><font color="#800000">12</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+                  </font>WriteLn<font color="#000080">;
+              </font><font color="#FF0000"><b>END
+        ELSE
+           BEGIN
+               FOR </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>l <font color="#FF0000"><b>DO
+                  BEGIN
+                      IF </b></font>EOF<font color="#000080">(</font>Medium<font color="#000080">)
+                        </font><font color="#FF0000"><b>THEN
+                           BEGIN
+                               </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text3<font color="#000080">);
+                               </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+                               </font>EXIT<font color="#000080">;
+                           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+                      </font>ReadLn<font color="#000080">(</font>Medium<font color="#000080">, </font>Vector<font color="#000080">^.</font>Data<font color="#000080">[</font>j<font color="#000080">]);
+                      </font><font color="#FF0000"><b>IF </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0
+                        </font><font color="#FF0000"><b>THEN
+                           BEGIN
+                               </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text3<font color="#000080">);
+                               </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+                               </font>EXIT<font color="#000080">;
+                           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+                  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>MedStr <font color="#000080">= </font><font color="#800000">'CON'
+      </font><font color="#FF0000"><b>THEN
+         </b></font>Windows<font color="#000080">.</font>CloseWindow
+      <font color="#FF0000"><b>ELSE
+         </b></font>Close<font color="#000080">(</font>Medium<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>WriteVector <font color="#000080">(</font>MedStr <font color="#000080">: </font>MedString<font color="#000080">; </font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>Places <font color="#000080">: </font>BYTE<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>j<font color="#000080">, </font>k    <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>Medium  <font color="#000080">: </font>TEXT<font color="#000080">;
+    </font>Window  <font color="#000080">: </font>WindowType<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    FOR </b></font>k <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>length<font color="#000080">(</font>MedStr<font color="#000080">) </font><font color="#FF0000"><b>DO
+       </b></font>MedStr<font color="#000080">[</font>k<font color="#000080">] := </font>UpCase<font color="#000080">(</font>MedStr<font color="#000080">[</font>k<font color="#000080">]);
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>MedStr <font color="#000080">= </font><font color="#800000">'CON'</font><font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>Window<font color="#000080">.</font>TextAtt <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+             </font>Window<font color="#000080">.</font>RahmenAtt <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+             </font>Window<font color="#000080">.</font>Rahmen <font color="#000080">:= </font>NoFrame<font color="#000080">;
+             </font>Window<font color="#000080">.</font>Titel <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+             </font>OpenWindowType<font color="#000080">(</font>VectorXPos<font color="#000080">, </font>VectorYPos<font color="#000080">, </font>VectorXPos<font color="#000080">+</font>Places<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,
+                            </font>VectorYPos<font color="#000080">+</font>Vector<font color="#000080">^.</font>Column<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">, </font>Window<font color="#000080">);
+         </font><font color="#FF0000"><b>END
+      ELSE
+         </b></font>assign<font color="#000080">(</font>Medium<font color="#000080">, </font>MedStr<font color="#000080">);
+    </font><font color="#FF0000"><b>IF NOT </b></font><font color="#000080">((</font>MedStr <font color="#000080">= </font><font color="#800000">'LST'</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>MedStr <font color="#000080">= </font><font color="#800000">'CON'</font><font color="#000080">))
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ReWrite<font color="#000080">(</font>Medium<font color="#000080">);
+             </font>WriteLn<font color="#000080">(</font>Medium<font color="#000080">, </font><font color="#800000">'#'</font><font color="#000080">, </font>Vector<font color="#000080">^.</font>Column<font color="#000080">);
+         </font><font color="#FF0000"><b>END
+      ELSE
+         IF </b></font><font color="#000080">(</font>MedStr <font color="#000080">= </font><font color="#800000">'LST'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>ReWrite<font color="#000080">(</font>Medium<font color="#000080">);
+    </font><font color="#FF0000"><b>FOR </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>Vector<font color="#000080">^.</font>Column <font color="#FF0000"><b>DO
+      IF </b></font><font color="#000080">(</font>MedStr <font color="#000080">&lt;&gt; </font><font color="#800000">'CON'</font><font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+           </b></font>WriteLn<font color="#000080">(</font>Medium<font color="#000080">, </font>MathFunc<font color="#000080">.</font>FloatStr<font color="#000080">(</font>Vector<font color="#000080">^.</font>Data<font color="#000080">[</font>j<font color="#000080">], </font>Places<font color="#000080">))
+        </font><font color="#FF0000"><b>ELSE
+           </b></font>Write<font color="#000080">(</font>MathFunc<font color="#000080">.</font>FloatStr<font color="#000080">(</font>Vector<font color="#000080">^.</font>Data<font color="#000080">[</font>j<font color="#000080">], </font>Places<font color="#000080">));
+    </font><font color="#FF0000"><b>IF </b></font>MedStr <font color="#000080">&lt;&gt; </font><font color="#800000">'CON' </font><font color="#FF0000"><b>THEN </b></font>close<font color="#000080">(</font>Medium<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>LoadConstant <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p       <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>Vector<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>Vector<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">mov   ax,i                   
+      mov   es,k
+      mov   bx,j                   
+      mov   cx,WORD ptr es:[bx]    
+      add   bx,2                   
+      fld   qword ptr C            </font><font color="#008000"><i>{ put C into ST(0) }
+</i></font><font color="#FF00FF">@ConstLoop:
+      fst   qword ptr ES:[BX]      </font><font color="#008000"><i>{ copy C from ST(0) into A[j] }
+      </i></font><font color="#FF00FF">add   bx,ax                  </font><font color="#008000"><i>{ ES:[BX] to next element }
+      </i></font><font color="#FF00FF">loop  @ConstLoop
+      fstp  st(0)                  </font><font color="#008000"><i>{ clean up Coprocessor-Stack }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>AddConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l<font color="#000080">, </font>m <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>A<font color="#000080">;
+    </font>q             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>B<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>q<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>m <font color="#000080">:= </font>q<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>B<font color="#000080">^.</font>Column <font color="#000080">:= </font>A<font color="#000080">^.</font>Column<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">PUSH  DS
+      MOV   AX,i                   
+      MOV   ES,k
+      MOV   BX,j                   
+      MOV   CX,WORD PTR ES:[BX]    
+      ADD   BX,2                   
+      MOV   SI,l
+      MOV   DS,m
+      ADD   SI,2                   
+      FLD   QWORD PTR C            </font><font color="#008000"><i>{ load constant C into ST(0) }
+</i></font><font color="#FF00FF">@AddLoop:
+      FLD   QWORD PTR ES:[BX]      </font><font color="#008000"><i>{ A.Data[j] into ST(0) }
+      </i></font><font color="#FF00FF">FADD  ST,St(1)               </font><font color="#008000"><i>{ ST(0) = A.Data[j] + C }
+      </i></font><font color="#FF00FF">FSTP  QWORD PTR DS:[SI]      </font><font color="#008000"><i>{ move result into B.Data[j] }
+      </i></font><font color="#FF00FF">ADD   BX,AX                  
+      ADD   SI,AX                  
+      loop  @AddLoop
+      FSTP  ST(0)                  
+      POP   DS
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SubConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l<font color="#000080">, </font>m <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>A<font color="#000080">;
+    </font>q             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>B<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>q<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>m <font color="#000080">:= </font>q<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>B<font color="#000080">^.</font>Column <font color="#000080">:= </font>A<font color="#000080">^.</font>Column<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">PUSH  DS
+      MOV   AX,i                   
+      MOV   ES,k
+      MOV   BX,j                   
+      MOV   CX,WORD PTR ES:[BX]    
+      ADD   BX,2                   
+      MOV   SI,l
+      MOV   DS,m
+      ADD   SI,2                   
+      FLD   QWORD PTR C                                                         
+@SubLoop:                                             
+      FLD   QWORD PTR ES:[BX]                                                   
+      FSUB  ST,ST(1)                                                            
+      FSTP  QWORD PTR DS:[SI]                                                   
+      ADD   BX,AX                                                               
+      ADD   SI,AX                                                               
+      LOOP  @SubLoop                                             
+      FSTP  ST(0)                                                               
+      POP   DS
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MulConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l<font color="#000080">, </font>m <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>A<font color="#000080">;
+    </font>q             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>B<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>q<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>m <font color="#000080">:= </font>q<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>B<font color="#000080">^.</font>Column <font color="#000080">:= </font>A<font color="#000080">^.</font>Column<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">PUSH  DS
+      MOV   AX,i                                                                
+      MOV   ES,k                                             
+      MOV   BX,j                                                                
+      MOV   CX,WORD PTR ES:[BX]                                                 
+      ADD   BX,2                                                                
+      MOV   SI,l                                             
+      MOV   DS,m                                             
+      ADD   SI,2                                                                
+      FLD   QWORD PTR C                                                         
+@MulLoop:                                             
+      FLD   QWORD PTR ES:[BX]                                                   
+      FMUL  ST,ST(1)                                                            
+      FSTP  QWORD PTR DS:[SI]                                                   
+      ADD   BX,AX                                                               
+      ADD   SI,AX                                                               
+      LOOP  @MulLoop                                             
+      FSTP  ST(0)                                                               
+      POP   DS
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DivConstant <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">; </font>C <font color="#000080">: </font>DOUBLE<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l<font color="#000080">, </font>m <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>A<font color="#000080">;
+    </font>q             <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>B<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>q<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>m <font color="#000080">:= </font>q<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>B<font color="#000080">^.</font>Column <font color="#000080">:= </font>A<font color="#000080">^.</font>Column<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">PUSH  DS                                                                  
+      MOV   AX,i                                                                
+      MOV   ES,k                                             
+      MOV   BX,j                                                                
+      MOV   CX,WORD PTR ES:[BX]                                                 
+      ADD   BX,2                                                                
+      MOV   SI,l                                             
+      MOV   DS,m                                             
+      ADD   SI,2                                                                
+      FLD   QWORD PTR C                                                         
+@DivLoop:                                             
+      FLD   QWORD PTR ES:[BX]                                                   
+      FDIV  ST,ST(1)                                                            
+      FSTP  QWORD PTR DS:[SI]                                                   
+      ADD   BX,AX                                                               
+      ADD   SI,AX                                                               
+      LOOP  @DivLoop                                             
+      FSTP  ST(0)                                                               
+      POP   DS                                                                  
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>VectorAdd <font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">, </font>C <font color="#000080">: </font>VectorTyp<font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}  
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Vektor-Addition: ungleiche Vektorlaenge'</font><font color="#000080">;            
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch} 
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Addition of vectors: vectors of different lengths'</font><font color="#000080">; 
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>VAR </b></font>i  <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">&lt;= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">&lt;&gt; </font>B<font color="#000080">^.</font>Column<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>C<font color="#000080">^.</font>Column <font color="#000080">&lt;&gt; </font>A<font color="#000080">^.</font>Column<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>text<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>A<font color="#000080">^.</font>Column <font color="#FF0000"><b>DO
+       </b></font>c<font color="#000080">^.</font>Data<font color="#000080">[</font>i<font color="#000080">] := </font>a<font color="#000080">^.</font>Data<font color="#000080">[</font>i<font color="#000080">] + </font>b<font color="#000080">^.</font>Data<font color="#000080">[</font>i<font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>VectorSub <font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">, </font>C <font color="#000080">: </font>VectorTyp<font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}  
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Vektor-Subtraktion: ungleiche Vektorlaenge'</font><font color="#000080">;            
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch} 
+</i></font><font color="#FF0000"><b>CONST </b></font>Text <font color="#000080">= </font><font color="#800000">' Subtraction of vectors: vectors of different lengths'</font><font color="#000080">; 
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>VAR </b></font>i  <font color="#000080">: </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>B<font color="#000080">^.</font>Column <font color="#000080">&lt;&gt; </font>A<font color="#000080">^.</font>Column<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>C<font color="#000080">^.</font>Column <font color="#000080">&lt;&gt; </font>A<font color="#000080">^.</font>Column<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>text<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>A<font color="#000080">^.</font>Column <font color="#FF0000"><b>DO
+       </b></font>c<font color="#000080">^.</font>Data<font color="#000080">[</font>i<font color="#000080">] := </font>a<font color="#000080">^.</font>Data<font color="#000080">[</font>i<font color="#000080">] - </font>b<font color="#000080">^.</font>Data<font color="#000080">[</font>i<font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>GSum <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k  <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p        <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>Vector<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>Vector<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>GSum <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+       </b></font><font color="#FF00FF">MOV   AX,i                                                                  
+       MOV   ES,k                                                  
+       MOV   BX,j                                                                  
+       MOV   CX,WORD PTR ES:[BX]                                                   
+       ADD   BX,2                                                                  
+       FLDZ                      </font><font color="#008000"><i>{ 0 into ST(0), serves as accumulator  }
+</i></font><font color="#FF00FF">@AddLoop:
+       FADD  QWORD PTR ES:[BX]   </font><font color="#008000"><i>{ add vector element to sum in ST(0) }
+       </i></font><font color="#FF00FF">ADD   BX,AX                                                                             
+       LOOP  @AddLoop                                                                          
+       FSTP  QWORD PTR @Result   </font><font color="#008000"><i>{ ST(0) is result of this function }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>HarmonicAverage <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l   <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p            <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>Vector<font color="#000080">;
+    </font>x            <font color="#000080">: </font>DOUBLE<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    </b></font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>Vector<font color="#000080">^.</font>Column<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+       </b></font><font color="#FF00FF">MOV   AX,i                                                                  
+       MOV   ES,k                                                  
+       MOV   BX,j                                                  
+       MOV   CX,WORD PTR ES:[BX]                                                   
+       ADD   BX,2                                                                  
+       FLDZ                                                                        
+@MulLoop:
+       FLDLN2                    </font><font color="#008000"><i>{ ST(0) = ln(2) }
+       </i></font><font color="#FF00FF">FLD   QWORD PTR ES:[BX]   </font><font color="#008000"><i>{ Vector element in ST(0)  }
+       </i></font><font color="#FF00FF">FYL2X                     </font><font color="#008000"><i>{ ST(0) = ln(2) * ld(Element) = ln(Element) }
+       </i></font><font color="#FF00FF">FADDP ST(1),ST(0)         </font><font color="#008000"><i>{ add ln(Element) to sum in ST(1) and pop ST(0)}
+       </i></font><font color="#FF00FF">ADD   BX,AX                                                                             
+       LOOP  @MulLoop                                                                          
+       FIDIV l                   </font><font color="#008000"><i>{ divide by vector length }
+       </i></font><font color="#FF00FF">FSTP  x                   </font><font color="#008000"><i>{ ln(Average) into variable x }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>HarmonicAverage <font color="#000080">:= </font>exp<font color="#000080">(</font>x<font color="#000080">);    </font><font color="#008000"><i>{ this would be lengthy in Assembler }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>VectorAbsolute <font color="#000080">(</font>Vector <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p       <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>Vector<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>Vector<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>VectorAbsolute <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">MOV   AX,i                                                     
+      MOV   ES,k                                  
+      MOV   BX,j                                  
+      MOV   CX,WORD PTR ES:[BX]                                      
+      ADD   BX,2                                                     
+      FLDZ                         </font><font color="#008000"><i>{ ST(0) = 0 (Sum of squares of elements) }
+</i></font><font color="#FF00FF">@MulLoop:
+      FLD   QWORD PTR ES:[BX]      </font><font color="#008000"><i>{ A[j] into ST(0), =&gt; Summe into ST(1) }
+      </i></font><font color="#FF00FF">FMUL  ST,ST                  </font><font color="#008000"><i>{ ST(0) = A[j]^2 }
+      </i></font><font color="#FF00FF">FADDP ST(1),ST               </font><font color="#008000"><i>{ Sum into ST(0) }
+      </i></font><font color="#FF00FF">ADD   BX,AX                  
+      LOOP  @MulLoop
+      FSQRT                        </font><font color="#008000"><i>{ ST(0) := sqrt(ST(0)) }
+      </i></font><font color="#FF00FF">FSTP  QWORD PTR @Result      
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>VectorInnerProduct <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}
+</i></font><font color="#FF0000"><b>CONST </b></font>Text1 <font color="#000080">= </font><font color="#800000">'Vektor-Error: Inneres Produkt ungleich langer Vektoren'</font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch}
+</i></font><font color="#FF0000"><b>CONST </b></font>Text1 <font color="#000080">= </font><font color="#800000">'Vector error: Inner Product of vectors of unequal length'</font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l<font color="#000080">, </font>m  <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>p              <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>A<font color="#000080">;
+    </font>q              <font color="#000080">: </font>PtrParts <font color="#FF0000"><b>ABSOLUTE </b></font>B<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>VectorInnerProduct <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>B<font color="#000080">^.</font>Column <font color="#000080">&lt;&gt; </font>A<font color="#000080">^.</font>Column<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text1<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>i <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DOUBLE<font color="#000080">);
+    </font>j <font color="#000080">:= </font>p<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>k <font color="#000080">:= </font>p<font color="#000080">.</font>Seg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>q<font color="#000080">.</font>Ofs<font color="#000080">;
+    </font>m <font color="#000080">:= </font>q<font color="#000080">.</font>Seg<font color="#000080">;
+    </font><font color="#FF0000"><b>ASM
+      </b></font><font color="#FF00FF">PUSH   DS
+      MOV    ES,k
+      MOV    SI,j
+      MOV    CX,WORD PTR ES:[SI];
+      ADD    SI,2
+      MOV    DS,m
+      MOV    DI,l
+      ADD    DI,2
+      MOV    BX,0
+      FLDZ
+@AddLoop:
+      FLD    QWORD PTR ES:[BX][SI]
+      FMUL   QWORD PTR DS:[BX][DI]
+      FADDP  ST(1),ST
+      ADD    BX,i
+      LOOP   @AddLoop
+      FSTP   QWORD PTR @Result
+      POP    DS
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Angle <font color="#000080">(</font>A<font color="#000080">, </font>B <font color="#000080">: </font>VectorTyp<font color="#000080">) : </font>DOUBLE<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF Deutsch}
+</i></font><font color="#FF0000"><b>CONST </b></font>Text1 <font color="#000080">= </font><font color="#800000">'Vektor-Error: Winkel zwischen Vektoren ungleicher Dimension'</font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+{$IFDEF Englisch}
+</i></font><font color="#FF0000"><b>CONST </b></font>Text1 <font color="#000080">= </font><font color="#800000">'Vector error: Angle between vectors of unequal dimension'</font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>BEGIN
+    IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>B<font color="#000080">^.</font>Column <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) 
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>Angle <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>A<font color="#000080">^.</font>Column<font color="#000080">) &lt;&gt; (</font>B<font color="#000080">^.</font>Column<font color="#000080">)
+      </font><font color="#FF0000"><b>THEN
+         BEGIN
+             </b></font>ch <font color="#000080">:= </font>Windows<font color="#000080">.</font>Error<font color="#000080">(</font>Text1<font color="#000080">);
+             </font>VectorError <font color="#000080">:= </font>TRUE<font color="#000080">;
+             </font>EXIT<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>Angle <font color="#000080">:= </font>MathFunc<font color="#000080">.</font>ArcCos<font color="#000080">(</font>VectorInnerProduct<font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">) /
+             (</font>VectorAbsolute<font color="#000080">(</font>A<font color="#000080">) * </font>VectorAbsolute<font color="#000080">(</font>B<font color="#000080">)));
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">. </font><font color="#008000"><i>{ unit vector }
+
+
+{ This program can be used to test the above units }
+
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>VectorTest<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses </b></font>crt<font color="#000080">, </font>windows<font color="#000080">, </font>mathfunc<font color="#000080">, </font>vector<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>Kurz <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>x         <font color="#000080">: </font>DOUBLE<font color="#000080">;
+    </font>A<font color="#000080">, </font>B<font color="#000080">, </font>C   <font color="#000080">: </font>VectorTyp<font color="#000080">;
+    </font>Fenster   <font color="#000080">: </font>WindowType<font color="#000080">;
+    </font>Speicher1<font color="#000080">,
+    </font>Speicher2<font color="#000080">,
+    </font>Speicher3 <font color="#000080">: </font>LONGINT<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+    </b></font>Speicher1 <font color="#000080">:= </font>MemAvail<font color="#000080">;
+    </font>Fenster<font color="#000080">.</font>TextAtt <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+    </font>Fenster<font color="#000080">.</font>RahmenAtt <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+    </font>Fenster<font color="#000080">.</font>Rahmen <font color="#000080">:= </font>NoFrame<font color="#000080">;
+    </font>Fenster<font color="#000080">.</font>Titel <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font>ClrScr<font color="#000080">;
+    </font>InitVector<font color="#000080">(</font>A<font color="#000080">, </font>kurz<font color="#000080">);
+    </font>InitVector<font color="#000080">(</font>B<font color="#000080">, </font>kurz<font color="#000080">);
+    </font>InitVector<font color="#000080">(</font>C<font color="#000080">, </font>kurz<font color="#000080">);
+    </font>Speicher2 <font color="#000080">:= </font>MemAvail<font color="#000080">;
+    </font>LoadConstant<font color="#000080">(</font>A<font color="#000080">, </font><font color="#800000">3.0</font><font color="#000080">);
+    </font>AddConstant<font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">, </font><font color="#800000">4.5</font><font color="#000080">);
+
+    </font>VectorAdd<font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">, </font>C<font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>WriteVector<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">, </font>A<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">15</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>VectorXPos<font color="#000080">, </font>VectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorXPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">'+'</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">20</font><font color="#000080">;
+    </font>WriteVector<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">, </font>B<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">34</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>vectorXPos<font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorXPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">'='</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">40</font><font color="#000080">;
+    </font>WriteVector<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">, </font>C<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+    </font>ReadLn<font color="#000080">;
+    </font><font color="#FF0000"><b>WHILE </b></font>MaxScreen <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>DO </b></font>CloseWindow<font color="#000080">;
+
+    </font>x <font color="#000080">:= </font>VectorInnerProduct<font color="#000080">(</font>A<font color="#000080">, </font>B<font color="#000080">);
+    </font>vectorXPos <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>WriteVector<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">, </font>A<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">15</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>vectorXPos<font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorXPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">'*'</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">20</font><font color="#000080">;
+    </font>WriteVector<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">, </font>B<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">34</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>vectorXPos<font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorXPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">'='</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">40</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>vectorXPos<font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorxPos<font color="#000080">+</font><font color="#800000">10</font><font color="#000080">, </font>vectoryPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font>x<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">:</font><font color="#800000">1</font><font color="#000080">);
+    </font>ReadLn<font color="#000080">;
+    </font><font color="#FF0000"><b>WHILE </b></font>MaxScreen <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>DO </b></font>CloseWindow<font color="#000080">;
+
+    </font>x <font color="#000080">:= </font>GSum<font color="#000080">(</font>A<font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>x <font color="#000080">:= </font>VectorAbsolute<font color="#000080">(</font>A<font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>vectorXPos<font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorXPos<font color="#000080">+</font><font color="#800000">8</font><font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">'Betrag'</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">11</font><font color="#000080">;
+    </font>WriteVector<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">, </font>A<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+    </font>VectorXPos <font color="#000080">:= </font><font color="#800000">26</font><font color="#000080">;
+    </font>OpenWindowType<font color="#000080">(</font>vectorXPos<font color="#000080">, </font>vectorYPos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>vectorxPos<font color="#000080">+</font><font color="#800000">15</font><font color="#000080">, </font>vectoryPos<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">, </font>Fenster<font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">' = '</font><font color="#000080">, </font>FloatStr<font color="#000080">(</font>x<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">));
+    </font>ReadLn<font color="#000080">;
+    </font><font color="#FF0000"><b>WHILE </b></font>MaxScreen <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>DO </b></font>CloseWindow<font color="#000080">;
+
+    </font>KillVector<font color="#000080">(</font>A<font color="#000080">);
+    </font>KillVector<font color="#000080">(</font>B<font color="#000080">);
+    </font>KillVector<font color="#000080">(</font>C<font color="#000080">);
+    </font>Speicher3 <font color="#000080">:= </font>MemAvail<font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Original free memory                        '</font><font color="#000080">, </font>Speicher1<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' Byte'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Free memory after creation of vectors       '</font><font color="#000080">, </font>Speicher2<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' Byte'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Free memory after destruction of vectors:   '</font><font color="#000080">, </font>Speicher3<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' Byte'</font><font color="#000080">);
+    </font>ReadLn<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0100.PAS">Original</a><b>]</b></p></body>
+</html>

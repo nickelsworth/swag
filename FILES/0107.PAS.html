@@ -1,0 +1,1238 @@
+<html>
+<head><title> "Handy TP7 Long file name unit" by EYAL DORON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to FILES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0107.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Hi,
+  here's another contribution - an LFN unit which is actually useful. It
+allows working with near-normal TP/TPW commands, transparently on LFN
+and non-LFN disks. Enjoy.
+
+Eyal Doron
+}
+
+{$IFDEF WINDOWS}
+{$N-,V-,W-,G+}
+{$ELSE}
+{N-,V-,G+}
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>lfnunit<font color="#000080">;
+
+</font><font color="#008000"><i>{========================================================================}
+{ LFNUnit - A long filename support unit for TP6 and TPW1.5.             }
+{ Written by Eyal Doron, doron@physics,technion.ac.il, June 1997.        }
+{ Released into the public domain.                                       }
+{                                                                        }
+{ This is a unit to support long filenames in Win95 and WinNT, for use   }
+{ in ordinary 16-bit programs in Turbo Pascal 6.0 and Turbo Pascal for   }
+{ Windows 1.5. It should be a simple matter to adapt to TP/BP 7 as well. }
+{ The unit is built to support LFN if available, and the usual FAT16     }
+{ format if not, in a transparent manner, i.e. the programmer should not }
+{ worry whether LFN is supported or not, the routines work the same in   }
+{ both cases. The unit is not complete, in the sense that not all of the }
+{ interrupts are supported, but the main thrust is the enhancement of    }
+{ the Turbo Pascal I/O scheme to support LFN in as natural a way as      }
+{ possible.                                                              }
+{                                                                        }
+{ The unit contains three families of procedures and functions:          }
+{ 1) Basic LFN API: This is a set of procedures and functions that give  }
+{    access to the LFN interrupts: FindFirst/Next/Close, short and long  }
+{    names, time, attributes and creation.                               }
+{ 2) Service routines. These routines make use of the LFN API to mimic   }
+{    the operation of the DOS or WinDos supplied routines, only with LFN }
+{    support. I chose to mimic the TP6.0 routines, rather than the TPW   }
+{    ones, because I prefer Pascal-type strings to C-type strings, but   }
+{    its a simple matter to add these as well. All the routines return   }
+{    their error codes inside the DOS/WinDos global &quot;DosError&quot;.          }
+{ 3) Input-output support. This set of procedures and functions defines  }
+{    the paradigm for LFN support in Turbo Pascal. It &quot;rides&quot; on top of  }
+{    the usual file variables (&quot;file&quot;, &quot;file of&quot; and &quot;text&quot;), and stores }
+{    the additional LFN info in the UserData field of the file records.  }
+{    The routines have an interface which is similar to the TP ones,     }
+{    namely &quot;LFNAssign&quot; is equivalent to &quot;Assign&quot;, &quot;LFNRewrite&quot; to       }
+{    &quot;Rewrite&quot;, and so on. This paradigm enables use of the usual Pascal }
+{    I/O scheme and routines with long file names, in an almost          }
+{    transparent manner. The differences are:                            }
+{    a) Before using a file variable it has to be initialized by calling }
+{       LFNNew. After you are done with it, you should call LFNDispose   }
+{       to free the allocated memory.                                    }
+{    b) You MUST consistently use LFNNew, LFNAssign, LFNRewrite,         }
+{       LFNRename and LFNDispose in order to support LFN. The other      }
+{       routines are optional, providing error detection and consistent  }
+{       error trapping, but the TP equivalents should also work.         }
+{    c) LFNReset, LFNRewrite and LFNAppend always accept a RecLen        }
+{       parameter, which is optional in Reset and Rewrite and missing in }
+{       Append. This is because TP does not support overloading. The     }
+{       parameter is ignored for text files and when it is zero.         }
+{    d) LFNAppend differs from Append also in that if the file does not  }
+{       exist, Append reports a DOS error, while LFNAppend creates it    }
+{       using LFNRewrite.                                                }
+{    e) LFNFindFirst/LFNFindNext return the name as an AsciiZ string,    }
+{       not a Pascal string, even in TP6, for the sake of consistency.   }
+{    f) All the routines return the error code in the DosError global    }
+{       Dos/WinDos variable, and most of them also return it as a        }
+{       functional result. Additionally, the &quot;LFNRuntimeErrors&quot; global   }
+{       boolean variable controls the generation of runtime errors.      }
+{                                                                        }
+{ Comments, bug reports, etc. are welcome.                               }
+{========================================================================}
+
+
+</i></font><font color="#FF0000"><b>Interface
+
+Uses
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+  </i></font>WinDos<font color="#000080">,</font>WObjects<font color="#000080">,</font>WinTypes<font color="#000080">,</font>WinProcs<font color="#000080">,</font>strings<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>Dos<font color="#000080">,</font>Objects<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>ShortPathName <font color="#000080">= </font><font color="#800000">79</font><font color="#000080">;
+  </font>LFNRuntimeErrors<font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">; </font><font color="#008000"><i>{ Determines if runtime errors are generated }
+
+  </i></font>LFNErr_Uninitialized <font color="#000080">= </font><font color="#800000">120</font><font color="#000080">; </font><font color="#008000"><i>{ LFN routines called before LFNAssign }
+  </i></font>LFNErr_NotAllocated  <font color="#000080">= </font><font color="#800000">121</font><font color="#000080">; </font><font color="#008000"><i>{ LFN routines called before LFNNew    }
+  </i></font>LFNErr_NotATextFile  <font color="#000080">= </font><font color="#800000">122</font><font color="#000080">; </font><font color="#008000"><i>{ Appending to a non-text file         }
+
+{$IFDEF WINDOWS}
+  </i></font>ofn_LongNames <font color="#000080">= </font><font color="#800000">$00200000</font><font color="#000080">;  </font><font color="#008000"><i>{ Required to support LFN in the common dialogs. }
+                              { OR it into the Flags record of TOpenFilename.  }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>ShortPathStr <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font>ShortPathName<font color="#000080">];
+</font><font color="#008000"><i>{$IFNDEF WINDOWS}
+  </i></font>TSearchRec <font color="#000080">= </font>SearchRec<font color="#000080">;
+  </font>TDateTime <font color="#000080">= </font>DateTime<font color="#000080">;
+  </font>PChar <font color="#000080">= ^</font>Char<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+  </i></font>TLFNSearchRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Attr         <font color="#000080">: </font>longint<font color="#000080">;                      
+    </font>Creation     <font color="#000080">: </font>comp<font color="#000080">;                     
+    </font>LastAccess   <font color="#000080">: </font>comp<font color="#000080">;                   
+    </font>LastMod      <font color="#000080">: </font>comp<font color="#000080">;             
+    </font>HighFileSize <font color="#000080">: </font>longint<font color="#000080">; </font><font color="#008000"><i>{ high 32 bits }             
+    </i></font>Size         <font color="#000080">: </font>longint<font color="#000080">; </font><font color="#008000"><i>{ low 32 bits  }              
+    </i></font>Reserved     <font color="#000080">: </font>comp<font color="#000080">;                     
+    </font>Name         <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">259</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;        
+    </font>ShortName    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">13</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;    
+    </font>Handle       <font color="#000080">: </font>word<font color="#000080">;                       
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>PLFNSearchRec <font color="#000080">= ^</font>TLFNSearchRec<font color="#000080">;
+  </font><font color="#008000"><i>{ Form used for old-style searches, with an embedded TSearchRec }
+  </i></font>TLFNShortSearchRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Attr         <font color="#000080">: </font>longint<font color="#000080">;
+    </font>Creation     <font color="#000080">: </font>comp<font color="#000080">;                     
+    </font>LastAccess   <font color="#000080">: </font>comp<font color="#000080">;                   
+    </font>LastMod      <font color="#000080">: </font>comp<font color="#000080">;             
+    </font>HighFileSize <font color="#000080">: </font>longint<font color="#000080">;              
+    </font>Size         <font color="#000080">: </font>longint<font color="#000080">;               
+    </font>Reserved     <font color="#000080">: </font>comp<font color="#000080">;                     
+    </font>Name         <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">13</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+    </font>SRec         <font color="#000080">: </font>TSearchRec<font color="#000080">;
+    </font>Filler       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">260</font><font color="#000080">-</font><font color="#800000">14</font><font color="#000080">-</font>sizeof<font color="#000080">(</font>TSearchRec<font color="#000080">)] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;       
+    </font>ShortName    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">13</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;    
+    </font>Handle       <font color="#000080">: </font>word<font color="#000080">;                       
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>PLFNShortSearchRec <font color="#000080">= ^</font>TLFNShortSearchRec<font color="#000080">;
+
+  </font><font color="#008000"><i>{ A record to isolate the UserData parameters } 
+  </i></font>TLFNFileParam <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Handle     <font color="#000080">: </font>word<font color="#000080">;                   </font><font color="#008000"><i>{ The file handle                  }
+    </i></font>Mode       <font color="#000080">: </font>word<font color="#000080">;                   </font><font color="#008000"><i>{ The file mode                    } 
+    </i></font>Res1       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">28</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;   </font><font color="#008000"><i>{ Everything else up to UserData   }
+    { Begin UserData }
+    </i></font>lfname     <font color="#000080">: </font>PString<font color="#000080">;                </font><font color="#008000"><i>{ The long filename in String form }
+    </i></font>plfname    <font color="#000080">: </font>PChar<font color="#000080">;                  </font><font color="#008000"><i>{ The long filename in AsciiZ form }
+    </i></font>TextFile   <font color="#000080">: </font>boolean<font color="#000080">;                </font><font color="#008000"><i>{ Is it a text or binary file      }
+    </i></font>Initialized<font color="#000080">: </font>boolean<font color="#000080">;                </font><font color="#008000"><i>{ Has it been LFNAssigned          }
+    </i></font>Magic      <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">3</font><font color="#000080">];              </font><font color="#008000"><i>{ ID to check LFNNew               }
+    </i></font>Res2       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;    </font><font color="#008000"><i>{ 2 bytes left in UserData         }
+    { End UserData }
+    </i></font>SName      <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">79</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;   </font><font color="#008000"><i>{ The short filename               }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>PLFNFileParam <font color="#000080">= ^</font>TLFNFileParam<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>LFNAble<font color="#000080">: </font>boolean<font color="#000080">;   </font><font color="#008000"><i>{ Is LFN supported or not. Upon startup it is determined }
+                      { by the OS, but can be switched off later if need be.   }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNToggleSupport<font color="#000080">(</font><font color="#FF0000"><b>on</b></font><font color="#000080">: </font>boolean<font color="#000080">): </font>boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFNDEF WINDOWS}
+{ I need these to access the Srec.Name field properly }
+</i></font><font color="#FF0000"><b>function </b></font>PCharOf<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">): </font>Pchar<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>StrPas<font color="#000080">(</font>P<font color="#000080">: </font>PChar<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>function </b></font>PChar2Pstring<font color="#000080">(</font>F<font color="#000080">: </font>Pchar<font color="#000080">): </font>PString<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>PString2PChar<font color="#000080">(</font>F<font color="#000080">: </font>Pstring<font color="#000080">): </font>PChar<font color="#000080">;
+
+</font><font color="#008000"><i>{ Basic API calls }
+</i></font><font color="#FF0000"><b>function  </b></font>LFNTimeToDos<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>LTime<font color="#000080">: </font>comp<font color="#000080">): </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>DosTimeToLFN<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Time<font color="#000080">: </font>longint<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>LTime<font color="#000080">: </font>comp<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LGetAttr<font color="#000080">(</font>Filename<font color="#000080">: </font>PChar<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Attr<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LRenameFile<font color="#000080">(</font>FromName<font color="#000080">,</font>ToName<font color="#000080">: </font>PChar<font color="#000080">): </font>word<font color="#000080">; 
+</font><font color="#FF0000"><b>function  </b></font>LCreateEmpty<font color="#000080">(</font>fname<font color="#000080">: </font>PChar<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNFindFirst<font color="#000080">(</font>filespec<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>attr<font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNFindNext<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNFindClose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNShortName<font color="#000080">(</font>LongName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>ShortPathStr<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNLongName<font color="#000080">(</font>ShortName<font color="#000080">: </font>ShortPathStr<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Service routines }
+</i></font><font color="#FF0000"><b>procedure </b></font>LFNUnpackTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>LTime<font color="#000080">: </font>comp<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>DT<font color="#000080">: </font>TDateTime<font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>LFNGetFAttr<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Attr<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNFileExist<font color="#000080">(</font>fname<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNFSearch<font color="#000080">(</font>Path<font color="#000080">,</font>DirList<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>LFNFSplit<font color="#000080">(</font>Path<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>Dir<font color="#000080">,</font>Name<font color="#000080">,</font>Ext<font color="#000080">: </font>PString<font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>LFNFExpand<font color="#000080">(</font>Path<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>CanonicalFname<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>CanonicalFilename<font color="#000080">(</font>Fname<font color="#000080">: </font>PChar<font color="#000080">): </font>Pchar<font color="#000080">;
+
+</font><font color="#008000"><i>{ Interface to the Pascal Input/Output routines }
+</i></font><font color="#FF0000"><b>procedure </b></font>LFNNew    <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>IsText<font color="#000080">: </font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>LFNAssign <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNRewrite<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>RecLen<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNAppend <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>RecLen<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNReset  <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>RecLen<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNErase  <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>LFNClose  <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>LFNDispose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>LFNRename <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>NewName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>integer<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>implementation
+
+const
+</b></font><font color="#008000"><i>{$IFNDEF WINDOWS}
+  </i></font>faReadOnly      <font color="#000080">=  </font>ReadOnly<font color="#000080">;
+  </font>faHidden        <font color="#000080">=  </font>Hidden<font color="#000080">;
+  </font>faSysFile       <font color="#000080">=  </font>SysFile<font color="#000080">;                
+  </font>faVolumeID      <font color="#000080">=  </font>VolumeID<font color="#000080">;
+  </font>faDirectory     <font color="#000080">=  </font>Directory<font color="#000080">;                
+  </font>faArchive       <font color="#000080">=  </font>Archive<font color="#000080">;                
+  </font>faAnyFile       <font color="#000080">=  </font>AnyFile<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+  </i></font>LFNMagic <font color="#000080">= </font><font color="#800000">'LFN'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>PSearchRec <font color="#000080">= ^</font>TSearchRec<font color="#000080">;
+  </font>TByteArray <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">$FFF0</font><font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>PByteArray <font color="#000080">= ^</font>TByteArray<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFNDEF WINDOWS}
+</i></font><font color="#FF0000"><b>function </b></font>PCharOf<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">): </font>Pchar<font color="#000080">;
+</font><font color="#008000"><i>{ A very simple function which returns a pointer to its argument. }
+{ Its main use is in turning array[...] of char in to PChar, to   }
+{ simulate the TPW/TP7/BP7 extended syntax.                       }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>PCharOf<font color="#000080">:=@</font>F<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>StrPas<font color="#000080">(</font>P<font color="#000080">: </font>PChar<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">: </font>integer<font color="#000080">;
+  </font>tmp<font color="#000080">: </font>PString<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>New<font color="#000080">(</font>tmp<font color="#000080">); </font>tmp<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">; </font><font color="#FF0000"><b>if </b></font>P<font color="#000080">=</font><font color="#FF0000"><b>Nil then </b></font>Exit<font color="#000080">;
+  </font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>length<font color="#000080">(</font>tmp<font color="#000080">^)&lt;</font><font color="#800000">256</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>PByteArray<font color="#000080">(</font>P<font color="#000080">)^[</font>i<font color="#000080">]&lt;&gt;</font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>tmp<font color="#000080">^:=</font>tmp<font color="#000080">^+</font>PByteArray<font color="#000080">(</font>P<font color="#000080">)^[</font>i<font color="#000080">]; </font>inc<font color="#000080">(</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>StrPas<font color="#000080">:=</font>tmp<font color="#000080">^; </font>Dispose<font color="#000080">(</font>tmp<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>StrLen<font color="#000080">(</font>P<font color="#000080">: </font>PChar<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>P<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil then while </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font><font color="#800000">$7FFF</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>PByteArray<font color="#000080">(</font>P<font color="#000080">)^[</font>i<font color="#000080">]&lt;&gt;</font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>i<font color="#000080">);
+  </font>StrLen<font color="#000080">:=</font>i<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>function </b></font>PChar2Pstring<font color="#000080">(</font>F<font color="#000080">: </font>Pchar<font color="#000080">): </font>PString<font color="#000080">;
+</font><font color="#008000"><i>{ This routine changes a PChar (AsciiZ) string to a }
+{ Pascal-type string, in the same memory location.  }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>len<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>len<font color="#000080">:=</font>StrLen<font color="#000080">(</font>F<font color="#000080">); </font><font color="#FF0000"><b>if </b></font>len<font color="#000080">&gt;</font><font color="#800000">255 </font><font color="#FF0000"><b>then </b></font>len<font color="#000080">:=</font><font color="#800000">255</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font>len <font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do </b></font>PByteArray<font color="#000080">(</font>F<font color="#000080">)^[</font>i<font color="#000080">]:=</font>PByteArray<font color="#000080">(</font>F<font color="#000080">)^[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">];
+  </font>F<font color="#000080">^:=</font>Chr<font color="#000080">(</font>len<font color="#000080">);
+  </font>PChar2PString<font color="#000080">:=</font>PString<font color="#000080">(</font>F<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                   </font><font color="#008000"><i>{ PChar2Pstring }
+
+</i></font><font color="#FF0000"><b>function </b></font>PString2PChar<font color="#000080">(</font>F<font color="#000080">: </font>Pstring<font color="#000080">): </font>PChar<font color="#000080">;
+</font><font color="#008000"><i>{ This routine changes a Pascal-type string to an }
+{ AsciiZ string, in the same memory location.     }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>len<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>len<font color="#000080">:=</font>length<font color="#000080">(</font>F<font color="#000080">^);
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>F<font color="#000080">^[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>F<font color="#000080">^[</font>i<font color="#000080">]; </font>F<font color="#000080">^[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font>PString2PChar<font color="#000080">:=</font>PChar<font color="#000080">(</font>F<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                 </font><font color="#008000"><i>{ PString2PChar }
+
+{$IFDEF WINDOWS}
+</i></font><font color="#FF0000"><b>function </b></font>SupportsLFN<font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>WinVersion<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{  SupportsLFN:=false; Exit;}
+  </i></font>WinVersion <font color="#000080">:= </font>LoWord<font color="#000080">(</font>GetVersion<font color="#000080">);
+  </font>SupportsLFN<font color="#000080">:=</font>true<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">((</font>Lo<font color="#000080">(</font>WinVersion<font color="#000080">) =  </font><font color="#800000">3</font><font color="#000080">)  </font><font color="#FF0000"><b>and                    </b></font><font color="#008000"><i>{windows 95 first}
+      </i></font><font color="#000080">(</font>Hi<font color="#000080">(</font>WinVersion<font color="#000080">) &lt; </font><font color="#800000">95</font><font color="#000080">)) </font><font color="#FF0000"><b>or                     </b></font><font color="#008000"><i>{version is 3.95 }
+      </i></font><font color="#000080">(</font>Lo<font color="#000080">(</font>WinVersion<font color="#000080">) &lt;  </font><font color="#800000">3</font><font color="#000080">)  </font><font color="#FF0000"><b>then </b></font>SupportsLFN <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+</i></font><font color="#FF0000"><b>function </b></font>SupportsLFN<font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax, $160a
+  int $2f
+  cmp ax, 0 
+  jne @no         </font><font color="#008000"><i>{ Not running under Windows   }
+  </i></font><font color="#FF00FF">cmp bh, 2
+  jle @no         </font><font color="#008000"><i>{ Major version &lt;3            }
+  </i></font><font color="#FF00FF">cmp bh, 4
+  jge @yes        </font><font color="#008000"><i>{ Major version &gt;3            }
+  </i></font><font color="#FF00FF">cmp bl, 94
+  jle @no         </font><font color="#008000"><i>{ Major version =3, minor &lt;95 }
+</i></font><font color="#FF00FF">@yes:
+  mov al, true
+  jmp @exit
+@no:
+  mov al, false
+@exit:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                 </font><font color="#008000"><i>{ SupportsLFN }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNToggleSupport<font color="#000080">(</font><font color="#FF0000"><b>on</b></font><font color="#000080">: </font>boolean<font color="#000080">): </font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ This routine toggles LFN support on and off, provided }
+{ the OS supports it. It returns the previous status.   }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>LFNToggleSupport<font color="#000080">:=</font>LFNAble<font color="#000080">;
+  </font>LFNAble<font color="#000080">:=</font><font color="#FF0000"><b>on and </b></font>SupportsLFN<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{==============================================================}
+{ BASIC LFN API CALLS.                                         }
+{ This is a set of routines which implement the WIn95 LFN API, }
+{ in Turbo Pascal form.                                        }
+{==============================================================}
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNTimeToDos<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>LTime<font color="#000080">: </font>comp<font color="#000080">): </font>longint<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Convert 64-bit number of 100ns since 01-01-1601 UTC to local DOS format time}
+{ (LTime is var to avoid putting it on the stack) }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  lds si,LTime
+  xor bl,bl
+  mov ax,71a7h
+  int 21h
+  pop ds
+  mov ax,cx
+  cmc
+  sbb cx,cx
+  and ax,cx
+  and dx,cx
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                </font><font color="#008000"><i>{ LFNTimeToDos }
+
+</i></font><font color="#FF0000"><b>function </b></font>DosTimeToLFN<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Time<font color="#000080">: </font>longint<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>LTime<font color="#000080">: </font>comp<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#008000"><i>{ Convert DOS time to the 64-bit Win95 format }
+</i></font><font color="#FF0000"><b>var
+  </b></font>DosTime<font color="#000080">,</font>DosDate<font color="#000080">: </font>word<font color="#000080">;
+  </font>DT<font color="#000080">: </font>TDateTime<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>UnpackTime<font color="#000080">(</font>Time<font color="#000080">,</font>DT<font color="#000080">); </font>FillChar<font color="#000080">(</font>LTime<font color="#000080">,</font>sizeof<font color="#000080">(</font>LTime<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>DT <font color="#FF0000"><b>do
+  begin
+    </b></font>DosTime<font color="#000080">:=(</font>sec <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>min <font color="#FF0000"><b>shl </b></font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>hour <font color="#FF0000"><b>shl </b></font><font color="#800000">11</font><font color="#000080">);
+    </font>DosDate<font color="#000080">:=</font>day <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>Month <font color="#FF0000"><b>shl </b></font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font>Year<font color="#000080">-</font><font color="#800000">1980</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">9</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ax, $71A7
+    mov bl, 1
+    mov cx, DosTime
+    mov dx, DosDate
+    mov bh, 0
+    les di, LTime
+    int $21
+    jnc @1
+    mov [DosError],ax
+@1:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>DosTimeToLFN<font color="#000080">:=</font>DosError<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                 </font><font color="#008000"><i>{ DosTimeToLFN }
+
+</i></font><font color="#FF0000"><b>function </b></font>LGetAttr<font color="#000080">(</font>Filename<font color="#000080">: </font>PChar<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Attr<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Get the attributes of a file, PChar syntax }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  lds dx,Filename
+  mov ax,7143h
+  xor bl,bl
+  int 21h
+  pop ds
+  les di,Attr
+  mov es:[di],cx
+  sbb bx,bx
+  and ax,bx
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                      </font><font color="#008000"><i>{ LGetAttr }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFindFirst<font color="#000080">(</font>FileSpec<font color="#000080">: </font>pchar<font color="#000080">; </font>Attr<font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>SRec<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Search for files }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  lds dx,FileSpec
+  les di,SRec
+  mov cx,Attr
+  xor si,si
+  mov ax,714eh
+  int 21h
+  pop ds
+  sbb bx,bx
+  mov es:[di].TLFNSearchRec.Handle,ax
+  and ax,bx
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LFindNext<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>SRec<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Find next file }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax,714fh
+  xor si,si
+  les di,SRec
+  mov bx,es:[di].TLFNSearchRec.Handle
+  int 21h
+  sbb bx,bx
+  and ax,bx
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LFindClose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>SRec<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Free search handle }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax,714fh
+  mov bx,es:[di].TLFNSearchRec.Handle
+  int 21h
+  sbb bx,bx
+  and ax,bx
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LGetShortName<font color="#000080">(</font>FileName<font color="#000080">: </font>pchar<font color="#000080">; </font>Result<font color="#000080">: </font>pchar<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Return complete short name/path for input file/path in buffer }
+{ Result (79 bytes) }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  lds si,FileName
+  les di,Result
+  mov ax,7160h
+  mov cx,1
+  int 21h
+  pop ds
+  sbb bx,bx
+  and ax,bx
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LGetLongName<font color="#000080">(</font>FileName<font color="#000080">: </font>PChar<font color="#000080">; </font>Result<font color="#000080">: </font>PChar<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Return complete long name/path for input file/path in buffer }
+{ Result (261 bytes) }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  lds si,FileName
+  les di,Result
+  mov ax,7160h
+  mov cx,2
+  int 21h
+  pop ds
+  sbb bx,bx
+  and ax,bx
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LRenameFile<font color="#000080">(</font>FromName<font color="#000080">,</font>ToName<font color="#000080">: </font>PChar<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Rename a file, supports long filenames. }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  mov ax, $7156
+  lds dx, FromName
+  les di, ToName
+  int $21
+  jc @1
+  mov ax, 0
+@1:
+  pop ds
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;           </font><font color="#008000"><i>{ LRenameFile }
+
+</i></font><font color="#FF0000"><b>function </b></font>LCreateEmpty<font color="#000080">(</font>fname<font color="#000080">: </font>PChar<font color="#000080">): </font>word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Create an empty file with the given (long) name. }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  mov ax, $716C 
+  mov bx, 000010b     </font><font color="#008000"><i>{ Open long file name for writing }
+  </i></font><font color="#FF00FF">mov cx, 0
+  mov dx, 10001b      </font><font color="#008000"><i>{ Open if exists, create of not.  }
+  </i></font><font color="#FF00FF">lds si, fname
+  mov di, 0
+  int $21
+  jc @1               </font><font color="#008000"><i>{ error creating file }
+  </i></font><font color="#FF00FF">mov bx, ax          </font><font color="#008000"><i>{ ok, close it again  }
+  </i></font><font color="#FF00FF">mov ah, $3E
+  int $21
+  jc @1               </font><font color="#008000"><i>{ error closing file }
+  </i></font><font color="#FF00FF">mov ax, 0           </font><font color="#008000"><i>{ ok, return zero    }
+</i></font><font color="#FF00FF">@1:
+  pop ds
+  mov [DosError],ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                </font><font color="#008000"><i>{ LCreateEmpty }
+
+{ Pascal-string based interface routines }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNFindFirst<font color="#000080">(</font>filespec<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>attr<font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#008000"><i>{ Implement the FindFirst procedure. This routine will call the TP }
+{ FindFirst if LFN is not supported, and will translate the result }
+{ into the TLFNSearchRec variable.                                 }
+{ NOTE: Under Win95, the filespec will be checked against both the }
+{ long and the short filenames, so an additional check may be      }
+{ necessary.                                                       } 
+</i></font><font color="#FF0000"><b>begin
+  If </b></font>LFNAble <font color="#FF0000"><b>then
+  begin
+    </b></font>filespec <font color="#000080">:= </font>filespec <font color="#000080">+ </font><font color="#800000">#0</font><font color="#000080">;
+    </font>LFindFirst<font color="#000080">(</font>PChar<font color="#000080">(@</font>Filespec<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]),</font>Attr<font color="#000080">,</font>S<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>DosError<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>S<font color="#000080">.</font>shortname<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]=</font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>move<font color="#000080">(</font>S<font color="#000080">.</font>name<font color="#000080">,</font>S<font color="#000080">.</font>shortname<font color="#000080">,</font>sizeof<font color="#000080">(</font>S<font color="#000080">.</font>shortname<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+      </font>S<font color="#000080">.</font>shortname<font color="#000080">[</font>sizeof<font color="#000080">(</font>S<font color="#000080">.</font>shortname<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end else
+  begin
+    </b></font>FillChar<font color="#000080">(</font>S<font color="#000080">,</font>sizeof<font color="#000080">(</font>S<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>FileSpec<font color="#000080">:=</font>FileSpec<font color="#000080">+</font><font color="#800000">#0</font><font color="#000080">;
+    </font>FindFirst<font color="#000080">(</font>PChar<font color="#000080">(@</font>FileSpec<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]),</font>Attr<font color="#000080">,</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+    </i></font>FindFirst<font color="#000080">(</font>FileSpec<font color="#000080">,</font>Attr<font color="#000080">,</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+    </i></font><font color="#FF0000"><b>if </b></font>DosError<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font>Move<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>name<font color="#000080">,</font>S<font color="#000080">.</font>Name<font color="#000080">,</font><font color="#800000">13</font><font color="#000080">); </font>S<font color="#000080">.</font>name<font color="#000080">[</font><font color="#800000">13</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+     </i></font>FillChar<font color="#000080">(</font>S<font color="#000080">.</font>Name<font color="#000080">,</font><font color="#800000">14</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+     </font>Move<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>name<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>S<font color="#000080">.</font>Name<font color="#000080">,
+          </font>byte<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>name<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]));
+</font><font color="#008000"><i>{$ENDIF}
+      </i></font>DosTimeToLFN<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>Time<font color="#000080">,</font>S<font color="#000080">.</font>LastMod<font color="#000080">);
+      </font>S<font color="#000080">.</font>Attr<font color="#000080">:=</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>Attr<font color="#000080">;
+      </font>S<font color="#000080">.</font>Size<font color="#000080">:=</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>Size<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LFNFindFirst<font color="#000080">:=</font>DosError<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;     </font><font color="#008000"><i>{ LFNFindFirst }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNFindNext<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#008000"><i>{ Implement the FindNext procedure. This routine will call the TP  }
+{ FindNext if LFN is not supported, and will translate the result  }
+{ into the TLFNSearchRec variable.                                 }
+{ NOTE: Under Win95, the filespec will be checked against both the }
+{ long and the short filenames, so an additional check may be      }
+{ necessary.                                                       } 
+</i></font><font color="#FF0000"><b>begin
+  If </b></font>LFNAble <font color="#FF0000"><b>then 
+  begin
+    </b></font>LFindNext<font color="#000080">(</font>S<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>DosError<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>S<font color="#000080">.</font>shortname<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]=</font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>move<font color="#000080">(</font>S<font color="#000080">.</font>name<font color="#000080">,</font>S<font color="#000080">.</font>shortname<font color="#000080">,</font>sizeof<font color="#000080">(</font>S<font color="#000080">.</font>shortname<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+      </font>S<font color="#000080">.</font>shortname<font color="#000080">[</font>sizeof<font color="#000080">(</font>S<font color="#000080">.</font>shortname<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; 
+  </font><font color="#FF0000"><b>end else
+  begin
+    </b></font>FindNext<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>DosError<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font>Move<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>name<font color="#000080">,</font>S<font color="#000080">.</font>Name<font color="#000080">,</font><font color="#800000">13</font><font color="#000080">); </font>S<font color="#000080">.</font>name<font color="#000080">[</font><font color="#800000">13</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+      </i></font>FillChar<font color="#000080">(</font>S<font color="#000080">.</font>Name<font color="#000080">,</font><font color="#800000">14</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font>Move<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>name<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>S<font color="#000080">.</font>Name<font color="#000080">,
+           </font>byte<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>name<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]));
+</font><font color="#008000"><i>{$ENDIF}
+      </i></font>DosTimeToLFN<font color="#000080">(</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>Time<font color="#000080">,</font>S<font color="#000080">.</font>LastMod<font color="#000080">);
+      </font>S<font color="#000080">.</font>Attr<font color="#000080">:=</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>Attr<font color="#000080">;
+      </font>S<font color="#000080">.</font>Size<font color="#000080">:=</font>PLFNShortSearchRec<font color="#000080">(@</font>S<font color="#000080">)^.</font>SRec<font color="#000080">.</font>Size<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LFNFindNext<font color="#000080">:=</font>DosError<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ LFNFindNext }                                             
+                                                 
+</i></font><font color="#FF0000"><b>function </b></font>LFNFindClose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font>TLFNSearchRec<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#008000"><i>{ Close the Win95 TLFNSearchRec structure. if LFN is not suppported, }
+{ this routine does nothing.                                         }
+</i></font><font color="#FF0000"><b>begin
+  If </b></font>LFNAble <font color="#FF0000"><b>then </b></font>LFNFindClose<font color="#000080">:=</font>LFindClose<font color="#000080">(</font>S<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>LFNFindClose<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{function}
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNShortName<font color="#000080">(</font>LongName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>ShortPathStr<font color="#000080">;
+</font><font color="#008000"><i>{ Returns the short name of the specified file. If LFN is not }
+{ supported, returns the input filename.                      }
+</i></font><font color="#FF0000"><b>var
+  </b></font>P<font color="#000080">,</font>Q<font color="#000080">: </font>PChar<font color="#000080">;
+  </font>i<font color="#000080">,</font>len<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if not </b></font>LFNAble <font color="#FF0000"><b>then
+  begin
+    </b></font>LFNShortName<font color="#000080">:=</font>LongName<font color="#000080">; </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>len<font color="#000080">:=</font>length<font color="#000080">(</font>LongName<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>LongName<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>LongName<font color="#000080">[</font>i<font color="#000080">]; </font>LongName<font color="#000080">[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font>P<font color="#000080">:=@</font>Longname<font color="#000080">;
+  </font>GetMem<font color="#000080">(</font>Q<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">); </font>Q<font color="#000080">^:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LGetShortName<font color="#000080">(</font>P<font color="#000080">,</font>Q<font color="#000080">)=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    if </b></font>Q<font color="#000080">^=</font><font color="#800000">#0 </font><font color="#FF0000"><b>then </b></font>LFNShortName<font color="#000080">:=</font>LongName
+    <font color="#FF0000"><b>else </b></font>LFNShortName<font color="#000080">:=</font>StrPas<font color="#000080">(</font>Q<font color="#000080">);
+  </font><font color="#FF0000"><b>end else </b></font>LFNShortName<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font>FreeMem<font color="#000080">(</font>Q<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                     </font><font color="#008000"><i>{ ShortName }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNLongName<font color="#000080">(</font>ShortName<font color="#000080">: </font>ShortPathStr<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Returns the long name of the specified file. If LFN is not }
+{ supported, returns the input filename.                     }
+</i></font><font color="#FF0000"><b>var
+  </b></font>SRec<font color="#000080">: </font>PLFNSearchRec<font color="#000080">;
+  </font>P<font color="#000080">: </font>PChar<font color="#000080">;
+  </font>P0<font color="#000080">,</font>D<font color="#000080">,</font>N<font color="#000080">,</font>E<font color="#000080">: </font>PString<font color="#000080">;
+  </font>i<font color="#000080">,</font>len<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNLongName<font color="#000080">:=</font>ShortName<font color="#000080">; </font><font color="#FF0000"><b>if not </b></font>LFNAble <font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+  </font>len<font color="#000080">:=</font>length<font color="#000080">(</font>ShortName<font color="#000080">); </font><font color="#FF0000"><b>if </b></font>len<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+  </font>New<font color="#000080">(</font>D<font color="#000080">); </font>LFNFSplit<font color="#000080">(</font>ShortName<font color="#000080">,</font>D<font color="#000080">,</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">,</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>ShortName<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>ShortName<font color="#000080">[</font>i<font color="#000080">]; </font>ShortName<font color="#000080">[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font>GetMem<font color="#000080">(</font>P0<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">); </font>P<font color="#000080">:=@</font>PByteArray<font color="#000080">(</font>P0<font color="#000080">)^[</font><font color="#800000">1</font><font color="#000080">]; </font>P0<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">; </font>P<font color="#000080">^:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font>LGetLongName<font color="#000080">(</font>PChar<font color="#000080">(@</font>ShortName<font color="#000080">),</font>P<font color="#000080">); </font>PByteArray<font color="#000080">(</font>P<font color="#000080">)^[</font><font color="#800000">256</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font>P0<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>Chr<font color="#000080">(</font>StrLen<font color="#000080">(</font>P<font color="#000080">));
+  </font>Dispose<font color="#000080">(</font>D<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>P<font color="#000080">^=</font><font color="#800000">#0 </font><font color="#FF0000"><b>then </b></font>LFNLongName<font color="#000080">:=</font>ShortName
+  <font color="#FF0000"><b>else </b></font>LFNLongName<font color="#000080">:=</font>StrPas<font color="#000080">(</font>P<font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>P0<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;               </font><font color="#008000"><i>{ LFNLongName }
+
+{====================================================================}
+{ DERIVATIVE SERVICE ROUTINES.                                       }
+{ This is a set of routines which mimic, as closely as possible, the }
+{ equivalent routines in Turbo Pascal, except that they support      }
+{ long filenames. In many cases, they are drop-in replacements, but  }
+{ some are new.                                                      }
+{====================================================================}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LFNUnpackTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>LTime<font color="#000080">: </font>comp<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>DT<font color="#000080">: </font>TDateTime<font color="#000080">);
+</font><font color="#008000"><i>{ Convert 64-bit time to date/time record }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>UnpackTime<font color="#000080">(</font>LFNTimeToDos<font color="#000080">(</font>LTime<font color="#000080">),</font>DT<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LFNGetFAttr<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Attr<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ Get the attributes of a file, using its File variable. }
+{ The file should have been LFNAssign'ed first. Its not  }
+{ strictly required, except for error checking.          }
+{ Returns the DOS error code.                            }                      
+</i></font><font color="#FF0000"><b>begin
+  </b></font>LFNGetFAttr<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>DosError<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+    if </b></font><font color="#000080">(</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>Initialized<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>DosError<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">; </font>LFNGetFAttr<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">; </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>GetFAttr<font color="#000080">(</font>F<font color="#000080">,</font>Attr<font color="#000080">); </font>LFNGetFAttr<font color="#000080">:=</font>DosError<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;               </font><font color="#008000"><i>{ LFNGetFAttr }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNFileExist<font color="#000080">(</font>fname<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ Returns TRUE if the file exists, and FALSE otherwise. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>fl<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>attr<font color="#000080">,</font>i<font color="#000080">,</font>len<font color="#000080">: </font>word<font color="#000080">;
+  </font>P<font color="#000080">: </font>PChar<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>fName<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then
+  begin
+    </b></font>LFNFileExist<font color="#000080">:=</font>false<font color="#000080">; </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+  begin
+    </b></font>len<font color="#000080">:=</font>length<font color="#000080">(</font>fname<font color="#000080">); </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>fname<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>fname<font color="#000080">[</font>i<font color="#000080">];
+    </font>fname<font color="#000080">[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">; </font>LGetAttr<font color="#000080">(</font>PChar<font color="#000080">(@</font>fname<font color="#000080">),</font>Attr<font color="#000080">)
+  </font><font color="#FF0000"><b>end else
+  begin
+    </b></font>Assign<font color="#000080">(</font>fl<font color="#000080">,</font>fname<font color="#000080">); </font>GetFAttr<font color="#000080">(</font>fl<font color="#000080">,</font>Attr<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LFNFileExist<font color="#000080">:=(</font>DosError<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                    </font><font color="#008000"><i>{ LFNFileExist }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNFSearch<font color="#000080">(</font>Path<font color="#000080">,</font>DirList<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Search for a file in a semicolon-delimited list of directories. }
+{ This is a drop-in replacement for FSearch (TP6), which I        }
+{ personally find more useful than the later FileSearch.          }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>len<font color="#000080">,</font>Ind<font color="#000080">: </font>integer<font color="#000080">;
+  </font>which<font color="#000080">: </font>PChar<font color="#000080">;
+  </font>tmp<font color="#000080">: </font>PString<font color="#000080">;
+  </font>found<font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNFSearch<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">; </font><font color="#FF0000"><b>if </b></font>Path<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+  begin
+    if </b></font><font color="#000080">(</font>DirList<font color="#000080">=</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and not </b></font>LFNFileExist<font color="#000080">(</font>Path<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>DirList<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then
+    begin
+      </b></font>LFNFSearch<font color="#000080">:=</font>Path<font color="#000080">; </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Ind<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>New<font color="#000080">(</font>tmp<font color="#000080">); </font>found<font color="#000080">:=</font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>DirList<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>DirList<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">';'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>delete<font color="#000080">(</font>DirList<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>repeat
+      </b></font>tmp<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Ind<font color="#000080">&lt;=</font>length<font color="#000080">(</font>DirList<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>DirList<font color="#000080">[</font>Ind<font color="#000080">]&lt;&gt;</font><font color="#800000">';'</font><font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>tmp<font color="#000080">^:=</font>tmp<font color="#000080">^+</font>DirList<font color="#000080">[</font>Ind<font color="#000080">]; </font>inc<font color="#000080">(</font>Ind<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Ind<font color="#000080">&lt;=</font>length<font color="#000080">(</font>DirList<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>DirList<font color="#000080">[</font>Ind<font color="#000080">]=</font><font color="#800000">';'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>Ind<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>Ind<font color="#000080">&gt;</font>length<font color="#000080">(</font>DirList<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Ind<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>else </b></font>inc<font color="#000080">(</font>Ind<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>tmp<font color="#000080">^&lt;&gt;</font><font color="#800000">'' </font><font color="#FF0000"><b>then
+      begin
+        if </b></font>tmp<font color="#000080">^[</font>length<font color="#000080">(</font>tmp<font color="#000080">^)]&lt;&gt;</font><font color="#800000">'\' </font><font color="#FF0000"><b>then </b></font>tmp<font color="#000080">^:=</font>tmp<font color="#000080">^+</font><font color="#800000">'\'</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>LFNFileExist<font color="#000080">(</font>tmp<font color="#000080">^+</font>Path<font color="#000080">) </font><font color="#FF0000"><b>then
+        begin
+          </b></font>LFNFSearch<font color="#000080">:=</font>LFNFExpand<font color="#000080">(</font>tmp<font color="#000080">^+</font>Path<font color="#000080">); </font>found<font color="#000080">:=</font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font>found <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>Ind<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">);
+    </font>Dispose<font color="#000080">(</font>tmp<font color="#000080">);
+  </font><font color="#FF0000"><b>end else
+  begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>GetMem<font color="#000080">(</font>Which<font color="#000080">,</font><font color="#800000">256</font><font color="#000080">);
+    </font>len<font color="#000080">:=</font>length<font color="#000080">(</font>Path<font color="#000080">); </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>Path<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>Path<font color="#000080">[</font>i<font color="#000080">]; </font>Path<font color="#000080">[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+    </font>len<font color="#000080">:=</font>length<font color="#000080">(</font>DirList<font color="#000080">); </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>DirList<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>DirList<font color="#000080">[</font>i<font color="#000080">]; </font>DirList<font color="#000080">[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+    </font>FileSearch<font color="#000080">(</font>which<font color="#000080">,</font>PChar<font color="#000080">(@</font>Path<font color="#000080">),</font>PChar<font color="#000080">(@</font>DirList<font color="#000080">));
+    </font>LFNFSearch<font color="#000080">:=</font>StrPas<font color="#000080">(</font>Which<font color="#000080">); </font>FreeMem<font color="#000080">(</font>Which<font color="#000080">,</font><font color="#800000">256</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+    </i></font>LFNFSearch<font color="#000080">:=</font>FSearch<font color="#000080">(</font>Path<font color="#000080">,</font>DirList<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                     </font><font color="#008000"><i>{ LFNFSearch }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LFNFSplit<font color="#000080">(</font>Path<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>Dir<font color="#000080">,</font>Name<font color="#000080">,</font>Ext<font color="#000080">: </font>PString<font color="#000080">);
+</font><font color="#008000"><i>{ An almost drop-in replacement for the TP6 FSplit, which supports LFN.   }
+{ The additional difference is that the arguments are passed as pointers, }
+{ rather than VAR variables. This is so that if a file segment is not     }
+{ needed, one can pass NIL in the respective variable, and it will not    }
+{ be returned.                                                            }
+</i></font><font color="#FF0000"><b>var
+  </b></font>StrPt<font color="#000080">,</font>StrSlash<font color="#000080">,</font>StrEnd<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>StrEnd<font color="#000080">:=</font>length<font color="#000080">(</font>Path<font color="#000080">);
+  </font>StrPt<font color="#000080">:=</font>StrEnd<font color="#000080">; </font>StrSlash<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while</b></font><font color="#000080">(</font>StrPt<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font>StrPt<font color="#000080">]&lt;&gt;</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font>StrPt<font color="#000080">]&lt;&gt;</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>StrPt<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>StrPt<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font>StrPt<font color="#000080">]=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ found extension }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>StrSlash<font color="#000080">:=</font>StrPt<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>StrSlash<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font>StrSlash<font color="#000080">]&lt;&gt;</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>StrSlash<font color="#000080">);
+  </font><font color="#FF0000"><b>end else if </b></font><font color="#000080">(</font>StrPt<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font>StrPt<font color="#000080">]=</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ No extension }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>StrSlash<font color="#000080">:=</font>StrPt<font color="#000080">; </font>StrPt<font color="#000080">:=</font>StrEnd<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end else if </b></font>StrPt<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ All name }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>StrPt<font color="#000080">:=</font>StrEnd<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">; </font>StrSlash<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>Dir<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil then
+  begin
+    </b></font>Dir<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>StrSlash<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Dir<font color="#000080">^:=</font>Copy<font color="#000080">(</font>Path<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>StrSlash<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Name<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil then
+  begin
+    </b></font>Name<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>StrPt<font color="#000080">&gt;</font>StrSlash<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Name<font color="#000080">^:=</font>Copy<font color="#000080">(</font>Path<font color="#000080">,</font>StrSlash<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>StrPt<font color="#000080">-</font>StrSlash<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Ext<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil then
+  begin
+    </b></font>Ext<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>StrPt<font color="#000080">&lt;=</font>StrEnd <font color="#FF0000"><b>then </b></font>Ext<font color="#000080">^:=</font>Copy<font color="#000080">(</font>Path<font color="#000080">,</font>StrPt<font color="#000080">,</font><font color="#800000">255</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                   </font><font color="#008000"><i>{ LFNFSplit }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNFExpand<font color="#000080">(</font>Path<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Drop-in replacement for the TP6 FExpand, which supports LFN. }
+{ Personally, I prefer it to the later FileExpand.             }
+</i></font><font color="#FF0000"><b>var
+  </b></font>D<font color="#000080">,</font>N<font color="#000080">,</font>E<font color="#000080">,</font>P<font color="#000080">: </font>PString<font color="#000080">;
+  </font>i<font color="#000080">,</font>j<font color="#000080">,</font>ndots<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>Path<font color="#000080">) </font><font color="#FF0000"><b>do if </b></font>Path<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">'/' </font><font color="#FF0000"><b>then </b></font>Path<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">'\'</font><font color="#000080">;
+  </font>LFNFExpand<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font>GetMem<font color="#000080">(</font>P<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+  </i></font>FileExpand<font color="#000080">(</font>PChar<font color="#000080">(</font>P<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">'.'</font><font color="#000080">); </font>P<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>chr<font color="#000080">(</font>StrLen<font color="#000080">(</font>PChar<font color="#000080">(</font>P<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">));
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>P<font color="#000080">^:=</font>FExpand<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">); 
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>P<font color="#000080">^&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>P<font color="#000080">^[</font>length<font color="#000080">(</font>P<font color="#000080">^)]&lt;&gt;</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>P<font color="#000080">^:=</font>P<font color="#000080">^+</font><font color="#800000">'\'</font><font color="#000080">;
+  </font>P<font color="#000080">^:=</font>LFNLongName<font color="#000080">(</font>P<font color="#000080">^);
+  </font>ndots<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>ndots<font color="#000080">&lt;</font>length<font color="#000080">(</font>Path<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font>Ndots<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>ndots<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>length<font color="#000080">(</font>Path<font color="#000080">)&gt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>UpCase<font color="#000080">(</font>Path<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">]) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Path<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]=</font><font color="#800000">':'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>P<font color="#000080">^:=</font>Path         <font color="#008000"><i>{ Fully qualified }
+  </i></font><font color="#FF0000"><b>else if </b></font>Path<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">'\' </font><font color="#FF0000"><b>then        </b></font><font color="#008000"><i>{ Only drive missing }
+    </i></font>P<font color="#000080">^:=</font>Copy<font color="#000080">(</font>P<font color="#000080">^,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">)+</font>Path
+  <font color="#FF0000"><b>else begin
+    for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ndots<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do    </b></font><font color="#008000"><i>{ relative filenames, multiple dots }
+    </i></font><font color="#FF0000"><b>begin
+      if </b></font>length<font color="#000080">(</font>P<font color="#000080">^)&gt;</font><font color="#800000">3 </font><font color="#FF0000"><b>then
+      begin
+        </b></font>j<font color="#000080">:=</font>length<font color="#000080">(</font>P<font color="#000080">^)-</font><font color="#800000">1</font><font color="#000080">;
+        </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>j<font color="#000080">&gt;</font><font color="#800000">3</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>P<font color="#000080">^[</font>j<font color="#000080">]&lt;&gt;</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>j<font color="#000080">);
+        </font>P<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>Chr<font color="#000080">(</font>j<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>delete<font color="#000080">(</font>Path<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Pos<font color="#000080">(</font><font color="#800000">'.\'</font><font color="#000080">,</font>Path<font color="#000080">)=</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Delete<font color="#000080">(</font>Path<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">)
+    </font><font color="#FF0000"><b>else if </b></font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">,</font>Path<font color="#000080">)=</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Delete<font color="#000080">(</font>Path<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font>P<font color="#000080">^:=</font>P<font color="#000080">^+</font>Path<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LFNFExpand<font color="#000080">:=</font>P<font color="#000080">^;
+  </font>FreeMem<font color="#000080">(</font>P<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                     </font><font color="#008000"><i>{ LFNFExpand }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>CanonicalFname<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ This routine takes a filename and changes its case to a canonical form: }
+{ 1. Without LFN support, lowercase.                                      }
+{ 1. For existing short filenames, or dir names, lowercase.               }
+{ 2. For existing long filenames, the system-supplied case.               }
+{ 3. For non-existing filenames, expand the existing part of the path,    }
+{    and leave the rest unchanged.                                        }
+{ In all cases '/' is changed to '\'.                                     }
+</i></font><font color="#FF0000"><b>type
+  </b></font>TBf <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>lname<font color="#000080">,</font>sname<font color="#000080">,</font>res<font color="#000080">: </font>Pstring<font color="#000080">;
+  </font>Buf<font color="#000080">: ^</font>TBf<font color="#000080">;
+  </font>i<font color="#000080">,</font>j<font color="#000080">: </font>integer<font color="#000080">;
+  </font>exists<font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>StrLwr<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>L<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>L<font color="#000080">) </font><font color="#FF0000"><b>do if </b></font>L<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">] </font><font color="#FF0000"><b>then
+    </b></font>L<font color="#000080">[</font>i<font color="#000080">]:=</font>Chr<font color="#000080">(</font>Ord<font color="#000080">(</font>L<font color="#000080">[</font>i<font color="#000080">])-</font>Ord<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">)+</font>Ord<font color="#000080">(</font><font color="#800000">'a'</font><font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>S<font color="#000080">) </font><font color="#FF0000"><b>do if </b></font>S<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">'/' </font><font color="#FF0000"><b>then </b></font>S<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">'\'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+  begin
+    </b></font>New<font color="#000080">(</font>Buf<font color="#000080">);
+    </font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>repeat
+      </b></font>i<font color="#000080">:=</font>Pos<font color="#000080">(</font><font color="#800000">'\'</font><font color="#000080">,</font>S<font color="#000080">); </font><font color="#FF0000"><b>if </b></font>i<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>i<font color="#000080">:=</font>length<font color="#000080">(</font>S<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>S<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">'\' </font><font color="#FF0000"><b>then </b></font>exists<font color="#000080">:=</font>LFNFileExist<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]+</font>Copy<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>i<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">)
+      </font><font color="#FF0000"><b>else </b></font>exists<font color="#000080">:=</font>LFNFileExist<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]+</font>Copy<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>i<font color="#000080">));
+      </font><font color="#FF0000"><b>if </b></font>exists <font color="#FF0000"><b>then
+      begin
+        </b></font>Buf<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">]:=</font>LFNShortName<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]+</font>Copy<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>i<font color="#000080">));
+        </font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">]:=</font>LFNLongName<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">]);
+        </font>j<font color="#000080">:=</font>length<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">])-</font><font color="#800000">1</font><font color="#000080">; </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>j<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">][</font>j<font color="#000080">]&lt;&gt;</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>j<font color="#000080">);
+        </font>Delete<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">],</font><font color="#800000">1</font><font color="#000080">,</font>j<font color="#000080">);
+        </font>j<font color="#000080">:=</font>length<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">])-</font><font color="#800000">1</font><font color="#000080">; </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>j<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">][</font>j<font color="#000080">]&lt;&gt;</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>j<font color="#000080">);
+        </font>Delete<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">],</font><font color="#800000">1</font><font color="#000080">,</font>j<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">]=</font>Buf<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>StrLwr<font color="#000080">(</font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">]);
+        </font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]:=</font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]+</font>Buf<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">];
+        </font>delete<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>exists<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>S<font color="#000080">=</font><font color="#800000">''</font><font color="#000080">);
+    </font>S<font color="#000080">:=</font>Buf<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]+</font>S<font color="#000080">;
+    </font>Dispose<font color="#000080">(</font>Buf<font color="#000080">);
+  </font><font color="#FF0000"><b>end else </b></font>StrLwr<font color="#000080">(</font>S<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                </font><font color="#008000"><i>{ CanonicalFname }
+
+</i></font><font color="#FF0000"><b>function </b></font>CanonicalFilename<font color="#000080">(</font>fname<font color="#000080">: </font>PChar<font color="#000080">): </font>PChar<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CanonicalFName<font color="#000080">(</font>PChar2PString<font color="#000080">(</font>fname<font color="#000080">)^);
+  </font>fname<font color="#000080">:=</font>PString2PChar<font color="#000080">(</font>PString<font color="#000080">(</font>fname<font color="#000080">));
+  </font>CanonicalFilename<font color="#000080">:=</font>fname<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=========================================================================}
+{ BINARY AND TEXT FILE INPUT/OUTPUT ROUTINES.                             }
+{ This set of routines is an interface between the LFN API and the Pascal }
+{ style input/output routines. It uses ordinary text and file variables,  }
+{ storing special info in the UserData field. The variable is then fully  }
+{ compatible with the Pascal read(ln), write(ln), BlockRead, BlockWrite,  }
+{ etc input/output routines.                                              }
+{ All the functions return the DOS error code, and also put it into       }
+{ DOSERROR. The global &quot;LFNRuntimeError&quot; determines if runtime errors     }
+{ will be generated (by default, no.)                                     }                    
+{=========================================================================}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LFNNew<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>IsText<font color="#000080">: </font>boolean<font color="#000080">);
+</font><font color="#008000"><i>{ This routine prepares a text or file variable for LFN use. It allocates }
+{ memory for the long name, and initializes the entries in the UserData.  }
+{ It must be called before any other.                                     }
+{ The &quot;IsText&quot; flag tells if the variable is of type &quot;file&quot; or &quot;text&quot;.    }
+</i></font><font color="#FF0000"><b>begin
+  with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    </b></font>TextFile<font color="#000080">:=</font>IsText<font color="#000080">;
+    </font>Initialized<font color="#000080">:=</font>false<font color="#000080">;
+    </font>Magic<font color="#000080">:=</font>LFNMagic<font color="#000080">;
+    </font>lfname<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">; </font>plfname<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+    begin
+      </b></font>GetMem<font color="#000080">(</font>lfname<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">); </font>FillChar<font color="#000080">(</font>lfname<font color="#000080">^,</font><font color="#800000">270</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font>plfname<font color="#000080">:=</font>PChar<font color="#000080">(@</font>PByteArray<font color="#000080">(</font>lfname<font color="#000080">)^[</font><font color="#800000">1</font><font color="#000080">]);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                    </font><font color="#008000"><i>{ LFNNew }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNAssign<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routine replaces the Pascal &quot;Assign&quot; routine. For existing files, }
+{ it first determines the short name, and then invokes &quot;Assign&quot;. If the  }
+{ file does not exist, it only stores the information in the UserData    }
+{ fields, since the equivalent short name is not known. The assign       }
+{ operation is then deferred to the first &quot;LFNRewrite&quot; call.             }
+{ LFNAssign may be called for the same variable for different filenames, }
+{ so long as the type (file or text) is the same.                        }
+</i></font><font color="#FF0000"><b>var
+  </b></font>tmp<font color="#000080">,</font>fname<font color="#000080">: </font>PString<font color="#000080">;
+  </font>IsText<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>P<font color="#000080">: </font>PChar<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^.</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+  begin
+    </b></font>DosError<font color="#000080">:=</font>LFNErr_NotAllocated<font color="#000080">;
+    </font>LFNAssign<font color="#000080">:=</font>DosError<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>MessageBox<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">'Bug, LFNAssign'</font><font color="#000080">,</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">,</font>mb_ok<font color="#000080">);    </font><font color="#008000"><i>{ for debugging }
+{$ENDIF}
+    </i></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   
+  </font>LFNAssign<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>DosError<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+  begin
+    </b></font>GetMem<font color="#000080">(</font>fname<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>LFNFileExist<font color="#000080">(</font>name<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>fname<font color="#000080">^:=</font>LFNShortName<font color="#000080">(</font>name<font color="#000080">);
+      </font>PByteArray<font color="#000080">(</font>fname<font color="#000080">)^[</font>length<font color="#000080">(</font>fname<font color="#000080">^)+</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end else </b></font>fname<font color="#000080">^:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end else </b></font>fname<font color="#000080">:=@</font>name<font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>fname<font color="#000080">^=</font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>Initialized<font color="#000080">:=</font>false
+    <font color="#FF0000"><b>else begin
+      </b></font>IsText<font color="#000080">:=</font>TextFile<font color="#000080">; </font>tmp<font color="#000080">:=</font>lfname<font color="#000080">; </font>P<font color="#000080">:=</font>plfname<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>IsText <font color="#FF0000"><b>then </b></font>Assign<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">),</font>fname<font color="#000080">^) </font><font color="#FF0000"><b>else </b></font>assign<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">),</font>fname<font color="#000080">^);
+      </font>Initialized<font color="#000080">:=</font>true<font color="#000080">;
+      </font>TextFile<font color="#000080">:=</font>IsText<font color="#000080">; </font>lfname<font color="#000080">:=</font>tmp<font color="#000080">; </font>plfname<font color="#000080">:=</font>P<font color="#000080">;
+      </font>Magic<font color="#000080">:=</font>LFNMagic<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+    begin
+      </b></font>lfname<font color="#000080">^:=</font>name<font color="#000080">;
+      </font>PByteArray<font color="#000080">(</font>lfname<font color="#000080">)^[</font>length<font color="#000080">(</font>lfname<font color="#000080">^)+</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then </b></font>FreeMem<font color="#000080">(</font>fname<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                       </font><font color="#008000"><i>{ LFNAssign }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNRewrite<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>RecLen<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routine readies a file for output. If the file does not yet exist, }
+{ it creates an empty file to get the system-determined short name, and   }
+{ performs a deferred Assign, since at Assign time a short name was not   }
+{ yet available (see description of LFNAssign).                           }
+{ The routine returns 0 if successful, and the DOS errorcode if not.      } 
+</i></font><font color="#FF0000"><b>var
+  </b></font>tmp<font color="#000080">,</font>fname<font color="#000080">: </font>PString<font color="#000080">;
+  </font>IsText<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>P<font color="#000080">: </font>PChar<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Err<font color="#000080">(</font>e<font color="#000080">: </font>byte<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNRewrite<font color="#000080">:=</font>e<font color="#000080">; </font>DosError<font color="#000080">:=</font>e<font color="#000080">; </font>Err<font color="#000080">:=</font>e<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNRuntimeErrors <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>e<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">(</font>e<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ 
+</font><font color="#FF0000"><b>begin
+  </b></font>Err<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^.</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+  begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>MessageBox<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">'Bug, LFNRewrite'</font><font color="#000080">,</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">,</font>mb_ok<font color="#000080">);   </font><font color="#008000"><i>{ for debugging }
+{$ENDIF}
+    </i></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   
+  </font><font color="#FF0000"><b>if </b></font>LFNAble <font color="#FF0000"><b>then
+  with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if not </b></font>Initialized <font color="#FF0000"><b>then    </b></font><font color="#008000"><i>{ create the file, so we can get a valid short name }
+    </i></font><font color="#FF0000"><b>begin
+      if </b></font>Err<font color="#000080">(</font>LCreateEmpty<font color="#000080">(</font>plfname<font color="#000080">))=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      begin
+        </b></font>New<font color="#000080">(</font>fname<font color="#000080">);
+        </font>fname<font color="#000080">^:=</font>LFNShortName<font color="#000080">(</font>lfname<font color="#000080">^);
+        </font>IsText<font color="#000080">:=</font>TextFile<font color="#000080">; </font>tmp<font color="#000080">:=</font>lfname<font color="#000080">; </font>P<font color="#000080">:=</font>plfname<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>IsText <font color="#FF0000"><b>then </b></font>Assign<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">),</font>fname<font color="#000080">^) </font><font color="#FF0000"><b>else </b></font>assign<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">),</font>fname<font color="#000080">^);
+        </font>Initialized<font color="#000080">:=</font>true<font color="#000080">;
+        </font>TextFile<font color="#000080">:=</font>IsText<font color="#000080">; </font>lfname<font color="#000080">:=</font>tmp<font color="#000080">; </font>plfname<font color="#000080">:=</font>P<font color="#000080">;
+        </font>Magic<font color="#000080">:=</font>LFNMagic<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Initialized <font color="#FF0000"><b>then
+    begin
+      </b></font><font color="#008000"><i>{$I-}
+      </i></font><font color="#FF0000"><b>if </b></font>TextFile <font color="#FF0000"><b>then </b></font>Rewrite<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">))
+      </font><font color="#FF0000"><b>else if </b></font>RecLen<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Rewrite<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">))
+      </font><font color="#FF0000"><b>else </b></font>Rewrite<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">),</font>RecLen<font color="#000080">);
+      </font>Err<font color="#000080">(</font>IoResult<font color="#000080">);
+      </font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end else with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  if </b></font>Initialized <font color="#FF0000"><b>then
+  begin
+    </b></font><font color="#008000"><i>{$I-}
+    </i></font><font color="#FF0000"><b>if </b></font>TextFile <font color="#FF0000"><b>then </b></font>Rewrite<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">))
+    </font><font color="#FF0000"><b>else if </b></font>RecLen<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>rewrite<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">))
+    </font><font color="#FF0000"><b>else </b></font>Rewrite<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">),</font>RecLen<font color="#000080">);
+    </font>Err<font color="#000080">(</font>IoResult<font color="#000080">);
+    </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;               </font><font color="#008000"><i>{ LFNRewrite }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNAppend<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>RecLen<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routines opens a previously LFNAssigned for output at the EOF. }
+{ Its not really necessary, except that it performs additional error  }
+{ checking to make  sure that the file was properly initialized.      }
+{ Also, in contrast to the TP Append, if the file does not exist the  }
+{ routine calls LFNRewrite to create and open it.                     }
+{ The routine returns 0 if successful, and the DOS errorcode if not.  }
+
+</i></font><font color="#FF0000"><b>function </b></font>Err<font color="#000080">(</font>e<font color="#000080">: </font>byte<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNAppend<font color="#000080">:=</font>e<font color="#000080">; </font>DosError<font color="#000080">:=</font>e<font color="#000080">; </font>Err<font color="#000080">:=</font>e<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNRuntimeErrors <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>e<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">(</font>e<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Err<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^.</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+  begin
+    </b></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end else if not </b></font>TextFile <font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_NotATextFile<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end else if not </b></font>Initialized <font color="#FF0000"><b>then </b></font>Err<font color="#000080">(</font>LFNRewrite<font color="#000080">(</font>F<font color="#000080">,</font>RecLen<font color="#000080">))
+    </font><font color="#FF0000"><b>else begin
+      </b></font><font color="#008000"><i>{$I-}
+      </i></font>Append<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">)); </font>Err<font color="#000080">(</font>IoResult<font color="#000080">);
+      </font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;             </font><font color="#008000"><i>{ LFNAppend }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNReset<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>RecLen<font color="#000080">: </font>word<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routines opens a file for input, instead of &quot;reset&quot;. Its not really }
+{ necessary, except that it performs additional error checking to make     }
+{ sure that the file was properly initialized.                             }
+{ The routine returns 0 if successful, and the DOS errorcode if not.       }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Err<font color="#000080">(</font>e<font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNReset<font color="#000080">:=</font>e<font color="#000080">; </font>DosError<font color="#000080">:=</font>e<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNRuntimeErrors <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>e<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">(</font>e<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ 
+</font><font color="#FF0000"><b>begin
+  </b></font>Err<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^.</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+  begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>MessageBox<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">'Bug, LFNReset'</font><font color="#000080">,</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">,</font>mb_ok<font color="#000080">);   </font><font color="#008000"><i>{ for debugging }
+{$ENDIF}
+    </i></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if not </b></font>Initialized <font color="#FF0000"><b>then </b></font>LFNReset<font color="#000080">:=</font>LFNErr_UnInitialized
+    <font color="#FF0000"><b>else begin
+      </b></font><font color="#008000"><i>{$I-}
+      </i></font><font color="#FF0000"><b>if </b></font>TextFile <font color="#FF0000"><b>then </b></font>Reset<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">))
+      </font><font color="#FF0000"><b>else if </b></font>RecLen<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Reset<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">))
+      </font><font color="#FF0000"><b>else </b></font>Reset<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">),</font>RecLen<font color="#000080">);
+      </font>Err<font color="#000080">(</font>IoResult<font color="#000080">);
+      </font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;             </font><font color="#008000"><i>{ LFNReset }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNErase<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routines erases a previously LFNAssigned, but not opened, file. }
+{ Its not really necessary, except that it performs additional error   }
+{ checking to make  sure that the file was properly initialized. Also, }
+{ it re-assignes the file so it will be properly ready for a rewrite.  }
+{ The routine returns 0 if successful, and the DOS errorcode if not.   }
+</i></font><font color="#FF0000"><b>var
+  </b></font>S<font color="#000080">: </font>PString<font color="#000080">;
+  </font>S1<font color="#000080">: </font>PChar<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Err<font color="#000080">(</font>e<font color="#000080">: </font>byte<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNErase<font color="#000080">:=</font>e<font color="#000080">; </font>DosError<font color="#000080">:=</font>e<font color="#000080">; </font>Err<font color="#000080">:=</font>e<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNRuntimeErrors <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>e<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">(</font>e<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    </b></font>LFNErase<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end else if </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>Initialized<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_UnInitialized<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>LFNClose<font color="#000080">(</font>F<font color="#000080">);
+    </font><font color="#FF0000"><b>if not </b></font>LFNAble <font color="#FF0000"><b>then
+    begin
+      </b></font>GetMem<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">81</font><font color="#000080">); </font>S1<font color="#000080">:=</font>PChar<font color="#000080">(@</font>PByteArray<font color="#000080">(</font>S<font color="#000080">)^[</font><font color="#800000">1</font><font color="#000080">]);
+      </font>Move<font color="#000080">(</font>SName<font color="#000080">,</font>S1<font color="#000080">^,</font><font color="#800000">80</font><font color="#000080">); </font>S<font color="#000080">^:=</font>Chr<font color="#000080">(</font>StrLen<font color="#000080">(</font>S1<font color="#000080">));
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{$I-}
+    </i></font><font color="#FF0000"><b>if </b></font>TextFile <font color="#FF0000"><b>then </b></font>Erase<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">)) </font><font color="#FF0000"><b>else </b></font>Erase<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>Err<font color="#000080">(</font>IoResult<font color="#000080">)=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      if </b></font>LFNAble <font color="#FF0000"><b>then </b></font>LFNAssign<font color="#000080">(</font>F<font color="#000080">,</font>lfname<font color="#000080">^)
+      </font><font color="#FF0000"><b>else begin
+        </b></font>LFNAssign<font color="#000080">(</font>F<font color="#000080">,</font>S<font color="#000080">^); </font>FreeMem<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">81</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                   </font><font color="#008000"><i>{ LFNErase }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNClose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routines closes a previously LFNAssigned and opened file.     }
+{ Its not really necessary, except that it performs additional error }
+{ checking to make  sure that the file was properly initialized.     }
+{ The routine returns 0 if successful, and the DOS errorcode if not. }
+
+</i></font><font color="#FF0000"><b>function </b></font>Err<font color="#000080">(</font>e<font color="#000080">: </font>byte<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNClose<font color="#000080">:=</font>e<font color="#000080">; </font>DosError<font color="#000080">:=</font>e<font color="#000080">; </font>Err<font color="#000080">:=</font>e<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNRuntimeErrors <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>e<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">(</font>e<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Err<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end else if not </b></font>Initialized <font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_UnInitialized<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{$I-}
+    </i></font><font color="#FF0000"><b>if </b></font>TextFile <font color="#FF0000"><b>then </b></font>close<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">)) </font><font color="#FF0000"><b>else </b></font>close<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">));
+    </font>Err<font color="#000080">(</font>IoResult<font color="#000080">);
+    </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                   </font><font color="#008000"><i>{ LFNClose }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LFNDispose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">);
+</font><font color="#008000"><i>{ This routine disposes of the additional memory allocated by LFNNew, }
+{ and cleans up the UserData fields. If the file is open, it also     }
+{ closes it, so that there is no need to call LFNClose previously.    }
+</i></font><font color="#FF0000"><b>begin
+  with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if </b></font><font color="#000080">(</font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>Initialized<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+    </font>LFNClose<font color="#000080">(</font>F<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>lfname<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil then </b></font>FreeMem<font color="#000080">(</font>lfname<font color="#000080">,</font><font color="#800000">270</font><font color="#000080">);
+    </font>lfname<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">; </font>plfname<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">; </font>Initialized<font color="#000080">:=</font>false<font color="#000080">; </font>Magic<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                 </font><font color="#008000"><i>{ LFNDispose }
+
+</i></font><font color="#FF0000"><b>function </b></font>LFNRename<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>F<font color="#000080">; </font>NewName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{ This routines renames a previously LFNAssigned, but not opened, file. }
+{ The file variable is then re-assigned to the new name.                }
+{ The routine returns 0 if successful, and the DOS errorcode if not.    }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>len<font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Err<font color="#000080">(</font>e<font color="#000080">: </font>byte<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LFNRename<font color="#000080">:=</font>e<font color="#000080">; </font>DosError<font color="#000080">:=</font>e<font color="#000080">; </font>Err<font color="#000080">:=</font>e<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LFNRuntimeErrors <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>e<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">(</font>e<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Err<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>NewName<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>PLFNFileParam<font color="#000080">(@</font>F<font color="#000080">)^ </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>Magic<font color="#000080">&lt;&gt;</font>LFNMagic <font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_NotAllocated<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end else if not </b></font>Initialized <font color="#FF0000"><b>then
+    begin
+      </b></font>Err<font color="#000080">(</font>LFNErr_UnInitialized<font color="#000080">); </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if not </b></font>LFNAble <font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ The usual TP stuff }
+    </i></font><font color="#FF0000"><b>begin
+      </b></font><font color="#008000"><i>{$I-}
+      </i></font><font color="#FF0000"><b>if </b></font>TextFile <font color="#FF0000"><b>then </b></font>Rename<font color="#000080">(</font>text<font color="#000080">(</font>F<font color="#000080">),</font>NewName<font color="#000080">) </font><font color="#FF0000"><b>else </b></font>Rename<font color="#000080">(</font><font color="#FF0000"><b>file</b></font><font color="#000080">(</font>F<font color="#000080">),</font>NewName<font color="#000080">);
+      </font>Err<font color="#000080">(</font>IoResult<font color="#000080">);
+      </font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>end else                       </b></font><font color="#008000"><i>{ LFN }
+    </i></font><font color="#FF0000"><b>begin
+      </b></font>len<font color="#000080">:=</font>length<font color="#000080">(</font>NewName<font color="#000080">);
+      </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>len <font color="#FF0000"><b>do </b></font>NewName<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>NewName<font color="#000080">[</font>i<font color="#000080">]; </font>NewName<font color="#000080">[</font>len<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Err<font color="#000080">(</font>LRenameFile<font color="#000080">(</font>plfname<font color="#000080">,</font>PChar<font color="#000080">(@</font>NewName<font color="#000080">)))=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      begin
+        for </b></font>i<font color="#000080">:=</font>len <font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do
+          </b></font>NewName<font color="#000080">[</font>i<font color="#000080">]:=</font>NewName<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]; </font>NewName<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font>chr<font color="#000080">(</font>len<font color="#000080">);
+        </font>LFNAssign<font color="#000080">(</font>F<font color="#000080">,</font>NewName<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;                    </font><font color="#008000"><i>{ LFNRename }
+
+</i></font><font color="#FF0000"><b>begin
+  </b></font>LFNAble<font color="#000080">:=</font>SupportsLFN<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to FILES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0107.PAS">Original</a><b>]</b></p></body>
+</html>

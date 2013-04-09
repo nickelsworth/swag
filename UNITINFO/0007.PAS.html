@@ -1,0 +1,933 @@
+<html>
+<head><title> "Code Profiler" by RALF ROSENKRANZ</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to UNITINFO SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0007.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>Unit </b></font>Profiler<font color="#000080">; </font><font color="#008000"><i>{*********************************************************}
+               {*                                                       *}
+               {*  PROFILER.PAS, 1997, Ralf Rosenkranz, Hagen, Germany  *}
+               {*                                                       *}
+               {*  This unit will help you to speed up your Programs.   *}
+               {*  The source is PUBLIC DOMAIN, feel free to use it.    *}
+               {*                                                       *}
+               {*  It works with BP 7.0 and DOS (No Multitasking Env.)  *)
+               {*                                                       *}
+               {*  USAGE: See the example at the end of this file.      *}
+               {*  Just place the PROFILER-Control-Lines in your Code,  *}
+               {*  set &quot;Options/Conditional defines&quot; to PROFILE,        *}
+               {*  and rebuild the Project. PROFILER will now generate  *}
+               {*  at runtime a Timing-Profile of your Code, the        *}
+               {*  result is in PROFILE.TXT. Attention: PROFILER uses   *}
+               {*  a lot of CPU-time by itself, but this doesn't effekt *}
+               {*  the result.                                          *}
+               {*                                                       *}
+               {*  Please visit my Homepage for more details:           *}
+               {*  http://privat.schlund.de/RosenkranzRalf/RR01Home.html*}
+               {*                                                       *}
+               {*********************************************************}
+
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+
+uses </b></font>TpTimer<font color="#000080">;  </font><font color="#008000"><i>{*********************************************************}
+               {*                        uses:                          *}
+               {*                                                       *}
+               {*                   TPTIMER.PAS 2.00                    *}
+               {*                by TurboPower Software                 *}
+               {*                                                       *}
+               {*         It's in the SWAG-Archive ! (TIMING.SWG)       *}
+               {*********************************************************}
+
+
+</i></font><font color="#FF0000"><b>Type </b></font>PSPT <font color="#000080">= ^</font>PST<font color="#000080">;
+     </font>PST <font color="#000080">= </font><font color="#FF0000"><b>Record
+            </b></font>H <font color="#000080">:</font>Word<font color="#000080">;
+            </font>Name <font color="#000080">:</font><font color="#FF0000"><b>String </b></font><font color="#000080">[</font><font color="#800000">64</font><font color="#000080">];
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ProfilerEnterSection <font color="#000080">(</font>SectionPtr <font color="#000080">:</font>PSPT<font color="#000080">);
+
+</font><font color="#FF0000"><b>Procedure </b></font>ProfilerLeaveSection <font color="#000080">(</font>SectionPtr <font color="#000080">:</font>PSPT<font color="#000080">);
+
+</font><font color="#FF0000"><b>Procedure </b></font>ProfilerReport <font color="#000080">(</font>FileName <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+
+</b></font><font color="#008000"><i>{$ifdef DPMI}
+</i></font><font color="#FF0000"><b>const </b></font>MaxSectionCount <font color="#000080">= </font><font color="#800000">256</font><font color="#000080">;
+</font><font color="#008000"><i>{$else}
+</i></font><font color="#FF0000"><b>const </b></font>MaxSectionCount <font color="#000080">= </font><font color="#800000">64</font><font color="#000080">;
+</font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>const </b></font>LevelSpacer <font color="#000080">= </font><font color="#800000">'  '</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>SSDPT <font color="#000080">= ^</font>SSDT<font color="#000080">;
+     </font>SSDT <font color="#000080">= </font><font color="#FF0000"><b>Record
+             </b></font>SAC <font color="#000080">:</font>LongInt<font color="#000080">;
+             </font>SAMS <font color="#000080">:</font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>SSDPAPT <font color="#000080">= ^</font>SSDPAT<font color="#000080">;
+     </font>SSDPAT <font color="#000080">= </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxSectionCount<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>SSDPT<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>SSCT <font color="#000080">= </font><font color="#FF0000"><b>Record
+             </b></font>SSAF <font color="#000080">:</font>Boolean<font color="#000080">;
+             </font>SSDPAP <font color="#000080">:</font>SSDPAPT<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>SDT <font color="#000080">= </font><font color="#FF0000"><b>Record
+            </b></font>CSP <font color="#000080">: </font>PSPT<font color="#000080">;
+            </font>TAC <font color="#000080">:</font>LongInt<font color="#000080">;
+            </font>TAMS <font color="#000080">:</font>LongInt<font color="#000080">;
+            </font>ET <font color="#000080">:</font>LongInt<font color="#000080">;
+            </font>LT <font color="#000080">:</font>LongInt<font color="#000080">;
+            </font>CSH <font color="#000080">:</font>Word<font color="#000080">;
+            </font>SAF <font color="#000080">:</font>Boolean<font color="#000080">;
+            </font>SSC <font color="#000080">:</font>SSCT<font color="#000080">;
+            </font>SOUPOTST <font color="#000080">:</font>Real<font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>SDAPT <font color="#000080">= ^</font>SDAT<font color="#000080">;
+     </font>SDAT <font color="#000080">= </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxSectionCount<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>SDT<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>SCT <font color="#000080">= </font><font color="#FF0000"><b>Record
+            </b></font>UC <font color="#000080">:</font>Word<font color="#000080">;
+            </font>SDAP <font color="#000080">:</font>SDAPT<font color="#000080">;
+            </font>CRSH <font color="#000080">:</font>Word<font color="#000080">;
+            </font>RDC <font color="#000080">:</font>LongInt<font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>SC <font color="#000080">:</font>SCT<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>THSF <font color="#000080">:</font>Boolean<font color="#000080">;
+    </font>TAS <font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>TD <font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>TZO <font color="#000080">:</font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>R <font color="#000080">:</font>Text<font color="#000080">;
+    </font>HRF <font color="#000080">:</font>Boolean<font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>Error <font color="#000080">(</font>E <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+ </b></font>WriteLn <font color="#000080">(</font>E<font color="#000080">);
+ </font>Halt <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Function </b></font>IntToStr <font color="#000080">(</font>L <font color="#000080">:</font>LongInt<font color="#000080">) :</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>Z <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>Str <font color="#000080">(</font>L<font color="#000080">, </font>Z<font color="#000080">);
+ </font>IntToStr<font color="#000080">:= </font>Z<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Function </b></font>RealToStr <font color="#000080">(</font>R <font color="#000080">:</font>Real<font color="#000080">) :</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>MAS <font color="#000080">= </font><font color="#800000">10000000</font><font color="#000080">;
+      </font>MIS <font color="#000080">= </font><font color="#800000">0.0000001</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>Z <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>EF <font color="#000080">:</font>Boolean<font color="#000080">;
+    </font>c <font color="#000080">:</font>Char<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   if </b></font><font color="#000080">((</font>Abs <font color="#000080">(</font>R<font color="#000080">) &lt; </font>MAS<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Abs <font color="#000080">(</font>R<font color="#000080">) &gt; </font>MIS<font color="#000080">)) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>R <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+   begin
+      </b></font>Str <font color="#000080">(</font>R<font color="#000080">:</font><font color="#800000">17</font><font color="#000080">:</font><font color="#800000">16</font><font color="#000080">, </font>Z<font color="#000080">);
+      </font>EF<font color="#000080">:= </font>False<font color="#000080">;
+      </font><font color="#FF0000"><b>while not </b></font>EF <font color="#FF0000"><b>do
+      begin
+         </b></font>c<font color="#000080">:= </font>Z <font color="#000080">[</font>Length <font color="#000080">(</font>Z<font color="#000080">)];
+         </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>c <font color="#000080">= </font><font color="#800000">'0'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>c <font color="#000080">= </font><font color="#800000">'.'</font><font color="#000080">)
+         </font><font color="#FF0000"><b>then </b></font>Z<font color="#000080">:= </font>Copy <font color="#000080">(</font>Z<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Length <font color="#000080">(</font>Z<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">)
+         </font><font color="#FF0000"><b>else </b></font>EF<font color="#000080">:= </font>True<font color="#000080">;
+         </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>c <font color="#000080">= </font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>Length <font color="#000080">(</font>Z<font color="#000080">) &lt;= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>EF<font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font>Z <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">' ' </font><font color="#FF0000"><b>do </b></font>Z<font color="#000080">:= </font>Copy <font color="#000080">(</font>Z<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Length <font color="#000080">(</font>Z<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">);
+   </font><font color="#FF0000"><b>end
+   else
+   begin
+      </b></font>Str <font color="#000080">(</font>R<font color="#000080">, </font>Z<font color="#000080">);
+      </font><font color="#FF0000"><b>while </b></font>Z <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">' ' </font><font color="#FF0000"><b>do </b></font>Z<font color="#000080">:= </font>Copy <font color="#000080">(</font>Z<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Length <font color="#000080">(</font>Z<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>RealToStr<font color="#000080">:= </font>Z<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Function </b></font>FixRealStr <font color="#000080">(</font>S <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">; </font>VKB<font color="#000080">, </font>NKB <font color="#000080">:</font>Integer<font color="#000080">) :</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>PP <font color="#000080">:</font>Byte<font color="#000080">;
+    </font>EP <font color="#000080">:</font>Byte<font color="#000080">;
+    </font>MEF <font color="#000080">:</font>Boolean<font color="#000080">;
+    </font>VK<font color="#000080">, </font>NK<font color="#000080">, </font>NE <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>EP<font color="#000080">:= </font>Pos <font color="#000080">(</font><font color="#800000">'E'</font><font color="#000080">, </font>S<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>EP <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>EP<font color="#000080">:= </font>Pos <font color="#000080">(</font><font color="#800000">'e'</font><font color="#000080">, </font>S<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>EP <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+ begin
+  </b></font>EP<font color="#000080">:= </font>Length <font color="#000080">(</font>S<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+  </font>MEF<font color="#000080">:= </font>False<font color="#000080">;
+ </font><font color="#FF0000"><b>end
+ else </b></font>MEF<font color="#000080">:= </font>True<font color="#000080">;
+ </font>PP<font color="#000080">:= </font>Pos <font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>S<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>PP <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and
+  </b></font><font color="#000080">(</font>PP <font color="#000080">&lt; </font>EP<font color="#000080">) </font><font color="#FF0000"><b>then
+ begin
+  </b></font>VK<font color="#000080">:= </font>Copy <font color="#000080">(</font>S<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>PP <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+  </font>NK<font color="#000080">:= </font>Copy <font color="#000080">(</font>S<font color="#000080">, </font>PP <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>EP <font color="#000080">- (</font>PP <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">));
+  </font>NE<font color="#000080">:= </font>Copy <font color="#000080">(</font>S<font color="#000080">, </font>EP <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>Length <font color="#000080">(</font>S<font color="#000080">) - </font>EP<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>VK <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">'-' </font><font color="#FF0000"><b>then
+  begin
+   while </b></font><font color="#000080">((</font>VK <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">'0'</font><font color="#000080">) </font><font color="#FF0000"><b>or
+          </b></font><font color="#000080">(</font>VK <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">' '</font><font color="#000080">)) </font><font color="#FF0000"><b>and
+          </b></font><font color="#000080">(</font>Length <font color="#000080">(</font>VK<font color="#000080">) &gt; </font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>VK<font color="#000080">:= </font>Copy <font color="#000080">(</font>VK<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Length <font color="#000080">(</font>VK<font color="#000080">) - </font><font color="#800000">2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+   while </b></font><font color="#000080">((</font>VK <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">'0'</font><font color="#000080">) </font><font color="#FF0000"><b>or
+          </b></font><font color="#000080">(</font>VK <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">' '</font><font color="#000080">)) </font><font color="#FF0000"><b>and
+          </b></font><font color="#000080">(</font>Length <font color="#000080">(</font>VK<font color="#000080">) &gt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>VK<font color="#000080">:= </font>Copy <font color="#000080">(</font>VK<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Length <font color="#000080">(</font>VK<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>Length <font color="#000080">(</font>VK<font color="#000080">) &lt; </font>VKB <font color="#FF0000"><b>do </b></font>VK<font color="#000080">:= </font><font color="#800000">' ' </font><font color="#000080">+ </font>VK<font color="#000080">;
+  </font>NK<font color="#000080">:= </font>Copy <font color="#000080">(</font>NK<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>NKB<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>MEF <font color="#000080">= </font>True <font color="#FF0000"><b>then
+  begin
+   while </b></font>Length <font color="#000080">(</font>NK<font color="#000080">) &lt; </font>NKB <font color="#FF0000"><b>do </b></font>NK<font color="#000080">:= </font><font color="#800000">' ' </font><font color="#000080">+ </font>NK<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>MEF <font color="#000080">= </font>False
+  <font color="#FF0000"><b>then </b></font>FixRealStr<font color="#000080">:= </font>VK <font color="#000080">+ </font><font color="#800000">'.' </font><font color="#000080">+ </font>NK
+  <font color="#FF0000"><b>else </b></font>FixRealStr<font color="#000080">:= </font>VK <font color="#000080">+ </font><font color="#800000">'.' </font><font color="#000080">+ </font>NK <font color="#000080">+ </font><font color="#800000">'E' </font><font color="#000080">+ </font>NE<font color="#000080">;
+ </font><font color="#FF0000"><b>end
+ else
+ begin
+  </b></font>VK<font color="#000080">:= </font>Copy <font color="#000080">(</font>S<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>EP <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+  </font>NE<font color="#000080">:= </font>Copy <font color="#000080">(</font>S<font color="#000080">, </font>EP <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>Length <font color="#000080">(</font>S<font color="#000080">) - </font>EP<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>VK <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">'-' </font><font color="#FF0000"><b>then
+  begin
+   while </b></font><font color="#000080">((</font>VK <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">'0'</font><font color="#000080">) </font><font color="#FF0000"><b>or
+          </b></font><font color="#000080">(</font>VK <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">' '</font><font color="#000080">)) </font><font color="#FF0000"><b>and
+          </b></font><font color="#000080">(</font>Length <font color="#000080">(</font>VK<font color="#000080">) &gt; </font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>do </b></font>VK<font color="#000080">:= </font>Copy <font color="#000080">(</font>VK<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Length <font color="#000080">(</font>VK<font color="#000080">) - </font><font color="#800000">2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+   while </b></font><font color="#000080">((</font>VK <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">'0'</font><font color="#000080">) </font><font color="#FF0000"><b>or
+          </b></font><font color="#000080">(</font>VK <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">' '</font><font color="#000080">)) </font><font color="#FF0000"><b>and
+          </b></font><font color="#000080">(</font>Length <font color="#000080">(</font>VK<font color="#000080">) &gt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>VK<font color="#000080">:= </font>Copy <font color="#000080">(</font>VK<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Length <font color="#000080">(</font>VK<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>Length <font color="#000080">(</font>VK<font color="#000080">) &lt; </font>VKB <font color="#FF0000"><b>do </b></font>VK<font color="#000080">:= </font><font color="#800000">' ' </font><font color="#000080">+ </font>VK<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>MEF <font color="#000080">= </font>False
+  <font color="#FF0000"><b>then </b></font>FixRealStr<font color="#000080">:= </font>VK <font color="#000080">+ </font><font color="#800000">'.' </font><font color="#000080">+ </font><font color="#800000">'0'
+  </font><font color="#FF0000"><b>else </b></font>FixRealStr<font color="#000080">:= </font>VK <font color="#000080">+ </font><font color="#800000">'.' </font><font color="#000080">+ </font><font color="#800000">'0' </font><font color="#000080">+ </font><font color="#800000">'E' </font><font color="#000080">+ </font>NE<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>Init<font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>InitSection <font color="#000080">:</font>PST <font color="#000080">= (</font>H<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">; </font>Name<font color="#000080">:</font><font color="#800000">'ProfilerInitSection'</font><font color="#000080">);
+</font><font color="#FF0000"><b>const </b></font>ZeroSection <font color="#000080">:</font>PST <font color="#000080">= (</font>H<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">; </font>Name<font color="#000080">:</font><font color="#800000">'ProfilerZeroSection'</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>const </b></font>SLC <font color="#000080">= </font><font color="#800000">1000</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>n<font color="#000080">,</font>m <font color="#000080">:</font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>HRF<font color="#000080">:= </font>False<font color="#000080">;
+ </font>THSF<font color="#000080">:= </font>False<font color="#000080">;
+ </font>TAS<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font>TD<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>with </b></font>SC <font color="#FF0000"><b>do
+ begin
+  </b></font>UC<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>new <font color="#000080">(</font>SDAP<font color="#000080">);
+  </font>CRSH<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>RDC<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>MaxSectionCount <font color="#FF0000"><b>do
+  begin
+   with </b></font>SDAP<font color="#000080">^[</font>n<font color="#000080">] </font><font color="#FF0000"><b>do
+   begin
+    </b></font>CSP<font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+    </font>TAC<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>TAMS<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>ET<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>LT<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>CSH<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>SAF<font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>with </b></font>SSC <font color="#FF0000"><b>do
+    begin
+     </b></font>New <font color="#000080">(</font>SSDPAP<font color="#000080">);
+     </font>SSAF<font color="#000080">:= </font>False<font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>m<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>MaxSectionCount <font color="#FF0000"><b>do
+     begin
+      </b></font>SSDPAP<font color="#000080">^[</font>m<font color="#000080">]:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>TZO<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SLC <font color="#FF0000"><b>do
+ begin
+  </b></font>ProfilerEnterSection <font color="#000080">(@</font>InitSection<font color="#000080">);
+  </font>ProfilerLeaveSection <font color="#000080">(@</font>InitSection<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>with </b></font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>InitSection<font color="#000080">.</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+ begin
+  </b></font>TZO<font color="#000080">:= </font>Round <font color="#000080">(</font>TAMS <font color="#000080">/ </font>TAC<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SLC <font color="#FF0000"><b>do
+ begin
+  </b></font>ProfilerEnterSection <font color="#000080">(@</font>ZeroSection<font color="#000080">);
+  </font>ProfilerLeaveSection <font color="#000080">(@</font>ZeroSection<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>Done<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ if </b></font>HRF <font color="#000080">= </font>False <font color="#FF0000"><b>then </b></font>ProfilerReport <font color="#000080">(</font><font color="#800000">'PROFILE.TXT'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>StopTime<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ if </b></font>THSF <font color="#000080">= </font>True
+ <font color="#FF0000"><b>then </b></font>Error <font color="#000080">(</font><font color="#800000">'Profiler.StopTime: Time is not running !'</font><font color="#000080">);
+ </font>TAS<font color="#000080">:= </font>ReadTimer <font color="#000080">- </font>TD<font color="#000080">;
+ </font>THSF<font color="#000080">:= </font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ContTime<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ if </b></font>THSF <font color="#000080">= </font>False
+ <font color="#FF0000"><b>then </b></font>Error <font color="#000080">(</font><font color="#800000">'Profiler.ContTime: Time has not been stopped !'</font><font color="#000080">);
+ </font>Inc <font color="#000080">(</font>TD<font color="#000080">, (</font>ReadTimer <font color="#000080">- </font>TD<font color="#000080">) - </font>TAS<font color="#000080">);
+ </font>THSF<font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Function </b></font>ReadMicroSecTime <font color="#000080">:</font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ if </b></font>THSF <font color="#000080">= </font>True
+ <font color="#FF0000"><b>then </b></font>ReadMicroSecTime<font color="#000080">:= </font>TAS
+ <font color="#FF0000"><b>else </b></font>ReadMicroSecTime<font color="#000080">:= </font>ReadTimer <font color="#000080">- </font>TD<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ProfilerEnterSection <font color="#000080">(</font>SectionPtr <font color="#000080">:</font>PSPT<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>H <font color="#000080">:</font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>StopTime<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>SC<font color="#000080">.</font>RDC <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+ begin
+  </b></font>Inc <font color="#000080">(</font>SC<font color="#000080">.</font>RDC<font color="#000080">);
+ </font><font color="#FF0000"><b>end
+ else
+ begin
+  </b></font>H<font color="#000080">:= </font>SectionPtr<font color="#000080">^.</font>H<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>H <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+   with </b></font>SC <font color="#FF0000"><b>do
+   begin
+    if </b></font>UC <font color="#000080">&gt;= </font>MaxSectionCount
+    <font color="#FF0000"><b>then </b></font>Error <font color="#000080">(</font><font color="#800000">'ProfilerEnterSection: Limit: ' </font><font color="#000080">+
+          </font>IntToStr <font color="#000080">(</font>MaxSectionCount<font color="#000080">) + </font><font color="#800000">'Sections  !'</font><font color="#000080">);
+    </font>Inc <font color="#000080">(</font>UC<font color="#000080">);
+    </font>H<font color="#000080">:= </font>UC<font color="#000080">;
+    </font>SectionPtr<font color="#000080">^.</font>H<font color="#000080">:= </font>H<font color="#000080">;
+    </font><font color="#FF0000"><b>with </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+     </b></font>CSP<font color="#000080">:= </font>SectionPtr<font color="#000080">;
+     </font>TAC<font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+     </font>TAMS<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font>ET<font color="#000080">:= </font>ReadMicroSecTime<font color="#000080">;
+     </font>LT<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font>CSH<font color="#000080">:= </font>CRSH<font color="#000080">;
+     </font>CRSH<font color="#000080">:= </font>H<font color="#000080">;
+     </font>SAF<font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+   with </b></font>SC <font color="#FF0000"><b>do
+   begin
+    with </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+     if </b></font>SAF <font color="#000080">= </font>True <font color="#FF0000"><b>then
+     begin
+      </b></font>SC<font color="#000080">.</font>RDC<font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>end
+     else
+     begin
+      </b></font>Inc <font color="#000080">(</font>TAC<font color="#000080">);
+      </font>ET<font color="#000080">:= </font>ReadMicroSecTime<font color="#000080">;
+      </font>CSH<font color="#000080">:= </font>CRSH<font color="#000080">;
+      </font>CRSH<font color="#000080">:= </font>H<font color="#000080">;
+      </font>SAF<font color="#000080">:= </font>True<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>ContTime<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ProfilerLeaveSection <font color="#000080">(</font>SectionPtr <font color="#000080">:</font>PSPT<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>H <font color="#000080">:</font>Word<font color="#000080">;
+    </font>DMS <font color="#000080">:</font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>StopTime<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>SC<font color="#000080">.</font>RDC <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+ begin
+  </b></font>Dec <font color="#000080">(</font>SC<font color="#000080">.</font>RDC<font color="#000080">);
+ </font><font color="#FF0000"><b>end
+ else
+ begin
+  </b></font>H<font color="#000080">:= </font>SectionPtr<font color="#000080">^.</font>H<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>H <font color="#000080">&lt;&gt; </font>SC<font color="#000080">.</font>CRSH <font color="#FF0000"><b>then
+   with </b></font>SC <font color="#FF0000"><b>do
+    </b></font>Error <font color="#000080">(</font><font color="#800000">'ProfilerLeaveSection: LeaveSection ' </font><font color="#000080">+
+        </font>SectionPtr<font color="#000080">^.</font>Name <font color="#000080">+
+        </font><font color="#800000">' doesn''t match EnterSection ' </font><font color="#000080">+
+        </font>SDAP<font color="#000080">^[</font>CRSH<font color="#000080">].</font>CSP<font color="#000080">^.</font>Name<font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>SC <font color="#FF0000"><b>do
+  begin
+   with </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+   begin
+    </b></font>LT<font color="#000080">:= </font>ReadMicroSecTime<font color="#000080">;
+    </font>DMS<font color="#000080">:= </font>LT <font color="#000080">- </font>ET<font color="#000080">;
+    </font>DMS<font color="#000080">:= </font>DMS <font color="#000080">- </font>TZO<font color="#000080">;
+    </font>Inc <font color="#000080">(</font>TAMS<font color="#000080">, </font>DMS<font color="#000080">);
+    </font>CRSH<font color="#000080">:= </font>CSH<font color="#000080">;
+    </font>SAF<font color="#000080">:= </font>False<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>CRSH <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+   begin
+    with </b></font>SDAP<font color="#000080">^[</font>CRSH<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+     with </b></font>SSC <font color="#FF0000"><b>do
+     begin
+      if </b></font>SSDPAP<font color="#000080">^[</font>H<font color="#000080">] = </font><font color="#FF0000"><b>NIL then
+      begin
+       </b></font>New <font color="#000080">(</font>SSDPAP<font color="#000080">^[</font>H<font color="#000080">]);
+       </font>SSAF<font color="#000080">:= </font>True<font color="#000080">;
+       </font><font color="#FF0000"><b>with </b></font>SSDPAP<font color="#000080">^[</font>H<font color="#000080">]^ </font><font color="#FF0000"><b>do
+       begin
+        </b></font>SAC<font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font>SAMS<font color="#000080">:= </font>DMS<font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+      begin
+       with </b></font>SSDPAP<font color="#000080">^[</font>H<font color="#000080">]^ </font><font color="#FF0000"><b>do
+       begin
+        </b></font>Inc <font color="#000080">(</font>SAC<font color="#000080">);
+        </font>Inc <font color="#000080">(</font>SAMS<font color="#000080">, </font>DMS<font color="#000080">);
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>ContTime<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>SectionReport <font color="#000080">(</font>H <font color="#000080">:</font>Word<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>SH <font color="#000080">:</font>Word<font color="#000080">;
+    </font>n <font color="#000080">:</font>Integer<font color="#000080">;
+    </font>L <font color="#000080">:</font>Word<font color="#000080">;
+    </font>AVMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>FP <font color="#000080">:</font>Real<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ with </b></font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+ begin
+  </b></font>AVMS<font color="#000080">:= </font>TAMS <font color="#000080">/ </font>TAC<font color="#000080">;
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font>CSP<font color="#000080">^.</font>Name<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' AverageMicroSecs='</font><font color="#000080">, </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>AVMS<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' ActiveMicroSecs='</font><font color="#000080">, </font>TAMS<font color="#000080">);
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' ActiveCount='</font><font color="#000080">, </font>TAC<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>SubSectionReport <font color="#000080">(</font>L <font color="#000080">:</font>Word<font color="#000080">;
+                            </font>H <font color="#000080">:</font>Word<font color="#000080">;
+                            </font>CSAMS <font color="#000080">:</font>Real<font color="#000080">;
+                            </font>ACPOTST<font color="#000080">:</font>Real<font color="#000080">;
+                            </font>CSAC <font color="#000080">:</font>LongInt<font color="#000080">;
+                            </font>TSAC <font color="#000080">:</font>LongInt<font color="#000080">;
+                            </font>TSAMS <font color="#000080">:</font>LongInt<font color="#000080">;
+                            </font>PF <font color="#000080">:</font>Boolean<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>SH <font color="#000080">:</font>Word<font color="#000080">;
+    </font>n <font color="#000080">:</font>Integer<font color="#000080">;
+    </font>TSN <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>TSAVMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>TSCPCS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>TSEMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>AMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>SSCPTS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>EMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>ASSEMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>NISSEMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>LPOTST <font color="#000080">:</font>Real<font color="#000080">;
+    </font>UPOTST<font color="#000080">:</font>Real<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ with </b></font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+ begin
+  </b></font>TSN<font color="#000080">:= </font>CSP<font color="#000080">^.</font>Name<font color="#000080">;
+  </font>ASSEMS<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>SSC <font color="#FF0000"><b>do
+  begin
+   for </b></font>SH<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SC<font color="#000080">.</font>UC <font color="#FF0000"><b>do
+   begin
+    if </b></font>SSDPAP<font color="#000080">^[</font>SH<font color="#000080">] &lt;&gt; </font><font color="#FF0000"><b>NIL then
+    begin
+     with </b></font>SSDPAP<font color="#000080">^[</font>SH<font color="#000080">]^ </font><font color="#FF0000"><b>do
+     begin
+      </b></font>AMS<font color="#000080">:= </font>SAMS <font color="#000080">/ </font>SAC<font color="#000080">;
+      </font>SSCPTS<font color="#000080">:= </font>SAC <font color="#000080">/ </font>TSAC<font color="#000080">;
+      </font>EMS<font color="#000080">:= </font>AMS <font color="#000080">* </font>SSCPTS<font color="#000080">;
+      </font>ASSEMS<font color="#000080">:= </font>ASSEMS <font color="#000080">+ </font>EMS<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>TSCPCS<font color="#000080">:= </font>TSAC <font color="#000080">/ </font>CSAC<font color="#000080">;
+ </font>TSAVMS<font color="#000080">:= </font>TSAMS <font color="#000080">/ </font>TSAC<font color="#000080">;
+ </font>TSEMS<font color="#000080">:= </font>TSAVMS <font color="#000080">* </font>TSCPCS<font color="#000080">;
+ </font>NISSEMS<font color="#000080">:= (</font>TSAVMS <font color="#000080">- </font>ASSEMS<font color="#000080">) * </font>TSCPCS<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>NISSEMS <font color="#000080">&lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>NISSEMS<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font>LPOTST<font color="#000080">:= </font>ACPOTST <font color="#000080">* (</font>TSEMS <font color="#000080">/ </font>CSAMS<font color="#000080">);
+ </font>UPOTST<font color="#000080">:= </font>ACPOTST <font color="#000080">* (</font>NISSEMS <font color="#000080">/ </font>CSAMS<font color="#000080">);
+ </font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>SOUPOTST<font color="#000080">:= </font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>SOUPOTST <font color="#000080">+ </font>UPOTST<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>PF <font color="#000080">= </font>True <font color="#FF0000"><b>then
+ begin
+  for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>L <font color="#FF0000"><b>do </b></font>Write <font color="#000080">(</font>R<font color="#000080">, </font>LevelSpacer<font color="#000080">);
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font>TSN<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' (Level)\Used%OfTime='</font><font color="#000080">,
+            </font><font color="#800000">'('</font><font color="#000080">, </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>LPOTST<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">), </font><font color="#800000">')\'</font><font color="#000080">,
+            </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>UPOTST<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">), </font><font color="#800000">'%'</font><font color="#000080">);
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' EffectiveMicroSecs='</font><font color="#000080">, </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>NISSEMS<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' ActiveMicroSecs='</font><font color="#000080">, </font>TSAMS<font color="#000080">);
+  </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' ActiveCount='</font><font color="#000080">, </font>TSAC<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>with </b></font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>SSC <font color="#FF0000"><b>do
+ begin
+  for </b></font>SH<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SC<font color="#000080">.</font>UC <font color="#FF0000"><b>do
+  begin
+   if </b></font>SSDPAP<font color="#000080">^[</font>SH<font color="#000080">] &lt;&gt; </font><font color="#FF0000"><b>NIL then
+   begin
+    with </b></font>SSDPAP<font color="#000080">^[</font>SH<font color="#000080">]^ </font><font color="#FF0000"><b>do
+    begin
+     </b></font>SubSectionReport <font color="#000080">(</font>L <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>SH<font color="#000080">, </font>TSAVMS<font color="#000080">, </font>LPOTST<font color="#000080">, </font>TSAC<font color="#000080">, </font>SAC<font color="#000080">, </font>SAMS<font color="#000080">, </font>PF<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>TopSectionReport <font color="#000080">(</font>H <font color="#000080">:</font>Word<font color="#000080">; </font>PF <font color="#000080">:</font>Boolean<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>SH <font color="#000080">:</font>Word<font color="#000080">;
+    </font>n <font color="#000080">:</font>Integer<font color="#000080">;
+    </font>L <font color="#000080">:</font>Word<font color="#000080">;
+    </font>AMS <font color="#000080">:</font>Real<font color="#000080">;
+    </font>FP <font color="#000080">:</font>Real<font color="#000080">;
+    </font>CAC <font color="#000080">:</font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ with </b></font>SC <font color="#FF0000"><b>do
+ begin
+  for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+  begin
+   </b></font>SDAP<font color="#000080">^[</font>n<font color="#000080">].</font>SOUPOTST<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>with </b></font>SC<font color="#000080">.</font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+ begin
+  </b></font>L<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>AMS<font color="#000080">:= </font>TAMS <font color="#000080">/ </font>TAC<font color="#000080">;
+  </font>FP<font color="#000080">:= </font><font color="#800000">100</font><font color="#000080">;
+  </font>CAC<font color="#000080">:= </font>TAC<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>PF <font color="#000080">= </font>True <font color="#FF0000"><b>then
+  begin
+   </b></font>Write <font color="#000080">(</font>R<font color="#000080">, </font>CSP<font color="#000080">^.</font>Name<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+   </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' AvailPercentOfTime=100.0%'</font><font color="#000080">);
+   </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' AverageMicroSecs='</font><font color="#000080">, </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>AMS<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+   </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' ActiveMicroSecs='</font><font color="#000080">, </font>TAMS<font color="#000080">);
+   </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' ActiveCount='</font><font color="#000080">, </font>TAC<font color="#000080">);
+   </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>SSC <font color="#FF0000"><b>do
+  begin
+   for </b></font>SH<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SC<font color="#000080">.</font>UC <font color="#FF0000"><b>do
+   begin
+    if </b></font>SSDPAP<font color="#000080">^[</font>SH<font color="#000080">] &lt;&gt; </font><font color="#FF0000"><b>NIL then
+    begin
+     with </b></font>SSDPAP<font color="#000080">^[</font>SH<font color="#000080">]^ </font><font color="#FF0000"><b>do
+     begin
+      </b></font>SubSectionReport <font color="#000080">(</font>L <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>SH<font color="#000080">, </font>AMS<font color="#000080">, </font>FP<font color="#000080">, </font>CAC<font color="#000080">, </font>SAC<font color="#000080">, </font>SAMS<font color="#000080">, </font>PF<font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ProfilerReport <font color="#000080">(</font>FileName <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>H <font color="#000080">:</font>Word<font color="#000080">;
+    </font>SH <font color="#000080">:</font>Word<font color="#000080">;
+    </font>n <font color="#000080">:</font>Integer<font color="#000080">;
+    </font>SOA <font color="#000080">:</font>Real<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>StopTime<font color="#000080">;
+ </font>Assign <font color="#000080">(</font>R<font color="#000080">, </font>FileName<font color="#000080">);
+ </font>Rewrite <font color="#000080">(</font>R<font color="#000080">);
+ </font><font color="#FF0000"><b>with </b></font>SC <font color="#FF0000"><b>do
+ begin
+  </b></font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'--- Section Overview ---------------------------------------------------------'</font><font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>H<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+  begin
+   </b></font>SectionReport <font color="#000080">(</font>H<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">5 </font><font color="#FF0000"><b>do </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'--- Top-Level-Sections Tree-View ---------------------------------------------'</font><font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>H<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+  begin
+   if </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>CSH <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+   begin
+    </b></font>TopSectionReport <font color="#000080">(</font>H<font color="#000080">, </font>True<font color="#000080">);
+    </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">4 </font><font color="#FF0000"><b>do </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'--- Sub-Level-Sections Tree-View ---------------------------------------------'</font><font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>H<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+  begin
+   if </b></font><font color="#000080">(</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>CSH <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and
+    </b></font><font color="#000080">(</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>SSC<font color="#000080">.</font>SSAF <font color="#000080">= </font>True<font color="#000080">) </font><font color="#FF0000"><b>then
+   begin
+    </b></font>TopSectionReport <font color="#000080">(</font>H<font color="#000080">, </font>True<font color="#000080">);
+    </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">4 </font><font color="#FF0000"><b>do </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'--- Top-Level-Sections Flat-View ---------------------------------------------'</font><font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>H<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+  begin
+   if </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>CSH <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+   begin
+    </b></font>TopSectionReport <font color="#000080">(</font>H<font color="#000080">, </font>False<font color="#000080">);
+    </font><font color="#FF0000"><b>with </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+     </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font>CSP<font color="#000080">^.</font>Name<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>SOA<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>for </b></font>SH<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+    begin
+     if </b></font>SDAP<font color="#000080">^[</font>SH<font color="#000080">].</font>SOUPOTST <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+     begin
+      with </b></font>SDAP<font color="#000080">^[</font>SH<font color="#000080">] </font><font color="#FF0000"><b>do
+      begin
+       </b></font>Write <font color="#000080">(</font>R<font color="#000080">, </font>LevelSpacer<font color="#000080">);
+       </font>Write <font color="#000080">(</font>R<font color="#000080">, </font>CSP<font color="#000080">^.</font>Name<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+       </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' Time%='</font><font color="#000080">, </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>SOUPOTST<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+       </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+       </font>SOA<font color="#000080">:= </font>SOA <font color="#000080">+ </font>SOUPOTST<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font>LevelSpacer <font color="#000080">+ </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>SOA<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">), </font><font color="#800000">'% of Time used in Sections'</font><font color="#000080">);
+    </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">4 </font><font color="#FF0000"><b>do </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'--- Sub-Level-Sections Flat-View ---------------------------------------------'</font><font color="#000080">);
+  </font>Writeln <font color="#000080">(</font>R<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>H<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+  begin
+   if </b></font><font color="#000080">(</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>CSH <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and
+    </b></font><font color="#000080">(</font>SDAP<font color="#000080">^[</font>H<font color="#000080">].</font>SSC<font color="#000080">.</font>SSAF <font color="#000080">= </font>True<font color="#000080">) </font><font color="#FF0000"><b>then
+   begin
+    </b></font>TopSectionReport <font color="#000080">(</font>H<font color="#000080">, </font>False<font color="#000080">);
+    </font><font color="#FF0000"><b>with </b></font>SDAP<font color="#000080">^[</font>H<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+     </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font>CSP<font color="#000080">^.</font>Name<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>SOA<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>for </b></font>SH<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>UC <font color="#FF0000"><b>do
+    begin
+     if </b></font>SDAP<font color="#000080">^[</font>SH<font color="#000080">].</font>SOUPOTST <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+     begin
+      with </b></font>SDAP<font color="#000080">^[</font>SH<font color="#000080">] </font><font color="#FF0000"><b>do
+      begin
+       </b></font>Write <font color="#000080">(</font>R<font color="#000080">, </font>LevelSpacer<font color="#000080">);
+       </font>Write <font color="#000080">(</font>R<font color="#000080">, </font>CSP<font color="#000080">^.</font>Name<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">);
+       </font>Write <font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">' Time%='</font><font color="#000080">, </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>SOUPOTST<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+       </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+       </font>SOA<font color="#000080">:= </font>SOA <font color="#000080">+ </font>SOUPOTST<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>WriteLn <font color="#000080">(</font>R<font color="#000080">, </font>LevelSpacer <font color="#000080">+ </font>FixRealStr <font color="#000080">(</font>RealToStr <font color="#000080">(</font>SOA<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">), </font><font color="#800000">'% of Time used in Sections'</font><font color="#000080">);
+    </font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">4 </font><font color="#FF0000"><b>do </b></font>WriteLn <font color="#000080">(</font>R<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>Close <font color="#000080">(</font>R<font color="#000080">);
+ </font>HRF<font color="#000080">:= </font>True<font color="#000080">;
+ </font>ContTime<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>var </b></font>ESP <font color="#000080">:</font>Pointer<font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>UnitExit<font color="#000080">; </font><font color="#FF0000"><b>FAR</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>ExitProc<font color="#000080">:= </font>ESP<font color="#000080">;
+ </font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>begin
+ </b></font>Init<font color="#000080">;
+ </font>ESP<font color="#000080">:= </font>ExitProc<font color="#000080">;
+ </font>ExitProc<font color="#000080">:= @</font>UnitExit<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+
+
+</font><font color="#800000">### </font>snip <font color="#800000">##########################################################################################
+
+
+</font><font color="#FF0000"><b>Program </b></font>PROFTEST<font color="#000080">;
+
+</font><font color="#008000"><i>{$define PROFILE}
+
+</i></font><font color="#FF0000"><b>uses </b></font><font color="#008000"><i>{$ifdef PROFILE} </i></font>Profiler<font color="#000080">, </font><font color="#008000"><i>{$endif} </i></font>DOS<font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>WasteTime <font color="#000080">(</font>Count <font color="#000080">:</font>Word<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>n<font color="#000080">,</font>m <font color="#000080">:</font>Word<font color="#000080">;
+    </font>Dummy <font color="#000080">:</font>Real<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Count <font color="#FF0000"><b>do
+   begin
+      for </b></font>m<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">10 </font><font color="#FF0000"><b>do
+      begin
+         </b></font>Dummy<font color="#000080">:= </font>Sin <font color="#000080">((</font>m<font color="#000080">/</font><font color="#800000">10</font><font color="#000080">)*</font>PI<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>Proc_1<font color="#000080">;
+
+</font><font color="#008000"><i>{$ifdef PROFILE} </i></font><font color="#FF0000"><b>const </b></font>Section <font color="#000080">:</font>PST <font color="#000080">= (</font>H<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">; </font>Name<font color="#000080">:</font><font color="#800000">'Proc_1'</font><font color="#000080">); </font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>begin
+   </b></font><font color="#008000"><i>{$ifdef PROFILE} </i></font>ProfilerEnterSection <font color="#000080">(@</font>Section<font color="#000080">); </font><font color="#008000"><i>{$endif}
+
+   </i></font>WriteLn <font color="#000080">(</font><font color="#800000">'Proc_1'</font><font color="#000080">);
+   </font>WasteTime <font color="#000080">(</font><font color="#800000">100</font><font color="#000080">);
+
+   </font><font color="#008000"><i>{$ifdef PROFILE} </i></font>ProfilerLeaveSection <font color="#000080">(@</font>Section<font color="#000080">); </font><font color="#008000"><i>{$endif}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>Proc_2<font color="#000080">;
+
+</font><font color="#008000"><i>{$ifdef PROFILE} </i></font><font color="#FF0000"><b>const </b></font>Section <font color="#000080">:</font>PST <font color="#000080">= (</font>H<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">; </font>Name<font color="#000080">:</font><font color="#800000">'Proc_2'</font><font color="#000080">); </font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>var </b></font>n <font color="#000080">:</font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   </b></font><font color="#008000"><i>{$ifdef PROFILE} </i></font>ProfilerEnterSection <font color="#000080">(@</font>Section<font color="#000080">); </font><font color="#008000"><i>{$endif}
+
+   </i></font>WriteLn <font color="#000080">(</font><font color="#800000">'Proc_2'</font><font color="#000080">);
+   </font>WasteTime <font color="#000080">(</font><font color="#800000">200</font><font color="#000080">);
+
+   </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">10 </font><font color="#FF0000"><b>do </b></font>Proc_1<font color="#000080">;
+
+   </font><font color="#008000"><i>{$ifdef PROFILE} </i></font>ProfilerLeaveSection <font color="#000080">(@</font>Section<font color="#000080">); </font><font color="#008000"><i>{$endif}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+
+</font><font color="#008000"><i>{$ifdef PROFILE} </i></font><font color="#FF0000"><b>const </b></font>Section <font color="#000080">:</font>PST <font color="#000080">= (</font>H<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">; </font>Name<font color="#000080">:</font><font color="#800000">'MainLoop'</font><font color="#000080">); </font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>var </b></font>n <font color="#000080">:</font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   </b></font><font color="#008000"><i>{$ifdef PROFILE} </i></font>ProfilerEnterSection <font color="#000080">(@</font>Section<font color="#000080">); </font><font color="#008000"><i>{$endif}
+
+   </i></font>WriteLn <font color="#000080">(</font><font color="#800000">'Start'</font><font color="#000080">);
+
+   </font><font color="#FF0000"><b>for </b></font>n<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">4 </font><font color="#FF0000"><b>do
+   begin
+      </b></font>WriteLn <font color="#000080">(</font>n<font color="#000080">);
+
+      </font>Proc_1<font color="#000080">;
+      </font>Proc_2<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font>WriteLn <font color="#000080">(</font><font color="#800000">'Stop'</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn <font color="#000080">(</font><font color="#800000">'Results in PROFILE.TXT'</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">;
+
+   </font><font color="#008000"><i>{$ifdef PROFILE} </i></font>ProfilerLeaveSection <font color="#000080">(@</font>Section<font color="#000080">); </font><font color="#008000"><i>{$endif}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+
+
+
+</font><font color="#800000">### </font>snip <font color="#800000">##########################################################################################
+
+
+
+</font>Result<font color="#000080">: </font>PROFILE<font color="#000080">.</font>TXT
+
+
+
+<font color="#000080">--- </font>Section Overview <font color="#000080">---------------------------------------------------------
+
+</font>ProfilerInitSection<font color="#000080">: </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">24.9 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">24950 </font>ActiveCount<font color="#000080">=</font><font color="#800000">1000
+</font>ProfilerZeroSection<font color="#000080">: </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">0.2 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">229 </font>ActiveCount<font color="#000080">=</font><font color="#800000">1000
+</font>MainLoop<font color="#000080">: </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">873098.0 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">873098 </font>ActiveCount<font color="#000080">=</font><font color="#800000">1
+</font>Proc_1<font color="#000080">: </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">16450.2 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">723809 </font>ActiveCount<font color="#000080">=</font><font color="#800000">44
+</font>Proc_2<font color="#000080">: </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">196836.5 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">787346 </font>ActiveCount<font color="#000080">=</font><font color="#800000">4
+
+
+
+
+
+
+</font><font color="#000080">--- </font>Top<font color="#000080">-</font>Level<font color="#000080">-</font>Sections Tree<font color="#000080">-</font>View <font color="#000080">---------------------------------------------
+
+</font>ProfilerInitSection<font color="#000080">: </font>AvailPercentOfTime<font color="#000080">=</font><font color="#800000">100.0</font><font color="#000080">% </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">24.9 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">24950 </font>ActiveCount<font color="#000080">=</font><font color="#800000">1000
+
+</font>ProfilerZeroSection<font color="#000080">: </font>AvailPercentOfTime<font color="#000080">=</font><font color="#800000">100.0</font><font color="#000080">% </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">0.2 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">229 </font>ActiveCount<font color="#000080">=</font><font color="#800000">1000
+
+</font>MainLoop<font color="#000080">: </font>AvailPercentOfTime<font color="#000080">=</font><font color="#800000">100.0</font><font color="#000080">% </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">873098.0 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">873098 </font>ActiveCount<font color="#000080">=</font><font color="#800000">1
+  </font>Proc_1<font color="#000080">: (</font>Level<font color="#000080">)\</font>Used<font color="#000080">%</font>OfTime<font color="#000080">=(</font><font color="#800000">7.5</font><font color="#000080">)\</font><font color="#800000">7.5</font><font color="#000080">% </font>EffectiveMicroSecs<font color="#000080">=</font><font color="#800000">65766.0 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">65766 </font>ActiveCount<font color="#000080">=</font><font color="#800000">4
+  </font>Proc_2<font color="#000080">: (</font>Level<font color="#000080">)\</font>Used<font color="#000080">%</font>OfTime<font color="#000080">=(</font><font color="#800000">90.1</font><font color="#000080">)\</font><font color="#800000">14.8</font><font color="#000080">% </font>EffectiveMicroSecs<font color="#000080">=</font><font color="#800000">129303.0 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">787346 </font>ActiveCount<font color="#000080">=</font><font color="#800000">4
+    </font>Proc_1<font color="#000080">: (</font>Level<font color="#000080">)\</font>Used<font color="#000080">%</font>OfTime<font color="#000080">=(</font><font color="#800000">75.3</font><font color="#000080">)\</font><font color="#800000">75.3</font><font color="#000080">% </font>EffectiveMicroSecs<font color="#000080">=</font><font color="#800000">164510.7 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">658043 </font>ActiveCount<font color="#000080">=</font><font color="#800000">40
+
+
+
+
+
+
+</font><font color="#000080">--- </font>Sub<font color="#000080">-</font>Level<font color="#000080">-</font>Sections Tree<font color="#000080">-</font>View <font color="#000080">---------------------------------------------
+
+</font>Proc_2<font color="#000080">: </font>AvailPercentOfTime<font color="#000080">=</font><font color="#800000">100.0</font><font color="#000080">% </font>AverageMicroSecs<font color="#000080">=</font><font color="#800000">196836.5 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">787346 </font>ActiveCount<font color="#000080">=</font><font color="#800000">4
+  </font>Proc_1<font color="#000080">: (</font>Level<font color="#000080">)\</font>Used<font color="#000080">%</font>OfTime<font color="#000080">=(</font><font color="#800000">83.5</font><font color="#000080">)\</font><font color="#800000">83.5</font><font color="#000080">% </font>EffectiveMicroSecs<font color="#000080">=</font><font color="#800000">164510.7 </font>ActiveMicroSecs<font color="#000080">=</font><font color="#800000">658043 </font>ActiveCount<font color="#000080">=</font><font color="#800000">40
+
+
+
+
+
+
+</font><font color="#000080">--- </font>Top<font color="#000080">-</font>Level<font color="#000080">-</font>Sections Flat<font color="#000080">-</font>View <font color="#000080">---------------------------------------------
+
+</font>ProfilerInitSection<font color="#000080">:
+  </font><font color="#800000">0.0</font><font color="#000080">% </font><font color="#FF0000"><b>of </b></font>Time used <font color="#FF0000"><b>in </b></font>Sections
+
+ProfilerZeroSection<font color="#000080">:
+  </font><font color="#800000">0.0</font><font color="#000080">% </font><font color="#FF0000"><b>of </b></font>Time used <font color="#FF0000"><b>in </b></font>Sections
+
+MainLoop<font color="#000080">:
+  </font>Proc_1<font color="#000080">: </font>Time<font color="#000080">%=</font><font color="#800000">82.9
+  </font>Proc_2<font color="#000080">: </font>Time<font color="#000080">%=</font><font color="#800000">14.8
+  97.7</font><font color="#000080">% </font><font color="#FF0000"><b>of </b></font>Time used <font color="#FF0000"><b>in </b></font>Sections
+
+
+
+
+
+
+<font color="#000080">--- </font>Sub<font color="#000080">-</font>Level<font color="#000080">-</font>Sections Flat<font color="#000080">-</font>View <font color="#000080">---------------------------------------------
+
+</font>Proc_2<font color="#000080">:
+  </font>Proc_1<font color="#000080">: </font>Time<font color="#000080">%=</font><font color="#800000">83.5
+  83.5</font><font color="#000080">% </font><font color="#FF0000"><b>of </b></font>Time used <font color="#FF0000"><b>in </b></font>Sections
+
+
+
+
+
+
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to UNITINFO SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0007.PAS">Original</a><b>]</b></p></body>
+</html>

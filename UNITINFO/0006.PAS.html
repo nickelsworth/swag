@@ -1,0 +1,691 @@
+<html>
+<head><title> "print the dependencies of TP units" by UWE MAEDER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to UNITINFO SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0006.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Purpose: bpxref is a ms-dos program that prints the
+dependencies (cross reference) of Turbo Pascal units by
+parsing import (uses) lists of the sources.
+Run bpxref with no parameters to display the calling syntax.
+Output to stdout (for piping).
+With source. I think little effort is necessary to extend
+it to Delphi sources (in addition you have to parse the .dpr file).
+
+Installation:
+files: bpxref.exe (executable binary)
+       bpxref.pas (the source)
+       readme.txt (what you're just reading)
+Extract the desired file(s). Ready.
+
+Status of the Program: Freeware.
+
+Distribution status: freely;
+
+Author: Uwe Maeder, university of wuerzburg, germany
+        tuze001@rzbox.uni-wuerzburg.de
+
+
+}
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>bpxref<font color="#000080">;
+</font><font color="#008000"><i>{$M 32000,0,255360 }
+{    ^  stack size (recursion!) }
+
+{ Borland Pascal Cross Reference Lister. Short description see main }
+{ uwe maeder, wuerzburg, germany }
+{ 10/88: BP4.0, at this time no oop, sorry! }
+{ 10/97: BP7.0, Version: 1.0 }
+{ thanks to Prof. N. Wirth: Compilerbau }
+</i></font><font color="#FF0000"><b>USES </b></font>crt<font color="#000080">,</font>dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE </b></font>NameStr <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">64</font><font color="#000080">];
+     </font>TimeStr <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">20</font><font color="#000080">];
+
+</font><font color="#008000"><i>{ ==== defs for the mini parser ===========}
+</i></font><font color="#FF0000"><b>TYPE </b></font>symbol <font color="#000080">= (</font>NulSym<font color="#000080">,</font>EOFSym<font color="#000080">,</font>ident<font color="#000080">,</font>number<font color="#000080">,</font>literal<font color="#000080">,
+               </font>IntfSym<font color="#000080">,</font>UsesSym<font color="#000080">,</font>ImplSym<font color="#000080">,</font>Comma<font color="#000080">);
+
+      </font>SymSet <font color="#000080">= </font><font color="#FF0000"><b>SET OF </b></font>Symbol<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>NoKW <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+</font><font color="#FF0000"><b>CONST </b></font>KWtbl<font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>NoKW<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>NameStr <font color="#000080">=
+            (</font><font color="#800000">''</font><font color="#000080">,
+             </font><font color="#800000">'USES'</font><font color="#000080">,</font><font color="#800000">'INTERFACE'</font><font color="#000080">,</font><font color="#800000">'IMPLEMENTATION'</font><font color="#000080">);
+
+      </font>wsym<font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>NoKW<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>symbol <font color="#000080">=
+             (</font>UsesSym<font color="#000080">,</font>IntfSym<font color="#000080">,</font>ImplSym<font color="#000080">);
+
+</font><font color="#008000"><i>{ === structure to hold information: tree and list==== }
+</i></font><font color="#FF0000"><b>TYPE </b></font>tpUseNode <font color="#000080">= ^</font>tUseNode<font color="#000080">;
+     </font>tUseNode  <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+                 </b></font>name<font color="#000080">: </font>NameStr<font color="#000080">;
+                 </font>next<font color="#000080">: </font>tpUseNode
+                <font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font>tpNode    <font color="#000080">= ^</font>tNode<font color="#000080">;
+     </font>tNode     <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+                  </b></font>Name<font color="#000080">: </font>NameStr<font color="#000080">;
+                  </font>dirx<font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{ Index of Dir in DirList }
+                  </i></font>time<font color="#000080">,</font>size<font color="#000080">: </font>LONGINT<font color="#000080">;
+                  </font>left<font color="#000080">,</font>right<font color="#000080">: </font>tpNode<font color="#000080">;
+                  </font>pUseList<font color="#000080">: </font>tpUseNode<font color="#000080">;
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>Root<font color="#000080">: </font>tpNode<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>CONST </b></font>PLAST <font color="#000080">= </font><font color="#800000">32</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>DirList<font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>PLAST<font color="#000080">] </font><font color="#FF0000"><b>OF STRING</b></font><font color="#000080">[</font><font color="#800000">50</font><font color="#000080">];
+    </font>DirCnt<font color="#000080">: </font>WORD<font color="#000080">;
+    </font>SourceSize<font color="#000080">: </font>LONGINT<font color="#000080">;
+    </font>SourceCount<font color="#000080">: </font>WORD<font color="#000080">;
+    </font>stdout<font color="#000080">: </font>text<font color="#000080">;
+    </font>verboose<font color="#000080">: </font>boolean<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ =============misc routines==================== }
+</i></font><font color="#FF0000"><b>function </b></font>UpperCase<font color="#000080">(</font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>i<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>do
+  </b></font>s<font color="#000080">[</font>i<font color="#000080">]:=</font>upcase<font color="#000080">(</font>s<font color="#000080">[</font>i<font color="#000080">]);
+ </font>UpperCase<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ UpperCase }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Trim<font color="#000080">(</font>s<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">): </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>p1<font color="#000080">,</font>p2<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>p2<font color="#000080">:=</font>length<font color="#000080">(</font>s<font color="#000080">);
+ </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p2<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>s<font color="#000080">[</font>p2<font color="#000080">]=</font><font color="#800000">' '</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+  </b></font>dec<font color="#000080">(</font>p2<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>p2<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  </b></font>trim<font color="#000080">:=</font><font color="#800000">''
+ </font><font color="#FF0000"><b>else
+ begin
+  </b></font>p1<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>s<font color="#000080">[</font>p1<font color="#000080">]=</font><font color="#800000">' ' </font><font color="#FF0000"><b>DO
+   </b></font>inc<font color="#000080">(</font>p1<font color="#000080">);
+  </font>trim<font color="#000080">:=</font>copy<font color="#000080">(</font>s<font color="#000080">,</font>p1<font color="#000080">,</font>p2<font color="#000080">-</font>p1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{trim}
+
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Piece<font color="#000080">(</font><font color="#FF0000"><b>CONST </b></font>s<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>delim<font color="#000080">: </font>CHAR<font color="#000080">; </font>n<font color="#000080">: </font>WORD<font color="#000080">): </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ gets the n-th element of the list s, separator delim  }
+</i></font><font color="#FF0000"><b>ASM
+ </b></font><font color="#FF00FF">PUSH DS
+ LDS  SI,s              </font><font color="#008000"><i>{ DS:SI String }
+ </i></font><font color="#FF00FF">LES  DI,@result        </font><font color="#008000"><i>{ ES:DI Result }
+ </i></font><font color="#FF00FF">PUSH DI                </font><font color="#008000"><i>{ merken }
+ </i></font><font color="#FF00FF">MOV  BX,n              </font><font color="#008000"><i>{ BH = nummer n }
+ </i></font><font color="#FF00FF">XCHG BL,BH
+ MOV  BL,delim          </font><font color="#008000"><i>{ trenner }
+ </i></font><font color="#FF00FF">CLD                    </font><font color="#008000"><i>{ aufw„rts geht's }
+ </i></font><font color="#FF00FF">XOR CX,CX
+ XOR DL,DL              </font><font color="#008000"><i>{ Counter Result }
+ </i></font><font color="#FF00FF">MOV CL,DS:[SI]         </font><font color="#008000"><i>{ L„nge s }
+ </i></font><font color="#FF00FF">CMP CL,0
+ JZ @ready              </font><font color="#008000"><i>{ leer: raus }
+ </i></font><font color="#FF00FF">MOV AH,1               </font><font color="#008000"><i>{ result default: TRUE }
+ </i></font><font color="#FF00FF">INC SI                 </font><font color="#008000"><i>{ Begin  1 weiter }
+ </i></font><font color="#FF00FF">DEC BH                 </font><font color="#008000"><i>{ copy ab n-1 }
+ </i></font><font color="#FF00FF">JZ @copy               </font><font color="#008000"><i>{ n=1: sofort kopieren }
+</i></font><font color="#FF00FF">@loop:
+ LODSB
+ CMP AL,BL              </font><font color="#008000"><i>{ trenner? }
+ </i></font><font color="#FF00FF">JNZ @lend
+ DEC BH                 </font><font color="#008000"><i>{ gefunden: DEC no }
+ </i></font><font color="#FF00FF">JZ @copy0              </font><font color="#008000"><i>{ =0: jetzt copy }
+</i></font><font color="#FF00FF">@lend:
+ LOOP @loop
+ </font><font color="#008000"><i>{ Hier L„nge erreicht }
+ </i></font><font color="#FF00FF">JMP @ready
+@copy0:
+ DEC CL                </font><font color="#008000"><i>{ 1- wegen keine LOOP }
+ </i></font><font color="#FF00FF">JZ @ready
+@copy:
+ INC DI                </font><font color="#008000"><i>{ ziel }
+</i></font><font color="#FF00FF">@cloop:
+ LODSB
+ CMP AL,BL             </font><font color="#008000"><i>{ trenner }
+ </i></font><font color="#FF00FF">JZ @ready             </font><font color="#008000"><i>{ ja: fertig }
+ </i></font><font color="#FF00FF">STOSB                 </font><font color="#008000"><i>{ Store und INC DI }
+ </i></font><font color="#FF00FF">INC DL                </font><font color="#008000"><i>{ L„nge }
+ </i></font><font color="#FF00FF">LOOP @cloop
+@ready:
+ POP DI                 </font><font color="#008000"><i>{ ES:DI -&gt; Result }
+ </i></font><font color="#FF00FF">MOV ES:[DI],DL         </font><font color="#008000"><i>{ l„nge Ziel }
+ </i></font><font color="#FF00FF">POP DS
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ piece }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>AdStr<font color="#000080">(</font>s<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>len<font color="#000080">: </font>BYTE<font color="#000080">): </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ format string s}
+</i></font><font color="#FF0000"><b>ASM
+ </b></font><font color="#FF00FF">PUSH DS
+ LDS SI,s
+ LES DI,@result
+ CLD          </font><font color="#008000"><i>{ aufw„rts gehts }
+ </i></font><font color="#FF00FF">MOV AL,len
+ STOSB        </font><font color="#008000"><i>{ new len }
+ </i></font><font color="#FF00FF">CMP AL,0
+ JZ @ready
+ MOV BL,AL    </font><font color="#008000"><i>{ BL : len }
+ </i></font><font color="#FF00FF">LODSB        </font><font color="#008000"><i>{ al = len(s) }
+ </i></font><font color="#FF00FF">XOR CH,CH
+ MOV CL,AL    </font><font color="#008000"><i>{ cx len(s) }
+ </i></font><font color="#FF00FF">MOV BH,AL    </font><font color="#008000"><i>{ bh: length(s)  }
+ </i></font><font color="#FF00FF">JCXZ @cont   </font><font color="#008000"><i>{ nothin to move }
+ </i></font><font color="#FF00FF">REP MOVSB    </font><font color="#008000"><i>{ move string s }
+ </i></font><font color="#FF00FF">SUB BL,BH    </font><font color="#008000"><i>{ len - length(s) }
+ </i></font><font color="#FF00FF">JBE @ready   </font><font color="#008000"><i>{ result &lt;= 0: ready }
+</i></font><font color="#FF00FF">@cont:
+ MOV CL,BL    </font><font color="#008000"><i>{ BL bytes Blank }
+ </i></font><font color="#FF00FF">MOV AL,' '
+ REP STOSB
+@ready:
+ POP DS
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ AdStr }
+
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>DateTimeStr<font color="#000080">(</font>time<font color="#000080">: </font>longint<font color="#000080">): </font>TimeStr<font color="#000080">; </font><font color="#008000"><i>{ german format }
+</i></font><font color="#FF0000"><b>VAR   </b></font>dt<font color="#000080">: </font>DateTime<font color="#000080">;
+      </font>s<font color="#000080">,</font>s0<font color="#000080">: </font>TimeStr<font color="#000080">;
+      </font>i<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>UnpackTime<font color="#000080">(</font>time<font color="#000080">,</font>dt<font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>dt <font color="#FF0000"><b>do
+  begin
+   </b></font>str<font color="#000080">(</font>day  <font color="#000080">:</font><font color="#800000">2</font><font color="#000080">,</font>s0<font color="#000080">); </font>s<font color="#000080">:=</font>s0<font color="#000080">+</font><font color="#800000">'.'</font><font color="#000080">;
+   </font>str<font color="#000080">(</font>month<font color="#000080">:</font><font color="#800000">2</font><font color="#000080">,</font>s0<font color="#000080">); </font>s<font color="#000080">:=</font>s<font color="#000080">+</font>s0<font color="#000080">+</font><font color="#800000">'.'</font><font color="#000080">;
+   </font>str<font color="#000080">(</font>year <font color="#000080">:</font><font color="#800000">4</font><font color="#000080">,</font>s0<font color="#000080">); </font>s<font color="#000080">:=</font>s<font color="#000080">+</font>s0<font color="#000080">;
+   </font>str<font color="#000080">(</font>hour <font color="#000080">:</font><font color="#800000">2</font><font color="#000080">,</font>s0<font color="#000080">); </font>s<font color="#000080">:=</font>s<font color="#000080">+</font><font color="#800000">':'</font><font color="#000080">+</font>s0<font color="#000080">+</font><font color="#800000">'.'</font><font color="#000080">;
+   </font>str<font color="#000080">(</font>min  <font color="#000080">:</font><font color="#800000">2</font><font color="#000080">,</font>s0<font color="#000080">); </font>s<font color="#000080">:=</font>s<font color="#000080">+</font>s0<font color="#000080">+</font><font color="#800000">'.'</font><font color="#000080">;
+   </font>str<font color="#000080">(</font>sec  <font color="#000080">:</font><font color="#800000">2</font><font color="#000080">,</font>s0<font color="#000080">); </font>s<font color="#000080">:=</font>s<font color="#000080">+</font>s0<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>DO
+   if </b></font>s<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">' ' </font><font color="#FF0000"><b>then </b></font>s<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">'0'</font><font color="#000080">;
+  </font>DateTimeStr<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>(* DateTimeStr *)
+
+
+{ ========== dir list load ================ }
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>EnterDir<font color="#000080">(</font>dir<font color="#000080">: </font>DirStr<font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">: </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ if </b></font>DirCnt<font color="#000080">&gt;=</font>PLAST <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+ </font>dir<font color="#000080">:=</font>UpperCase<font color="#000080">(</font>dir<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>dir<font color="#000080">[</font>length<font color="#000080">(</font>dir<font color="#000080">)]&lt;&gt;</font><font color="#800000">'\' </font><font color="#FF0000"><b>then </b></font>dir<font color="#000080">:=</font>dir<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">;
+ </font>i<font color="#000080">:=</font>DirCnt<font color="#000080">;
+ </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>dir<font color="#000080">&lt;&gt;</font>DirList<font color="#000080">[</font>i<font color="#000080">]) </font><font color="#FF0000"><b>DO </b></font>DEC<font color="#000080">(</font>i<font color="#000080">);
+ </font><font color="#FF0000"><b>IF </b></font>i<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+ BEGIN
+  </b></font>INC<font color="#000080">(</font>DirCnt<font color="#000080">); </font>DirList<font color="#000080">[</font>DirCnt<font color="#000080">]:=</font>dir<font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ EnterDir }
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>LoadDirList<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>path<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>f<font color="#000080">: </font>text<font color="#000080">;
+    </font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>dir<font color="#000080">: </font>DirStr<font color="#000080">;
+    </font>i<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>DirCnt<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>assign<font color="#000080">(</font>f<font color="#000080">,</font>path<font color="#000080">);
+ </font><font color="#008000"><i>{$I-} </i></font>reset<font color="#000080">(</font>f<font color="#000080">); </font><font color="#008000"><i>{$I+}
+ </i></font><font color="#FF0000"><b>if </b></font>IOresult<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+ begin
+  while not </b></font>eof<font color="#000080">(</font>f<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+   </b></font>ReadLn<font color="#000080">(</font>f<font color="#000080">,</font>s<font color="#000080">);
+   </font>i<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>dir<font color="#000080">:=</font>trim<font color="#000080">(</font>piece<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">';'</font><font color="#000080">,</font>i<font color="#000080">));
+   </font><font color="#FF0000"><b>while </b></font>dir<font color="#000080">&lt;&gt;</font><font color="#800000">'' </font><font color="#FF0000"><b>do
+   begin
+    </b></font>EnterDir<font color="#000080">(</font>dir<font color="#000080">);
+    </font>inc<font color="#000080">(</font>i<font color="#000080">); </font>dir<font color="#000080">:=</font>piece<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">';'</font><font color="#000080">,</font>i<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>close<font color="#000080">(</font>f<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ LoadDirList }
+
+{ ================ file search in DirList =================  }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>FindDir<font color="#000080">(</font>uname<font color="#000080">: </font>NameStr<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>dirx<font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>time<font color="#000080">,</font>size<font color="#000080">: </font>LONGINT<font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font>s<font color="#000080">: </font>SearchRec<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>dirx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>time<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>size<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#008000"><i>{$I-}
+ </i></font><font color="#FF0000"><b>REPEAT
+  </b></font>INC<font color="#000080">(</font>i<font color="#000080">);
+  </font>dos<font color="#000080">.</font>FindFirst<font color="#000080">(</font>DirList<font color="#000080">[</font>i<font color="#000080">]+</font>uname<font color="#000080">+</font><font color="#800000">'.PAS'</font><font color="#000080">,</font>Archive<font color="#000080">,</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>DosError<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+   </b></font>dirx<font color="#000080">:=</font>i<font color="#000080">;
+ </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>dirx<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>i<font color="#000080">&gt;=</font>DirCnt<font color="#000080">);
+ </font><font color="#008000"><i>{$I+}
+ </i></font><font color="#FF0000"><b>IF </b></font>dirx<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+ BEGIN
+  </b></font>time<font color="#000080">:=</font>s<font color="#000080">.</font>time<font color="#000080">;
+  </font>size<font color="#000080">:=</font>s<font color="#000080">.</font>size<font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ FindDir }
+
+{ ============ list routines ===================}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>search<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>id<font color="#000080">: </font>NameStr<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>p<font color="#000080">: </font>tpNode<font color="#000080">): </font>tpNode<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ IF </b></font>p<font color="#000080">=</font><font color="#FF0000"><b>NIL THEN
+ BEGIN
+  </b></font>NEW<font color="#000080">(</font>p<font color="#000080">);
+  </font><font color="#FF0000"><b>WITH </b></font>p<font color="#000080">^ </font><font color="#FF0000"><b>DO
+  BEGIN
+   </b></font>name<font color="#000080">:=</font>id<font color="#000080">; </font>dirx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>time<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+   </font>pUseList<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">; </font>left<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">; </font>right<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+   </font>search<font color="#000080">:=</font>p<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END ELSE
+  IF </b></font>id<font color="#000080">&lt;</font>p<font color="#000080">^.</font>name <font color="#FF0000"><b>THEN </b></font>search<font color="#000080">:=</font>search<font color="#000080">(</font>id<font color="#000080">,</font>p<font color="#000080">^.</font>left<font color="#000080">)
+ </font><font color="#FF0000"><b>ELSE
+  IF </b></font>id<font color="#000080">&gt;</font>p<font color="#000080">^.</font>name <font color="#FF0000"><b>THEN </b></font>search<font color="#000080">:=</font>search<font color="#000080">(</font>id<font color="#000080">,</font>p<font color="#000080">^.</font>right<font color="#000080">)
+ </font><font color="#FF0000"><b>ELSE </b></font>search<font color="#000080">:=</font>p<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ search }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Used<font color="#000080">(</font>id<font color="#000080">: </font>NameStr<font color="#000080">; </font>p<font color="#000080">: </font>tpUseNode<font color="#000080">): </font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>q<font color="#000080">: </font>tpUseNode<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>q<font color="#000080">:=</font>p<font color="#000080">;
+ </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>q<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>q<font color="#000080">^.</font>name<font color="#000080">&lt;&gt;</font>id<font color="#000080">) </font><font color="#FF0000"><b>DO </b></font>q<font color="#000080">:=</font>q<font color="#000080">^.</font>next<font color="#000080">;
+ </font>Used<font color="#000080">:=</font>q<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Used }
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>UsedBy<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>uname<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ prints all units that import unit uname }
+</i></font><font color="#FF0000"><b>var </b></font>l<font color="#000080">: </font>word<font color="#000080">;
+
+ </font><font color="#FF0000"><b>PROCEDURE </b></font>PrUsedBy<font color="#000080">(</font>p<font color="#000080">: </font>tpNode<font color="#000080">);
+ </font><font color="#FF0000"><b>BEGIN
+  IF </b></font>p<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL THEN
+  WITH </b></font>p<font color="#000080">^ </font><font color="#FF0000"><b>DO
+  BEGIN
+   </b></font>PrUsedBy<font color="#000080">(</font>left<font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>Used<font color="#000080">(</font>uname<font color="#000080">,</font>pUseList<font color="#000080">) </font><font color="#FF0000"><b>THEN
+   BEGIN
+    IF </b></font>l<font color="#000080">&gt;</font><font color="#800000">69 </font><font color="#FF0000"><b>THEN
+    begin
+     </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">);
+     </font>l<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Write<font color="#000080">(</font>stdout<font color="#000080">,</font>Name<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">:</font><font color="#800000">10</font><font color="#000080">-</font>Length<font color="#000080">(</font>Name<font color="#000080">)); </font>inc<font color="#000080">(</font>l<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">);
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>PrUsedBy<font color="#000080">(</font>right<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ PrUsed }
+
+</i></font><font color="#FF0000"><b>BEGIN
+ IF </b></font>root<font color="#000080">=</font><font color="#FF0000"><b>NIL THEN </b></font>EXIT<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font>uname<font color="#000080">,</font><font color="#800000">' USED by:'</font><font color="#000080">); </font>l<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>PrUsedBy<font color="#000080">(</font>root<font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ UsedBy }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>PrintPaths<font color="#000080">;
+
+ </font><font color="#FF0000"><b>procedure </b></font>traverse<font color="#000080">(</font>p<font color="#000080">: </font>tpNode<font color="#000080">);
+ </font><font color="#FF0000"><b>begin
+  if </b></font>p<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>nil then
+   with </b></font>p<font color="#000080">^ </font><font color="#FF0000"><b>do
+   begin
+    </b></font>traverse<font color="#000080">(</font>p<font color="#000080">^.</font>left<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>dirx<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+     </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font>AdStr<font color="#000080">(</font>DirList<font color="#000080">[</font>dirx<font color="#000080">]+</font>name<font color="#000080">+</font><font color="#800000">'.PAS'</font><font color="#000080">,</font><font color="#800000">50</font><font color="#000080">),
+                    </font><font color="#800000">' '</font><font color="#000080">,</font>size<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>DateTimeStr<font color="#000080">(</font>time<font color="#000080">));
+    </font>traverse<font color="#000080">(</font>p<font color="#000080">^.</font>right<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ traverse }
+
+</i></font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ PrintPaths }
+ </i></font><font color="#FF0000"><b>IF </b></font>root<font color="#000080">=</font><font color="#FF0000"><b>NIL THEN </b></font>EXIT<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'All Files:'</font><font color="#000080">);
+ </font>traverse<font color="#000080">(</font>root<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ PrintPaths }
+
+
+{ ======= recursively collect all uses lists ============= }
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>GetStructure<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>UName<font color="#000080">: </font>NameStr<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>p<font color="#000080">: </font>tpNode<font color="#000080">; </font>Level<font color="#000080">: </font>WORD<font color="#000080">);
+</font><font color="#FF0000"><b>CONST </b></font>EOFch <font color="#000080">= </font><font color="#800000">#31</font><font color="#000080">;
+      </font>EOLch <font color="#000080">= </font><font color="#800000">#13</font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>ref<font color="#000080">: </font>tpNode<font color="#000080">;
+    </font>up<font color="#000080">,</font>p1<font color="#000080">,</font>p2<font color="#000080">: </font>tpUseNode<font color="#000080">;
+    </font>F<font color="#000080">: </font>TEXT<font color="#000080">;
+    </font>udirx<font color="#000080">: </font>word<font color="#000080">;
+    </font>ch0<font color="#000080">,</font>ch<font color="#000080">: </font>char<font color="#000080">;
+    </font>sym<font color="#000080">: </font>symbol<font color="#000080">;
+    </font>id<font color="#000080">: </font>NameStr<font color="#000080">;
+    </font>str<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ mini parser. it seems to be enough to skip comments and
+    to recognize
+     INTERFACE, IMPLEMENTATION and USES
+    GetNumber and GetLiteral may be omitted.
+    Source must be syntactical correct!
+    Parser doesn't know about compiler directives, i.e. in
+     uses (*$IFDEF debug*) debug, (*$ENDIF*),gbase;
+    the unit debug is included! }
+
+   </i></font><font color="#FF0000"><b>PROCEDURE </b></font>getsym<font color="#000080">;
+   </font><font color="#FF0000"><b>VAR </b></font>j<font color="#000080">: </font>integer<font color="#000080">;
+
+    </font><font color="#FF0000"><b>PROCEDURE  </b></font>getch<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+     IF </b></font>EOF<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>THEN
+      </b></font>ch0<font color="#000080">:=</font>EOFch
+     <font color="#FF0000"><b>ELSE
+     IF </b></font>EOLn<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>THEN
+     BEGIN
+      </b></font>ReadLn<font color="#000080">(</font>F<font color="#000080">); </font>ch0<font color="#000080">:=</font>EOLch<font color="#000080">;
+     </font><font color="#FF0000"><b>END ELSE
+      </b></font>read<font color="#000080">(</font>F<font color="#000080">,</font>ch0<font color="#000080">);
+     </font>ch<font color="#000080">:=</font>UpCase<font color="#000080">(</font>ch0<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetCh }
+
+    </i></font><font color="#FF0000"><b>PROCEDURE </b></font>GetId<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+      </b></font>id<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>REPEAT </b></font>id<font color="#000080">:=</font>id<font color="#000080">+</font>ch<font color="#000080">; </font>getch <font color="#FF0000"><b>UNTIL not </b></font><font color="#000080">(</font>ch <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">,</font><font color="#800000">'_'</font><font color="#000080">]);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetId }
+
+    </i></font><font color="#FF0000"><b>PROCEDURE </b></font>GetNumber<font color="#000080">; </font><font color="#008000"><i>{ result as string in str }
+    </i></font><font color="#FF0000"><b>BEGIN
+      </b></font>str<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>REPEAT </b></font>str<font color="#000080">:=</font>str<font color="#000080">+</font>ch<font color="#000080">; </font>getch <font color="#FF0000"><b>UNTIL not </b></font><font color="#000080">(</font>ch <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">,</font><font color="#800000">'.'</font><font color="#000080">]);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetNumber }
+
+    </i></font><font color="#FF0000"><b>function </b></font>GetLiteral<font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#008000"><i>{ result in str }
+    </i></font><font color="#FF0000"><b>var </b></font>stop<font color="#000080">: </font>boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>begin
+     </b></font>str<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+     </font>GetCh<font color="#000080">; </font>stop<font color="#000080">:=</font>false<font color="#000080">;
+     </font><font color="#FF0000"><b>while not </b></font><font color="#000080">(</font>ch <font color="#FF0000"><b>in </b></font><font color="#000080">[</font>EOFch<font color="#000080">,</font>EOLch<font color="#000080">]) </font><font color="#FF0000"><b>and not </b></font>stop <font color="#FF0000"><b>do
+     begin
+      if </b></font>ch<font color="#000080">=</font><font color="#800000">'''' </font><font color="#FF0000"><b>then     </b></font><font color="#008000"><i>{ check for &quot;''&quot; -&gt; &quot;'&quot; }
+      </i></font><font color="#FF0000"><b>begin
+       </b></font>GetCh<font color="#000080">;
+       </font><font color="#FF0000"><b>if </b></font>ch<font color="#000080">=</font><font color="#800000">'''' </font><font color="#FF0000"><b>then
+       begin
+        </b></font>str<font color="#000080">:=</font>str<font color="#000080">+</font>ch<font color="#000080">;
+        </font>GetCh<font color="#000080">;
+       </font><font color="#FF0000"><b>end
+       else
+        </b></font>stop<font color="#000080">:=</font>true<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+      begin
+       </b></font>str<font color="#000080">:=</font>str<font color="#000080">+</font>ch0<font color="#000080">;
+       </font>GetCh<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>GetLiteral<font color="#000080">:=</font>stop<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetLiteral }
+
+    </i></font><font color="#FF0000"><b>PROCEDURE </b></font>Comment1<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+     REPEAT
+      </b></font>GetCh<font color="#000080">;
+     </font><font color="#FF0000"><b>UNTIL </b></font>ch <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'}'</font><font color="#000080">,</font>EOFch<font color="#000080">];
+     </font>GetCh<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Comment1 }
+
+    </i></font><font color="#FF0000"><b>PROCEDURE </b></font>Comment2<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+     REPEAT
+      WHILE NOT </b></font><font color="#000080">(</font>ch <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'*'</font><font color="#000080">,</font>EOFCh<font color="#000080">]) </font><font color="#FF0000"><b>DO </b></font>GetCh<font color="#000080">;
+      </font>GetCh<font color="#000080">;
+     </font><font color="#FF0000"><b>UNTIL </b></font>ch <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">')'</font><font color="#000080">,</font>EOFCh<font color="#000080">];
+     </font>GetCh<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Comment2 }
+
+  </i></font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>(* getsym *)
+   </i></font><font color="#FF0000"><b>WHILE </b></font>ch <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">#13</font><font color="#000080">] </font><font color="#FF0000"><b>DO </b></font>getch<font color="#000080">;
+   </font><font color="#FF0000"><b>CASE </b></font>ch <font color="#FF0000"><b>OF
+    </b></font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+               </b></font>GetId<font color="#000080">;
+               </font>KWtbl<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font>id<font color="#000080">; </font>j<font color="#000080">:=</font>NoKW<font color="#000080">;
+               </font><font color="#FF0000"><b>WHILE </b></font>id<font color="#000080">&lt;&gt;</font>KWtbl<font color="#000080">[</font>j<font color="#000080">] </font><font color="#FF0000"><b>DO </b></font>dec<font color="#000080">(</font>j<font color="#000080">);
+               </font><font color="#FF0000"><b>IF </b></font>j<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>sym<font color="#000080">:=</font>wsym<font color="#000080">[</font>j<font color="#000080">] </font><font color="#FF0000"><b>ELSE </b></font>sym<font color="#000080">:=</font>ident<font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">: </font><font color="#FF0000"><b>begin </b></font>GetNumber<font color="#000080">; </font>sym<font color="#000080">:=</font>number <font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">''''    </font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font>GetLiteral <font color="#FF0000"><b>then
+               </b></font>sym<font color="#000080">:=</font>literal
+              <font color="#FF0000"><b>else
+              begin
+               </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'Error in literal'</font><font color="#000080">);
+               </font>sym<font color="#000080">:=</font>EOFsym<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">','</font><font color="#000080">:     </font><font color="#FF0000"><b>BEGIN </b></font>sym<font color="#000080">:=</font>comma<font color="#000080">; </font>GetCh<font color="#000080">; </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#800000">'{'</font><font color="#000080">: </font><font color="#FF0000"><b>begin
+          </b></font>Comment1<font color="#000080">;
+          </font>GetSym<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'('</font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+          </b></font>GetCh<font color="#000080">;
+          </font><font color="#FF0000"><b>IF </b></font>ch<font color="#000080">=</font><font color="#800000">'*' </font><font color="#FF0000"><b>THEN
+          BEGIN
+           </b></font>GetCh<font color="#000080">; </font>Comment2<font color="#000080">; </font>GetSym<font color="#000080">;
+          </font><font color="#FF0000"><b>END ELSE </b></font>sym<font color="#000080">:=</font>NulSym<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>EOFch<font color="#000080">:   </font>sym<font color="#000080">:=</font>EOFSym<font color="#000080">;
+    </font><font color="#FF0000"><b>ELSE     BEGIN </b></font>sym<font color="#000080">:=</font>NulSym<font color="#000080">; </font>GetCh<font color="#000080">; </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetSym }
+
+ </i></font><font color="#FF0000"><b>procedure </b></font>ParseUseList<font color="#000080">;
+ </font><font color="#FF0000"><b>begin
+  </b></font>GetSym<font color="#000080">; </font><font color="#008000"><i>{ USES }
+  </i></font>p1<font color="#000080">:=</font>up<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>sym<font color="#000080">=</font>ident <font color="#FF0000"><b>DO
+  BEGIN
+   </b></font>p1<font color="#000080">^.</font>name<font color="#000080">:=</font>COPY<font color="#000080">(</font>id<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>verboose <font color="#FF0000"><b>then </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">:(</font>level<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">),</font>id<font color="#000080">);
+   </font>NEW<font color="#000080">(</font>p2<font color="#000080">); </font>p1<font color="#000080">^.</font>next<font color="#000080">:=</font>p2<font color="#000080">;
+   </font><font color="#FF0000"><b>WITH </b></font>p2<font color="#000080">^ </font><font color="#FF0000"><b>DO
+   BEGIN
+    </b></font>next<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+    </font>name<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>p1<font color="#000080">:=</font>p2<font color="#000080">;
+   </font>GetSym<font color="#000080">; </font><font color="#FF0000"><b>IF </b></font>sym<font color="#000080">=</font>comma <font color="#FF0000"><b>THEN </b></font>GetSym<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ ParseUseList }
+
+
+</i></font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{ GetStructure }
+ </i></font>INC<font color="#000080">(</font>Level<font color="#000080">);
+ </font>ref<font color="#000080">:=</font>search<font color="#000080">(</font>UName<font color="#000080">,</font>root<font color="#000080">);
+ </font><font color="#FF0000"><b>IF </b></font>ref<font color="#000080">^.</font>pUseList<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL THEN </b></font>EXIT<font color="#000080">; </font><font color="#008000"><i>{ schon da }
+ </i></font>FindDir<font color="#000080">(</font>UName<font color="#000080">,</font>udirx<font color="#000080">,</font>ref<font color="#000080">^.</font>time<font color="#000080">,</font>ref<font color="#000080">^.</font>size<font color="#000080">);
+ </font><font color="#FF0000"><b>IF </b></font>udirx<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>verboose <font color="#FF0000"><b>then
+  </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'Scanning '</font><font color="#000080">,</font>DirList<font color="#000080">[</font>udirx<font color="#000080">]+</font>uname<font color="#000080">,</font><font color="#800000">' ... '</font><font color="#000080">);
+ </font>INC<font color="#000080">(</font>SourceCount<font color="#000080">); </font>SourceSize<font color="#000080">:=</font>SourceSize<font color="#000080">+</font>ref<font color="#000080">^.</font>size<font color="#000080">;
+ </font>ref<font color="#000080">^.</font>dirx<font color="#000080">:=</font>udirx<font color="#000080">;
+ </font>NEW<font color="#000080">(</font>up<font color="#000080">);
+ </font><font color="#FF0000"><b>WITH </b></font>up<font color="#000080">^ </font><font color="#FF0000"><b>DO
+ BEGIN
+  </b></font>Name<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font>next<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font>ASSIGN<font color="#000080">(</font>F<font color="#000080">,</font>DirList<font color="#000080">[</font>udirx<font color="#000080">]+</font>UName<font color="#000080">+</font><font color="#800000">'.PAS'</font><font color="#000080">); </font>RESET<font color="#000080">(</font>F<font color="#000080">);
+ </font>ch<font color="#000080">:=</font><font color="#800000">' '</font><font color="#000080">;
+ </font>GetSym<font color="#000080">;
+ </font><font color="#008000"><i>{ collect the USES lists }
+ </i></font><font color="#FF0000"><b>WHILE NOT </b></font><font color="#000080">(</font>sym <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font>EOFSym<font color="#000080">,</font>IntfSym<font color="#000080">,</font>UsesSym<font color="#000080">]) </font><font color="#FF0000"><b>DO </b></font>GetSym<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>sym<font color="#000080">=</font>IntfSym <font color="#FF0000"><b>then
+ begin
+  if </b></font>verboose <font color="#FF0000"><b>then </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">:(</font>level<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">),</font><font color="#800000">'interface uses:'</font><font color="#000080">);
+  </font>GetSym<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>sym<font color="#000080">=</font>UsesSym <font color="#FF0000"><b>then
+   </b></font>ParseUseList<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE NOT </b></font><font color="#000080">(</font>sym <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font>EOFSym<font color="#000080">,</font>ImplSym<font color="#000080">]) </font><font color="#FF0000"><b>DO </b></font>GetSym<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>sym<font color="#000080">=</font>ImplSym <font color="#FF0000"><b>then
+  begin
+   if </b></font>verboose <font color="#FF0000"><b>then </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">:(</font>level<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">),</font><font color="#800000">'implementation uses:'</font><font color="#000080">);
+   </font>GetSym<font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>sym<font color="#000080">=</font>UsesSym <font color="#FF0000"><b>then
+    </b></font>ParseUseList<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end
+ else     </b></font><font color="#008000"><i>{ no INTERFACE }
+ </i></font><font color="#FF0000"><b>if </b></font>sym<font color="#000080">=</font>UsesSym <font color="#FF0000"><b>then
+ begin
+  if </b></font>verboose <font color="#FF0000"><b>then </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'program uses:'</font><font color="#000080">);
+  </font>ParseUseList<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>CLOSE<font color="#000080">(</font>F<font color="#000080">);
+ </font><font color="#008000"><i>{ Parse the files in pUseList recursively }
+ </i></font>ref<font color="#000080">^.</font>pUseList<font color="#000080">:=</font>up<font color="#000080">;
+ </font>p1<font color="#000080">:=</font>up<font color="#000080">;
+ </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p1<font color="#000080">^.</font>name<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+ BEGIN
+  </b></font>GetStructure<font color="#000080">(</font>p1<font color="#000080">^.</font>name<font color="#000080">,</font>root<font color="#000080">,</font>level<font color="#000080">);
+  </font>p1<font color="#000080">:=</font>p1<font color="#000080">^.</font>next<font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetStructure }
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>OutputStructure<font color="#000080">(</font>r<font color="#000080">: </font>tpNode<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>lc<font color="#000080">: </font>WORD<font color="#000080">;
+    </font>line<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>PrintStructure<font color="#000080">(</font>r<font color="#000080">: </font>tpNode<font color="#000080">);
+  </font><font color="#FF0000"><b>VAR </b></font>p<font color="#000080">: </font>tpUseNode<font color="#000080">;
+
+    </font><font color="#FF0000"><b>PROCEDURE </b></font>PrintUseList<font color="#000080">(</font>p<font color="#000080">: </font>tpUseNode<font color="#000080">);
+    </font><font color="#FF0000"><b>VAR </b></font>q<font color="#000080">: </font>tpUseNode<font color="#000080">;
+        </font>empty<font color="#000080">: </font>BOOLEAN<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+     </b></font>q<font color="#000080">:=</font>p<font color="#000080">;   </font>empty<font color="#000080">:=</font>TRUE<font color="#000080">;
+     </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>q<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>q<font color="#000080">^.</font>name<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+     BEGIN
+      </b></font>empty<font color="#000080">:=</font>FALSE<font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font>length<font color="#000080">(</font>line<font color="#000080">)&gt;</font><font color="#800000">74 </font><font color="#FF0000"><b>THEN
+      BEGIN
+       </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font>line<font color="#000080">);
+       </font>line<font color="#000080">:=</font>AdStr<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">16</font><font color="#000080">);
+       </font>INC<font color="#000080">(</font>lc<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>line<font color="#000080">:=</font>line<font color="#000080">+</font>AdStr<font color="#000080">(</font>q<font color="#000080">^.</font>name<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">);
+      </font>q<font color="#000080">:=</font>q<font color="#000080">^.</font>next<font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font>empty <font color="#FF0000"><b>THEN
+     BEGIN
+      </b></font>line<font color="#000080">:=</font>line<font color="#000080">+</font><font color="#800000">'-'</font><font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ PrintUseList }
+
+
+  </i></font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{ PrintStructure }
+   </i></font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL THEN
+   WITH </b></font>r<font color="#000080">^ </font><font color="#FF0000"><b>DO
+   BEGIN
+    </b></font>PrintStructure<font color="#000080">(</font>left<font color="#000080">);
+    </font>line<font color="#000080">:=</font>AdStr<font color="#000080">(</font>name<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">)+</font><font color="#800000">' USES '</font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>dirx<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+     </b></font>PrintUseList<font color="#000080">(</font>pUseList<font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE
+     </b></font>line<font color="#000080">:=</font>line<font color="#000080">+</font><font color="#800000">'No PAS-file'</font><font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font>line<font color="#000080">); </font>line<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+    </font>INC<font color="#000080">(</font>lc<font color="#000080">);
+    </font>PrintStructure<font color="#000080">(</font>right<font color="#000080">)
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ PrintStructure }
+
+</i></font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{ OutputStructure }
+ </i></font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">=</font><font color="#FF0000"><b>NIL THEN </b></font>EXIT<font color="#000080">;
+ </font>lc<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>line<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+ </font>PrintStructure<font color="#000080">(</font>r<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ OutputStructure }
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DisposeStructure<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>p<font color="#000080">: </font>tpNode<font color="#000080">);
+
+ </font><font color="#FF0000"><b>PROCEDURE </b></font>DisposeUseList<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>u<font color="#000080">: </font>tpUseNode<font color="#000080">);
+ </font><font color="#FF0000"><b>BEGIN
+  IF </b></font>u<font color="#000080">=</font><font color="#FF0000"><b>NIL THEN </b></font>EXIT<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>u<font color="#000080">^.</font>next<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL DO </b></font>DisposeUseList<font color="#000080">(</font>u<font color="#000080">^.</font>next<font color="#000080">);
+  </font>DISPOSE<font color="#000080">(</font>u<font color="#000080">); </font>u<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ IF </b></font>p<font color="#000080">=</font><font color="#FF0000"><b>NIL THEN </b></font>EXIT<font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>p<font color="#000080">^.</font>left<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL THEN </b></font>DisposeStructure<font color="#000080">(</font>p<font color="#000080">^.</font>left<font color="#000080">);
+ </font><font color="#FF0000"><b>IF </b></font>p<font color="#000080">^.</font>right<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL THEN </b></font>DisposeStructure<font color="#000080">(</font>p<font color="#000080">^.</font>right<font color="#000080">);
+ </font>DisposeUseList<font color="#000080">(</font>p<font color="#000080">^.</font>pUseList<font color="#000080">);
+ </font>Dispose<font color="#000080">(</font>p<font color="#000080">); </font>p<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ DisposeStructure }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>ScanUnits<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>SelPath<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>dir<font color="#000080">: </font>DirStr<font color="#000080">;
+    </font>name<font color="#000080">: </font>NameStr<font color="#000080">;
+    </font>ext<font color="#000080">: </font>ExtStr<font color="#000080">;
+    </font>mdirx <font color="#000080">: </font>word<font color="#000080">;
+    </font>dummy<font color="#000080">: </font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>fsplit<font color="#000080">(</font>SelPath<font color="#000080">,</font>dir<font color="#000080">,</font>name<font color="#000080">,</font>ext<font color="#000080">);
+ </font>EnterDir<font color="#000080">(</font>dir<font color="#000080">);
+ </font>FindDir<font color="#000080">(</font>Name<font color="#000080">,</font>mdirx<font color="#000080">,</font>dummy<font color="#000080">,</font>dummy<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>mdirx<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  </b></font>GetStructure<font color="#000080">(</font>Name<font color="#000080">,</font>root<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)
+ </font><font color="#FF0000"><b>else
+  </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'File not found'</font><font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font>SourceCount<font color="#000080">,</font><font color="#800000">' PAS-File(s)'</font><font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'Size: '</font><font color="#000080">,</font>SourceSize <font color="#FF0000"><b>DIV </b></font><font color="#800000">1024</font><font color="#000080">,</font><font color="#800000">' KByte'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ ScanUnits }
+
+</i></font><font color="#FF0000"><b>var </b></font>pcnt<font color="#000080">,</font>i<font color="#000080">: </font>word<font color="#000080">;
+    </font>options<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ main }
+ </i></font><font color="#FF0000"><b>if </b></font>ParamCount<font color="#000080">&lt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+ begin
+  </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'bpxref dirs path[.pas] [units] [/v] [/p] [/x]'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'prints dependencies of Turbo Pascal units'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'by scanning the uses lists of the source files.'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Output to stdout.'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'dirs    : file containing the dirs, separated by semicola'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'          example: \pas;\db;\graphic'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'path    : path of unit or program'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'units   : unit list, prints all units uses by the elements'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'/v      : verboose, prints scanning information'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'/x      : print x-reference list'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'/p      : print paths of all units'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Example : bpxref \bin\bpdirs.txt \db\myprog gbase hex /p &gt; myprog.xrf'</font><font color="#000080">);
+ </font><font color="#FF0000"><b>end
+ else
+ begin
+  </b></font>assign<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">); </font>rewrite<font color="#000080">(</font>stdout<font color="#000080">);
+  </font>pcnt<font color="#000080">:=</font>ParamCount<font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>pos<font color="#000080">(</font><font color="#800000">'/'</font><font color="#000080">,</font>ParamStr<font color="#000080">(</font>pcnt<font color="#000080">))&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>pcnt<font color="#000080">);
+  </font>options<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font>pcnt<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ParamCount <font color="#FF0000"><b>do
+   </b></font>options<font color="#000080">:=</font>options<font color="#000080">+</font>UpperCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font>i<font color="#000080">));
+  </font>verboose<font color="#000080">:=</font>pos<font color="#000080">(</font><font color="#800000">'/V'</font><font color="#000080">,</font>options<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">;
+  </font>LoadDirList<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+  </font><font color="#FF0000"><b>if </b></font>DirCnt<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'No DirList'</font><font color="#000080">);
+  </font>verboose<font color="#000080">:=</font>UpperCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font>pcnt<font color="#000080">))=</font><font color="#800000">'/V'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>verboose <font color="#FF0000"><b>then </b></font>dec<font color="#000080">(</font>pcnt<font color="#000080">);
+  </font>root<font color="#000080">:=</font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>SourceSize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>SourceCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>ScanUnits<font color="#000080">(</font>UpperCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">)));
+  </font>WriteLn<font color="#000080">(</font>stdout<font color="#000080">,</font><font color="#800000">'Start-File: '</font><font color="#000080">,</font>ParamStr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));
+  </font><font color="#FF0000"><b>if </b></font>pos<font color="#000080">(</font><font color="#800000">'/X'</font><font color="#000080">,</font>options<font color="#000080">)&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>OutputStructure<font color="#000080">(</font>root<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">3 </font><font color="#FF0000"><b>to </b></font>pcnt <font color="#FF0000"><b>do
+   </b></font>UsedBy<font color="#000080">(</font>UpperCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font>i<font color="#000080">)));
+  </font><font color="#FF0000"><b>if </b></font>pos<font color="#000080">(</font><font color="#800000">'/P'</font><font color="#000080">,</font>options<font color="#000080">)&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PrintPaths<font color="#000080">;
+  </font>DisposeStructure<font color="#000080">(</font>root<font color="#000080">);
+  </font>close<font color="#000080">(</font>stdout<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to UNITINFO SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0006.PAS">Original</a><b>]</b></p></body>
+</html>

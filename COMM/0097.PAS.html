@@ -1,0 +1,248 @@
+<html>
+<head><title> "Simplified and FAST COMM Routines" by COLIN URQUHART</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0097.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+I am using a PCCOM 4-port serial card and this unit works with a small test
+program but when I use it in a larger program (executable approx 48k) I only
+get some of the characters from the port.
+The serial card is 16450 based with vector at $02BF..
+I have done very little interrupt programming so I don't know if that is the
+problem.
+
+Thanks........
+}
+</i></font><font color="#FF0000"><b>unit </b></font>mycom<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+procedure </b></font>Async_ISR<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>XmitChar<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">;</font>C<font color="#000080">: </font>char<font color="#000080">);  </font><font color="#008000"><i>{ Uses variable and constant declarations from}
+</i></font><font color="#FF0000"><b>function  </b></font>RemoteReadKey<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">): </font>char<font color="#000080">;  </font><font color="#008000"><i>{ Uses var and const from above }
+</i></font><font color="#FF0000"><b>function  </b></font>RemoteKeyPressed<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;  </font><font color="#008000"><i>{ Uses vars and consts from above }
+</i></font><font color="#FF0000"><b>procedure </b></font>InitPort<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>InitInter<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>TerminateInter<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>COM_BufSize <font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+
+USES </b></font>DOS<font color="#000080">,</font>crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>COM_mask<font color="#000080">:</font>byte<font color="#000080">;
+    </font>COM_Buffer<font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of array</b></font><font color="#000080">[</font><font color="#800000">0 </font><font color="#000080">.. </font><font color="#800000">129</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;  </font><font color="#008000"><i>{ A buffer for input}
+    </i></font>COM_Temp<font color="#000080">,  </font><font color="#008000"><i>{ Varible to hold various modem statuses }
+    </i></font>COM_CommPort<font color="#000080">: </font>byte<font color="#000080">;  </font><font color="#008000"><i>{ Comm Port in use }
+    </i></font>COM_Head <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;  </font><font color="#008000"><i>{ Size of the buffer }
+    </i></font>OldInt0Dh <font color="#000080">:</font>pointer<font color="#000080">;
+    </font>OldPIC<font color="#000080">:</font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>COM_IRQ_Number <font color="#000080">= </font><font color="#800000">$07</font><font color="#000080">;
+      </font>COM_IRQ_Vector <font color="#000080">= </font><font color="#800000">$0F</font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>const
+  </b></font>BaseAddr<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0 </font><font color="#000080">.. </font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word <font color="#000080">= (</font><font color="#800000">$02A0</font><font color="#000080">, </font><font color="#800000">$02A8</font><font color="#000080">, </font><font color="#800000">$02B0</font><font color="#000080">, </font><font color="#800000">$02B8</font><font color="#000080">);
+  </font>Baud<font color="#000080">=</font><font color="#800000">38400</font><font color="#000080">;                     </font><font color="#008000"><i>{ Speed required }
+  </i></font>Divisor<font color="#000080">:</font>word <font color="#000080">= </font><font color="#800000">115200 </font><font color="#FF0000"><b>div </b></font>Baud<font color="#000080">; </font><font color="#008000"><i>{ or 1843200 / (16 * Baud) }
+                                  {    ^   UART clock speed  }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Async_ISR<font color="#000080">;
+   </font><font color="#FF0000"><b>CONST </b></font>Buf_Pnt<font color="#000080">:</font>POINTER<font color="#000080">=@</font>COM_Buffer<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{  WRITE('*'); }
+  </i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">STI </font><font color="#008000"><i>{ STI - Disable interrupts }
+  </i></font><font color="#FF00FF">PUSHA
+  PUSH SS
+  MOV CL,00           </font><font color="#008000"><i>{ Com Port Counter 0 - 3 =&gt; COM5 - COM8}
+</i></font><font color="#FF00FF">@NextVector:
+  MOV DX, 02BFh               </font><font color="#008000"><i>{ WHO WANTED AN INTERRUPT ? }
+  </i></font><font color="#FF00FF">MOV BL,01
+  SHL BL,CL
+  IN AL,DX
+  TEST AL,BL
+  JNZ @CheckNextVector
+  MOV DX, 02A0h               </font><font color="#008000"><i>{ BASE OF FIRST PORT }
+  </i></font><font color="#FF00FF">MOV AL,08
+  MUL CL
+  ADD DX,AX                  </font><font color="#008000"><i>{ GOT BASE ADDRESS IN DX }
+</i></font><font color="#FF00FF">@GoBackForMore:
+  ADD DX,02h
+  IN AL,DX                   </font><font color="#008000"><i>{ CHECK INTERRUPT ID REGISTER }
+  </i></font><font color="#FF00FF">SUB DX,02h
+  TEST AL,01h                </font><font color="#008000"><i>{ NO IRQ PENDING }
+  </i></font><font color="#FF00FF">JNZ @CheckNextVector
+  AND AL,06h
+  CMP AL,04h                  </font><font color="#008000"><i>{ DID WE RECEIVE A CHARACTER }
+  </i></font><font color="#FF00FF">JNZ @CheckMore               </font><font color="#008000"><i>{ NO ? THEN WHAT ELSE }
+  </i></font><font color="#FF00FF">IN AL,DX                    </font><font color="#008000"><i>{ READ INPUT FROM PORT }
+  </i></font><font color="#FF00FF">MOV BH,AL                   </font><font color="#008000"><i>{ PUT DATA IN BH FOR LATER }
+  </i></font><font color="#FF00FF">LDS SI,Buf_Pnt
+  LES DI,Buf_Pnt
+  MOV AL,130            </font><font color="#008000"><i>{ SIZE OF BUFFER + 2 for size &amp; tail pointer }
+  </i></font><font color="#FF00FF">MUL CL
+  ADD SI,AX
+  ADD DI,AX                    </font><font color="#008000"><i>{ FOUND BUFFER[COM_PORT] }
+  </i></font><font color="#FF00FF">LODSB
+  CMP AL,127                  </font><font color="#008000"><i>{ IF BUFFER FULL IGNORE CHARACTER }
+  </i></font><font color="#FF00FF">JA @CheckForAnotherIRQ
+  INC AL                      </font><font color="#008000"><i>{ INC SIZE IF ROOM }
+  </i></font><font color="#FF00FF">STOSB                       </font><font color="#008000"><i>{ WRITE BACK TO SIZE COUNTER }
+  </i></font><font color="#FF00FF">LODSB                        </font><font color="#008000"><i>{ tail pointer }
+  </i></font><font color="#FF00FF">MOV BL,AL                    </font><font color="#008000"><i>{ PUT TAIL POINTER IN BL }
+  </i></font><font color="#FF00FF">INC AL
+  CMP AL,128
+  JB @WriteTail
+  MOV AL,0
+@WriteTail:
+  STOSB
+  MOV AL,BH                    </font><font color="#008000"><i>{ GET BACK DATA FROM BH }
+  </i></font><font color="#FF00FF">MOV BH,0
+  ADD DI,BX                    </font><font color="#008000"><i>{ ADD CONTENTS OF TAIL POINTER TO POINTER }
+  </i></font><font color="#FF00FF">STOSB                        </font><font color="#008000"><i>{ WRITE DATA TO BUFFER }
+  </i></font><font color="#FF00FF">JMP @CheckForAnotherIRQ
+@CheckMore:
+  CMP AH,02h                  </font><font color="#008000"><i>{ THD EMPTY }
+  </i></font><font color="#FF00FF">JNZ @CheckMore2
+
+  
+  </font><font color="#008000"><i>{ FOR LATER ADDITION OF INTERRUPT SEND ROUTINE }
+
+
+  </i></font><font color="#FF00FF">JMP @CheckForAnotherIRQ
+@CheckMore2:
+  CMP AH,06h                  </font><font color="#008000"><i>{ ERROR OR BREAK }
+  </i></font><font color="#FF00FF">JNZ @CheckForAnotherIRQ
+  IN AL,DX                    </font><font color="#008000"><i>{ READ FROM PORT TO CLEAR OVERRUNS }
+  </i></font><font color="#FF00FF">ADD DX,05h
+  IN AL,DX                    </font><font color="#008000"><i>{ READ LINE STATUS REGISTER }
+  </i></font><font color="#FF00FF">SUB DX,05h
+@CheckForAnotherIRQ:
+  JMP @GoBackForMore        </font><font color="#008000"><i>{ ANOTHER INTERRUPT ON THIS PORT }
+
+</i></font><font color="#FF00FF">@CheckNextVector:
+  INC CL
+  CMP CL,04h
+  JNZ @NextVector
+  MOV DX,0020h
+  MOV AL,20h
+  OUT DX,AL    </font><font color="#008000"><i>{ RESET PIC }
+  </i></font><font color="#FF00FF">POP SS
+  POPA
+  CLI          </font><font color="#008000"><i>{ CLI - Enable interrupts }
+
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>procedure </b></font>XmitChar<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">;</font>C<font color="#000080">: </font>char<font color="#000080">);  </font><font color="#008000"><i>{ Uses variable and constant declarations from}
+</i></font><font color="#FF0000"><b>begin                         </b></font><font color="#008000"><i>{  the previous example }
+  </i></font><font color="#FF0000"><b>repeat
+</b></font><font color="#008000"><i>{  write ('.');}
+  </i></font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">] + </font><font color="#800000">$05</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$20 </font><font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">);  </font><font color="#008000"><i>{ Wait for THR }
+
+  </i></font>port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]] := </font>Ord<font color="#000080">(</font>C<font color="#000080">);  </font><font color="#008000"><i>{ Send character }
+
+{  textcolor(red);
+  write(ord(c));
+  write('.');
+  textcolor(lightgray);}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>RemoteReadKey<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">): </font>char<font color="#000080">;  </font><font color="#008000"><i>{ Uses var and const from above }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>ord<font color="#000080">(</font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font><font color="#800000">0</font><font color="#000080">]) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+</b></font>RemoteReadKey <font color="#000080">:= </font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font>COM_Head<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">2</font><font color="#000080">];  </font><font color="#008000"><i>{Get the character }
+</i></font>inc<font color="#000080">(</font>COM_Head<font color="#000080">[</font>Serial_IOPort<font color="#000080">]);  </font><font color="#008000"><i>{ Move Head to the nextcharacter }
+</i></font><font color="#FF0000"><b>if </b></font>COM_Head<font color="#000080">[</font>Serial_IOPort<font color="#000080">] &gt; </font><font color="#800000">127 </font><font color="#FF0000"><b>then </b></font>COM_Head<font color="#000080">[</font>Serial_IOPort<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ Wrap Head around if necessary }
+</i></font>dec<font color="#000080">(</font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font><font color="#800000">0</font><font color="#000080">]);  </font><font color="#008000"><i>{Remove the character }  </i></font><font color="#FF0000"><b>end
+  else </b></font>RemoteReadKey<font color="#000080">:=</font>chr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>RemoteKeyPressed<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">): </font>boolean<font color="#000080">;  </font><font color="#008000"><i>{ Uses vars and consts from above }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>RemoteKeyPressed <font color="#000080">:= </font>ord<font color="#000080">(</font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font><font color="#800000">0</font><font color="#000080">]) &gt; </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ A key was pressed if there is data in}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;                             </font><font color="#008000"><i>{  the buffer }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>InitPort<font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">);
+          </font><font color="#FF0000"><b>var </b></font>COM_tt<font color="#000080">:</font>byte<font color="#000080">;
+          </font><font color="#FF0000"><b>begin
+          inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">); </font><font color="#008000"><i>{ STI - Disable interrupts }
+          </i></font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">$03</font><font color="#000080">]:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">$03</font><font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">128</font><font color="#000080">;
+          </font><font color="#008000"><i>{ Ready to set Port speed }
+          </i></font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]]:= </font>Lo<font color="#000080">(</font>Divisor<font color="#000080">);
+          </font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">$01</font><font color="#000080">]:= </font>Hi<font color="#000080">(</font>Divisor<font color="#000080">);  </font><font color="#008000"><i>{ Set Speed to 38400 }
+          </i></font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">$03</font><font color="#000080">]:= </font><font color="#800000">$03 </font><font color="#FF0000"><b>or </b></font><font color="#800000">$08 </font><font color="#FF0000"><b>or </b></font><font color="#800000">$00</font><font color="#000080">;
+                  </font><font color="#008000"><i>{ end set port speed and set 8  -   O  -   1 }
+          </i></font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">$01</font><font color="#000080">]:= </font><font color="#800000">$01</font><font color="#000080">;
+                   </font><font color="#008000"><i>{ set Interrupt enable on Rx Data }
+          </i></font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">1</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">2</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">3</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">4</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">5</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">6</font><font color="#000080">];
+          </font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]]:=</font><font color="#800000">0</font><font color="#000080">;
+
+  </font>COM_Head<font color="#000080">[</font>Serial_IOPort<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font><font color="#800000">1</font><font color="#000080">]:=</font>CHR<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);  </font><font color="#008000"><i>{ tail }
+  </i></font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font><font color="#800000">0</font><font color="#000080">]:=</font>chr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);  </font><font color="#008000"><i>{ size }
+
+  </i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);  </font><font color="#008000"><i>{ CLI - Enable interrupts }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>InitInter<font color="#000080">;
+           </font><font color="#FF0000"><b>begin
+           </b></font>InitPort <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+           </font>InitPort <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+           </font>InitPort <font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+           </font>InitPort <font color="#000080">(</font><font color="#800000">3</font><font color="#000080">);
+               </font>Port<font color="#000080">[</font><font color="#800000">$02BF</font><font color="#000080">]:=</font><font color="#800000">$ff</font><font color="#000080">;
+               </font>GetIntVec<font color="#000080">(</font>COM_IRQ_vector<font color="#000080">, </font>OldInt0Dh<font color="#000080">);
+               </font>SetIntVec<font color="#000080">(</font>COM_IRQ_vector<font color="#000080">, @</font>Async_ISR<font color="#000080">);
+               </font>COM_mask <font color="#000080">:= (</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font><font color="#000080">(</font>COM_IRQ_number<font color="#000080">)) </font><font color="#FF0000"><b>xor </b></font><font color="#800000">$00FF</font><font color="#000080">;
+               </font>OldPic<font color="#000080">:=</font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">];
+               </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>OldPIC <font color="#FF0000"><b>and </b></font>COM_mask<font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>TerminateInter<font color="#000080">;
+          </font><font color="#FF0000"><b>var </b></font>Serial_IOPort<font color="#000080">,</font>com_tt<font color="#000080">:</font>byte<font color="#000080">;
+          </font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{             COM_mask := 1 shl (COM_IRQ_number);}
+             </i></font>SetIntVec<font color="#000080">(</font>COM_IRQ_vector<font color="#000080">, </font>OldInt0Dh<font color="#000080">);
+          </font><font color="#FF0000"><b>for </b></font>Serial_IOPort <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">3 </font><font color="#FF0000"><b>do begin
+                   </b></font><font color="#008000"><i>{ set Interrupt enable off }
+          </i></font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">1</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">2</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">3</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">4</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">5</font><font color="#000080">];
+          </font>COM_tt<font color="#000080">:=</font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">6</font><font color="#000080">];
+          </font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]]:=</font><font color="#800000">0</font><font color="#000080">;
+          </font>Port<font color="#000080">[</font>BaseAddr<font color="#000080">[</font>Serial_IOPort<font color="#000080">]+</font><font color="#800000">$01</font><font color="#000080">]:= </font><font color="#800000">$00</font><font color="#000080">;
+             </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font>OldPIC<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>COM_BufSize <font color="#000080">(</font>Serial_IOPort<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">;
+         </font><font color="#FF0000"><b>begin
+         </b></font>COM_BufSize<font color="#000080">:=</font>ord<font color="#000080">(</font>COM_Buffer<font color="#000080">[</font>Serial_IOPort<font color="#000080">][</font><font color="#800000">0</font><font color="#000080">]);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font>Com_Buffer Structure<font color="#000080">:
+</font>Byte <font color="#800000">0 </font><font color="#000080">-  </font>number <font color="#FF0000"><b>of </b></font>characters <font color="#FF0000"><b>in </b></font>buffer
+Byte <font color="#800000">1 </font><font color="#000080">-  </font>tail ponter <font color="#FF0000"><b>in </b></font>buffer
+<font color="#800000">2</font><font color="#000080">-</font><font color="#800000">129  </font><font color="#000080">-  </font><font color="#800000">128 </font>bytes <font color="#000080">(</font>the buffer<font color="#000080">)
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0097.PAS">Original</a><b>]</b></p></body>
+</html>

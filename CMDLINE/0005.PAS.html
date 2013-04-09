@@ -1,0 +1,832 @@
+<html>
+<head><title> "Parse Command Line" by KENNETH W. FOX</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to CMDLINE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0005.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{*************************************************************************)
+            Program name: Command parse sub routines
+                  Author: Kenneth W. Fox
+                          1449 Maple Rd.
+                          KintnersVille Pa. 18930
+                          USA
+           Date Started : 5 AUG 1992
+           Date finished: 10 jan 1993
+           date last Rev: 20 JAn 1993
+*************************************************************************
+
+Commandline args:
+-----------------
+NONE
+
+Description of Program:
+-----------------------
+set of  Procedures to handle all commandline Parameters With or without regard
+to Case -- selected by the Boolean Var Nocase -- if True then  everrything
+is converted to uppercase prior to testing
+
+all arguments returned from switches are left in whatever Case they were
+entered on the commandline unless ConvertArgsToUpper is set to True.
+
+Includes following Procedures:
+
+Procedure NAME          : PURPOSE
+------------------------:-------------------------------------------------
+ FnameCheck             : to validate Program name
+                          stops people from renanming the Program  if you don't
+                          want them to -- if you don't care then don't call
+                          this routine.
+
+ DispCmdline            : use to display commandline parameters when debugging
+
+ ConvertArgtoNumber     : converts specified arg from a String to a numeric
+                          value.
+
+ CheckHelp              : routine to check to see if the Strings designated
+                          as commandline help Strings are present or not.
+                          the use of this routine requires the File
+                          Helpuser.pas. Additionally this routine checks to
+                          see if the 'info' switch was present -- conveniaet
+                          way to display registration info in share ware..
+
+
+ CmdParse               : main routine to parse command line-- this Procedure
+                          is called With Various arguments to alter the content
+                          of the CmdArray data structure.
+
+
+
+Additonal mods to be made:
+---------------------------
+1) add subroutine in cmdline parser to capture delimited Strings (such as
+those between quotes)
+
+2) add subroutine to check if any items one the commandline besides the valid
+switches and such were present --
+
+to be used For spotting invalid commandline parameters return value should
+be Boolean invalid and the paramString(#)...
+
+NOTES: may run into trouble writing the routine when the delimited Strings
+Function  is added.. possible errors include capturing elements of the
+delimited String as invalid args -- will also check For no closing delimiter..
+
+3) develop a version of the cmd line parser which Uses a linked list instead
+of a set of Arrays to save the values in -- will save some memory..
+
+4) convert the whole Procedure to an itelligent macro which merely requires
+a list of the command args (doesn't use a fixed Array size -- will
+dynamically allocate space based on number of arguments specified in the
+arg pickup header File. regrettably , some form of header File will need
+to be used in order to specify what will be searched For --
+
+5) a possible solution is a way to make a mini compiler macro which will
+read in the switches to be processed from a File along With definitions
+
+eventually convert the whole thing into a Unit // overlay .
+
+
+Rev History:
+------------
+
+notes on errors -- if  the switch Strings are not Varying their length
+ when Const SwitchLength is changed, then the $I CmdParse.H File is not
+in the correct path
+
+ remember that the commandArray initialization Procedure is in the
+CmdParse.h File and the appropriate adjustments to the qty and values of
+the switches need to be made there .. if you are experiencing problems
+ With the capture of switches, ensure that you ahe init'd you Array values
+correctly
+
+ added Boolean present field For argdsw Array
+
+9/5/92 -- moved the call to initCmdArray from the calling routine into the
+          initialization section of cmdparse.pas -- because i forgot to add
+          it to chkLabel.pas and was going nuts tring to find the error.
+          live and learn.
+
+9/5/92 -- added the DispCmdline Procedure as a result of the above session
+          of psychosis..
+
+9/6/92 -- re organized cmdparse.pas into more subroutines -- made it easier
+          to follow what was going on.. also added removeable code to
+          implement a delimited String parser.. this routine will need to
+          access the commandline directly instead of using the ParamStr()
+(99 min left), (H)elp, More?           Function of turbo.
+
+9/6/92 -- added the ConvertArgtoNumber  routine
+          **** NOTE ***** &quot;HelpUser&quot; is a Procedure I add to all Programs
+          which use command line args or otherwise -- I normally use an
+          $I IncludeFile to implement it.. the Include Staement MUST
+          occur BEFORE the include StaTement For CmdParse.pas File..  or
+          you can delete the reference to the File from the Program
+
+9/6/92 -- added the standard help codes to the switches Array in cmdParse.H
+          ( /? , /h , /H , help , HELP ).
+
+9/6/92 -- added FnameCheck to this File-- FnameCheck requires a Constant or
+          String called &quot;ProgName&quot; containing the name of the MAIN Program
+          it checks the ParamStr(0) to verify that the Filename of the
+          Program has not been renamed -- useful For copyright purposes,
+          annoying to users.. use at own peril
+
+9/6/92 -- updated header File to list Procedures avail in cmdparse.pas
+
+1/8/93 -- added the info switch to and DisplayInfo routines to show
+          registration / info request address.
+
+
+end desc.
+}
+
+{HEADER File For cmdparse.pas -- include in Calling File   }
+
+{PROGNAME.pas}  {&lt;&lt;&lt;&lt;----- Program using this header File   }
+{ 20 Jan 1993} {&lt;&lt;&lt;&lt;----- date this File last changed      }
+{ Ken Fox    }  {&lt;&lt;&lt;&lt;----- Person who last updated this File}
+
+(*
+Uses Dos,Crt;
+
+Const
+  VersionNum = 'V1.0 BETA';
+  ProgNameStr = 'NEWPROJ.EXE';
+  ProgNameShortStr = 'NP.EXE';
+  copyRightStr = ProgNameStr+' ' + VersionNum +
+                ', Copyright 1992 - 1993, Ken Fox. All Rights Reserved.';
+
+  DefaultFileName = 'NEWPROJ.DAT';
+
+*)
+
+{--------------------------------------------------------------------------}
+{                          procs Available in CmdParse.H                   }
+{ Procedure   initCmdArray(Var CmdArray : CommandLineArrayType);           }
+{   this proc is included in ths File becuase the args to check For are    }
+{ part of the calling routine, not the parser itself. note that the excess }
+{ switches are commented out and will there For not compile but it will    }
+{ make it easier to add stuff in the future should you so desire           }
+{--------------------------------------------------------------------------}
+{                          procs Available in CmdParse.Pas                 }
+{ additional info on the following procs may be found in the cmdparse.Pas  }
+{ File in the ....\tp\include directory..                                  }
+{                                                                          }
+{ Procedure DispCmdline;                                                   }
+{                                                                          }
+{ Procedure CmdParse(Var CmdArray : CommandLineArrayType;                  }
+{                            NoCase,                                       }
+{                            ConvertArgsToUpper   : Boolean );             }
+{                                                                          }
+{ Procedure ConvertArgtoNumber(ArgNum : Integer;                           }
+{                             Var  CmdArray : CommandLineArrayType;        }
+{                             Var  ResultNumber: Word);                    }
+{                                                                          }
+{ Procedure FnameCheck(progname , progname2 :pathStr;                      }
+{                      errorlevel : Byte);                                 }
+{                                                                          }
+{ Procedure CheckHelp;                                                     }
+{                                                                          }
+{--------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Const
+</b></font>SwitchLength <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;   </font><font color="#008000"><i>{   maxlegth of a switch to be tested for}
+</i></font>ArgLength <font color="#000080">= </font><font color="#800000">11</font><font color="#000080">;     </font><font color="#008000"><i>{   max length of an argument from the commandline}
+</i></font>DelimLength <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;     </font><font color="#008000"><i>{   maxlength of delimiter if used}
+</i></font>SwitchNum <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;      </font><font color="#008000"><i>{   the number of switches and hence the size of the Array}
+                    {      of switches  without arguments                  }
+</i></font>ArgdSwitchNum <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;  </font><font color="#008000"><i>{   the number of switches and hence the size of the Array}
+                    {      of switches  With arguments                 }
+</i></font>DelimNum <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;       </font><font color="#008000"><i>{   number of args With delimited Strings          }
+
+
+</i></font><font color="#FF0000"><b>Type
+</b></font>SwitchType <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font>Switchlength<font color="#000080">];
+</font>ArgType <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font>ArgLength<font color="#000080">];
+</font>DelimType <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font>DelimLength<font color="#000080">];
+
+</font>SwitchesType <font color="#000080">= </font><font color="#FF0000"><b>Record
+         </b></font>Switch <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>SwitchNum<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>SwitchType<font color="#000080">;
+         </font>Present <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>switchNum<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean
+         <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font>SwitchWithArgType <font color="#000080">= </font><font color="#FF0000"><b>Record
+              </b></font>Switch  <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>ArgdSwitchNum<font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>SwitchType<font color="#000080">;
+              </font>Arg     <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>ArgdSwitchNum<font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>ArgType<font color="#000080">;
+              </font>Present <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>ArgdSwitchNum<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean
+              <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font>SwitchedArgWithEmbeddedSpacesType <font color="#000080">= </font><font color="#FF0000"><b>Record
+              </b></font>Switch     <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>DelimNum<font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>SwitchType<font color="#000080">;
+              </font>StartDelim <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>DelimNum<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>DelimType<font color="#000080">;
+              </font>Arg        <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>DelimNum<font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>ArgType<font color="#000080">;
+              </font>endDelim   <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>DelimNum<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>DelimType<font color="#000080">;
+              </font>Present    <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>DelimNum<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean
+              <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font>CommandLineArrayType <font color="#000080">= </font><font color="#FF0000"><b>Record
+           </b></font>Switches <font color="#000080">: </font>SwitchesType<font color="#000080">;
+           </font>ArgDSw   <font color="#000080">: </font>SwitchWithArgType<font color="#000080">;
+           </font><font color="#008000"><i>{    DelimSw  : SwitchedArgWithEmbeddedSpacesType; }
+           </i></font>NoParams <font color="#000080">: </font>Boolean           <font color="#008000"><i>{True if nothing on commandline}
+           </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+</b></font>NoCase<font color="#000080">,
+</font>ConvertArgsToUpper
+                  <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font>CmdArray                <font color="#000080">: </font>CommandLineArrayType<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure   </b></font>initCmdArray<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray <font color="#000080">: </font>CommandLineArrayType<font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+   </b></font><font color="#008000"><i>{DEFAULT VALUES SET}
+   </i></font>NoCase <font color="#000080">:= </font>True<font color="#000080">;
+   </font>ConvertArgsToUpper <font color="#000080">:= </font>True<font color="#000080">;
+
+</font><font color="#FF0000"><b>with </b></font>CmdArray <font color="#FF0000"><b>do
+   begin
+   </b></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">'/?' </font><font color="#000080">;     </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">'/h' </font><font color="#000080">;     </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] := </font><font color="#800000">'/H' </font><font color="#000080">;     </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] := </font><font color="#800000">'HELP' </font><font color="#000080">;   </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] := </font><font color="#800000">'help' </font><font color="#000080">;   </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] := </font><font color="#800000">'INFO'     </font><font color="#008000"><i>{show author contact Info}
+
+{   Switches.Switch[6] := '  ' ;}   {NOT USED}
+{   Switches.Switch[7] := '  ' ;}   {NOT USED}
+{   Switches.Switch[8] := '  ' ;}   {NOT USED}
+{   Switches.Switch[9] := '  ' ;}   {NOT USED}
+{   Switches.Switch[10] := '  ' ;}  {NOT USED}
+{   Switches.Switch[11] := '  ' ;}  {NOT USED}
+{   Switches.Switch[12] := '  ' ;}  {NOT USED}
+
+{  ArgDSw.Switch[1] := '' ;}       {not used}
+{  ArgDSw.Switch[2] := '' ;}       {not used}
+{  ArgDSw.Switch[3] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[4] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[5] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[6] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[7] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[8] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[9] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[10] := '' ;}      {NOT USED}
+{  ArgDSw.Switch[11] := '' ;}      {NOT USED}
+{  ArgDSw.Switch[12] := '' ;}      {NOT USED}
+{  ArgDSw.Switch[13] := '' ;}      {NOT USED}
+(*
+With DelimSw Do
+{     Switch[1]     := '' ;     }  {NOT USED}
+{     StartDelim[1] := '' ;     }  {NOT USED}
+{     endDelim[1]   := '' ;     }  {NOT USED}
+{     Switch[2] := '' ;         }  {NOT USED}
+{     StartDelim[2] := '' ;     }  {NOT USED}
+{     endDelim[2]   := '' ;     }  {NOT USED}
+
+{     Switch[3] := '' ;         }  {NOT USED}
+{     StartDelim[3] := '' ;     }  {NOT USED}
+{     endDelim[3]   := '' ;     }  {NOT USED}
+
+{     Switch[4] := '' ;         }  {NOT USED}
+{     StartDelim[4] := '' ;     }  {NOT USED}
+{     endDelim[4]   := '' ;     }  {NOT USED}
+
+{     Switch[5] := '' ;         }  {NOT USED}
+{     StartDelim[5] := '' ;     }  {NOT USED}
+{     endDelim[5]   := '' ;     }  {NOT USED}
+
+{     Switch[6] := '' ;         }  {NOT USED}
+{     StartDelim[6] := '' ;     }  {NOT USED}
+{     endDelim[6]   := '' ;     }  {NOT USED}
+
+{     Switch[7] := '' ;         }  {NOT USED}
+{     StartDelim[7] := '' ;     }  {NOT USED}
+{     endDelim[7]   := '' ;     }  {NOT USED}
+
+{     Switch[8] := '' ;         }  {NOT USED}
+{     StartDelim[8] := '' ;     }  {NOT USED}
+{     endDelim[8]   := '' ;     }  {NOT USED}
+
+{     Switch[9] := '' ;         }  {NOT USED}
+{     StartDelim[9] := '' ;     }  {NOT USED}
+{     endDelim[9]   := '' ;     }  {NOT USED}
+
+{     Switch[10] := '' ;        }  {NOT USED}
+{     StartDelim[10] := '' ;    }  {NOT USED}
+{     endDelim[10]   := '' ;    }  {NOT USED}
+
+{     Switch[11] := '' ;        }  {NOT USED}
+{     StartDelim[11] := '' ;    }  {NOT USED}
+{     endDelim[11]   := '' ;    }  {NOT USED}
+(99 min left), (H)elp, More? 
+{     Switch[12] := '' ;        }  {NOT USED}
+{     StartDelim[12] := '' ;    }  {NOT USED}
+{     endDelim[12]   := '' ;    }  {NOT USED}
+
+{     Switch[13] := '' ;        }  {NOT USED}
+{     StartDelim[13] := '' ;    }  {NOT USED}
+{     endDelim[13]   := '' ;    }  {NOT USED}
+
+{     Switch[14] := '' ;        }  {NOT USED}
+{     StartDelim[14] := '' ;    }  {NOT USED}
+{     endDelim[14]   := '' ;    }  {NOT USED}
+end {with DelimSw }
+*)
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{WITH CmdArray}
+
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>CmdParse<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray <font color="#000080">: </font>CommandLineArrayType<font color="#000080">;
+                             </font>NoCase<font color="#000080">,
+                             </font>ConvertArgsToUpper   <font color="#000080">: </font>Boolean <font color="#000080">);
+
+</font><font color="#008000"><i>{ Procedure to handle all commandline Parameters With or without regard }
+{to Case -- selected by the Boolean Var Nocase -- if True then  everrything}
+{is converted to uppercase prior to testing}
+
+{all arguments returned from switches are left in whatever Case they were }
+{entered on the commandline unless ConvertArgsToUpper is set to True.}
+
+</i></font><font color="#FF0000"><b>Const
+   </b></font>Blank <font color="#000080">= </font><font color="#800000">' '</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+   </b></font>counter                 <font color="#000080">: </font>Integer<font color="#000080">;
+   </font>Blanks                  <font color="#000080">: </font>ArgType<font color="#000080">;
+
+</font><font color="#008000"><i>{+++++++++++++++++++++++  Private Procedures to CmdParse Main  +++++++++++++}
+</i></font><font color="#FF0000"><b>Procedure </b></font>ConvertArgsToUpperCase<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray<font color="#000080">:</font>CommandLineArrayType<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>Counter<font color="#000080">,
+  </font>Counter2   <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin   </b></font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; ConvertArgsToUpperCase &lt;&lt;&lt;&lt;------------}
+
+  </i></font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ArgDSwitchNum <font color="#FF0000"><b>Do
+      For </b></font>Counter2 <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Arg<font color="#000080">[</font>counter<font color="#000080">]) </font><font color="#FF0000"><b>DO
+          </b></font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Arg<font color="#000080">[</font>counter<font color="#000080">,</font>Counter2<font color="#000080">] :=
+                </font>UPCASE<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Arg<font color="#000080">[</font>counter<font color="#000080">,</font>Counter2<font color="#000080">] );
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;    </font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; ConvertArgsToUpperCase &lt;&lt;&lt;&lt;------------}
+
+{----------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>ConvertSwitchesToUpperCase<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray<font color="#000080">:</font>CommandLineArrayType<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>Counter<font color="#000080">,
+  </font>Counter2   <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; ConvertSwitchesToUpperCase  &lt;&lt;&lt;&lt;------------}
+   </i></font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SwitchNum <font color="#FF0000"><b>Do
+      begin
+      For </b></font>Counter2 <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font>counter<font color="#000080">]) </font><font color="#FF0000"><b>DO
+          </b></font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font>counter<font color="#000080">,</font>Counter2<font color="#000080">] :=
+             </font>UPCASE<font color="#000080">(</font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font>counter<font color="#000080">,</font>Counter2<font color="#000080">]);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ArgDSwitchNum <font color="#FF0000"><b>Do
+      For </b></font>Counter2 <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Switch<font color="#000080">[</font>counter<font color="#000080">]) </font><font color="#FF0000"><b>DO
+          </b></font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Switch<font color="#000080">[</font>counter<font color="#000080">,</font>Counter2<font color="#000080">] :=
+                </font>UPCASE<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Switch<font color="#000080">[</font>counter<font color="#000080">,</font>Counter2<font color="#000080">] );
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; ConvertSwitchesToUpperCase  &lt;&lt;&lt;&lt;------------}
+
+{----------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitializeArrays<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray<font color="#000080">:</font>CommandLineArrayType<font color="#000080">;
+                           </font><font color="#FF0000"><b>Var </b></font>Nocase <font color="#000080">: </font>Boolean  <font color="#000080">);
+</font><font color="#FF0000"><b>Var
+   </b></font>Counter
+          <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin     </b></font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; InitializeArrays  &lt;&lt;&lt;&lt;------------}
+
+  </i></font>cmdArray<font color="#000080">.</font>NoParams <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SwitchNum <font color="#FF0000"><b>Do
+    </b></font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>present<font color="#000080">[</font>counter<font color="#000080">] := </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ArgDSwitchNum <font color="#FF0000"><b>Do
+    begin
+       </b></font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>present<font color="#000080">[</font>counter<font color="#000080">] := </font>False<font color="#000080">;
+       </font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Arg<font color="#000080">[</font>counter<font color="#000080">] := </font>Blanks<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>NoCase <font color="#FF0000"><b>then                           </b></font><font color="#008000"><i>{convert all Switches in CmdArray}
+     </i></font>ConvertSwitchesToUpperCase<font color="#000080">(</font>CmdArray<font color="#000080">); </font><font color="#008000"><i>{to uppercaseif nocase is set to }
+                                           {True}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;       </font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; InitializeArrays  &lt;&lt;&lt;&lt;------------}
+{----------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>ParseNow<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray<font color="#000080">:</font>CommandLineArrayType<font color="#000080">;
+                           </font><font color="#FF0000"><b>Var </b></font>Nocase <font color="#000080">: </font>Boolean  <font color="#000080">);
+</font><font color="#FF0000"><b>Var
+</b></font>Counter<font color="#000080">,</font>Counter2<font color="#000080">,
+</font>Start<font color="#000080">,
+</font>SwitLen<font color="#000080">,</font>CurrentArgLen   <font color="#000080">: </font>Integer<font color="#000080">;
+</font>Blanks                  <font color="#000080">: </font>ArgType<font color="#000080">;
+</font>TestStr                 <font color="#000080">: </font>SwitchType<font color="#000080">;
+</font>WorkStr                 <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Label
+   </b></font>Next_Parameter<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin   </b></font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; ParseNow &lt;&lt;&lt;&lt;------------}
+  {check For switches without args first}
+
+  </i></font><font color="#FF0000"><b>For </b></font>counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ParamCount <font color="#FF0000"><b>Do
+    begin  </b></font><font color="#008000"><i>{number of Parameters Loop}
+       </i></font>TestStr<font color="#000080">:= </font>ParamStr<font color="#000080">(</font>counter<font color="#000080">);
+
+       </font><font color="#FF0000"><b>if </b></font>Nocase <font color="#FF0000"><b>Then    </b></font><font color="#008000"><i>{ covert paramStr(counter) to upper Case if NoCase}
+          </i></font><font color="#FF0000"><b>begin          </b></font><font color="#008000"><i>{ is set to True}
+            </i></font>WorkStr <font color="#000080">:= </font>TestStr<font color="#000080">;
+            </font><font color="#FF0000"><b>For </b></font>Counter2 <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SwitchLength <font color="#FF0000"><b>DO
+                </b></font>TestStr<font color="#000080">[</font>counter2<font color="#000080">]  := </font>UPCASE<font color="#000080">((</font>WorkStr<font color="#000080">[</font>counter2<font color="#000080">]));
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>For </b></font>Counter2 <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>SwitchNum <font color="#FF0000"><b>Do
+           begin  </b></font><font color="#008000"><i>{ Switches without arguments loop }
+              </i></font>SwitLen <font color="#000080">:= </font>Length<font color="#000080">(</font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font>Counter2<font color="#000080">]);
+              </font><font color="#FF0000"><b>if </b></font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font>Counter2<font color="#000080">] =
+                    </font>Copy<font color="#000080">(</font>TestStr<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>SwitLen<font color="#000080">) </font><font color="#FF0000"><b>then
+
+                    begin
+                       </b></font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Present<font color="#000080">[</font>Counter2<font color="#000080">] := </font>True<font color="#000080">;
+                       </font><font color="#FF0000"><b>Goto </b></font>Next_Parameter<font color="#000080">;
+                     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Switches without arguments loop }
+
+       </i></font><font color="#FF0000"><b>For </b></font>counter2 <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ArgDSwitchNum  <font color="#FF0000"><b>Do
+           begin     </b></font><font color="#008000"><i>{ Switches With arguments test loop }
+
+              </i></font>SwitLen <font color="#000080">:= </font>Length<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Switch<font color="#000080">[</font>Counter2<font color="#000080">]);
+              </font><font color="#FF0000"><b>if </b></font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Switch<font color="#000080">[</font>Counter2<font color="#000080">] =
+                    </font>Copy<font color="#000080">(</font>TestStr<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>SwitLen<font color="#000080">) </font><font color="#FF0000"><b>then
+
+                 begin
+                    </b></font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>present<font color="#000080">[</font>Counter2<font color="#000080">] := </font>True<font color="#000080">;
+                    </font>Start <font color="#000080">:= </font>length<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Switch<font color="#000080">[</font>Counter2<font color="#000080">]) + </font><font color="#800000">1</font><font color="#000080">;
+                    </font>CurrentArgLen <font color="#000080">:= </font>length<font color="#000080">(</font>paramStr<font color="#000080">(</font>counter<font color="#000080">)) - (</font>start<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+                    </font>CmdArray<font color="#000080">.</font>ArgDSw<font color="#000080">.</font>Arg<font color="#000080">[</font>Counter2<font color="#000080">] :=
+                          </font>Copy<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">),</font>Start<font color="#000080">,</font>CurrentArgLen<font color="#000080">);
+
+                    </font><font color="#FF0000"><b>Goto </b></font>Next_Parameter<font color="#000080">; </font><font color="#008000"><i>{used inplace of an Exit}
+                 </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;     </font><font color="#008000"><i>{ Switches With arguments test loop }
+
+    </i></font>next_parameter<font color="#000080">:; </font><font color="#008000"><i>{used to speed up execution -- Exit doesn't work here}
+
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;        </font><font color="#008000"><i>{number of Parameters Loop}
+
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;    </font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; ParseNow &lt;&lt;&lt;&lt;------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Parsedelimited<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>CmdArray <font color="#000080">: </font>CommandLineArrayType<font color="#000080">;
+                             </font>NoCase<font color="#000080">,
+                             </font>ConvertArgsToUpper   <font color="#000080">: </font>Boolean <font color="#000080">);
+
+</font><font color="#008000"><i>{this Procedure will bag any String on the commandline With embedded spaces}
+(*  and is delimited by Characters such as &quot;&quot; , {}, [], (), &lt;&gt;, ^^, etc ...*)
+
+
+</i></font><font color="#FF0000"><b>begin    </b></font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; Parsedelimited &lt;&lt;&lt;&lt;------------}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;     </font><font color="#008000"><i>{---------&gt;&gt;&gt;&gt; Parsedelimited &lt;&lt;&lt;&lt;------------}
+{----------------------------------------------------------------------}
+
+{+++++++++++++++++++ end  Private Procedures to CmdParse Main  +++++++++++++}
+
+{==================================== MAIN Procedure ===================}
+</i></font><font color="#FF0000"><b>begin           </b></font><font color="#008000"><i>{+++++++++&gt;&gt;&gt;&gt; Procedure CmdParse  &lt;&lt;&lt;&lt;++++++++++++}
+  {Init Arrays}
+  </i></font><font color="#FF0000"><b>For </b></font>counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ArgLength <font color="#FF0000"><b>do      </b></font><font color="#008000"><i>{  the String Blanks needs to be }
+      </i></font>Blanks<font color="#000080">[</font>Counter<font color="#000080">] := </font>Blank<font color="#000080">;         </font><font color="#008000"><i>{  global because most routines  }
+                                        {  are useing it                 }
+
+  </i></font>InitCmdArray<font color="#000080">(</font>CmdArray<font color="#000080">); </font><font color="#008000"><i>{ this Procedure located in the cmdparse.h File}
+                          { assigns values to switches, etc.}
+
+  </i></font>InitializeArrays<font color="#000080">(</font>CmdArray<font color="#000080">,</font>NoCase<font color="#000080">);
+
+
+
+  </font><font color="#FF0000"><b>If </b></font>ParamCount <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then                </b></font><font color="#008000"><i>{ check command line For null String}
+     </i></font><font color="#FF0000"><b>begin                              </b></font><font color="#008000"><i>{ if nullString then set No Params  }
+        </i></font>cmdArray<font color="#000080">.</font>NoParams <font color="#000080">:= </font>True<font color="#000080">;      </font><font color="#008000"><i>{ and return to the calling routine }
+        </i></font>Exit<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+   </font>ParseNow<font color="#000080">(</font>CmdArray<font color="#000080">, </font>Nocase<font color="#000080">);           </font><font color="#008000"><i>{ routine parses the commandline   }
+                                         { passing through the switches w/o }
+                                         { arguments first. When Delimited  }
+ { If Not(NoDelimited) then }            { switch parsing is added, it will }
+   { Parsedelimited(CmdArray,NoCase);}   { occur after all other parsing    }
+                                         { as a seperate routine to follow  }
+                                         { PARSENOW -- additionally -- add  }
+                                         { Boolean Value &quot;NoDelimited&quot; to   }
+                                         { calling routine and Cmdparse.h   }
+                                         { to bypass checking For delimited }
+
+  </i></font><font color="#FF0000"><b>if </b></font>ConvertArgsToUpper <font color="#FF0000"><b>then
+       </b></font>ConvertArgsToUpperCase<font color="#000080">(</font>CmdArray<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;     </font><font color="#008000"><i>{+++++++++&gt;&gt;&gt;&gt; Procedure CmdParse  &lt;&lt;&lt;&lt;++++++++++++}
+
+{======================  end CmdParse MAIN Procedure ===================}
+
+{ /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\}
+{                    Parser Utility routines                            }
+{ /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>ConvertArgtoNumber<font color="#000080">(</font>ArgNum <font color="#000080">: </font>Integer<font color="#000080">;
+                             </font><font color="#FF0000"><b>Var  </b></font>CmdArray <font color="#000080">: </font>CommandLineArrayType<font color="#000080">;
+                             </font><font color="#FF0000"><b>Var  </b></font>ResultNumber<font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>code <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin    </b></font><font color="#008000"><i>{-----------&gt;&gt;&gt;&gt; ConvertArgtoNumber &lt;&lt;&lt;&lt;---------------}
+
+  </i></font>Val<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Arg<font color="#000080">[</font>ArgNum<font color="#000080">],</font>ResultNumber<font color="#000080">,</font>code<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>code <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+       begin
+          </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Error commandline argument: '</font><font color="#000080">,
+                       </font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Switch<font color="#000080">[</font>ArgNum<font color="#000080">],</font><font color="#800000">'  '</font><font color="#000080">,
+                       </font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Arg<font color="#000080">[</font>ArgNum<font color="#000080">]);
+          </font>Writeln<font color="#000080">(</font><font color="#800000">'press enter to continue'</font><font color="#000080">);
+          </font>readln<font color="#000080">;
+          </font>HelpUser<font color="#000080">;  </font><font color="#008000"><i>{see notes}
+       </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;     </font><font color="#008000"><i>{-----------&gt;&gt;&gt;&gt; ConvertArgtoNumber &lt;&lt;&lt;&lt;---------------}
+
+{/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>FnameCheck<font color="#000080">(</font>progname<font color="#000080">, </font>progname2 <font color="#000080">:</font>pathStr<font color="#000080">;
+                     </font>errorlevel <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+</b></font>teststr1<font color="#000080">,</font>teststr2 <font color="#000080">:</font>pathStr<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin    </b></font><font color="#008000"><i>{-----------&gt;&gt;&gt;&gt; FnameCheck &lt;&lt;&lt;&lt;---------------}
+
+</i></font>teststr1 <font color="#000080">:= </font>copy<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">),(</font>length<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">)) - (</font>Length<font color="#000080">(</font>progname<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">) ),
+                             </font>Length<font color="#000080">(</font>progname<font color="#000080">));
+</font>teststr2 <font color="#000080">:= </font>copy<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">),(</font>length<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">)) - (</font>Length<font color="#000080">(</font>progname2<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">) ),
+                             </font>Length<font color="#000080">(</font>progname2<font color="#000080">));
+
+</font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>teststr1 <font color="#000080">&lt;&gt; </font>ProgName<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>teststr2 <font color="#000080">&lt;&gt; </font>ProgName2<font color="#000080">))
+   </font><font color="#FF0000"><b>then
+     begin
+     </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Unrecoverable Error in '</font><font color="#000080">,</font>progname<font color="#000080">, </font><font color="#800000">', Check FileNAME'</font><font color="#000080">);
+     </font>halt<font color="#000080">(</font>Errorlevel<font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;     </font><font color="#008000"><i>{-----------&gt;&gt;&gt;&gt; FnameCheck &lt;&lt;&lt;&lt;---------------}
+
+{/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>DispCmdline<font color="#000080">;
+     </font><font color="#008000"><i>{ use For debugging -- displays the command line parameters}
+     { readln at end shows screen Until enter is pressed}
+</i></font><font color="#FF0000"><b>VAr </b></font>Count <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>ClrScr<font color="#000080">;
+
+</font><font color="#FF0000"><b>For </b></font>Count <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to  </b></font>SwitchNum <font color="#FF0000"><b>do
+    if </b></font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>present<font color="#000080">[</font>count<font color="#000080">] </font><font color="#FF0000"><b>then
+       </b></font>WriteLn<font color="#000080">(</font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font>count<font color="#000080">],</font><font color="#800000">'    Present'</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>For </b></font>Count <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ArgdSwitchNum  <font color="#FF0000"><b>do
+    if </b></font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>present<font color="#000080">[</font>count<font color="#000080">] </font><font color="#FF0000"><b>then
+       begin
+          </b></font>WriteLn<font color="#000080">(</font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Switch<font color="#000080">[</font>count<font color="#000080">],</font><font color="#800000">'   Present.'</font><font color="#000080">);
+          </font>WriteLn<font color="#000080">(</font><font color="#800000">'Value of:  '</font><font color="#000080">,</font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Arg<font color="#000080">[</font>count<font color="#000080">]);
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font>Writeln<font color="#000080">;
+</font>Write<font color="#000080">(</font><font color="#800000">'press ENTER to continue'</font><font color="#000080">);
+</font>ReadLn<font color="#000080">;
+</font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>CheckHelp<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+   </b></font>COUNT <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   For </b></font>count <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">5 </font><font color="#FF0000"><b>do
+     if </b></font>cmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Present<font color="#000080">[</font>Count<font color="#000080">] </font><font color="#FF0000"><b>then
+        </b></font>helpUser<font color="#000080">;
+
+   </font><font color="#FF0000"><b>if </b></font>cmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Present<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] </font><font color="#FF0000"><b>then
+     </b></font>displayinfo<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------Helpuser --------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>HelpUser<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>ClrScr<font color="#000080">;
+   </font>Writeln <font color="#000080">(</font>CopyRightStr<font color="#000080">);
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'USAGE: '</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>Writeln<font color="#000080">;
+   </font>Writeln<font color="#000080">(</font><font color="#800000">'Press Enter to continue.'</font><font color="#000080">);
+   </font>ReadLn<font color="#000080">;
+   </font>Writeln<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'EXAMPLE:...............................'</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>Writeln <font color="#000080">(</font>CopyRightStr<font color="#000080">);
+   </font>halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>DisplayInfo<font color="#000080">;
+   </font><font color="#FF0000"><b>begin
+      </b></font>ClrScr<font color="#000080">;
+      </font>Writeln<font color="#000080">(</font>copyrightStr<font color="#000080">);
+      </font>Writeln<font color="#000080">;
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Ken Fox'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'1449 Maple Rd.'</font><font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Kintnersville Pa. 18930'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'215 672-9713       9 - 5 EST'</font><font color="#000080">);
+      </font>Writeln<font color="#000080">;
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Contact on shareware conference on Internet  -- KEN FOX'</font><font color="#000080">);
+      </font>Writeln<font color="#000080">;
+      </font>halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{--------------------------------------------------------------------------}
+
+</i></font>this info <font color="#FF0000"><b>is For </b></font>all <font color="#FF0000"><b>of </b></font>the <font color="#FF0000"><b>PASCAL </b></font>conference people<font color="#000080">:
+
+</font><font color="#FF0000"><b>to </b></font>use the rotuines <font color="#FF0000"><b>in </b></font>this <font color="#FF0000"><b>Program </b></font>you need <font color="#FF0000"><b>to do </b></font>the following
+
+<font color="#008000"><i>{$I path.......\Progname.h}
+{$I Path.......\Helpuser.PAS}
+{$I path.......\CMDPARSE.PAS}
+
+ </i></font>progname<font color="#000080">.</font>H <font color="#FF0000"><b>is </b></font>a copy <font color="#FF0000"><b>of </b></font>the CMDPARSE<font color="#000080">.</font>H <font color="#FF0000"><b>File </b></font>which <font color="#FF0000"><b>contains </b></font>the specific
+ settings <font color="#FF0000"><b>For </b></font>the <font color="#FF0000"><b>Program </b></font>you are writing <font color="#000080">.
+
+ </font>HELPUSER<font color="#000080">.</font>PAS <font color="#FF0000"><b>is </b></font>a <font color="#FF0000"><b>Program </b></font>specific help routine which get called by
+ the routie CHECKHELP <font color="#FF0000"><b>in </b></font>CMDPARSE<font color="#000080">.</font>PAS <font color="#FF0000"><b>if </b></font>the CheckHelp <font color="#FF0000"><b>Procedure is
+ </b></font>used <font color="#FF0000"><b>in </b></font>the main <font color="#FF0000"><b>Program</b></font><font color="#000080">. </font>crude but effective<font color="#000080">.
+
+ </font>CMDPARSE<font color="#000080">.</font>PAS <font color="#000080">-- </font>this <font color="#FF0000"><b>File contains </b></font>all <font color="#FF0000"><b>of </b></font>the parsing routines<font color="#000080">. </font>I keep this
+ <font color="#FF0000"><b>File in </b></font>my <font color="#000080">.....\</font>TP<font color="#000080">\</font>INCLUDE directory <font color="#000080">.
+
+ </font>I <font color="#FF0000"><b>set </b></font>up a sepearte directory below the tp directory <font color="#FF0000"><b>For </b></font>each <font color="#FF0000"><b>Program
+ and </b></font>copy the Files Helpuser<font color="#000080">.</font>Pas <font color="#FF0000"><b>and </b></font>cmdparse<font color="#000080">.</font>h into it thusly each
+ copy <font color="#FF0000"><b>of </b></font>these two Files <font color="#FF0000"><b>is </b></font>customized <font color="#FF0000"><b>For </b></font>the give application <font color="#FF0000"><b>While
+ </b></font>the actual parsing routines are kept <font color="#FF0000"><b>in </b></font>the INCLUDED FileS directory<font color="#000080">.
+ </font>there<font color="#800000">'s no need to modify CMDPARSE.PAS
+
+ </font>using the parser<font color="#000080">..
+
+       </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>in </b></font>the CMDPARSE<font color="#000080">.</font>H <font color="#FF0000"><b>File </b></font>there are templates <font color="#FF0000"><b>For </b></font>all <font color="#FF0000"><b>of </b></font>the <font color="#FF0000"><b>Array
+ </b></font>initializations<font color="#000080">. </font>the switches <font color="#FF0000"><b>to </b></font>search <font color="#FF0000"><b>For </b></font>are manually inserted <font color="#FF0000"><b>in to
+ </b></font>each <font color="#FF0000"><b>Array </b></font>item<font color="#000080">. </font>additionally the <font color="#FF0000"><b>Array </b></font>sizes must be <font color="#FF0000"><b>set </b></font>where indicated
+ <font color="#FF0000"><b>in </b></font>the CMDPARSE<font color="#000080">.</font>H <font color="#FF0000"><b>File</b></font><font color="#000080">.
+</font><font color="#008000"><i>{-------------------------------------------------------------------------}
+  </i></font>THE FOLLOWING ARE THE SETTINGS <font color="#FF0000"><b>For Array </b></font>SIZES
+<font color="#008000"><i>{-------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Const
+</b></font>SwitchLength <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;   </font><font color="#008000"><i>{   maxlegth of a switch to be tested for}
+</i></font>ArgLength <font color="#000080">= </font><font color="#800000">11</font><font color="#000080">;     </font><font color="#008000"><i>{   max length of an argument from the commandline}
+</i></font>DelimLength <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;     </font><font color="#008000"><i>{   maxlength of delimiter if used}
+</i></font>SwitchNum <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;      </font><font color="#008000"><i>{   the number of switches and hence the size of the Array}
+                    {      of switches  without arguments                  }
+</i></font>ArgdSwitchNum <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;  </font><font color="#008000"><i>{   the number of switches and hence the size of the Array}
+                    {      of switches  With arguments                 }
+</i></font>DelimNum <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;       </font><font color="#008000"><i>{   number of args With delimited Strings          }
+
+{-------------------------------------------------------------------------}
+     </i></font>THE FOLLOWING SHOW HOW <font color="#FF0000"><b>to </b></font>INIT THE <font color="#FF0000"><b>Array </b></font>SEARCH VarIABLES<font color="#000080">..
+     </font>THESE LINES ARE ALL CONTAINED <font color="#FF0000"><b>in  </b></font><font color="#000080">----&gt;&gt;&gt;&gt; </font>CMDPARSE<font color="#000080">.</font>H
+<font color="#008000"><i>{-------------------------------------------------------------------------}
+
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">'/?' </font><font color="#000080">;     </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">'/h' </font><font color="#000080">;     </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] := </font><font color="#800000">'/H' </font><font color="#000080">;     </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] := </font><font color="#800000">'HELP' </font><font color="#000080">;   </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] := </font><font color="#800000">'help' </font><font color="#000080">;   </font><font color="#008000"><i>{default help String}
+   </i></font>Switches<font color="#000080">.</font>Switch<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] := </font><font color="#800000">'INFO'     </font><font color="#008000"><i>{show author contact Info}
+
+{   Switches.Switch[6] := '  ' ;}   {NOT USED}
+
+{---------------------------------}
+</i></font>THE FOLLOWING ARE <font color="#FF0000"><b>For </b></font>SWITCHES WHICH WILL CAPTURE A VALUE <font color="#FF0000"><b>AS </b></font>WELL <font color="#FF0000"><b>AS
+</b></font>TEST <font color="#FF0000"><b>For </b></font>THE PRESENCE <font color="#FF0000"><b>of </b></font>THE ARGUMENT
+<font color="#008000"><i>{---------------------------------}
+{  ArgDSw.Switch[1] := '' ;}       {not used}
+{  ArgDSw.Switch[2] := '' ;}       {not used}
+{  ArgDSw.Switch[3] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[4] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[5] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[6] := '' ;}       {NOT USED}
+{  ArgDSw.Switch[7] := '' ;}       {NOT USED}
+
+{-------------------------------------------------------------------------}
+
+       </i></font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>if </b></font>you intend <font color="#FF0000"><b>to </b></font>use the routines <font color="#FF0000"><b>in </b></font>HELPUSER<font color="#000080">.</font>PAS <font color="#FF0000"><b>or to </b></font>perform
+a Filename validation  <font color="#000080">-- </font>there <font color="#FF0000"><b>is </b></font>a template at the beginning <font color="#FF0000"><b>of </b></font>CMDPARSE<font color="#000080">.</font>H
+<font color="#FF0000"><b>with </b></font>Certain Constants which must be <font color="#FF0000"><b>set</b></font><font color="#000080">.
+
+</font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">,</font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>VersionNum <font color="#000080">= </font><font color="#800000">'V1.0 BETA'</font><font color="#000080">;
+  </font>ProgNameStr <font color="#000080">= </font><font color="#800000">'NEWPROJ.EXE'</font><font color="#000080">;
+  </font>ProgNameShortStr <font color="#000080">= </font><font color="#800000">'NP.EXE'</font><font color="#000080">;
+  </font>copyRightStr <font color="#000080">= </font>ProgNameStr<font color="#000080">+</font><font color="#800000">' ' </font><font color="#000080">+ </font>VersionNum <font color="#000080">+
+                </font><font color="#800000">', Copyright 1992 - 1993, Ken Fox. All Rights Reserved.'</font><font color="#000080">;
+
+  </font>DefaultFileName <font color="#000080">= </font><font color="#800000">'NEWPROJ.DAT'</font><font color="#000080">;
+
+</font><font color="#008000"><i>{-------------------------------------------------------------------------}
+
+      </i></font><font color="#800000">3</font><font color="#000080">) </font><font color="#FF0000"><b>To </b></font>call the Various routines <font color="#FF0000"><b>in  </b></font>the CMDPARSE<font color="#000080">.</font>PAS <font color="#FF0000"><b>File </b></font>there are
+Templates which you can cut <font color="#FF0000"><b>and </b></font>paste into you <font color="#FF0000"><b>Program </b></font>from  CMDPARSE<font color="#000080">.</font>H
+
+<font color="#008000"><i>{--------------------------------------------------------------------------}
+{                          procs Available in CmdParse.Pas                 }
+{ additional info on the following procs may be found in the cmdparse.Pas  }
+{ File in the ....\tp\include directory..                                  }
+{                                                                          }
+{ Procedure DispCmdline;                                                   }
+{                                                                          }
+{ Procedure CmdParse(Var CmdArray : CommandLineArrayType;                  }
+{                            NoCase,                                       }
+{                            ConvertArgsToUpper   : Boolean );             }
+{                                                                          }
+{ Procedure ConvertArgtoNumber(ArgNum : Integer;                           }
+{                             Var  CmdArray : CommandLineArrayType;        }
+{                             Var  ResultNumber: Word);                    }
+{                                                                          }
+{ Procedure FnameCheck(progname , progname2 :pathStr;                      }
+{                      errorlevel : Byte);                                 }
+{                                                                          }
+{ Procedure CheckHelp;                                                     }
+{                                                                          }
+{--------------------------------------------------------------------------}
+
+      </i></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>To </b></font>test whether an <font color="#FF0000"><b>ON</b></font><font color="#000080">/</font>OFF switch <font color="#FF0000"><b>is </b></font>present <font color="#000080">(</font>such <font color="#FF0000"><b>as </b></font><font color="#000080">/?) </font><font color="#FF0000"><b>on </b></font>the
+commandline  use the following<font color="#000080">:
+
+             </font><font color="#FF0000"><b>if </b></font>CmdArray<font color="#000080">.</font>Switches<font color="#000080">.</font>Present<font color="#000080">[</font>number<font color="#000080">] </font><font color="#FF0000"><b>then
+                begin
+                end</b></font><font color="#000080">;
+
+      </font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>to </b></font>get the argument from a switch <font color="#000080">.
+
+            </font><font color="#FF0000"><b>if </b></font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Present<font color="#000080">[</font>number<font color="#000080">] </font><font color="#FF0000"><b>then
+               </b></font>WhatEverVariable <font color="#000080">:= </font>CmdArray<font color="#000080">.</font>ArgDsw<font color="#000080">.</font>Arg<font color="#000080">[</font>number<font color="#000080">];
+
+      </font><font color="#800000">6</font><font color="#000080">) </font>the <font color="#FF0000"><b>Procedure </b></font>ConvertArgtoNumber <font color="#FF0000"><b>is </b></font>avail <font color="#FF0000"><b>to </b></font>convert a
+<font color="#FF0000"><b>String on </b></font>the command line <font color="#FF0000"><b>to </b></font>a decimal number<font color="#000080">.. </font>this <font color="#FF0000"><b>is </b></font>only good <font color="#FF0000"><b>for
+for </b></font>whole numbers w<font color="#000080">/</font>o nnn<font color="#000080">.</font><font color="#800000">0000111 </font>etc<font color="#000080">.
+
+
+</font>hope this stuff <font color="#FF0000"><b>is </b></font>useful <font color="#000080">-- </font>there are other notes <font color="#FF0000"><b>and </b></font>comments sprinkled
+throughout so please check those before calling<font color="#000080">..
+
+</font><font color="#FF0000"><b>finally </b></font><font color="#000080">- </font><font color="#FF0000"><b>in </b></font>the interest traversing the command tail only once the most
+henious <font color="#FF0000"><b>of </b></font>Programming Constructs <font color="#000080">-- </font>the <font color="#FF0000"><b>Goto </b></font>statement <font color="#000080">-- </font>has been used<font color="#000080">.
+</font>please forgive me <font color="#FF0000"><b>in </b></font>advance<font color="#000080">....
+
+</font>questions comments <font color="#FF0000"><b>and </b></font>suggestions are welcome<font color="#000080">..
+
+</font>see the address <font color="#FF0000"><b>in </b></font>the CMDPASE<font color="#000080">.</font>DOC <font color="#FF0000"><b>File</b></font><font color="#000080">..
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to CMDLINE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0005.PAS">Original</a><b>]</b></p></body>
+</html>

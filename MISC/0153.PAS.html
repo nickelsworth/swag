@@ -1,0 +1,374 @@
+<html>
+<head><title> "Multitasking Unit" by MIKE WAROT</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0153.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: ka9dgx@interaccess.com (Mike Warot)
+
+  Here is the code I wrote to do cooperative multitasking in TP4, and have
+since used in TP5, TP6, TP7. This version works with TP7, I make no
+guarantees for earlier versions.
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>Tasker<font color="#000080">;
+</font><font color="#008000"><i>{
+  Non-Preemptive MultiTasking Unit
+  for Turbo Pascal Version 4
+
+  Author  : Michael Warot - Blue Star Systems
+  Date    : November 1987
+  Purpose : Simple multi-tasking for turbo pascal 4.0
+  Version : 1.10
+
+  V1.10  August    1988 MAW - After much modification, added LastP to
+                              point to the highest numbered active process.
+                              With MaxProc set to 30 and 2 tasks, took
+                              effective yield time down from 240 uS to 38 uS
+  V1.04  March     1988 MAW - Modify record used to save process, now
+                              use a pointer instead of 2 words to save
+                              the stack frame.
+                              Eliminate redundant variable NextP
+  V1.03  March,    1988 MAW - Modify code to save video state for a given
+                              process. A flag Video_Save toggles this.
+  V1.02  March,    1988 MAW - Modify code to support Sleep Function
+                              Added procedures LOCK and UNLOCK to permit
+                              use of non-reentrant procedures in programs
+  V1.01  January,  1988 MAW - Remove obsolete startup function Init_Tasking.
+                              Put in some documentation. Clean up code.
+  V1.00  November, 1987 MAW - Initial version, simple and crude, but it works.
+}
+{$F+    Force FAR calls - must be on}
+</i></font><font color="#FF0000"><b>Interface
+Uses
+  </b></font>Crt<font color="#000080">,</font>Timer2<font color="#000080">;          </font><font color="#008000"><i>{ For saving screen status, etc }
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>FlagPtr    <font color="#000080">= ^</font>Boolean<font color="#000080">;                 </font><font color="#008000"><i>{ Pointer to a flag           }
+</i></font><font color="#FF0000"><b>Var
+  </b></font>Save_Video <font color="#000080">: </font>Boolean<font color="#000080">;                  </font><font color="#008000"><i>{ True for cursor saving }
+
+</i></font><font color="#FF0000"><b>Function </b></font>Fork<font color="#000080">:</font>Boolean<font color="#000080">; </font><font color="#008000"><i>{ Call this procedure to spawn a new process. The
+                         procedure will return to your program twice. The
+                         first time it will be the root process, and will
+                         return a value of false, the second time it will
+                         return a value of true }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Raw_Yield<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>Yield<font color="#000080">;       </font><font color="#008000"><i>{ Call this procedure often in your code. This is the
+                         heart of the Multi-Tasking, it will return after all
+                         of the other processes have a crack at it.        }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Sleep<font color="#000080">(</font>Flag <font color="#000080">: </font>FlagPtr<font color="#000080">);
+                       </font><font color="#008000"><i>{ Call this procedure with an address of a flag which
+                         when TRUE, will re-awaken the process. Upon entry
+                         this procedure will test the value of this flag, and
+                         if FALSE, will mark the process HIBER.
+                         This procedure makes a call to YIELD in all cases.
+                         Note : Don't let all of you processes Sleep, or
+                         you could put things into a deadlock. }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Lock<font color="#000080">(</font>Resource <font color="#000080">: </font>Byte<font color="#000080">);
+                       </font><font color="#008000"><i>{ This procedure allows the programmer to insure that
+                         a procedure is not entered twice, it does this by
+                         having the second call yield until the resource is
+                         free, using Sleep }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>UnLock<font color="#000080">(</font>Resource <font color="#000080">: </font>Byte<font color="#000080">);
+                       </font><font color="#008000"><i>{ This procedure unlocks a resource, allowing it to be
+                         used by other processes }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>KillProc<font color="#000080">;    </font><font color="#008000"><i>{ This procedure is intended to be called by a process
+                         that has done all of it's work. It marks the process
+                         as one that is 'DEAD' and thus never re-awakens }
+
+</i></font><font color="#FF0000"><b>Function  </b></font>Child_Process<font color="#000080">:</font>Boolean<font color="#000080">;
+                       </font><font color="#008000"><i>{ This function returns True if the calling procedure
+                         is a child process. This test should be used to branch
+                         into a specific procedure for a given task.       }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetPriority<font color="#000080">(</font>P <font color="#000080">: </font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>Function  </b></font>ProcessCount<font color="#000080">:</font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Wait<font color="#000080">(</font>TicksToWait <font color="#000080">: </font>Longint<font color="#000080">);
+                       </font><font color="#008000"><i>{ This procedure causes a task to wait by calling
+                         yield until DT(timer2 unit) deterimes that
+                         TicksToWait timer ticks have elapsed }
+
+</i></font><font color="#FF0000"><b>Implementation
+</b></font><font color="#008000"><i>{
+  Hide this from the users....
+
+  These procedures work on the following basis:
+    1&gt; For each process, there is an amount of memory reserved for
+       a machine stack, this is called a Stack Frame. This holds
+       the current state of a given process.
+
+    2&gt; The process table (Procs) contains pointers to all of the
+       Stack Frames. When a task is to be swapped out, it's state
+       is saved in it's own stack, then the frame pointer is placed
+       in (Procs) until the process is to be swapped back in.
+
+    3&gt; Every one in a while, when a task has some time to share,
+       it makes a call to Yield, which does all of the swapping.
+}
+</i></font><font color="#FF0000"><b>Const
+  </b></font>MaxProc   <font color="#000080">= </font><font color="#800000">100</font><font color="#000080">;           </font><font color="#008000"><i>{ Maximum number of processes
+                               Adjust for your purposes..  }
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>ProcState <font color="#000080">= (</font>Dead<font color="#000080">,
+               </font>Kill<font color="#000080">,
+               </font>Live<font color="#000080">,
+               </font>Slow<font color="#000080">,                    </font><font color="#008000"><i>{ Running, but in background }
+               </i></font>Pause<font color="#000080">,                   </font><font color="#008000"><i>{ Waiting for above          }
+               </i></font>Hiber<font color="#000080">);                  </font><font color="#008000"><i>{ What is the process doing?  }
+
+  </i></font>Task_Rec  <font color="#000080">= </font><font color="#FF0000"><b>Record
+                </b></font>Frame     <font color="#000080">: </font>Pointer<font color="#000080">;     </font><font color="#008000"><i>{ Frame save area}
+                </i></font>ID        <font color="#000080">: </font>Word<font color="#000080">;        </font><font color="#008000"><i>{ Process Number }
+                </i></font>FrameBlk  <font color="#000080">: </font>Pointer<font color="#000080">;     </font><font color="#008000"><i>{ Frame block }
+                </i></font>FrameSiz  <font color="#000080">: </font>Word<font color="#000080">;        </font><font color="#008000"><i>{ Amount of memory user  }
+                </i></font>State     <font color="#000080">: </font>ProcState<font color="#000080">;   </font><font color="#008000"><i>{ Is it a live process ? }
+                </i></font>HiberPtr  <font color="#000080">: </font>FlagPtr<font color="#000080">;     </font><font color="#008000"><i>{ Pointer to &quot;WAKE&quot; flag }
+                </i></font>Priority  <font color="#000080">: </font>LongInt<font color="#000080">;     </font><font color="#008000"><i>{ priority (0=Real Time) }
+                </i></font>NextTime  <font color="#000080">: </font>Longint<font color="#000080">;     </font><font color="#008000"><i>{ Next wake up call @    }
+              </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Record }
+</i></font><font color="#FF0000"><b>Var
+  </b></font>MaxStack  <font color="#000080">: </font>Word<font color="#000080">;
+
+  </font>SFrame    <font color="#000080">: </font>Pointer<font color="#000080">;
+
+  </font>Procs     <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MaxProc<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Task_Rec<font color="#000080">; </font><font color="#008000"><i>{ Keeps the process pointers }
+  </i></font>NextP<font color="#000080">,                              </font><font color="#008000"><i>{ Last live process number  }
+  </i></font>ThisP<font color="#000080">,                              </font><font color="#008000"><i>{ Current process           }
+  </i></font>LastP     <font color="#000080">: </font>Word<font color="#000080">;                   </font><font color="#008000"><i>{ Last Process number       }
+
+  </i></font>LiveCount <font color="#000080">: </font>Word<font color="#000080">;                   </font><font color="#008000"><i>{ How many thing happening? }
+
+  </i></font>Locks     <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean<font color="#000080">; </font><font color="#008000"><i>{ Resource locks }
+
+  </i></font><font color="#FF0000"><b>Function  </b></font>Ticks<font color="#000080">:</font>Longint<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    Inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);                </font><font color="#008000"><i>{ CLI - Interupts off }
+    </i></font>Ticks <font color="#000080">:= </font>MemL<font color="#000080">[</font><font color="#800000">$0040</font><font color="#000080">:</font><font color="#800000">$006c</font><font color="#000080">];
+    </font><font color="#FF0000"><b>Inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);                </font><font color="#008000"><i>{ STI - back on again }
+  </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Ticks }
+
+{
+  Here are the inline macros to handle the frame pointers for a task swap
+}
+  </i></font><font color="#FF0000"><b>Procedure </b></font>SaveFrame<font color="#000080">;
+    </font><font color="#FF0000"><b>Inline</b></font><font color="#000080">( </font><font color="#800000">$89</font><font color="#000080">/</font><font color="#800000">$2E</font><font color="#000080">/</font>SFrame        <font color="#008000"><i>{   MOV     [0000],BP     }
+           </i></font><font color="#000080">/</font><font color="#800000">$8C</font><font color="#000080">/</font><font color="#800000">$16</font><font color="#000080">/</font>SFrame<font color="#000080">+</font><font color="#800000">2      </font><font color="#008000"><i>{   MOV     [0002],SS     } </i></font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>Procedure </b></font>LoadFrame<font color="#000080">;
+    </font><font color="#FF0000"><b>Inline</b></font><font color="#000080">( </font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$2E</font><font color="#000080">/</font>SFrame        <font color="#008000"><i>{   MOV     BP,[0000]     }
+           </i></font><font color="#000080">/</font><font color="#800000">$8E</font><font color="#000080">/</font><font color="#800000">$16</font><font color="#000080">/</font>SFrame<font color="#000080">+</font><font color="#800000">2      </font><font color="#008000"><i>{   MOV     SS,[0002]     } </i></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>Function </b></font>Fork<font color="#000080">:</font>Boolean<font color="#000080">;                </font><font color="#008000"><i>{ Create a new process      }
+</i></font><font color="#FF0000"><b>Var
+  </b></font>Tmp <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>SaveFrame<font color="#000080">;                          </font><font color="#008000"><i>{ Save current frame pointer }
+  </i></font>Tmp <font color="#000080">:= </font>True<font color="#000080">;                        </font><font color="#008000"><i>{ Assume child process }
+  </i></font>NextP <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                         </font><font color="#008000"><i>{ Search the process table for an }
+  </i></font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>NextP <font color="#000080">&lt;= </font>MaxProc<font color="#000080">) </font><font color="#FF0000"><b>AND        </b></font><font color="#008000"><i>{ open entry for the new process  }
+        </i></font><font color="#000080">(</font>Procs<font color="#000080">[</font>NextP<font color="#000080">].</font>State <font color="#000080">&lt;&gt; </font>Dead<font color="#000080">) </font><font color="#FF0000"><b>do
+          </b></font>Inc<font color="#000080">(</font>NextP<font color="#000080">);
+
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>NextP <font color="#000080">&lt;= </font>MaxProc<font color="#000080">) </font><font color="#FF0000"><b>then          </b></font><font color="#008000"><i>{ If table not full, then }
+  </i></font><font color="#FF0000"><b>begin
+    If </b></font>NextP <font color="#000080">&gt; </font>LastP <font color="#FF0000"><b>then             </b></font><font color="#008000"><i>{ If We past it, bump it }
+      </i></font>LastP <font color="#000080">:= </font>NextP<font color="#000080">;
+
+    </font><font color="#FF0000"><b>With </b></font>Procs<font color="#000080">[</font>NextP<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+      </b></font>FrameSiz <font color="#000080">:= </font>MaxStack<font color="#000080">;           </font><font color="#008000"><i>{ Set up size of area }
+      </i></font>GetMem<font color="#000080">(</font>FrameBlk<font color="#000080">,</font>FrameSiz<font color="#000080">);
+      </font>State     <font color="#000080">:= </font>Live<font color="#000080">;              </font><font color="#008000"><i>{ Note we're ready to go.... }
+      </i></font>ID        <font color="#000080">:= </font>NextP<font color="#000080">;             </font><font color="#008000"><i>{ Set up the new task       }
+      </i></font>Frame     <font color="#000080">:=
+        </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>FrameBlk<font color="#000080">^),</font>Ofs<font color="#000080">(</font>SFrame<font color="#000080">^) ); </font><font color="#008000"><i>{ Setup stack    }
+
+      </i></font>Priority  <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+      </font>Move<font color="#000080">(</font>Mem<font color="#000080">[</font>Seg<font color="#000080">(</font>SFrame<font color="#000080">^)   : </font>Ofs<font color="#000080">(</font>SFrame<font color="#000080">^)-</font><font color="#800000">2</font><font color="#000080">],
+           </font>Mem<font color="#000080">[</font>Seg<font color="#000080">(</font>FrameBlk<font color="#000080">^) : </font>Ofs<font color="#000080">(</font>SFrame<font color="#000080">^)-</font><font color="#800000">2</font><font color="#000080">],
+           (</font>MaxStack<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">)-</font>Ofs<font color="#000080">(</font>SFrame<font color="#000080">^) );
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Inc<font color="#000080">(</font>LiveCount<font color="#000080">);                   </font><font color="#008000"><i>{ Bump process counter }
+    </i></font>Tmp <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ we can fork }
+  </i></font>LoadFrame<font color="#000080">;
+  </font>Fork <font color="#000080">:= </font>Tmp<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Raw_Fork }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Raw_Yield<font color="#000080">;                  </font><font color="#008000"><i>{ Let the other task's go at it }
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>SaveFrame<font color="#000080">;                          </font><font color="#008000"><i>{ Save our current stack frame  }
+  </i></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>Frame <font color="#000080">:= </font>SFrame<font color="#000080">;       </font><font color="#008000"><i>{ in our entry in Procs         }
+
+  </i></font><font color="#FF0000"><b>If </b></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>State <font color="#000080">= </font>Slow <font color="#FF0000"><b>then
+  With </b></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">] </font><font color="#FF0000"><b>do
+  begin
+    </b></font>State <font color="#000080">:= </font>Pause<font color="#000080">;
+    </font>NextTime <font color="#000080">:= </font>Ticks<font color="#000080">+</font>Priority<font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>NextTime <font color="#000080">&gt; </font><font color="#800000">$001800ae </font><font color="#FF0000"><b>then
+      </b></font>NextTime <font color="#000080">:= </font>NextTime <font color="#000080">- </font><font color="#800000">$001800ae</font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ with }
+
+  </i></font><font color="#FF0000"><b>If </b></font>LiveCount <font color="#000080">&gt;= </font><font color="#800000">1 </font><font color="#FF0000"><b>then              </b></font><font color="#008000"><i>{ If we actually have a task to }
+  </i></font><font color="#FF0000"><b>begin                               </b></font><font color="#008000"><i>{ swap to, then....             }
+    </i></font><font color="#FF0000"><b>repeat                            </b></font><font color="#008000"><i>{ keep looking until we hit a   }
+      </i></font><font color="#FF0000"><b>If </b></font>ThisP <font color="#000080">&lt; </font>LastP <font color="#FF0000"><b>then           </b></font><font color="#008000"><i>{ live one                      }
+        </i></font>Inc<font color="#000080">(</font>ThisP<font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>ThisP <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>With </b></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">] </font><font color="#FF0000"><b>do
+      Case </b></font>State <font color="#FF0000"><b>of
+        </b></font>Dead<font color="#000080">,
+        </font>Live    <font color="#000080">: ;
+
+        </font>Hiber   <font color="#000080">: </font><font color="#FF0000"><b>If </b></font>HiberPtr<font color="#000080">^ </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ Check to see if we should }
+                    </i></font>State <font color="#000080">:= </font>Live<font color="#000080">;    </font><font color="#008000"><i>{ wake a sleeping process   }
+        </i></font>Pause   <font color="#000080">: </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Priority <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR
+                     </b></font><font color="#000080">(</font>Ticks <font color="#000080">&gt; </font>NextTime<font color="#000080">) </font><font color="#FF0000"><b>then
+                  begin
+                    </b></font>State    <font color="#000080">:= </font>Slow<font color="#000080">;                   </font><font color="#008000"><i>{ handle slow task }
+                  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>Kill    <font color="#000080">: </font><font color="#FF0000"><b>If </b></font>ThisP <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then                    </b></font><font color="#008000"><i>{ Kill Off a process }
+                  </i></font><font color="#FF0000"><b>Begin
+                    </b></font>FreeMem<font color="#000080">(</font>FrameBlk<font color="#000080">,</font>FrameSiz<font color="#000080">);
+                    </font>State <font color="#000080">:= </font>Dead<font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Case State }
+    </i></font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>State <font color="#000080">= </font>Live<font color="#000080">) </font><font color="#FF0000"><b>or
+          </b></font><font color="#000080">(</font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>State <font color="#000080">= </font>Slow<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>SFrame <font color="#000080">:= </font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>Frame<font color="#000080">;        </font><font color="#008000"><i>{ Load new stack frame }
+  </i></font>LoadFrame<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Raw_Yield }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Yield<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>ox<font color="#000080">,</font>oy  <font color="#000080">: </font>byte<font color="#000080">;
+  </font>wmax<font color="#000080">,
+  </font>wmin   <font color="#000080">: </font>word<font color="#000080">;
+  </font>attr   <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  If Not </b></font>Save_Video <font color="#FF0000"><b>then     </b></font><font color="#008000"><i>{ Implemented this way in case the value changes }
+    </i></font>Raw_Yield
+  <font color="#FF0000"><b>else
+  begin
+    </b></font>attr <font color="#000080">:= </font>TextAttr<font color="#000080">;                         </font><font color="#008000"><i>{ Save current colors  }
+    </i></font>ox   <font color="#000080">:= </font>WhereX<font color="#000080">;         </font>oy <font color="#000080">:= </font>WhereY<font color="#000080">;     </font><font color="#008000"><i>{ save cursor position }
+    </i></font>wmin <font color="#000080">:= </font>WindMin<font color="#000080">;      </font>wmax <font color="#000080">:= </font>WindMax<font color="#000080">;    </font><font color="#008000"><i>{ save window size     }
+
+    </i></font>Raw_Yield<font color="#000080">;    </font><font color="#008000"><i>{ actual Yield Call }
+
+    </i></font>WindMin <font color="#000080">:= </font>wmin<font color="#000080">;      </font>WindMax <font color="#000080">:= </font>wmax<font color="#000080">;    </font><font color="#008000"><i>{ restore window size  }
+    </i></font>GotoXY<font color="#000080">(</font>ox<font color="#000080">,</font>oy<font color="#000080">);                            </font><font color="#008000"><i>{ restore cursor       }
+    </i></font>TextAttr <font color="#000080">:= </font>attr<font color="#000080">;                         </font><font color="#008000"><i>{ restore colors       }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Yield_Plus }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Sleep<font color="#000080">(</font>Flag <font color="#000080">: </font>FlagPtr<font color="#000080">);     </font><font color="#008000"><i>{ Put a process to sleep           }
+</i></font><font color="#FF0000"><b>Begin
+  If NOT </b></font>Flag<font color="#000080">^ </font><font color="#FF0000"><b>Then
+  Begin
+    </b></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>HiberPtr <font color="#000080">:= </font>Flag<font color="#000080">;   </font><font color="#008000"><i>{ Set wake up pointer }
+    </i></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>State    <font color="#000080">:= </font>Hiber<font color="#000080">;  </font><font color="#008000"><i>{ Mark this process as hibernating }
+  </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>Yield<font color="#000080">;                             </font><font color="#008000"><i>{ Do a yield, either way, to keep
+                                       things going smoothly            }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Sleep }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Lock<font color="#000080">(</font>Resource <font color="#000080">: </font>Byte<font color="#000080">);     </font><font color="#008000"><i>{ Lock a resource ID }
+</i></font><font color="#FF0000"><b>Begin
+  If NOT </b></font>Locks<font color="#000080">[</font>Resource<font color="#000080">] </font><font color="#FF0000"><b>Then        </b></font><font color="#008000"><i>{ If not open, then wait until }
+    </i></font>Sleep<font color="#000080">(@</font>Locks<font color="#000080">[</font>Resource<font color="#000080">]);         </font><font color="#008000"><i>{ the resource becomes available }
+
+  { Resource MUST be available now! }
+
+  </i></font>Locks<font color="#000080">[</font>Resource<font color="#000080">] := </font>FALSE<font color="#000080">;          </font><font color="#008000"><i>{ Make it unavailable for use  }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Lock }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>UnLock<font color="#000080">(</font>Resource <font color="#000080">: </font>Byte<font color="#000080">);   </font><font color="#008000"><i>{ Unlock that resource }
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>Locks<font color="#000080">[</font>Resource<font color="#000080">] := </font>True<font color="#000080">;           </font><font color="#008000"><i>{ Make the resource available }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ UnLock }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>KillProc<font color="#000080">;                  </font><font color="#008000"><i>{ Stop a process in it's tracks    }
+</i></font><font color="#FF0000"><b>Begin
+  If </b></font>LiveCount <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then              </b></font><font color="#008000"><i>{ if we are actually swapping then }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">].</font>State <font color="#000080">:= </font>Kill<font color="#000080">;      </font><font color="#008000"><i>{   mark us as dead                }
+    </i></font>Dec<font color="#000080">(</font>LiveCount<font color="#000080">);                  </font><font color="#008000"><i>{   Bump process count             }
+    </i></font>Raw_Yield<font color="#000080">;                       </font><font color="#008000"><i>{   and yield. (Never returns)     }
+{$IFDEF DEBUG}
+    </i></font>WriteLn<font color="#000080">(</font><font color="#800000">'IN TASKER.PAS - FATAL ERROR, PROCESS EXCEPTION'</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>end
+  else                               </b></font><font color="#008000"><i>{ if not swapping, then            }
+    </i></font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);                         </font><font color="#008000"><i>{ exit to dos.....                 }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ KillProc }
+
+</i></font><font color="#FF0000"><b>Function </b></font>Child_Process<font color="#000080">;              </font><font color="#008000"><i>{ Returns true if not root process }
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>Child_Process <font color="#000080">:= </font>ThisP <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetPriority<font color="#000080">;               </font><font color="#008000"><i>{ Set number of clicks between runs }
+</i></font><font color="#FF0000"><b>Begin
+  With </b></font>Procs<font color="#000080">[</font>ThisP<font color="#000080">] </font><font color="#FF0000"><b>do
+  begin
+    </b></font>Priority <font color="#000080">:= </font>P<font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>P <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>State  <font color="#000080">:= </font>Live
+    <font color="#FF0000"><b>else
+      </b></font>State  <font color="#000080">:= </font>Slow<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>ProcessCount<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>ProcessCount <font color="#000080">:= </font>LiveCount<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Wait<font color="#000080">(</font>TicksToWait <font color="#000080">: </font>Longint<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>t <font color="#000080">: </font>longint<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    If </b></font>TicksToWait <font color="#000080">&lt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>EXIT<font color="#000080">;
+    </font>StartTime<font color="#000080">(</font>T<font color="#000080">);
+    </font><font color="#FF0000"><b>While </b></font>DT<font color="#000080">(</font>T<font color="#000080">) &lt; </font>TicksToWait <font color="#FF0000"><b>do </b></font>Yield<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Initialization code, called automatically by the user program,
+  like it or not!                                                      }
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitTasking<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>NextP <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                        </font><font color="#008000"><i>{ We are in the root process      }
+  </i></font>ThisP <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>LastP <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                        </font><font color="#008000"><i>{ Last Active process             }
+  </i></font>FillChar<font color="#000080">(</font>Procs<font color="#000080">,</font>SizeOf<font color="#000080">(</font>Procs<font color="#000080">),</font><font color="#800000">#0</font><font color="#000080">);
+  </font>Procs<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">].</font>State <font color="#000080">:= </font>Live<font color="#000080">;
+  </font>LiveCount <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                    </font><font color="#008000"><i>{ And one task is running (this one) }
+  </i></font><font color="#FF0000"><b>For </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do
+    </b></font>Locks<font color="#000080">[</font>i<font color="#000080">] := </font>True<font color="#000080">;                </font><font color="#008000"><i>{ All resources available }
+  </i></font>Save_Video <font color="#000080">:= </font>True<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font>MaxStack <font color="#000080">:= </font>Sptr<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">;
+  </font>InitTasking<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0153.PAS">Original</a><b>]</b></p></body>
+</html>

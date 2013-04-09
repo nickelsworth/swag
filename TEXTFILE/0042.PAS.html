@@ -1,0 +1,140 @@
+<html>
+<head><title> "Unit for Large Text Files" by BJ™RN FELTEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0042.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Unfortunately this won't work, for some reason BP ignores the FileMode
+&gt; variable when dealing with a file of type Text.  I modified one of the
+&gt; RTL files to correct this problem
+
+   This is not directed specifically to you, but to anyone that's interested in
+a unit that can read big textfiles (like loggfiles, nodelists and so on) in a
+fast way. It can only handle one file at a time and with later versions of TP/
+BP the speed increase isn't as dramatic as it was in older versions, that
+hadn't stuff like buffered textfiles. I use it a lot (even in network
+environments -- with FileMode set to $40).
+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>FileUtil<font color="#000080">; </font><font color="#008000"><i>{ unit for fast reading of large textfiles }
+
+{ Donated to the PD by Bj”rn Felten @ 2:203/208 -- Nov 1994 }
+{ From the package BF_UTIL.ZIP }
+
+</i></font><font color="#FF0000"><b>interface
+
+var
+    </b></font>Line    <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#008000"><i>{ where the read line is returned }
+                     { a global is used for higher speed }
+    </i></font>XEof    <font color="#000080">:</font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>XReset<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>XReadLn<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>FileHandle<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>XOpen<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>FileHandle<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">; </font>FileName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>XClose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>FileHandle<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>implementation
+
+const
+    </b></font>BufSiz <font color="#000080">= </font><font color="#800000">$e000</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+    </b></font>Buffer <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>BufSiz<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+    </font>BufPtr <font color="#000080">= ^</font>Buffer<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+    </b></font>TempLine    <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>Buff        <font color="#000080">:</font>BufPtr<font color="#000080">;
+    </font>Segm<font color="#000080">,</font>Offs<font color="#000080">,
+    </font>NumRead<font color="#000080">,
+    </font>LastPos<font color="#000080">,
+    </font>FirstPos    <font color="#000080">: </font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>XReset<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>FirstPos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+   </font>LastPos<font color="#000080">:=</font>FirstPos<font color="#000080">;
+   </font>XEof<font color="#000080">:=</font>false
+<font color="#FF0000"><b>end
+</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>XReadLn<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>FileHandle<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+    asm
+      </b></font><font color="#FF00FF">mov  es,Segm      </font><font color="#008000"><i>{ just to be sure }
+      </i></font><font color="#FF00FF">mov  bx,es
+      mov  dx,ds
+      cld
+      mov  di,LastPos   </font><font color="#008000"><i>{ start within file }
+      </i></font><font color="#FF00FF">add  di,Offs
+      mov  al,13        </font><font color="#008000"><i>{ set up a search for CR }
+      </i></font><font color="#FF00FF">mov  cx,257       </font><font color="#008000"><i>{ max 255 char plus overhead }
+      </i></font><font color="#FF00FF">mov  si,di
+      repnz scasb       </font><font color="#008000"><i>{ look for CR }
+      </i></font><font color="#FF00FF">mov  di,offset Line   </font><font color="#008000"><i>{ put it into string }
+      </i></font><font color="#FF00FF">neg  cl           </font><font color="#008000"><i>{ get string length }
+      </i></font><font color="#FF00FF">mov  [di],cl      </font><font color="#008000"><i>{ put it in first position }
+      </i></font><font color="#FF00FF">je   @empty
+      inc  di
+      mov  ds,bx        </font><font color="#008000"><i>{ swap es and ds}
+      </i></font><font color="#FF00FF">mov  es,dx
+      rep  movsb        </font><font color="#008000"><i>{ move it }
+</i></font><font color="#FF00FF">@empty:
+      lodsw             </font><font color="#008000"><i>{ skip CR/LF }
+      </i></font><font color="#FF00FF">mov  ds,dx        </font><font color="#008000"><i>{ restore ds }
+      </i></font><font color="#FF00FF">sub  si,Offs
+      mov  LastPos,si   </font><font color="#008000"><i>{ save last position }
+ </i></font><font color="#FF0000"><b>end
+ </b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>LastPos<font color="#000080">&gt;=</font>BufSiz <font color="#FF0000"><b>then
+ begin
+   </b></font>TempLine<font color="#000080">:=</font>Line<font color="#000080">; </font><font color="#008000"><i>{ handle partial line at block boundary }
+   </i></font>blockread<font color="#000080">(</font>FileHandle<font color="#000080">,</font>Buff<font color="#000080">^,</font>BufSiz<font color="#000080">,</font>NumRead<font color="#000080">);
+   </font>XReset<font color="#000080">;
+   </font>XReadLn<font color="#000080">(</font>FileHandle<font color="#000080">);
+   </font>Line<font color="#000080">:=</font>TempLine<font color="#000080">+</font>Line
+ <font color="#FF0000"><b>end
+ </b></font><font color="#000080">;
+ </font>XEof<font color="#000080">:=(</font>LastPos<font color="#000080">&gt;=</font>NumRead<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>XOpen<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>FileHandle<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">; </font>FileName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>FileHandle<font color="#000080">,</font>FileName<font color="#000080">);
+  </font><font color="#008000"><i>(*$I-*) </i></font>reset<font color="#000080">(</font>FileHandle<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">) </font><font color="#008000"><i>(*$I+*)
+  </i></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>IoResult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+     </b></font>writeln<font color="#000080">;
+     </font>writeln<font color="#000080">(</font><font color="#800000">'Can''t find '</font><font color="#000080">,</font>FileName<font color="#000080">,</font><font color="#800000">' in this directory!'</font><font color="#000080">);
+     </font>writeln<font color="#000080">;
+     </font>halt<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">)
+  </font><font color="#FF0000"><b>end
+  </b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>memavail<font color="#000080">&lt;</font>BufSiz<font color="#000080">+</font><font color="#800000">$400 </font><font color="#FF0000"><b>then
+  begin
+     </b></font>writeln<font color="#000080">;
+     </font>writeln<font color="#000080">(</font><font color="#800000">'Need at least '</font><font color="#000080">,</font>BufSiz <font color="#FF0000"><b>shr </b></font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">'kb RAM!'</font><font color="#000080">);
+     </font>writeln<font color="#000080">;
+     </font>halt<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">)
+  </font><font color="#FF0000"><b>end
+  </b></font><font color="#000080">;
+  </font>new<font color="#000080">(</font>Buff<font color="#000080">);
+  </font>Segm<font color="#000080">:=</font>seg<font color="#000080">(</font>Buff<font color="#000080">^);
+  </font>Offs<font color="#000080">:=</font>ofs<font color="#000080">(</font>Buff<font color="#000080">^);
+  </font>Buff<font color="#000080">^[</font>BufSiz<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">#13</font><font color="#000080">;  </font><font color="#008000"><i>{ stuff some CR's in to avoid running }
+  </i></font>Buff<font color="#000080">^[</font>BufSiz<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]:=</font><font color="#800000">#13</font><font color="#000080">;  </font><font color="#008000"><i>{ off limits if unlucky w/ boundaries }
+  </i></font>blockread<font color="#000080">(</font>FileHandle<font color="#000080">,</font>Buff<font color="#000080">^,</font>BufSiz<font color="#000080">,</font>NumRead<font color="#000080">);
+  </font>Buff<font color="#000080">^[</font>NumRead<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">#13</font><font color="#000080">;
+  </font>Buff<font color="#000080">^[</font>NumRead<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]:=</font><font color="#800000">#13</font><font color="#000080">;
+  </font>XReset
+<font color="#FF0000"><b>end
+</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>XClose<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>FileHandle<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+   </b></font>close<font color="#000080">(</font>FileHandle<font color="#000080">);
+   </font>dispose<font color="#000080">(</font>Buff<font color="#000080">)
+</font><font color="#FF0000"><b>end
+</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0042.PAS">Original</a><b>]</b></p></body>
+</html>

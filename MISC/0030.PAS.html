@@ -1,0 +1,197 @@
+<html>
+<head><title> "Another Device in TP" by D.J. MURDOCK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+I've written a simple device driver in TP, and it works.  From some things I've
+heard, it won't work in all versions of DOS (it's an .EXE format device driver,
+not a .BIN format one).  There are tons of restrictions on what you can do in
+it - DOS isn't reentrant, and the TP system library isn't designed to do things
+while DOS is active, so I don't even let it get initialized, etc., etc.
+
+It's still a bit of a mess, but here it is, for your enjoyment and edification:
+ a character device driver that keeps a buffer of 255 characters, called
+TPDEVICE.
+
+To try it out, compile it (you'll need OPro or TPro; sorry, but stack swapping
+is essential, and I wouldn't want to try to write code to do it myself), put it
+into your CONFIG.SYS (on a floppy disk, please!) as
+
+  device=tpdev.exe
+
+and then reboot.   Hopefully you won't crash, but if you do, you'll have to
+reboot from a different disk and remove it from CONFIG.SYS.
+
+Then you can try
+
+  COPY TPDEVICE CON
+
+to see the initialization message, and
+
+  ECHO This is a line for the buffer &gt;TPDEVICE
+
+to replace it with a new one.
+}
+{ DOS character device driver written entirely in TP 6 }
+
+{ Written by D.J. Murdoch for the public domain, May 1991 }
+
+{$S-,F-}       { Stack checking wouldn't work here, and we assume near calls }
+{$M $1000,0,0} { We can't use the heap and don't use the stack.  This
+                 setting doesn't really matter though, since you normally
+                 won't run TPDEV }
+
+</i></font><font color="#FF0000"><b>program </b></font>tpdev<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses
+  </b></font>opint<font color="#000080">;  </font><font color="#008000"><i>{ OPro interrupt services, needed for stack switching }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>strategy_routine<font color="#000080">(</font>bp<font color="#000080">:</font>word<font color="#000080">); </font>interrupt<font color="#000080">; </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>interrupt_routine<font color="#000080">(</font>bp<font color="#000080">:</font>word<font color="#000080">); </font>interrupt<font color="#000080">; </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>header<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Here's the trick:  an assembler routine in the main program, guaranteed to
+  be linked first in the .EXE file!!}
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">dd $FFFFFFFF    </font><font color="#008000"><i>{ next driver }
+  </i></font><font color="#FF00FF">dw $8000        </font><font color="#008000"><i>{ attributes of simple character device }
+  </i></font><font color="#FF00FF">dw offset strategy_routine
+  dw offset interrupt_routine
+  db 'TPDEVICE'
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>stDone <font color="#000080">= </font><font color="#800000">$100</font><font color="#000080">;
+  </font>stBusy <font color="#000080">= </font><font color="#800000">$200</font><font color="#000080">;
+
+  </font>cmInit  <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>cmInput <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+  </font>cmInput_no_wait <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font>cmInput_status  <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+  </font>cmInput_flush   <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;
+  </font>cmOutput        <font color="#000080">= </font><font color="#800000">8</font><font color="#000080">;
+  </font>cmOutput_Verify <font color="#000080">= </font><font color="#800000">9</font><font color="#000080">;
+  </font>cmOutput_status <font color="#000080">= </font><font color="#800000">10</font><font color="#000080">;
+  </font>cmOutput_flush  <font color="#000080">= </font><font color="#800000">11</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>request_header <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>request_length <font color="#000080">: </font>byte<font color="#000080">;
+    </font>subunit        <font color="#000080">: </font>byte<font color="#000080">;
+    </font>command_code   <font color="#000080">: </font>byte<font color="#000080">;
+    </font>status         <font color="#000080">: </font>word<font color="#000080">;
+    </font>reserved       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font><font color="#FF0000"><b>case </b></font>byte <font color="#FF0000"><b>of
+      </b></font>cmInit <font color="#000080">: (</font>num_units  <font color="#000080">: </font>byte<font color="#000080">;
+                </font>first_free <font color="#000080">: </font>pointer<font color="#000080">;
+                </font>args       <font color="#000080">: ^</font>char<font color="#000080">;
+                </font>drive_num  <font color="#000080">: </font>byte<font color="#000080">;);
+      </font>cmInput <font color="#000080">:  </font><font color="#008000"><i>{ also used for output }
+               </i></font><font color="#000080">(</font>media_descriptor <font color="#000080">: </font>byte<font color="#000080">;
+               </font>buffer            <font color="#000080">: </font>pointer<font color="#000080">;
+               </font>byte_count        <font color="#000080">: </font>word<font color="#000080">);
+      </font>cmInput_no_wait <font color="#000080">: (</font>next_char <font color="#000080">: </font>char<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>local_stack  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4000</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font>end_of_stack <font color="#000080">: </font>byte<font color="#000080">;
+  </font>request      <font color="#000080">: ^</font>request_header<font color="#000080">;
+  </font>line         <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>handler<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>regs <font color="#000080">: </font>intregisters<font color="#000080">);
+</font><font color="#008000"><i>{ This routine is called by the strategy routine, and handles all requests.
+  The data segment is okay, and we're running on the local_stack so we've got
+ plenty of space, but remember:
+   ****** The initialization code for SYSTEM and all other units hasn't
+          ever been called!!  ******** }
+</i></font><font color="#FF0000"><b>begin
+  with </b></font>request<font color="#000080">^ </font><font color="#FF0000"><b>do
+  begin
+    case </b></font>command_code <font color="#FF0000"><b>of
+
+      </b></font>cmInit <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        </b></font><font color="#008000"><i>{ Last thing in the data segment in TP6 - No heap!!}
+        </i></font>first_free <font color="#000080">:= </font>ptr<font color="#000080">(</font>dseg<font color="#000080">, </font>ofs<font color="#000080">(</font>saveint75<font color="#000080">) + </font><font color="#800000">4</font><font color="#000080">);
+        </font>status     <font color="#000080">:= </font>stDone<font color="#000080">;
+        </font>line       <font color="#000080">:= </font><font color="#800000">'TPDRIVER successfully initialized.'</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>cmInput <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        if </b></font>byte_count <font color="#000080">&gt; </font>length<font color="#000080">(</font>line<font color="#000080">) </font><font color="#FF0000"><b>then
+          </b></font>byte_count <font color="#000080">:= </font>length<font color="#000080">(</font>line<font color="#000080">);
+        </font>move<font color="#000080">(</font>line<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>buffer<font color="#000080">^, </font>byte_count<font color="#000080">);
+        </font>line <font color="#000080">:= </font>copy<font color="#000080">(</font>line<font color="#000080">, </font>byte_count <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">255</font><font color="#000080">);
+        </font>status <font color="#000080">:= </font>stDone<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>cmInput_no_wait <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        if </b></font>length<font color="#000080">(</font>line<font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        begin
+          </b></font>next_char <font color="#000080">:= </font>line<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+          </font>status <font color="#000080">:= </font>stDone<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+        else
+          </b></font>status <font color="#000080">:= </font>stBusy<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>cmInput_Status<font color="#000080">,
+      </font>cmOutput_Status<font color="#000080">,
+      </font>cmInput_Flush<font color="#000080">,
+      </font>cmOutput_Flush <font color="#000080">: </font>status <font color="#000080">:= </font>stDone<font color="#000080">;
+
+      </font>cmOutput<font color="#000080">,
+      </font>cmOutput_Verify <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        if </b></font>byte_count <font color="#000080">+ </font>length<font color="#000080">(</font>line<font color="#000080">) &gt; </font><font color="#800000">255 </font><font color="#FF0000"><b>then
+          </b></font>byte_count <font color="#000080">:= </font><font color="#800000">255 </font><font color="#000080">- </font>length<font color="#000080">(</font>line<font color="#000080">);
+        </font>move<font color="#000080">(</font>buffer<font color="#000080">^, </font>line<font color="#000080">[</font>length<font color="#000080">(</font>line<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">], </font>byte_count<font color="#000080">);
+        </font>line<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>char<font color="#000080">(</font>byte<font color="#000080">(</font>byte_count <font color="#000080">+ </font>length<font color="#000080">(</font>line<font color="#000080">)));
+        </font>status <font color="#000080">:= </font>stDone<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>RetFar<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Replacement for the IRET code that ends the interrupt routines below }
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov sp,bp
+  pop bp
+  pop es
+  pop ds
+  pop di
+  pop si
+  pop dx
+  pop cx
+  pop bx
+  pop ax
+  retf
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>strategy_routine<font color="#000080">(</font>bp <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>regs <font color="#000080">: </font>intregisters <font color="#FF0000"><b>absolute </b></font>bp<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>regs <font color="#FF0000"><b>do
+    </b></font>request <font color="#000080">:= </font>ptr<font color="#000080">(</font>es<font color="#000080">, </font>bx<font color="#000080">);
+  </font>RetFar<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>interrupt_routine<font color="#000080">(</font>bp <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>regs <font color="#000080">: </font>intregisters <font color="#FF0000"><b>absolute </b></font>bp<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>SwapStackandCallNear<font color="#000080">(</font>Ofs<font color="#000080">(</font>handler<font color="#000080">), @</font>end_of_stack<font color="#000080">, </font>regs<font color="#000080">);
+  </font>RetFar<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'TPDEVICE - DOS device driver written *entirely* in Turbo Pascal.'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Install using DEVICE=TPDEV.EXE in CONFIG.SYS.'</font><font color="#000080">);
+  </font>request <font color="#000080">:= @</font>header<font color="#000080">;  </font><font color="#008000"><i>{ Need a reference to pull in the header. }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p></body>
+</html>

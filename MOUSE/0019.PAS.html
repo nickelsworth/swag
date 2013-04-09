@@ -1,0 +1,192 @@
+<html>
+<head><title> "GREAT Mouse Routines" by SEAN PALMER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MOUSE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{ Rodent unit  v1.3      OooO }  { &lt;&lt; isn't he cute? } {   09/01/93              \/  }
+{ Interrupt-style interface for Microsoft mouse, Turbo Pascal 6.0+}
+
+{ by Sean L. Palmer }
+{ Released to the Public Domain }
+
+{ Please credit me if your program uses these routines! }
+
+
+</i></font><font color="#FF0000"><b>unit </b></font>Rodent<font color="#000080">;
+</font><font color="#008000"><i>{$A-,B-,D-,E-,F-,G+,I-,L-,N-,O-,R-,S-,V-,X+}
+{make sure you alloc enough stack space in main program!} {as written, requires a 286+ and that the mouse exists}
+
+</i></font><font color="#FF0000"><b>interface
+
+const
+ </b></font>x <font color="#000080">:</font>integer<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">; </font>y <font color="#000080">:</font>integer<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{current mouse pos}
+ </i></font>xs<font color="#000080">:</font>integer<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">; </font>ys<font color="#000080">:</font>integer<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{mickey counts}
+ </i></font>left<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">; </font>center<font color="#000080">=</font><font color="#800000">2</font><font color="#000080">; </font>right<font color="#000080">=</font><font color="#800000">4</font><font color="#000080">;  </font><font color="#008000"><i>{button masks- (btn and left)&lt;&gt;0 if left button
+                              down}
+ </i></font>b<font color="#000080">:</font>boolean<font color="#000080">=</font>false<font color="#000080">;            </font><font color="#008000"><i>{button status, true if any button down} </i></font><font color="#FF0000"><b>var
+ </b></font>btn<font color="#000080">:</font>byte <font color="#FF0000"><b>absolute </b></font>b<font color="#000080">;        </font><font color="#008000"><i>{button status, mask with (btn and mask)&lt;&gt;0 to
+                              get a specific button}
+ </i></font>hidden<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>type
+ </b></font>pMouseHook<font color="#000080">=^</font>tMouseHook<font color="#000080">;
+ </font>tMouseHook<font color="#000080">=</font><font color="#FF0000"><b>procedure</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{avoid calling dos, bios, and mouse routines from these if possible}
+</i></font><font color="#FF0000"><b>function </b></font>erasHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>moveHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>drawHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">; </font><font color="#008000"><i>{change out handlers}
+</i></font><font color="#FF0000"><b>function </b></font>clikHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>liftHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>show<font color="#000080">(</font>f<font color="#000080">:</font>boolean<font color="#000080">);          </font><font color="#008000"><i>{true=show}
+</i></font><font color="#FF0000"><b>procedure </b></font>confine<font color="#000080">(</font>l<font color="#000080">,</font>t<font color="#000080">,</font>r<font color="#000080">,</font>b<font color="#000080">:</font>integer<font color="#000080">); </font><font color="#008000"><i>{set min,max bounds}
+</i></font><font color="#FF0000"><b>procedure </b></font>moveTo<font color="#000080">(</font>h<font color="#000080">,</font>v<font color="#000080">:</font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>setSpeed<font color="#000080">(</font>xs<font color="#000080">,</font>ys<font color="#000080">,</font>thr<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>{set x,y pix per 16 mickeys, double speed threshold}
+
+</i></font><font color="#FF0000"><b>implementation
+
+</b></font><font color="#008000"><i>{This unit should work in any mode, but you need to provide the routines
+ to draw and erase the cursor.}
+{note: reason coords are scaled *8 throughout is because mouse driver}
+ {stupidly messes with the values differently in different modes.}
+ {This is just a work-around so it won't be limited to every eighth column
+  or row in text modes.}
+{PS: be very careful using mickey counts in DI &amp; SI in event handler.}
+
+</i></font><font color="#FF0000"><b>var
+ </b></font>hideCount<font color="#000080">:</font>byte <font color="#FF0000"><b>absolute </b></font>hidden<font color="#000080">;
+
+
+</font><font color="#008000"><i>{this procedure does nothing, used to disable an event} </i></font><font color="#FF0000"><b>procedure </b></font>defaultMouseHook<font color="#000080">;</font><font color="#FF0000"><b>far</b></font><font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{must save previous setting of I-flag}
+</i></font><font color="#FF0000"><b>procedure </b></font>clearInts<font color="#000080">;</font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$9C</font><font color="#000080">/</font><font color="#800000">$FA</font><font color="#000080">); </font><font color="#008000"><i>{pushF;cli} </i></font><font color="#FF0000"><b>procedure </b></font>restoreInts<font color="#000080">;</font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$9D</font><font color="#000080">);   </font><font color="#008000"><i>{popF}
+
+</i></font><font color="#FF0000"><b>const
+ </b></font>vDrawHook<font color="#000080">:</font>tMouseHook<font color="#000080">=</font>defaultMouseHook<font color="#000080">; </font><font color="#008000"><i>{pre-set all hooks to do nothing}
+ </i></font>vErasHook<font color="#000080">:</font>tMouseHook<font color="#000080">=</font>defaultMouseHook<font color="#000080">;
+ </font>vMoveHook<font color="#000080">:</font>tMouseHook<font color="#000080">=</font>defaultMouseHook<font color="#000080">;
+ </font>vClikHook<font color="#000080">:</font>tMouseHook<font color="#000080">=</font>defaultMouseHook<font color="#000080">;
+ </font>vLiftHook<font color="#000080">:</font>tMouseHook<font color="#000080">=</font>defaultMouseHook<font color="#000080">;
+
+</font><font color="#008000"><i>{these all both set a hook to a procedure you provide, and also return
+ the old hook so you can later restore it} {Use something like:}
+
+{var savedClikHook:tMouseHook;}
+{...}
+{@savedClikHook:=clikHook(myClikHook);}
+{...}
+{clikHook(savedClikHook)}
+
+</i></font><font color="#FF0000"><b>function </b></font>drawHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;</font><font color="#FF0000"><b>begin
+ </b></font>drawHook<font color="#000080">:=@</font>vDrawHook<font color="#000080">; </font>clearInts<font color="#000080">; </font>vDrawHook<font color="#000080">:=</font>h<font color="#000080">; </font>restoreInts<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>erasHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;</font><font color="#FF0000"><b>begin
+ </b></font>erasHook<font color="#000080">:=@</font>vErasHook<font color="#000080">; </font>clearInts<font color="#000080">; </font>vErasHook<font color="#000080">:=</font>h<font color="#000080">; </font>restoreInts<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>moveHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;</font><font color="#FF0000"><b>begin
+ </b></font>moveHook<font color="#000080">:=@</font>vMoveHook<font color="#000080">; </font>clearInts<font color="#000080">; </font>vMoveHook<font color="#000080">:=</font>h<font color="#000080">; </font>restoreInts<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>clikHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;</font><font color="#FF0000"><b>begin
+ </b></font>clikHook<font color="#000080">:=@</font>vclikHook<font color="#000080">; </font>clearInts<font color="#000080">; </font>vClikHook<font color="#000080">:=</font>h<font color="#000080">; </font>restoreInts<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>liftHook<font color="#000080">(</font>h<font color="#000080">:</font>tMouseHook<font color="#000080">):</font>pMouseHook<font color="#000080">;</font><font color="#FF0000"><b>begin
+ </b></font>liftHook<font color="#000080">:=@</font>vLiftHook<font color="#000080">; </font>clearInts<font color="#000080">; </font>vLiftHook<font color="#000080">:=</font>h<font color="#000080">; </font>restoreInts<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{here is the callback function for the mouse driver}
+
+{calling regs:}
+ {ax:triggering event bit mask}
+ {bx:button status bit mask (bit 0=left,1=center,2=right)}
+ {cx:mouse X/bit 7 is sign for di,bit 0 always=0}
+ {dx:mouse Y/bit 7 is sign for si}
+ {di:abs mouse Delta X}
+ {si:abs mouse Delta Y}
+
+{bits in event mask:}
+ {0:move}
+ {1:left btn down}
+ {2:left btn up}
+ {3,4:center btn}
+ {5,6:right btn}
+
+{This code is real easy to break, be careful!} </i></font><font color="#FF0000"><b>procedure </b></font>doMouseHook<font color="#000080">;</font><font color="#FF0000"><b>far</b></font><font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">push ax; mov ax,seg @DATA; mov ds,ax; pop ax;
+ mov xs,si; mov ys,di; </font><font color="#008000"><i>{disregard di,si mickey counts}
+ </i></font><font color="#FF00FF">mov btn,bl;
+ and cx,$3FFF; shr cx,3; and dx,$3FFF; shr dx,3; </font><font color="#008000"><i>{strip hi bits}
+ </i></font><font color="#FF00FF">push ax; push cx; push dx;  </font><font color="#008000"><i>{save event status}
+ </i></font><font color="#FF00FF">test hidden,$FF; jnz @NOERAS; call vErasHook; @NOERAS:
+ pop dx; mov y,dx; pop cx; mov x,cx;
+ call vMoveHook;  </font><font color="#008000"><i>{always assume mouse has moved, disregard bit 0 of ax}
+ </i></font><font color="#FF00FF">test hidden,$FF; jnz @NODRAW; call vDrawHook; @NODRAW:
+ pop ax; </font><font color="#008000"><i>{restore event status}
+</i></font><font color="#FF00FF">@CLIK: test al,00101010b; jz @LIFT; </font><font color="#008000"><i>{check any button clik flag}
+ </i></font><font color="#FF00FF">push ax; call vClikHook; pop ax;
+@LIFT: test al,01010100b; jz @EXIT; </font><font color="#008000"><i>{check any button lift flag}
+ </i></font><font color="#FF00FF">call vLiftHook;
+@EXIT:
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>show<font color="#000080">(</font>f<font color="#000080">:</font>boolean<font color="#000080">);</font><font color="#FF0000"><b>begin
+ </b></font>clearInts<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>f <font color="#FF0000"><b>then begin
+  if </b></font>hidden <font color="#FF0000"><b>then begin </b></font>dec<font color="#000080">(</font>hideCount<font color="#000080">); </font><font color="#FF0000"><b>if not </b></font>hidden <font color="#FF0000"><b>then </b></font>vDrawHook<font color="#000080">; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+ else begin if not </b></font>hidden <font color="#FF0000"><b>then </b></font>vErasHook<font color="#000080">; </font>inc<font color="#000080">(</font>hideCount<font color="#000080">); </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>restoreInts<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>confine<font color="#000080">(</font>l<font color="#000080">,</font>t<font color="#000080">,</font>r<font color="#000080">,</font>b<font color="#000080">:</font>integer<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">mov ax,7; mov cx,l; shl cx,3; mov dx,r; shl dx,3; int $33;
+ mov ax,8; mov cx,t; shl cx,3; mov dx,b; shl dx,3; int $33;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>moveTo<font color="#000080">(</font>h<font color="#000080">,</font>v<font color="#000080">:</font>integer<font color="#000080">);</font><font color="#FF0000"><b>begin
+ if not </b></font>hidden <font color="#FF0000"><b>then </b></font>vErasHook<font color="#000080">;
+ </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">mov cx,h; mov x,cx; shl cx,3;
+     mov dx,v; mov y,dx; shl dx,3;
+     mov ax,4; int $33; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if not </b></font>hidden <font color="#FF0000"><b>then </b></font>vDrawHook<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>setSpeed<font color="#000080">(</font>xs<font color="#000080">,</font>ys<font color="#000080">,</font>thr<font color="#000080">:</font>word<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">mov ax,$1A; mov bx,xs; shl bx,3; mov cx,ys; shl cx,3; mov dx,thr; int $33;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+ </b></font>oldMouseHook<font color="#000080">:</font>pointer<font color="#000080">;
+ </font>oldEventMask<font color="#000080">:</font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>removeMouse<font color="#000080">;</font><font color="#FF0000"><b>begin
+ if not </b></font>hidden <font color="#FF0000"><b>then </b></font>show<font color="#000080">(</font>false<font color="#000080">);
+ </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">les dx,oldMouseHook; mov cx,oldEventMask; mov ax,$C; int $33;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+ </b></font>mouseHook<font color="#000080">:</font>pointer <font color="#FF0000"><b>absolute </b></font><font color="#800000">0</font><font color="#000080">:</font><font color="#800000">$33</font><font color="#000080">*</font><font color="#800000">4</font><font color="#000080">;
+</font><font color="#FF0000"><b>const
+ </b></font>eventMask<font color="#000080">=</font><font color="#800000">$7F</font><font color="#000080">;  </font><font color="#008000"><i>{all events}
+
+</i></font><font color="#FF0000"><b>function </b></font>exists<font color="#000080">:</font>boolean<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">xor ax,ax; mov es,ax; </font><font color="#008000"><i>{get ready to check interrupt vector for nil}
+ </i></font><font color="#FF00FF">mov bx,es:[$33*4]; or bx,es:[$33*4+2]; jz @X; </font><font color="#008000"><i>{no}
+ {ax still 0} </i></font><font color="#FF00FF">int $33; @X:  </font><font color="#008000"><i>{result in al}
+ </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ if </b></font>exists <font color="#FF0000"><b>then begin
+  </b></font>setSpeed<font color="#000080">(</font><font color="#800000">32</font><font color="#000080">,</font><font color="#800000">64</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);    </font><font color="#008000"><i>{set up a natural-feeling speed for 640x480}
+  </i></font>moveTo<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">); </font>confine<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">); </font><font color="#008000"><i>{trap the little sucker}
+  </i></font>hideCount<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">push cs; pop es; mov dx,offset doMouseHook; </font><font color="#008000"><i>{loc of callback function}
+   </i></font><font color="#FF00FF">mov cx,eventMask; mov ax,$14; int $33;      </font><font color="#008000"><i>{enable event callbacks}
+   </i></font><font color="#FF00FF">mov oldEventMask,cx;
+   mov word ptr oldMouseHook,dx; mov word ptr oldMouseHook+2,es;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+ else begin </b></font>writeln<font color="#000080">(</font><font color="#800000">'Need mouse.'</font><font color="#000080">); </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MOUSE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p></body>
+</html>

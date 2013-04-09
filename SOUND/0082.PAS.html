@@ -1,0 +1,1055 @@
+<html>
+<head><title> "CD Player on MMPC Sound Cards" by ROGER DUNK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0082.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Does anyone by any chance know how I can play a CD through my
+&gt; MMPC compatable CD ROM drive? It's connected to a Sound
+&gt; Blaster. Does anyone have the code to this?
+
+Michael, The program CDPLAY.PAS and the two units mentioned
+below allow you to play audio CD's through and MMPC CD-ROM drive.
+Just make sure the CD-ROM driver is loaded first. If you use this
+program in your own code please give me some credit :-)
+
+Regards,
+Roger Dunk
+}
+
+{  NOTE : The CD_Vars and CDUNIT_P are at the end of this code }
+
+{$X+}
+</i></font><font color="#FF0000"><b>program </b></font>CDPlay<font color="#000080">;
+
+</font><font color="#008000"><i>{$IfDef Windows}
+{$C PRELOAD}
+</i></font><font color="#FF0000"><b>uses </b></font>CD_Vars<font color="#000080">, </font>CDUnit_P<font color="#000080">, </font>WinCRT<font color="#000080">, </font>WinProcs<font color="#000080">;
+</font><font color="#008000"><i>{$Else}
+</i></font><font color="#FF0000"><b>uses </b></font>CD_Vars<font color="#000080">, </font>CDUnit_P<font color="#000080">, </font>CRT<font color="#000080">, </font>Drivers<font color="#000080">;
+</font><font color="#008000"><i>{$EndIf}
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>TotPlayRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+     </b></font>Frames<font color="#000080">,
+     </font>Seconds<font color="#000080">,
+     </font>Minutes<font color="#000080">,
+     </font>Nada     <font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>GoodDisk <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>SaveExit   <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>OldMode    <font color="#000080">: </font>Word<font color="#000080">;
+  </font>CurrentTrack<font color="#000080">,
+  </font>StartTrack<font color="#000080">,
+  </font>EndTrack   <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>TotPlay    <font color="#000080">: </font>TotPlayRec<font color="#000080">;
+  </font>TrackInfo  <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">99</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>PAudioTrackInfo<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LeadingZero<font color="#000080">(</font>w<font color="#000080">: </font>Word<font color="#000080">): </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>s<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Str<font color="#000080">(</font>w<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">, </font>s<font color="#000080">);
+  </font>LeadingZero <font color="#000080">:= </font>Copy<font color="#000080">(</font><font color="#800000">'00'</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">2 </font><font color="#000080">- </font>Length<font color="#000080">(</font>s<font color="#000080">)) + </font>s<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>DrawScreen<font color="#000080">;
+</font><font color="#FF0000"><b>Const </b></font>TStr <font color="#000080">= </font><font color="#800000">'%03d:%02d'</font><font color="#000080">;
+      </font>VStr <font color="#000080">= </font><font color="#800000">'%1d.%2d'</font><font color="#000080">;
+</font><font color="#FF0000"><b>Var   </b></font>FStr <font color="#000080">: </font>PChar<font color="#000080">;
+      </font>NStr <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+      </font>Param<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>LongInt<font color="#000080">;
+      </font>Code <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'CD ROM Audio Disk Player'</font><font color="#000080">);
+  </font>Param<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>MSCDEX_Version<font color="#000080">.</font>Major<font color="#000080">;
+  </font>Param<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>MSCDEX_Version<font color="#000080">.</font>Minor<font color="#000080">;
+
+</font><font color="#008000"><i>{$IfDef Windows}
+  </i></font>wvsPrintf<font color="#000080">(</font>FStr<font color="#000080">, </font>VStr<font color="#000080">, </font>Param<font color="#000080">);
+</font><font color="#008000"><i>{$Else}
+  </i></font>FormatStr<font color="#000080">(</font>NStr<font color="#000080">, </font>VStr<font color="#000080">, </font>Param<font color="#000080">);
+</font><font color="#008000"><i>{$EndIf}
+
+  </i></font>WriteLn<font color="#000080">(</font><font color="#800000">'MSCDEX Version '</font><font color="#000080">, </font>NStr<font color="#000080">);
+  </font>Str<font color="#000080">(</font>NumberOfCD<font color="#000080">, </font>NStr<font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Number of CD ROM Drives is: '</font><font color="#000080">+</font>Nstr<font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'First CD Drive Letter is  : '</font><font color="#000080">+</font>Chr<font color="#000080">(</font>FirstCD<font color="#000080">+</font><font color="#800000">65</font><font color="#000080">));
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'There are ' </font><font color="#000080">+ </font>LeadingZero<font color="#000080">(</font>EndTrack <font color="#000080">- </font>StartTrack <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">) + </font><font color="#800000">' Tracks on this disk'</font><font color="#000080">);
+  </font>Code <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{***********************************************************************}
+
+{***********************************************************************}
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Setup<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>LeadOut<font color="#000080">,
+  </font>StartP<font color="#000080">,
+  </font>TotalPlayTime    <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>I     <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>A<font color="#000080">,</font>B<font color="#000080">,</font>C <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>Track <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>EA    <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>SP<font color="#000080">,</font>EP <font color="#000080">: </font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font>FillChar<font color="#000080">(</font>AudioDiskInfo<font color="#000080">, </font>SizeOf<font color="#000080">(</font>AudioDiskInfo<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>DeviceStatus<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Audio <font color="#FF0000"><b>THEN
+  Begin
+    </b></font>Audio_Disk_Info<font color="#000080">;
+    </font>TotalPlayTime <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>LeadOut <font color="#000080">:= </font>AudioDiskInfo<font color="#000080">.</font>LeadOutTrack<font color="#000080">;
+
+    </font>StartTrack <font color="#000080">:= </font>AudioDiskInfo<font color="#000080">.</font>LowestTrack<font color="#000080">;
+    </font>EndTrack <font color="#000080">:= </font>AudioDiskInfo<font color="#000080">.</font>HighestTrack<font color="#000080">;
+    </font>CurrentTrack <font color="#000080">:= </font>StartTrack<font color="#000080">;
+    </font>I <font color="#000080">:= </font>StartTrack<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>Repeat               </b></font><font color="#008000"><i>{ Checks if Audio Track or Data Track }
+        </i></font>Inc<font color="#000080">(</font>I<font color="#000080">);
+        </font>Track <font color="#000080">:= </font>I<font color="#000080">;
+        </font>Audio_Track_Info<font color="#000080">(</font>StartP<font color="#000080">, </font>Track<font color="#000080">);
+    </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>Track <font color="#FF0000"><b>AND </b></font><font color="#800000">64 </font><font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>I <font color="#000080">= </font>EndTrack<font color="#000080">);
+
+    </font>StartTrack <font color="#000080">:= </font>I<font color="#000080">;
+
+    </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font>StartTrack <font color="#FF0000"><b>to </b></font>EndTrack <font color="#FF0000"><b>DO
+      Begin
+        </b></font>Track <font color="#000080">:= </font>I<font color="#000080">;
+        </font>Audio_Track_Info<font color="#000080">(</font>StartP<font color="#000080">, </font>Track<font color="#000080">);
+        </font>New<font color="#000080">(</font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]);
+        </font>FillChar<font color="#000080">(</font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^, </font>SizeOf<font color="#000080">(</font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^), </font><font color="#800000">#0</font><font color="#000080">);
+        </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>Track <font color="#000080">:= </font>I<font color="#000080">;
+        </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>StartPoint <font color="#000080">:= </font>StartP<font color="#000080">;
+        </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>TrackControl <font color="#000080">:= </font>Track<font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font>StartTrack <font color="#FF0000"><b>to </b></font>EndTrack <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>DO
+        </b></font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>EndPoint <font color="#000080">:= </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]^.</font>StartPoint<font color="#000080">;
+    </font>TrackInfo<font color="#000080">[</font>EndTrack<font color="#000080">]^.</font>EndPoint <font color="#000080">:= </font>LeadOut<font color="#000080">;
+
+    </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font>StartTrack <font color="#FF0000"><b>to </b></font>EndTrack <font color="#FF0000"><b>DO
+        </b></font>Move<font color="#000080">(</font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>EndPoint<font color="#000080">, </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>Frames<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+
+    </font>TrackInfo<font color="#000080">[</font>StartTrack<font color="#000080">]^.</font>PlayMin <font color="#000080">:= </font>TrackInfo<font color="#000080">[</font>StartTrack<font color="#000080">]^.</font>Minutes<font color="#000080">;
+    </font>TrackInfo<font color="#000080">[</font>StartTrack<font color="#000080">]^.</font>PlaySec <font color="#000080">:= </font>TrackInfo<font color="#000080">[</font>StartTrack<font color="#000080">]^.</font>Seconds <font color="#000080">- </font><font color="#800000">2</font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font>StartTrack <font color="#000080">+ </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>EndTrack <font color="#FF0000"><b>DO
+      Begin
+        </b></font>EP <font color="#000080">:= (</font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>Minutes <font color="#000080">* </font><font color="#800000">60</font><font color="#000080">) + </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>Seconds<font color="#000080">;
+        </font>SP <font color="#000080">:= (</font>TrackInfo<font color="#000080">[</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]^.</font>Minutes <font color="#000080">* </font><font color="#800000">60</font><font color="#000080">) + </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]^.</font>Seconds<font color="#000080">;
+        </font>EP <font color="#000080">:= </font>EP <font color="#000080">- </font>SP<font color="#000080">;
+        </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>PlayMin <font color="#000080">:= </font>EP <font color="#FF0000"><b>DIV </b></font><font color="#800000">60</font><font color="#000080">;
+        </font>TrackInfo<font color="#000080">[</font>I<font color="#000080">]^.</font>PlaySec <font color="#000080">:= </font>EP <font color="#FF0000"><b>Mod </b></font><font color="#800000">60</font><font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+    </font>TotalPlayTime <font color="#000080">:= </font>AudioDiskInfo<font color="#000080">.</font>LeadOutTrack <font color="#000080">- </font>TrackInfo<font color="#000080">[</font>StartTrack<font color="#000080">]^.</font>StartPoint<font color="#000080">;
+    </font>Move<font color="#000080">(</font>TotalPlayTime<font color="#000080">, </font>TotPlay<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{***********************************************************************}
+
+
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>Setup<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Audio <font color="#FF0000"><b>THEN
+  If </b></font>Playing <font color="#FF0000"><b>THEN
+     </b></font>StopAudio
+  <font color="#FF0000"><b>ELSE
+     Begin
+       </b></font>StopAudio<font color="#000080">;
+       </font>Play_Audio<font color="#000080">(</font>TrackInfo<font color="#000080">[</font>StartTrack<font color="#000080">]^.</font>StartPoint<font color="#000080">,
+             </font>TrackInfo<font color="#000080">[</font>EndTrack<font color="#000080">]^.</font>EndPoint<font color="#000080">);
+       </font>Audio_Status_Info<font color="#000080">;
+       </font>DrawScreen<font color="#000080">;
+     </font><font color="#FF0000"><b>End
+  ELSE
+      </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'This is not an Audio CD'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'UPC Code is: '</font><font color="#000080">, </font>UPC_Code<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ -----------------------------------   CUT HERE --------------------   }
+
+</i></font><font color="#FF0000"><b>Unit </b></font>CD_Vars<font color="#000080">;
+
+</font><font color="#FF0000"><b>Interface
+
+Type
+  </b></font>ListBuf    <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>UnitCode <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>UnitSeg<font color="#000080">,
+    </font>UnitOfs  <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>VTOCArray  <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2048</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>DriveByteArray <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">128</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+
+  </font>Req_Hdr    <font color="#000080">= </font><font color="#FF0000"><b>Record
+     </b></font>Len     <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>SubUnit <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>Command <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>Status  <font color="#000080">: </font>Word<font color="#000080">;
+     </font>Reserved<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>Init       <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>IoCtlInput <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+  </font>InputFlush <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;
+  </font>IOCtlOutput<font color="#000080">= </font><font color="#800000">12</font><font color="#000080">;
+  </font>DevOpen    <font color="#000080">= </font><font color="#800000">13</font><font color="#000080">;
+  </font>DevClose   <font color="#000080">= </font><font color="#800000">14</font><font color="#000080">;
+  </font>ReadLong   <font color="#000080">= </font><font color="#800000">128</font><font color="#000080">;
+  </font>ReadLongP  <font color="#000080">= </font><font color="#800000">130</font><font color="#000080">;
+  </font>SeekCmd    <font color="#000080">= </font><font color="#800000">131</font><font color="#000080">;
+  </font>PlayCD     <font color="#000080">= </font><font color="#800000">132</font><font color="#000080">;
+  </font>StopPlay   <font color="#000080">= </font><font color="#800000">133</font><font color="#000080">;
+  </font>ResumePlay <font color="#000080">= </font><font color="#800000">136</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+
+  </b></font>Audio_Play <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>APReq    <font color="#000080">: </font>Req_Hdr<font color="#000080">;
+    </font>AddrMode <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Start    <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>NumSecs  <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>IOControlBlock <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>IOReq_Hdr <font color="#000080">: </font>Req_Hdr<font color="#000080">;
+    </font>MediaDesc <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>TransAddr <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>NumBytes  <font color="#000080">: </font>Word<font color="#000080">;
+    </font>StartSec  <font color="#000080">: </font>Word<font color="#000080">;
+    </font>ReqVol    <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>TransBlock<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">130</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>ReadControl <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>IOReq_Hdr <font color="#000080">: </font>Req_Hdr<font color="#000080">;
+    </font>AddrMode  <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>TransAddr <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>NumSecs   <font color="#000080">: </font>Word<font color="#000080">;
+    </font>StartSec  <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>ReadMode  <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>IL_Size<font color="#000080">,
+    </font>IL_Skip   <font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>AudioDiskInfoRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>LowestTrack    <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>HighestTrack   <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>LeadOutTrack   <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>PAudioTrackInfo   <font color="#000080">= ^</font>AudioTrackInfoRec<font color="#000080">;
+  </font>AudioTrackInfoRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Track           <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>StartPoint      <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>EndPoint        <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>Frames<font color="#000080">,
+    </font>Seconds<font color="#000080">,
+    </font>Minutes<font color="#000080">,
+    </font>PlayMin<font color="#000080">,
+    </font>PlaySec<font color="#000080">,
+    </font>TrackControl    <font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>MSCDEX_Ver_Rec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Major<font color="#000080">,
+    </font>Minor       <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>DirBufRec    <font color="#000080">= </font><font color="#FF0000"><b>Record
+     </b></font>XAR_Len   <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>FileStart <font color="#000080">: </font>LongInt<font color="#000080">;
+     </font>BlockSize <font color="#000080">: </font>Integer<font color="#000080">;
+     </font>FileLen   <font color="#000080">: </font>LongInt<font color="#000080">;
+     </font>DT        <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>Flags     <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>InterSize <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>InterSkip <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>VSSN      <font color="#000080">: </font>Integer<font color="#000080">;
+     </font>NameLen   <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>NameArray <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">38</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+     </font>FileVer   <font color="#000080">: </font>Integer<font color="#000080">;
+     </font>SysUseLen <font color="#000080">: </font>Byte<font color="#000080">;
+     </font>SysUseData<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">220</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+     </font>FileName  <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">38</font><font color="#000080">];
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Q_Channel_Rec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Control     <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Track       <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Index       <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Minutes     <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Seconds     <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Frame       <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Zero        <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>AMinutes    <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>ASeconds    <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>AFrame      <font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>AudioChannel   <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>RedBook<font color="#000080">,
+  </font>Audio<font color="#000080">,
+  </font>DoorOpen<font color="#000080">,
+  </font>DoorLocked<font color="#000080">,
+  </font>AudioManip<font color="#000080">,
+  </font>DiscInDrive    <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>AudioDiskInfo  <font color="#000080">: </font>AudioDiskInfoRec<font color="#000080">;
+  </font>DriverList     <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">26</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>ListBuf<font color="#000080">;
+  </font>NumberOfCD     <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>FirstCD        <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>UnitList       <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">26</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>MSCDEX_Version <font color="#000080">: </font>MSCDEX_Ver_Rec<font color="#000080">;
+  </font>QChannelInfo   <font color="#000080">: </font>Q_Channel_Rec<font color="#000080">;
+  </font>Busy<font color="#000080">,
+  </font>Playing<font color="#000080">,
+  </font>Paused         <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>Last_Start<font color="#000080">,
+  </font>Last_End       <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>DirBuf         <font color="#000080">: </font>DirBufRec<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+Begin
+  </b></font>FillChar<font color="#000080">(</font>DriverList<font color="#000080">, </font>SizeOf<font color="#000080">(</font>DriverList<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>FillChar<font color="#000080">(</font>UnitList<font color="#000080">, </font>SizeOf<font color="#000080">(</font>UnitList<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>NumberOfCD  <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>FirstCD  <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>MSCDEX_Version<font color="#000080">.</font>Major <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>MSCDEX_Version<font color="#000080">.</font>Minor <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ -----------------------------------   CUT HERE --------------------   }
+
+{$X+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>CDUnit_P<font color="#000080">;
+
+</font><font color="#FF0000"><b>Interface
+
+</b></font><font color="#008000"><i>{Include the appropriate units.}
+
+{$IfDef Windows}
+{$C PRELOAD}
+</i></font><font color="#FF0000"><b>Uses </b></font>Strings<font color="#000080">, </font>WinCRT<font color="#000080">, </font>WinDOS<font color="#000080">, </font>WinProcs<font color="#000080">, </font>SimRMI<font color="#000080">, </font>CD_Vars<font color="#000080">;
+</font><font color="#008000"><i>{$EndIf}
+{$IfDef DPMI}
+</i></font><font color="#FF0000"><b>Uses </b></font>Strings<font color="#000080">, </font>CRT<font color="#000080">, </font>DOS<font color="#000080">, </font>WinAPI<font color="#000080">, </font>SimRMI<font color="#000080">, </font>CD_Vars<font color="#000080">;
+</font><font color="#008000"><i>{$EndIf}
+{$IfDef MSDOS}
+</i></font><font color="#FF0000"><b>Uses </b></font>Strings<font color="#000080">, </font>CRT<font color="#000080">, </font>DOS<font color="#000080">, </font>CD_Vars<font color="#000080">;
+</font><font color="#008000"><i>{$EndIf}
+
+</i></font><font color="#FF0000"><b>Var
+  </b></font>Drive   <font color="#000080">: </font>Integer<font color="#000080">;  </font><font color="#008000"><i>{ Must set drive before all operations }
+  </i></font>SubUnit <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>File_Name<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Code <font color="#000080">: </font>Integer<font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Read_VTOC<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>VTOC <font color="#000080">: </font>VTOCArray<font color="#000080">;
+                   </font><font color="#FF0000"><b>var </b></font>Index <font color="#000080">: </font>Integer<font color="#000080">) : </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CD_Check<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Code <font color="#000080">: </font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>Vol_Desc<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Code <font color="#000080">: </font>Integer<font color="#000080">;
+                   </font><font color="#FF0000"><b>var </b></font>ErrCode <font color="#000080">: </font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>Get_Dir_Entry<font color="#000080">(</font>PathName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+                        </font><font color="#FF0000"><b>var </b></font>Format<font color="#000080">, </font>ErrCode <font color="#000080">: </font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>DeviceStatus<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Channel_Info<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Disk_Info<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Track_Info<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>StartPoint <font color="#000080">: </font>LongInt<font color="#000080">;
+                           </font><font color="#FF0000"><b>Var </b></font>TrackControl <font color="#000080">: </font>Byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Status_Info<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Q_Channel_Info<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Lock<font color="#000080">(</font>LockDrive <font color="#000080">: </font>Boolean<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>Reset<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Eject<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CloseTray<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Resume_Play<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Pause_Audio<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Play_Audio<font color="#000080">(</font>StartSec<font color="#000080">, </font>EndSec <font color="#000080">: </font>LongInt<font color="#000080">);
+
+</font><font color="#FF0000"><b>function </b></font>StopAudio <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Sector_Size<font color="#000080">(</font>ReadMode <font color="#000080">: </font>Byte<font color="#000080">) : </font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Volume_Size <font color="#000080">: </font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Media_Changed <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Head_Location<font color="#000080">(</font>AddrMode <font color="#000080">: </font>Byte<font color="#000080">) : </font>LongInt<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Read_Drive_Bytes<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ReadBytes <font color="#000080">: </font>DriveByteArray<font color="#000080">);
+
+</font><font color="#FF0000"><b>function </b></font>UPC_Code <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+Const
+  </b></font>CarryFlag  <font color="#000080">= </font><font color="#800000">$0001</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+</b></font><font color="#008000"><i>{$IfDef MSDOS}
+  </i></font>Regs       <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#008000"><i>{$Else}
+  </i></font>Regs       <font color="#000080">:</font>TRealModeRecord<font color="#000080">; </font><font color="#008000"><i>{ from SimRMI Unit }
+{$EndIf}
+  </i></font>DOSOffset<font color="#000080">,
+  </font>DOSSegment<font color="#000080">,
+  </font>DOSSelector<font color="#000080">:</font>Word<font color="#000080">;
+  </font>AllocateLong<font color="#000080">:</font>Longint<font color="#000080">;
+  </font>IOBlock    <font color="#000080">: </font>Pointer<font color="#000080">;
+
+
+</font><font color="#008000"><i>{$IfDef MSDOS}
+{ standard DOS routines for segments and pointers }
+</i></font><font color="#FF0000"><b>function </b></font>GetIOBlock<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Block <font color="#000080">: </font>Pointer<font color="#000080">; </font>Size <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetMem<font color="#000080">(</font>Block<font color="#000080">, </font>Size<font color="#000080">);
+  </font>DOSSegment <font color="#000080">:= </font>Seg<font color="#000080">(</font>Block<font color="#000080">^);
+  </font>DOSOffset <font color="#000080">:= </font>Ofs<font color="#000080">(</font>Block<font color="#000080">^);
+  </font>GetIOBlock <font color="#000080">:= </font>TRUE<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>FreeIOBlock<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Block<font color="#000080">: </font>Pointer<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FreeMem<font color="#000080">(</font>Block<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Block<font color="#000080">^));
+  </font>DOSSegment <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>DOSSelector <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>DOSOffset <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>FreeIOBlock <font color="#000080">:= </font>TRUE<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$ELSE}
+
+{ Get a block in DOS and set pointer values.  DOSSelector is used
+  to access the block under protected mode.  DOSSegment accesses the
+  block in real mode }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetIOBlock<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Block <font color="#000080">: </font>Pointer<font color="#000080">; </font>Size <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>AllocateLong<font color="#000080">:=</font>GlobalDOSAlloc<font color="#000080">(</font>Size<font color="#000080">); </font><font color="#008000"><i>{ enough extra room for string }
+  </i></font><font color="#FF0000"><b>If </b></font>AllocateLong<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>Then  </b></font><font color="#008000"><i>{If allocation was successful...}
+  </i></font><font color="#FF0000"><b>Begin
+     </b></font>DOSSegment<font color="#000080">:=</font>AllocateLong <font color="#FF0000"><b>SHR </b></font><font color="#800000">16</font><font color="#000080">;     </font><font color="#008000"><i>{Get the real mode segment of the me
+     DOSSelector:=AllocateLong AND $FFFF; {Get the protected mode selector of
+     DOSOffset := 0;
+     Block := Ptr(DOSSelector, 0);
+     GetIOBlock := TRUE;
+  End
+  ELSE
+     GetIOBlock := FALSE;
+end;
+
+{ Free the DOS block and dereference the pointer }
+
+</i></font><font color="#FF0000"><b>function </b></font>FreeIOBlock<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Block<font color="#000080">: </font>Pointer<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DOSSelector <font color="#000080">:= </font>GlobalDOSFree<font color="#000080">(</font>DOSSelector<font color="#000080">);
+  </font>DOSSegment <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Block <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+  </font>FreeIOBlock <font color="#000080">:= (</font>DOSSelector <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$EndIf}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Clear_Regs<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FillChar<font color="#000080">(</font>Regs<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Regs<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CD_Intr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Regs<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$15</font><font color="#000080">;
+
+</font><font color="#008000"><i>{$IfDef MSDOS}
+  </i></font>Intr<font color="#000080">(</font><font color="#800000">$2F</font><font color="#000080">, </font>Regs<font color="#000080">);  </font><font color="#008000"><i>{ Call DOS normally }
+{$Else}
+  </i></font><font color="#FF0000"><b>If NOT </b></font>SimRealModeInt<font color="#000080">(</font><font color="#800000">$2F</font><font color="#000080">,@</font>Regs<font color="#000080">) </font><font color="#FF0000"><b>Then    </b></font><font color="#008000"><i>{Call DOS through the DPMI}
+     </i></font>Halt<font color="#000080">(</font><font color="#800000">100</font><font color="#000080">);
+</font><font color="#008000"><i>{$EndIf}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MSCDEX_Ver<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Clear_Regs<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$0C</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font><font color="#800000">$0000</font><font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font>MSCDEX_Version<font color="#000080">.</font>Minor <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Regs<font color="#000080">.</font>BX <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+     </b></font>MSCDEX_Version<font color="#000080">.</font>Major <font color="#000080">:= </font><font color="#800000">1
+  </font><font color="#FF0000"><b>ELSE
+     Begin
+       </b></font>MSCDEX_Version<font color="#000080">.</font>Major <font color="#000080">:= </font>Regs<font color="#000080">.</font>BH<font color="#000080">;
+       </font>MSCDEX_Version<font color="#000080">.</font>Minor <font color="#000080">:= </font>Regs<font color="#000080">.</font>BL<font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Initialize<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NumberOfCD <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Clear_Regs<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$00</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font><font color="#800000">$0000</font><font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Regs<font color="#000080">.</font>BX <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+     Begin
+       </b></font>NumberOfCD <font color="#000080">:= </font>Regs<font color="#000080">.</font>BX<font color="#000080">;
+       </font>FirstCD <font color="#000080">:= </font>Regs<font color="#000080">.</font>CX<font color="#000080">;
+       </font>Clear_Regs<font color="#000080">;
+       </font>FillChar<font color="#000080">(</font>DriverList<font color="#000080">, </font>SizeOf<font color="#000080">(</font>DriverList<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+       </font>FillChar<font color="#000080">(</font>UnitList<font color="#000080">, </font>SizeOf<font color="#000080">(</font>UnitList<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+       </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$01</font><font color="#000080">;               </font><font color="#008000"><i>{ Get List of Driver Header Addresses }
+       </i></font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>Seg<font color="#000080">(</font>DriverList<font color="#000080">);
+       </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>Ofs<font color="#000080">(</font>DriverList<font color="#000080">);
+       </font>CD_Intr<font color="#000080">;
+       </font>Clear_Regs<font color="#000080">;
+       </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$0D</font><font color="#000080">;               </font><font color="#008000"><i>{ Get List of CD-ROM Units }
+       </i></font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>Seg<font color="#000080">(</font>UnitList<font color="#000080">);
+       </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>Ofs<font color="#000080">(</font>UnitList<font color="#000080">);
+       </font>CD_Intr<font color="#000080">;
+       </font>MSCDEX_Ver<font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>File_Name<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Code <font color="#000080">: </font>Integer<font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>FN <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Clear_Regs<font color="#000080">;
+  </font><font color="#FF0000"><b>If NOT </b></font>GetIOBlock<font color="#000080">(</font>FN<font color="#000080">, </font><font color="#800000">64</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font>FillChar<font color="#000080">(</font>FN<font color="#000080">, </font>SizeOf<font color="#000080">(</font>FN<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font>Code <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#008000"><i>{
+       Copyright Filename     =  1
+       Abstract Filename      =  2
+       Bibliographic Filename =  3
+}
+  </i></font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font>Code <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Regs<font color="#000080">.</font>Flags <font color="#FF0000"><b>AND </b></font>CarryFlag<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+     </b></font>File_Name <font color="#000080">:= </font>StrPas<font color="#000080">(</font>FN<font color="#000080">)
+  </font><font color="#FF0000"><b>ELSE
+     </b></font>File_Name <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>FN<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>Read_VTOC<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>VTOC <font color="#000080">: </font>VTOCArray<font color="#000080">;
+                   </font><font color="#FF0000"><b>var </b></font>Index <font color="#000080">: </font>Integer<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{ On entry -
+     Index = Vol Desc Number to read from 0 to ?
+  On return
+     Case Index of
+            1    : Standard Volume Descriptor
+            $FF  : Volume Descriptor Terminator
+            0    : All others
+}
+</i></font><font color="#FF0000"><b>var
+  </b></font>PVTOC <font color="#000080">: </font>Pointer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Clear_Regs<font color="#000080">;
+  </font><font color="#FF0000"><b>If NOT </b></font>GetIOBlock<font color="#000080">(</font>PVTOC<font color="#000080">, </font>SizeOf<font color="#000080">(</font>VTOCArray<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font>FillChar<font color="#000080">(</font>PVTOC<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>PVTOC<font color="#000080">^), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$05</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>DX <font color="#000080">:= </font>Index<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font>Index <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX<font color="#000080">;
+  </font>Move<font color="#000080">(</font>PVTOC<font color="#000080">^,</font>VTOC<font color="#000080">, </font>SizeOf<font color="#000080">(</font>VTOC<font color="#000080">));
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Regs<font color="#000080">.</font>Flags <font color="#FF0000"><b>AND </b></font>CarryFlag<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+     </b></font>Read_VTOC <font color="#000080">:= </font>TRUE
+  <font color="#FF0000"><b>ELSE
+     </b></font>Read_VTOC <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>PVTOC<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CD_Check<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Code <font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>Clear_Regs<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$0B</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font><font color="#800000">$0000</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Regs<font color="#000080">.</font>BX <font color="#000080">&lt;&gt; </font><font color="#800000">$ADAD </font><font color="#FF0000"><b>THEN
+     </b></font>Code <font color="#000080">:= </font><font color="#800000">2
+  </font><font color="#FF0000"><b>ELSE
+     Begin
+       If </b></font>Regs<font color="#000080">.</font>AX <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+          </b></font>Code <font color="#000080">:= </font><font color="#800000">0
+       </font><font color="#FF0000"><b>ELSE
+          </b></font>Code <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>Vol_Desc<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Code <font color="#000080">: </font>Integer<font color="#000080">;
+                   </font><font color="#FF0000"><b>var </b></font>ErrCode <font color="#000080">: </font>Integer<font color="#000080">);
+
+  </font><font color="#FF0000"><b>function </b></font>Get_Vol_Desc <font color="#000080">: </font>Byte<font color="#000080">;
+    </font><font color="#FF0000"><b>begin
+      </b></font>Clear_Regs<font color="#000080">;
+      </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+      </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$0E</font><font color="#000080">;
+      </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font><font color="#800000">$0000</font><font color="#000080">;
+      </font>CD_Intr<font color="#000080">;
+      </font>Code <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX<font color="#000080">;
+      </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Regs<font color="#000080">.</font>Flags <font color="#FF0000"><b>AND </b></font>CarryFlag<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+         </b></font>ErrCode <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;
+      </font>Get_Vol_Desc <font color="#000080">:= </font>Regs<font color="#000080">.</font>DH<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Clear_Regs<font color="#000080">;
+  </font>ErrCode <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Code <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+     Begin
+       </b></font>Regs<font color="#000080">.</font>DH <font color="#000080">:= </font>Code<font color="#000080">;
+       </font>Regs<font color="#000080">.</font>DL <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+       </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font><font color="#800000">$0001</font><font color="#000080">;
+       </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$0E</font><font color="#000080">;
+       </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+       </font>CD_Intr<font color="#000080">;
+       </font>Code <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX<font color="#000080">;
+       </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Regs<font color="#000080">.</font>Flags <font color="#FF0000"><b>AND </b></font>CarryFlag<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+          </b></font>ErrCode <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>ErrCode <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+     </b></font>Code <font color="#000080">:= </font>Get_Vol_Desc<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Get_Dir_Entry<font color="#000080">(</font>PathName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+                        </font><font color="#FF0000"><b>var </b></font>Format<font color="#000080">, </font>ErrCode <font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>PN <font color="#000080">: </font>PChar<font color="#000080">;
+  </font>DB <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FillChar<font color="#000080">(</font>DirBuf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>DirBuf<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>PathName <font color="#000080">:= </font>PathName <font color="#000080">+ </font><font color="#800000">#0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>If NOT </b></font>GetIOBlock<font color="#000080">(</font>DB<font color="#000080">, </font>SizeOf<font color="#000080">(</font>DirBufRec<font color="#000080">) + </font><font color="#800000">256</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font>PN <font color="#000080">:= </font>Ptr<font color="#000080">(</font>DOSSelector<font color="#000080">, </font>SizeOf<font color="#000080">(</font>DirBufRec<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">);
+  </font>Clear_Regs<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$0F</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>CL <font color="#000080">:= </font>Drive<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>CH <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DirBufRec<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>SI <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>DI <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font>ErrCode <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Regs<font color="#000080">.</font>Flags <font color="#FF0000"><b>AND </b></font>CarryFlag<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+  Begin
+    </b></font>Move<font color="#000080">(</font>DB<font color="#000080">^, </font>DirBuf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>DirBuf<font color="#000080">));
+    </font>Move<font color="#000080">(</font>DirBuf<font color="#000080">.</font>NameArray<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>DirBuf<font color="#000080">.</font>FileName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">38</font><font color="#000080">);
+    </font>DirBuf<font color="#000080">.</font>FileName<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">#12</font><font color="#000080">; </font><font color="#008000"><i>{ File names are only 8.3 }
+    </i></font>Format <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX
+  <font color="#FF0000"><b>End
+  ELSE
+    </b></font>Format <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>DB<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>IO_Control<font color="#000080">(</font>Command<font color="#000080">, </font>NumberOfBytes<font color="#000080">, </font>TransferBytes<font color="#000080">,
+                     </font>ReturnBytes<font color="#000080">, </font>StartPoint <font color="#000080">: </font>Byte<font color="#000080">;
+                     </font><font color="#FF0000"><b>var </b></font>Bytes<font color="#000080">, </font>TransferBlock<font color="#000080">): </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>I <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If NOT </b></font>GetIOBlock<font color="#000080">(</font>IOBlock<font color="#000080">, </font>SizeOf<font color="#000080">(</font>IOControlBlock<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>With </b></font>IOControlBlock<font color="#000080">(</font>IOBlock<font color="#000080">^) </font><font color="#FF0000"><b>DO
+  Begin
+    </b></font>I <font color="#000080">:= </font>Ofs<font color="#000080">(</font>TransBlock<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) - </font>Ofs<font color="#000080">(</font>IOReq_Hdr<font color="#000080">);
+    </font>NumBytes <font color="#000080">:= </font>NumberOfBytes<font color="#000080">;
+    </font>IOReq_Hdr<font color="#000080">.</font>Len <font color="#000080">:= </font><font color="#800000">26</font><font color="#000080">;
+    </font>IOReq_Hdr<font color="#000080">.</font>SubUnit <font color="#000080">:= </font>SubUnit<font color="#000080">;
+    </font>IOReq_Hdr<font color="#000080">.</font>Status <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>TransAddr <font color="#000080">:= </font>Ptr<font color="#000080">(</font>DOSSegment<font color="#000080">, </font>I<font color="#000080">); </font><font color="#008000"><i>{ 23 bytes into the IOBlock^ }
+    </i></font>IOReq_Hdr<font color="#000080">.</font>Command <font color="#000080">:= </font>Command<font color="#000080">;
+    </font>Move<font color="#000080">(</font>Bytes<font color="#000080">, </font>TransBlock<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>TransferBytes<font color="#000080">);
+    </font>Clear_Regs<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$10</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+    </font>CD_Intr<font color="#000080">;
+    </font>Busy <font color="#000080">:= (</font>IOReq_Hdr<font color="#000080">.</font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">512</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font><font color="#000080">((</font>IOReq_Hdr<font color="#000080">.</font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">32768</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+       </b></font>I <font color="#000080">:= </font>IOReq_Hdr<font color="#000080">.</font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">$FF
+    </font><font color="#FF0000"><b>ELSE
+        </b></font>I <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>ReturnBytes <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+       </b></font>Move<font color="#000080">(</font>TransBlock<font color="#000080">[</font>StartPoint<font color="#000080">], </font>TransferBlock<font color="#000080">, </font>ReturnBytes<font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>IO_Control <font color="#000080">:= </font>I<font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>IOBlock<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Channel_Info<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">4</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">9</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">9</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>AudioChannel<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DeviceStatus<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+  </font>Status<font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">6</font><font color="#000080">;
+
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+  </font>Move<font color="#000080">(</font>Bytes<font color="#000080">, </font>Status<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+
+  </font>DoorOpen     <font color="#000080">:= </font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">1 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+  </font>DoorLocked   <font color="#000080">:= </font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">2 </font><font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Audio        <font color="#000080">:= </font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">16 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+  </font>AudioManip   <font color="#000080">:= </font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">256 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+  </font>DiscInDrive  <font color="#000080">:= </font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">2048 </font><font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>RedBook      <font color="#000080">:= </font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">1024 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Disk_Info<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">10</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>AudioDiskInfo<font color="#000080">);
+  </font>Playing <font color="#000080">:= </font>Busy<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Track_Info<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>StartPoint <font color="#000080">: </font>LongInt<font color="#000080">;
+                           </font><font color="#FF0000"><b>Var </b></font>TrackControl <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">5</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">11</font><font color="#000080">;
+  </font>Bytes<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>TrackControl<font color="#000080">;   </font><font color="#008000"><i>{ Track number }
+
+  </i></font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+  </font>Move<font color="#000080">(</font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>StartPoint<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+  </font>TrackControl <font color="#000080">:= </font>Bytes<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">];
+
+  </font>Playing <font color="#000080">:= </font>Busy<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Q_Channel_Info<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">12</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>QChannelInfo<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Audio_Status_Info<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">11</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">15</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">8</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+  </font>Paused <font color="#000080">:= (</font>Word<font color="#000080">(</font>Bytes<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">;
+  </font>Move<font color="#000080">(</font>Bytes<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">], </font>Last_Start<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+  </font>Move<font color="#000080">(</font>Bytes<font color="#000080">[</font><font color="#800000">8</font><font color="#000080">], </font>Last_End<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+  </font>Playing <font color="#000080">:= </font>Busy<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Eject<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlOutput<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Reset<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlOutput<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+  </font>Busy <font color="#000080">:= </font>TRUE<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Lock<font color="#000080">(</font>LockDrive <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>LockDrive <font color="#FF0000"><b>THEN
+     </b></font>Bytes<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">1
+  </font><font color="#FF0000"><b>ELSE
+     </b></font>Bytes<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlOutput<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CloseTray<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlOutput<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>AudioPlay <font color="#000080">: </font>Pointer<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>Play<font color="#000080">(</font>StartLoc<font color="#000080">, </font>NumSec <font color="#000080">: </font>LongInt<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+
+  If NOT </b></font>GetIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Audio_Play<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>With </b></font>Audio_Play<font color="#000080">(</font>AudioPlay<font color="#000080">^) </font><font color="#FF0000"><b>DO
+  Begin
+    </b></font>APReq<font color="#000080">.</font>Command <font color="#000080">:= </font>PlayCD<font color="#000080">;
+    </font>APReq<font color="#000080">.</font>Len <font color="#000080">:= </font><font color="#800000">22</font><font color="#000080">;
+    </font>APReq<font color="#000080">.</font>SubUnit <font color="#000080">:= </font>SubUnit<font color="#000080">;
+    </font>Start <font color="#000080">:= </font>StartLoc<font color="#000080">;
+    </font>NumSecs <font color="#000080">:= </font>NumSec<font color="#000080">;
+    </font>AddrMode <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$10</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+    </font>CD_Intr<font color="#000080">;
+    </font>Play <font color="#000080">:= ((</font>APReq<font color="#000080">.</font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">32768</font><font color="#000080">) = </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Play_Audio<font color="#000080">(</font>StartSec<font color="#000080">, </font>EndSec <font color="#000080">: </font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>SP<font color="#000080">,
+  </font>EP     <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>SArray <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+  </font>EArray <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Move<font color="#000080">(</font>StartSec<font color="#000080">, </font>SArray<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">4</font><font color="#000080">);
+  </font>Move<font color="#000080">(</font>EndSec<font color="#000080">, </font>EArray<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">4</font><font color="#000080">);
+  </font>SP <font color="#000080">:= </font>SArray<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">];           </font><font color="#008000"><i>{ Must use longint or get negative result }
+  </i></font>SP <font color="#000080">:= (</font>SP<font color="#000080">*</font><font color="#800000">75</font><font color="#000080">*</font><font color="#800000">60</font><font color="#000080">) + (</font>SArray<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]*</font><font color="#800000">75</font><font color="#000080">) + </font>SArray<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+  </font>EP <font color="#000080">:= </font>EArray<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">];
+  </font>EP <font color="#000080">:= (</font>EP<font color="#000080">*</font><font color="#800000">75</font><font color="#000080">*</font><font color="#800000">60</font><font color="#000080">) + (</font>EArray<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]*</font><font color="#800000">75</font><font color="#000080">) + </font>EArray<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+  </font>EP <font color="#000080">:= </font>EP<font color="#000080">-</font>SP<font color="#000080">;
+
+  </font>Playing <font color="#000080">:= </font>Play<font color="#000080">(</font>StartSec<font color="#000080">, </font>EP<font color="#000080">);
+  </font>Audio_Status_Info<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Pause_Audio<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+
+  If </b></font>Playing <font color="#FF0000"><b>THEN
+     Begin
+       If NOT </b></font>GetIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Audio_Play<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+          </b></font>Exit<font color="#000080">;
+       </font><font color="#FF0000"><b>With </b></font>Audio_Play<font color="#000080">(</font>AudioPlay<font color="#000080">^) </font><font color="#FF0000"><b>DO
+       Begin
+         </b></font>APReq<font color="#000080">.</font>Command <font color="#000080">:= </font>StopPlay<font color="#000080">;
+         </font>APReq<font color="#000080">.</font>Len <font color="#000080">:= </font><font color="#800000">13</font><font color="#000080">;
+         </font>APReq<font color="#000080">.</font>SubUnit <font color="#000080">:= </font>SubUnit<font color="#000080">;
+       </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+       </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$10</font><font color="#000080">;
+       </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+       </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+       </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+       </font>CD_Intr<font color="#000080">;
+       </font>FreeIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Audio_Status_Info<font color="#000080">;
+  </font>Playing <font color="#000080">:= </font>FALSE<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Resume_Play<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If NOT </b></font>GetIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Audio_Play<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>With </b></font>Audio_Play<font color="#000080">(</font>AudioPlay<font color="#000080">^) </font><font color="#FF0000"><b>DO
+  Begin
+    </b></font>APReq<font color="#000080">.</font>Command <font color="#000080">:= </font>ResumePlay<font color="#000080">;
+    </font>APReq<font color="#000080">.</font>Len <font color="#000080">:= </font><font color="#800000">13</font><font color="#000080">;
+    </font>APReq<font color="#000080">.</font>SubUnit <font color="#000080">:= </font>SubUnit<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$10</font><font color="#000080">;
+  </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+  </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+  </font>CD_Intr<font color="#000080">;
+  </font>Audio_Status_Info<font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">); </font><font color="#008000"><i>{ free DOS block anbd dereference pointer }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>StopAudio <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+
+  If NOT </b></font>GetIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Audio_Play<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>With </b></font>Audio_Play<font color="#000080">(</font>AudioPlay<font color="#000080">^) </font><font color="#FF0000"><b>DO
+  Begin
+    </b></font>APReq<font color="#000080">.</font>Command <font color="#000080">:= </font>StopPlay<font color="#000080">;
+    </font>APReq<font color="#000080">.</font>Len <font color="#000080">:= </font><font color="#800000">13</font><font color="#000080">;
+    </font>APReq<font color="#000080">.</font>SubUnit <font color="#000080">:= </font>SubUnit<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font><font color="#800000">$10</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>CX <font color="#000080">:= </font>Drive<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>ES <font color="#000080">:= </font>DOSSegment<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>BX <font color="#000080">:= </font>DOSOffset<font color="#000080">;
+    </font>CD_Intr<font color="#000080">;
+    </font>StopAudio <font color="#000080">:= ((</font>APReq<font color="#000080">.</font>Status <font color="#FF0000"><b>AND </b></font><font color="#800000">32768</font><font color="#000080">) = </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>FreeIOBlock<font color="#000080">(</font>AudioPlay<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Sector_Size<font color="#000080">(</font>ReadMode <font color="#000080">: </font>Byte<font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>SecSize <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Bytes   <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">7</font><font color="#000080">;
+  </font>Bytes<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>ReadMode<font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>SecSize<font color="#000080">);
+  </font>Sector_Size <font color="#000080">:= </font>SecSize<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Volume_Size <font color="#000080">: </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>VolSize <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>Bytes   <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">8</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>VolSize<font color="#000080">);
+  </font>Volume_Size <font color="#000080">:= </font>VolSize<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Media_Changed <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{  1  :  Media not changed
+   0  :  Don't Know
+  -1  :  Media changed
+}
+</i></font><font color="#FF0000"><b>var
+  </b></font>MedChng <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">9</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>MedChng<font color="#000080">);
+  </font>Inc<font color="#000080">(</font>MedChng<font color="#000080">);
+  </font><font color="#FF0000"><b>If </b></font>MedChng <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+     </b></font>Media_Changed <font color="#000080">:= </font>True
+  <font color="#FF0000"><b>ELSE
+     </b></font>Media_Changed <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Head_Location<font color="#000080">(</font>AddrMode <font color="#000080">: </font>Byte<font color="#000080">) : </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>HeadLoc <font color="#000080">: </font>Longint<font color="#000080">;
+  </font>Bytes <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+  </font>Bytes<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>AddrMode<font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>HeadLoc<font color="#000080">);
+  </font>Head_Location <font color="#000080">:= </font>HeadLoc<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Read_Drive_Bytes<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ReadBytes <font color="#000080">: </font>DriveByteArray<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>Bytes <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Bytes <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+  </font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">130</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">128</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>ReadBytes<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>UPC_Code <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>I<font color="#000080">, </font>J<font color="#000080">, </font>K <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>TempStr <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>Bytes <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">11</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>TempStr <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>FillChar<font color="#000080">(</font>Bytes<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Bytes<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>Bytes<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">14</font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>IO_Control<font color="#000080">(</font>IOCtlInput<font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Bytes<font color="#000080">, </font>Bytes<font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+     </b></font>TempStr <font color="#000080">:= </font><font color="#800000">'No UPC Code'
+  </font><font color="#FF0000"><b>ELSE
+  Begin
+    For </b></font>I <font color="#000080">:= </font><font color="#800000">3 </font><font color="#FF0000"><b>to </b></font><font color="#800000">9 </font><font color="#FF0000"><b>DO
+      Begin
+        </b></font>J <font color="#000080">:= (</font>Bytes<font color="#000080">[</font>I<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$F0</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">;
+        </font>K <font color="#000080">:= </font>Bytes<font color="#000080">[</font>I<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$0F</font><font color="#000080">;
+        </font>TempStr <font color="#000080">:= </font>TempStr <font color="#000080">+ </font>Chr<font color="#000080">(</font>J <font color="#000080">+ </font><font color="#800000">48</font><font color="#000080">);
+        </font>TempStr <font color="#000080">:= </font>TempStr <font color="#000080">+ </font>Chr<font color="#000080">(</font>K <font color="#000080">+ </font><font color="#800000">48</font><font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>Length<font color="#000080">(</font>TempStr<font color="#000080">) &gt; </font><font color="#800000">13 </font><font color="#FF0000"><b>THEN
+        </b></font>TempStr <font color="#000080">:= </font>Copy<font color="#000080">(</font>TempSTr<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">13</font><font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>UPC_Code <font color="#000080">:= </font>TempStr<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************}
+{$IfDef MSDOS}
+{$ELSE}
+{$F+}
+</i></font><font color="#FF0000"><b>var
+  </b></font>ExitRoutine <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>MyExit<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ExitProc <font color="#000080">:= </font>ExitRoutine<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>DOSSelector <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+  Begin
+     </b></font>GlobalDOSFree<font color="#000080">(</font>DOSSelector<font color="#000080">);
+     </font>WriteLn<font color="#000080">(</font><font color="#800000">'DOS Selector not free'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>End
+  ELSE
+     </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'DOS Selector free'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$EndIf}
+
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>NumberOfCD <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>FirstCD <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>FillChar<font color="#000080">(</font>MSCDEX_Version<font color="#000080">, </font>SizeOf<font color="#000080">(</font>MSCDEX_Version<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>Initialize<font color="#000080">;
+  </font>Drive <font color="#000080">:= </font>FirstCD<font color="#000080">;
+  </font>SubUnit <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#008000"><i>{$IfDef MSDOS}
+{$ELSE}
+  </i></font>ExitRoutine <font color="#000080">:= </font>ExitProc<font color="#000080">;
+  </font>ExitProc <font color="#000080">:= @</font>MyExit<font color="#000080">;
+</font><font color="#008000"><i>{$EndIf}
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0082.PAS">Original</a><b>]</b></p></body>
+</html>

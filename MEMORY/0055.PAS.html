@@ -1,0 +1,619 @@
+<html>
+<head><title> "Call Stack Reporter" by WIM VAN DER VEGT</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0055.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{---------------------------------------------------------}
+{  Project : Call Stack Reporter                          }
+{  Auteur  : Ir. G.W. van der Vegt                        }
+{            Hondsbroek 57                                }
+{            6121 XB Born                                 }
+{---------------------------------------------------------}
+{  Datum .tijd  Revisie                                   }
+{  920713.2100  Creatie.                                  }
+{  920715.2330  Trace at normal exit (exitcode=0) removed.}
+{  920805.2230  Path removed from filename in trace       }
+{  920806.2200  Blanks filled in, RunTime Library routines}
+{               now traced to.                            }
+{  921026.2000  Textmode(lastmode) added to default       }
+{               Csr_report. Objects &amp; overlay tracing     }
+{               tested.                                   }
+{  921118.1400  Exitcode doesn't trigger trace anymore    }
+{  931114.1430  Keyboard flush in exitprocedure           }
+{  940201.2200  Made independed of Routines.              }
+{---------------------------------------------------------}
+{  To do        Trace Virtual Methode Table (VMT)         }
+{---------------------------------------------------------}
+
+{$D+}
+{$L+}
+
+{---------------------------------------------------------}
+{----This unit gives the line numbers &amp; filenames at error}
+{    The result is a list of the call stack as produced by}
+{    the Turbo Pascal IDE.                                }
+{                                                         }
+{    The internal text mode report function can be        }
+{    replaced by another one located in your program.     }
+{    This could be a graphics mode or printer version. It }
+{    must be compiled far (so use $F+ &amp; $F- around it.    }
+{    It's called once for each call level.                }
+{                                                         }
+{    This program parses the MAP file to obtain the       }
+{    line numbers. It searches for the MAP file in the    }
+{    programs startup directory as obtained by            }
+{    PARAMSTR(0).                                         }
+{---------------------------------------------------------}
+{    To obtain all possible info compile with the         }
+{    following setting :                                  }
+{                                                         }
+{    OPTIONS/LINKER/MAP FILE      = DETAILED              }
+{    OPTION/COMPILE/DEBUG INFO    = ON                    }
+{                                                         }
+{    The last can also be forced by the $D+ compiler      }
+{    directive .                                          }
+{                                                         }
+{    This version traces procedures, functions through    }
+{    the main program and it's (overlayed) units. It also }
+{    traces static methodes but not virtual methodes.     }
+{    When tracing static methodes a phantom entry with    }
+{    an call address located oon the heap is generated.   }
+{    The trace is stopped at the first call to a virtual  }
+{    methode. In a future version VMT tracing will be     }
+{    added as soon as I start using virtual methodes.     }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>UNIT </b></font>CSR_01<font color="#000080">;
+
+</font><font color="#FF0000"><b>INTERFACE
+
+</b></font><font color="#008000"><i>{---------------------------------------------------------}
+{----TYPES                                                }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>Csr_repfunc  <font color="#000080">= </font><font color="#FF0000"><b>PROCEDURE</b></font><font color="#000080">(</font>level <font color="#000080">: </font>Word<font color="#000080">;</font>csr <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+{----VARIABLES                                            }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>Csr_reporter <font color="#000080">: </font>Csr_repfunc<font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+{----PROCEDURES/FUNCTIONS                                 }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Csr_report<font color="#000080">(</font>level <font color="#000080">: </font>Word<font color="#000080">;</font>csr <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+Uses
+  </b></font>CRT<font color="#000080">,
+  </font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>ext     <font color="#000080">: </font>extstr<font color="#000080">;
+  </font>dir     <font color="#000080">: </font>dirstr<font color="#000080">;
+  </font>nam     <font color="#000080">: </font>namestr<font color="#000080">;
+  </font>mapfile <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+  </font>map     <font color="#000080">: </font>Text<font color="#000080">;
+  </font>ft      <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>space   <font color="#000080">= </font><font color="#800000">#32</font><font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+{----SUPPORT PROCEDURES &amp; FUNCTIONS                       }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Istr<font color="#000080">(</font>i<font color="#000080">,</font>n <font color="#000080">: </font>INTEGER<font color="#000080">;</font>pad <font color="#000080">: </font>CHAR<font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Str<font color="#000080">(</font>i<font color="#000080">:</font>n<font color="#000080">,</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>pad<font color="#000080">&lt;&gt;</font>space<font color="#000080">)
+    </font><font color="#FF0000"><b>THEN
+      WHILE </b></font><font color="#000080">(</font>Pos<font color="#000080">(</font>space<font color="#000080">,</font>s<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+        </b></font>s<font color="#000080">[</font>Pos<font color="#000080">(</font>space<font color="#000080">,</font>s<font color="#000080">)]:=</font>pad<font color="#000080">;
+  </font>Istr<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Istr}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION  </b></font>Wstr<font color="#000080">(</font>w <font color="#000080">: </font>WORD<font color="#000080">;</font>n <font color="#000080">: </font>INTEGER<font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Str<font color="#000080">(</font>w<font color="#000080">:</font>n<font color="#000080">,</font>s<font color="#000080">);
+  </font>Wstr<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Wstr}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION  </b></font>Sstr<font color="#000080">(</font>s <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;</font>n <font color="#000080">: </font>INTEGER<font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>tmp <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>tmp<font color="#000080">:=</font>s<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>n<font color="#000080">&gt;=</font><font color="#800000">0
+    </font><font color="#FF0000"><b>THEN WHILE </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>tmp<font color="#000080">)&lt;+</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO </b></font>Insert<font color="#000080">(</font>space<font color="#000080">,</font>tmp<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE WHILE </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>tmp<font color="#000080">)&lt;-</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO </b></font>tmp<font color="#000080">:=</font>tmp<font color="#000080">+</font>space<font color="#000080">;
+  </font>Sstr<font color="#000080">:=</font>tmp<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Sstr}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Beep<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Sound<font color="#000080">(</font><font color="#800000">500</font><font color="#000080">);
+  </font>Delay<font color="#000080">(</font><font color="#800000">20</font><font color="#000080">);
+  </font>Nosound<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Beep}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Word2Hex<font color="#000080">(</font>w <font color="#000080">: </font>Word<font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>hexChars <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">$F</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char <font color="#000080">= </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Word2Hex <font color="#000080">:=</font>hexChars<font color="#000080">[</font>Hi<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">]+</font>hexChars<font color="#000080">[</font>Hi<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">]+
+             </font>hexChars<font color="#000080">[</font>Lo<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">]+</font>hexChars<font color="#000080">[</font>Lo<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{of Word2Hex}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Function </b></font>Hex2Word<font color="#000080">(</font>h <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">) : </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>hexChars <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">16</font><font color="#000080">] = </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>f <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>f <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>length<font color="#000080">(</font>h<font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+     begin
+       if </b></font>pos<font color="#000080">(</font>Copy<font color="#000080">(</font>h<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">),</font>HexChars<font color="#000080">) = </font><font color="#800000">0
+         </font><font color="#FF0000"><b>then </b></font>f <font color="#000080">:= </font><font color="#800000">0
+         </font><font color="#FF0000"><b>Else </b></font>f <font color="#000080">:= (</font>f<font color="#000080">*</font><font color="#800000">16</font><font color="#000080">)+</font>pos<font color="#000080">(</font>H<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>Hexchars<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">;
+       </font>delete<font color="#000080">(</font>h<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Hex2Word<font color="#000080">:= </font>f<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{of Hex2Word}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Ptr2Hex<font color="#000080">(</font>p <font color="#000080">: </font>POINTER<font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font><font color="#000080">(</font>p<font color="#000080">=</font><font color="#FF0000"><b>nil</b></font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN </b></font>Ptr2Hex <font color="#000080">:= </font><font color="#800000">'   NIL   '
+    </font><font color="#FF0000"><b>else </b></font>Ptr2Hex <font color="#000080">:= </font>Word2hex<font color="#000080">(</font>Seg<font color="#000080">(</font>P<font color="#000080">^))+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>Ofs<font color="#000080">(</font>P<font color="#000080">^));
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Ptr2Hex}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>FlushKbd<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font>MemW<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$1C</font><font color="#000080">]:=</font>MemW<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$1A</font><font color="#000080">];
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{of Fluskkbd}
+
+{---------------------------------------------------------}
+{----STACK TRACE ROUTINES START HERE                      }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>BPreg <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$55</font><font color="#000080">/</font><font color="#800000">$58</font><font color="#000080">); </font><font color="#008000"><i>{Push BP, Pop AX}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Findlineno<font color="#000080">(</font>first<font color="#000080">,</font><font color="#FF0000"><b>near </b></font><font color="#000080">: </font>BOOLEAN<font color="#000080">;</font>dep <font color="#000080">: </font>Word<font color="#000080">;</font>p <font color="#000080">: </font>Pointer<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>tmp     <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+
+  </font>line    <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>adr     <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">9</font><font color="#000080">];
+  </font>ch      <font color="#000080">: </font>Char<font color="#000080">;
+
+  </font>fn      <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+  </font>un      <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+
+  </font>errseg<font color="#000080">,
+  </font>errofs  <font color="#000080">: </font>Word<font color="#000080">;
+
+  </font>s<font color="#000080">,
+  </font>lastun<font color="#000080">,
+  </font>lastpr<font color="#000080">,
+  </font>lastfn  <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+  </font>lastnr  <font color="#000080">: </font>Word<font color="#000080">;
+  </font>call    <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>BEGIN
+  IF near
+    THEN </b></font>call<font color="#000080">:=</font><font color="#800000">'near'
+    </font><font color="#FF0000"><b>ELSE </b></font>call<font color="#000080">:=</font><font color="#800000">'far '</font><font color="#000080">;
+
+  </font>errseg<font color="#000080">:=</font>Hex2word<font color="#000080">(</font>Copy<font color="#000080">(</font>Ptr2hex<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">));
+  </font>errofs<font color="#000080">:=</font>Hex2word<font color="#000080">(</font>Copy<font color="#000080">(</font>Ptr2hex<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">));
+
+  </font>lastnr<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>lastfn<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font>lastpr<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font>lastun<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+
+  </font>Assign<font color="#000080">(</font>map<font color="#000080">,</font>dir<font color="#000080">+</font>nam<font color="#000080">+</font><font color="#800000">'.MAP'</font><font color="#000080">);
+  </font><font color="#008000"><i>{$I-} </i></font>Reset<font color="#000080">(</font>map<font color="#000080">); </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>IOResult<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN
+      BEGIN
+      </b></font><font color="#008000"><i>{----Fist try on unit/program name}
+        </i></font>s<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+</font><font color="#008000"><i>{
+ 00000H 00096H 00097H VALTOREN           CODE
+
+  Address         Publics by Value
+}
+        </i></font><font color="#FF0000"><b>WHILE NOT</b></font><font color="#000080">(</font>Eof<font color="#000080">(</font>map<font color="#000080">) </font><font color="#FF0000"><b>OR
+                  </b></font><font color="#000080">(</font>Pos<font color="#000080">(</font><font color="#800000">'Publics by Value'</font><font color="#000080">,</font>s<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR
+                  </b></font><font color="#000080">(</font>Pos<font color="#000080">(</font><font color="#800000">'Line numbers'   </font><font color="#000080">,</font>s<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">)) </font><font color="#FF0000"><b>DO
+          BEGIN
+            </b></font>Readln<font color="#000080">(</font>map<font color="#000080">,</font>s<font color="#000080">);
+            </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>s<font color="#000080">)&gt;=</font><font color="#800000">45</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>s<font color="#000080">[</font><font color="#800000">7</font><font color="#000080">]=</font><font color="#800000">'H'</font><font color="#000080">)
+              </font><font color="#FF0000"><b>THEN
+                BEGIN
+                  IF </b></font><font color="#000080">(</font>Errseg<font color="#000080">=</font>Hex2Word<font color="#000080">(</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">))) </font><font color="#008000"><i>{AND
+                     (Copy(s,42,4)='CODE')}
+                    </i></font><font color="#FF0000"><b>THEN </b></font>lastun<font color="#000080">:=</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">23</font><font color="#000080">,</font><font color="#800000">18</font><font color="#000080">);
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+      </font><font color="#008000"><i>{----Strip Trailing Blanks}
+        </i></font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>lastun<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND
+              </b></font><font color="#000080">(</font>lastun<font color="#000080">[</font>Length<font color="#000080">(</font>lastun<font color="#000080">)]=</font><font color="#800000">#32</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+          </b></font>Delete<font color="#000080">(</font>lastun<font color="#000080">,</font>Length<font color="#000080">(</font>lastun<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">);
+
+      </font><font color="#008000"><i>{----Second Try to find procedure name}
+        </i></font>s<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+</font><font color="#008000"><i>{
+  Address         Publics by Value
+
+ 0000:0000       @
+ 000A:00CB       MENU_INIT
+}
+        </i></font><font color="#FF0000"><b>WHILE NOT</b></font><font color="#000080">(</font>Eof<font color="#000080">(</font>map<font color="#000080">) </font><font color="#FF0000"><b>OR
+                  </b></font><font color="#000080">(</font>Pos<font color="#000080">(</font><font color="#800000">'Line numbers'</font><font color="#000080">,</font>s<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">)) </font><font color="#FF0000"><b>DO
+          BEGIN
+            </b></font>Readln<font color="#000080">(</font>map<font color="#000080">,</font>s<font color="#000080">);
+            </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>s<font color="#000080">)&gt;=</font><font color="#800000">18</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>s<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">]=</font><font color="#800000">':'</font><font color="#000080">)
+              </font><font color="#FF0000"><b>THEN
+                BEGIN
+                  IF </b></font><font color="#000080">(</font>Errseg<font color="#000080">=</font>Hex2Word<font color="#000080">(</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)))
+                    </font><font color="#FF0000"><b>THEN
+                      BEGIN
+                        IF </b></font><font color="#000080">(</font>lastpr<font color="#000080">=</font><font color="#800000">''</font><font color="#000080">)
+                          </font><font color="#FF0000"><b>THEN </b></font>lastpr<font color="#000080">:=</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">18</font><font color="#000080">,</font>Length<font color="#000080">(</font>s<font color="#000080">)-</font><font color="#800000">17</font><font color="#000080">)
+                          </font><font color="#FF0000"><b>ELSE
+                            IF </b></font><font color="#000080">(</font>Errofs<font color="#000080">&gt;=</font>Hex2Word<font color="#000080">(</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)))
+                              </font><font color="#FF0000"><b>THEN </b></font>lastpr<font color="#000080">:=</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">18</font><font color="#000080">,</font>Length<font color="#000080">(</font>s<font color="#000080">)-</font><font color="#800000">17</font><font color="#000080">);
+                      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+      </font><font color="#008000"><i>{----Strip Trailing Blanks}
+        </i></font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>lastpr<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND
+              </b></font><font color="#000080">(</font>lastpr<font color="#000080">[</font>Length<font color="#000080">(</font>lastpr<font color="#000080">)]=</font><font color="#800000">#32</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+          </b></font>Delete<font color="#000080">(</font>lastpr<font color="#000080">,</font>Length<font color="#000080">(</font>lastpr<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">);
+
+      </font><font color="#008000"><i>{----Third try on line numbers &amp; sourcefile names}
+        </i></font><font color="#FF0000"><b>REPEAT
+</b></font><font color="#008000"><i>{
+  Line numbers for TEST_ERROR(TEST_ERR.PAS) segment TEST_ERROR
+}
+          </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Pos<font color="#000080">(</font><font color="#800000">'Line numbers'</font><font color="#000080">,</font>s<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">)
+            </font><font color="#FF0000"><b>THEN
+              BEGIN
+                </b></font>Delete<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">17</font><font color="#000080">);
+                </font>un<font color="#000080">:=</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>Pos<font color="#000080">(</font><font color="#800000">'('</font><font color="#000080">,</font>s<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+                </font>Delete<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>Pos<font color="#000080">(</font><font color="#800000">'('</font><font color="#000080">,</font>s<font color="#000080">));
+                </font>fn<font color="#000080">:=</font>Copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>Pos<font color="#000080">(</font><font color="#800000">')'</font><font color="#000080">,</font>s<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+
+                </font><font color="#FF0000"><b>While </b></font>Pos<font color="#000080">(</font><font color="#800000">'\'</font><font color="#000080">,</font>fn<font color="#000080">)&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO </b></font>Delete <font color="#000080">(</font>fn<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>Pos<font color="#000080">(</font><font color="#800000">'\'</font><font color="#000080">,</font>fn<font color="#000080">));
+
+                </font>Readln<font color="#000080">(</font>map<font color="#000080">);
+                </font><font color="#FF0000"><b>REPEAT
+</b></font><font color="#008000"><i>{
+  15 0000:0008    16 0000:0017    18 0000:00C4    28 0000:00D2
+}
+                  </i></font>Read<font color="#000080">(</font>map<font color="#000080">,</font>line<font color="#000080">);
+                  </font>Read<font color="#000080">(</font>map<font color="#000080">,</font>ch<font color="#000080">);
+                  </font>Read<font color="#000080">(</font>map<font color="#000080">,</font>adr<font color="#000080">);
+                  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Errseg<font color="#000080">=</font>Hex2Word<font color="#000080">(</font>Copy<font color="#000080">(</font>adr<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)))
+                    </font><font color="#FF0000"><b>THEN
+                      BEGIN
+                        </b></font>lastfn<font color="#000080">:=</font>fn<font color="#000080">;
+                        </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Errofs<font color="#000080">&gt;=</font>Hex2Word<font color="#000080">(</font>Copy<font color="#000080">(</font>adr<font color="#000080">,</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)))
+                          </font><font color="#FF0000"><b>THEN </b></font>lastnr<font color="#000080">:=</font>line<font color="#000080">;
+                      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+                  </font><font color="#FF0000"><b>If </b></font>Eoln<font color="#000080">(</font>map<font color="#000080">)
+                    </font><font color="#FF0000"><b>Then </b></font>Readln<font color="#000080">(</font>map<font color="#000080">);
+
+                </font><font color="#FF0000"><b>UNTIL </b></font>Eoln<font color="#000080">(</font>map<font color="#000080">);
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+            </font><font color="#FF0000"><b>IF NOT</b></font><font color="#000080">(</font>eof<font color="#000080">(</font>map<font color="#000080">))
+              </font><font color="#FF0000"><b>THEN </b></font>Readln<font color="#000080">(</font>map<font color="#000080">,</font>s<font color="#000080">);
+
+          </font><font color="#FF0000"><b>UNTIL </b></font>Eof<font color="#000080">(</font>map<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">((</font>lastnr<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>lastfn<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">));
+
+        </font>Close<font color="#000080">(</font>map<font color="#000080">);
+
+        </font>Beep<font color="#000080">;
+
+        </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>lastfn<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">((</font>errseg<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>errofs<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">))
+          </font><font color="#FF0000"><b>THEN
+          </b></font><font color="#008000"><i>{----Report Line Number &amp; Source File}
+            </i></font><font color="#FF0000"><b>BEGIN
+              WHILE </b></font><font color="#000080">(</font>length<font color="#000080">(</font>lastfn<font color="#000080">)&lt;</font><font color="#800000">12</font><font color="#000080">) </font><font color="#FF0000"><b>DO </b></font>Insert<font color="#000080">(</font><font color="#800000">#32</font><font color="#000080">,</font>lastfn<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+              </font><font color="#FF0000"><b>If </b></font>first
+                <font color="#FF0000"><b>THEN
+                  </b></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'Runtime error '</font><font color="#000080">+</font>Istr<font color="#000080">(</font>exitcode<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">)+
+                                                  </font><font color="#800000">' in line '</font><font color="#000080">+</font>Wstr<font color="#000080">(</font>lastnr<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)+
+                                                  </font><font color="#800000">' of '</font><font color="#000080">+</font>lastfn<font color="#000080">+
+                                                  </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">)
+                </font><font color="#FF0000"><b>ELSE
+                  </b></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'    Called '</font><font color="#000080">+</font>call<font color="#000080">+</font><font color="#800000">' from line '</font><font color="#000080">+</font>Wstr<font color="#000080">(</font>lastnr<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)+
+                                                      </font><font color="#800000">' of '</font><font color="#000080">+</font>lastfn<font color="#000080">+
+                                                      </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">);
+            </font><font color="#FF0000"><b>END
+          ELSE
+            BEGIN
+              IF </b></font><font color="#000080">(</font>lastun<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>lastpr<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">)
+                </font><font color="#FF0000"><b>THEN
+                </b></font><font color="#008000"><i>{----Report Unit/Program Name &amp; Procedure name}
+                  </i></font><font color="#FF0000"><b>BEGIN
+                    IF </b></font><font color="#000080">(</font>Pos<font color="#000080">(</font><font color="#800000">'@'</font><font color="#000080">,</font>lastpr<font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">)
+                      </font><font color="#FF0000"><b>THEN </b></font>s<font color="#000080">:=</font>lastun<font color="#000080">+</font><font color="#800000">'.MAIN'
+                      </font><font color="#FF0000"><b>ELSE </b></font>s<font color="#000080">:=</font>lastun<font color="#000080">+</font><font color="#800000">'.'</font><font color="#000080">+</font>lastpr<font color="#000080">;
+
+                    </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>s<font color="#000080">)&gt;</font><font color="#800000">25</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+                      </b></font>Delete<font color="#000080">(</font>s<font color="#000080">,</font>Length<font color="#000080">(</font>s<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">);
+
+                    </font><font color="#FF0000"><b>If </b></font>first
+                      <font color="#FF0000"><b>THEN
+                        </b></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'Runtime error '</font><font color="#000080">+</font>Istr<font color="#000080">(</font>exitcode<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">)+
+                                                        </font><font color="#800000">' in '</font><font color="#000080">+</font>Sstr<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">25</font><font color="#000080">)+
+                                                        </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">)
+                      </font><font color="#FF0000"><b>ELSE
+                        </b></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'    Called '</font><font color="#000080">+</font>call<font color="#000080">+</font><font color="#800000">' from '</font><font color="#000080">+</font>Sstr<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">25</font><font color="#000080">)+
+                                                            </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">);
+                  </font><font color="#FF0000"><b>END
+                ELSE
+                </b></font><font color="#008000"><i>{----Report Error Address Only}
+                  </i></font><font color="#FF0000"><b>BEGIN
+                    If </b></font>first
+                      <font color="#FF0000"><b>THEN
+                        </b></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'Runtime error '</font><font color="#000080">+</font>Istr<font color="#000080">(</font>exitcode<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">)+
+                                                        </font><font color="#800000">'             '</font><font color="#000080">+
+                                                        </font><font color="#800000">'                '</font><font color="#000080">+
+                                                        </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">)
+                      </font><font color="#FF0000"><b>ELSE
+                        </b></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'    Called '</font><font color="#000080">+</font>call<font color="#000080">+</font><font color="#800000">' from line     '</font><font color="#000080">+
+                                                           </font><font color="#800000">'                '</font><font color="#000080">+
+                                                           </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">);
+                  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END
+    ELSE
+    </b></font><font color="#008000"><i>{----Report Error Addres Only}
+      </i></font>Csr_reporter<font color="#000080">(</font>dep<font color="#000080">,</font><font color="#800000">'Runtime error '</font><font color="#000080">+</font>Istr<font color="#000080">(</font>exitcode<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">)+
+                                      </font><font color="#800000">' at '</font><font color="#000080">+</font>Word2hex<font color="#000080">(</font>errseg<font color="#000080">)+</font><font color="#800000">':'</font><font color="#000080">+</font>Word2Hex<font color="#000080">(</font>errofs<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">)
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Findlineno}
+
+{---------------------------------------------------------}
+{$F+}
+
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>exitsave <font color="#000080">: </font>POINTER<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Myexit<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>ch  <font color="#000080">: </font>Char<font color="#000080">;
+  </font>cdiv<font color="#000080">,
+  </font>csmin<font color="#000080">,
+  </font>cs<font color="#000080">,
+  </font>sp<font color="#000080">,
+  </font>ss  <font color="#000080">: </font>WORD<font color="#000080">;
+  </font>p   <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>dep <font color="#000080">: </font>WORD<font color="#000080">;
+  </font>j   <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Flushkbd<font color="#000080">;
+
+  </font>Exitproc<font color="#000080">:=</font>exitsave<font color="#000080">;
+
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>exitcode<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>erroraddr<font color="#000080">=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>Exit<font color="#000080">;
+
+  </font>sp<font color="#000080">:=</font>BPreg<font color="#000080">;
+  </font>ss<font color="#000080">:=</font>SSeg<font color="#000080">;
+
+</font><font color="#008000"><i>{----Calculate calling depth}
+  </i></font>dep<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>p<font color="#000080">:=</font>Ptr<font color="#000080">(</font>ss<font color="#000080">,</font>sp<font color="#000080">);
+  </font><font color="#FF0000"><b>WHILE </b></font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+    BEGIN
+      IF </b></font><font color="#000080">(</font>Mem<font color="#000080">[</font>cs<font color="#000080">:</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">2</font><font color="#000080">]-</font><font color="#800000">3</font><font color="#000080">]&lt;&gt;</font><font color="#800000">$E8</font><font color="#000080">)
+        </font><font color="#FF0000"><b>THEN </b></font>cs<font color="#000080">:=</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">4</font><font color="#000080">];
+
+      </font>p<font color="#000080">:=</font>Ptr<font color="#000080">(</font>ss<font color="#000080">,</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)]);
+      </font>Inc<font color="#000080">(</font>dep<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font>p<font color="#000080">:=</font>Ptr<font color="#000080">(</font>ss<font color="#000080">,</font>sp<font color="#000080">);
+  </font>cdiv <font color="#000080">:=</font>Cseg<font color="#000080">-</font>cs<font color="#000080">;
+  </font>csmin<font color="#000080">:=</font>cs<font color="#000080">;
+  </font>cs   <font color="#000080">:=</font>Cseg<font color="#000080">;
+
+</font><font color="#008000"><i>{----Report Runtime address}
+  </i></font>Findlineno<font color="#000080">(</font>true<font color="#000080">,</font>true<font color="#000080">,</font>dep<font color="#000080">,</font>erroraddr<font color="#000080">);
+  </font>Dec<font color="#000080">(</font>dep<font color="#000080">);
+
+</font><font color="#008000"><i>{----Calculate cseg at runtime error}
+  </i></font>cs<font color="#000080">:=</font>csmin<font color="#000080">+</font>Seg<font color="#000080">(</font>erroraddr<font color="#000080">^);
+
+</font><font color="#008000"><i>{----Prevent Turbo Pascal from reporting}
+  </i></font>Erroraddr<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>If NOT</b></font><font color="#000080">(</font>mapfile<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>Exit<font color="#000080">;
+
+</font><font color="#008000"><i>{----Skip Runtime error handler entry}
+  </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)]&lt;&gt;</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN </b></font>p<font color="#000080">:=</font>Ptr<font color="#000080">(</font>ss<font color="#000080">,</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)]);
+
+</font><font color="#008000"><i>{----Report Call Stack}
+  </i></font><font color="#FF0000"><b>WHILE </b></font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+    BEGIN
+    </b></font><font color="#008000"><i>{----Test for near call instruction 3 bytes before return address}
+      </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Mem<font color="#000080">[</font>cs<font color="#000080">:</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">2</font><font color="#000080">]-</font><font color="#800000">3</font><font color="#000080">]=</font><font color="#800000">$E8</font><font color="#000080">)
+      </font><font color="#008000"><i>{----Trace a near call}
+        </i></font><font color="#FF0000"><b>THEN </b></font>Findlineno<font color="#000080">(</font>false<font color="#000080">,</font>true<font color="#000080">,</font>dep<font color="#000080">,</font>Ptr<font color="#000080">(</font>WORD<font color="#000080">(</font>Cs<font color="#000080">+</font>Cdiv<font color="#000080">-</font>Cseg<font color="#000080">),</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">2</font><font color="#000080">]-</font><font color="#800000">3</font><font color="#000080">))
+        </font><font color="#FF0000"><b>ELSE
+        </b></font><font color="#008000"><i>{----Trace a far call}
+          </i></font><font color="#FF0000"><b>BEGIN
+            </b></font>Cs<font color="#000080">:=</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">4</font><font color="#000080">];
+            </font>Findlineno<font color="#000080">(</font>false<font color="#000080">,</font>false<font color="#000080">,</font>dep<font color="#000080">,</font>Ptr<font color="#000080">(</font>WORD<font color="#000080">(</font>Cs<font color="#000080">+</font>Cdiv<font color="#000080">-</font>Cseg<font color="#000080">),</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">2</font><font color="#000080">]-</font><font color="#800000">3</font><font color="#000080">));
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+    </font><font color="#008000"><i>{----Increment stackpointer}
+      </i></font>p<font color="#000080">:=</font>Ptr<font color="#000080">(</font>ss<font color="#000080">,</font>MemW<font color="#000080">[</font>ss<font color="#000080">:</font>Ofs<font color="#000080">(</font>p<font color="#000080">^)]);
+      </font>Dec<font color="#000080">(</font>dep<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Myexit}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Csr_report<font color="#000080">(</font>level <font color="#000080">: </font>Word<font color="#000080">;</font>csr <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>ft
+    <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Textmode<font color="#000080">(</font>lastmode<font color="#000080">);
+        </font>ft<font color="#000080">:=</font>false<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Writeln<font color="#000080">(</font>csr<font color="#000080">+</font><font color="#800000">' ('</font><font color="#000080">,</font>level<font color="#000080">,</font><font color="#800000">')'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{of Csr_report}
+{$F-}
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>exitsave<font color="#000080">:=</font>Exitproc<font color="#000080">;
+  </font>exitproc<font color="#000080">:=@</font>Myexit<font color="#000080">;
+  </font>csr_reporter<font color="#000080">:=</font>Csr_report<font color="#000080">;
+
+  </font>Fsplit<font color="#000080">(</font>Paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">),</font>dir<font color="#000080">,</font>nam<font color="#000080">,</font>ext<font color="#000080">);
+  </font>Assign<font color="#000080">(</font>map<font color="#000080">,</font>dir<font color="#000080">+</font>nam<font color="#000080">+</font><font color="#800000">'.MAP'</font><font color="#000080">);
+  </font><font color="#008000"><i>{$I-} </i></font>Reset<font color="#000080">(</font>map<font color="#000080">); </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>IOResult<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>mapfile<font color="#000080">:=</font>true<font color="#000080">;
+        </font>Close<font color="#000080">(</font>map<font color="#000080">);
+      </font><font color="#FF0000"><b>END
+    ELSE </b></font>mapfile<font color="#000080">:=</font>false<font color="#000080">;
+
+  </font>ft<font color="#000080">:=</font>true<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{  STACK UNIT NEEDED FOR CRS_01}
+
+</i></font><font color="#FF0000"><b>UNIT </b></font>Stack1<font color="#000080">;
+
+</font><font color="#FF0000"><b>INTERFACE
+
+PROCEDURE </b></font>test2<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>i <font color="#000080">: </font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+VAR
+  </b></font>i <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>test2<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>i <font color="#000080">: </font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>test4<font color="#000080">(</font>i <font color="#000080">: </font>INTEGER<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>tmp <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>tmp<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>div </b></font>tmp<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>test4<font color="#000080">(</font>i<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>i<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{ -------------------------------   DEMO ------------------------}
+{---------------------------------------------------------}
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>Csrtst<font color="#000080">;
+
+</font><font color="#FF0000"><b>USES
+  </b></font>CRT<font color="#000080">,
+  </font>Csr_01<font color="#000080">,
+  </font>Stack1<font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>test3<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>i <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>test2<font color="#000080">(</font>i<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>test4<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>test3
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>clrscr<font color="#000080">;
+  </font>test4<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0055.PAS">Original</a><b>]</b></p></body>
+</html>

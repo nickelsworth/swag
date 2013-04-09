@@ -1,0 +1,878 @@
+<html>
+<head><title> "View Windows BMP Files" by BARRY NAUJOK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to WIN-OS2 SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0010.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+-----------------------------------------------------------------------------
+Program BMPView;  { by Barry Naujok, 1993, written in TP7 }
+        { This information was completely derived on my own (ALL of it). }
+        { If there are any errors or omisions, please let me know at ... }
+        {          a1357665@cfs01.cc.monash.edu.au                       }
+        { Currently only supports 3-256 colours (not monochrome or true colour) }
+        { My opinion: As can be seen from decoding a BitMaP, I truly believe }
+        {    that Microsoft is a bit backwards! :) (other opinions welcome) }
+
+</i></font><font color="#FF0000"><b>Uses </b></font>VESA<font color="#000080">,</font>Crt<font color="#000080">,</font>Dos<font color="#000080">,</font>Strings<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const </b></font>bufsize<font color="#000080">=</font><font color="#800000">32000</font><font color="#000080">; </font><font color="#008000"><i>{ my optimal buffer size, could be bigger for other drives }
+                     { Has to be even for the RLE decompression }
+</i></font><font color="#FF0000"><b>Type </b></font>THeader<font color="#000080">=</font><font color="#FF0000"><b>Record
+       </b></font>ID    <font color="#000080">: </font>Word<font color="#000080">;     </font><font color="#008000"><i>{ 'BM' for a Windows BitMaP }
+       </i></font>FSize <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Size of file }
+       </i></font>Ver   <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ BMP version (?), currently 0 }
+       </i></font>Image <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Offset of image into file }
+       </i></font>Misc  <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Unknown, appears to be 40 for all files }
+       </i></font>Width <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Width of image }
+       </i></font>Height<font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Height of image }
+       </i></font>Num   <font color="#000080">: </font>Word<font color="#000080">;     </font><font color="#008000"><i>{ Not sure, possibly number of images or planes (1) }
+       </i></font>Bits  <font color="#000080">: </font>Word<font color="#000080">;     </font><font color="#008000"><i>{ Number of bits per pixel }
+       </i></font>Comp  <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Type of compression, 0 for uncompressed, 1,2 for RLE }
+       </i></font>ISize <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Size of image in bytes }
+       </i></font>XRes  <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ X dots per metre (not inches! for US, unbelievable!) }
+       </i></font>YRes  <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Y dots per metre }
+       </i></font>PSize <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Palette size (number of colours) if not zero }
+       </i></font>Res   <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ Probably reserved, currently 0 }
+     </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;  </font><font color="#008000"><i>{ 54 bytes }
+
+     </i></font>PByte <font color="#000080">= ^</font>Byte<font color="#000080">;
+
+     </font>TPalette <font color="#000080">= </font><font color="#FF0000"><b>Record
+       </b></font>b<font color="#000080">,</font>g<font color="#000080">,</font>r<font color="#000080">,</font>x <font color="#000080">: </font>Byte<font color="#000080">;   </font><font color="#008000"><i>{ BMP uses a fourth byte for the palette, not used }
+     </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var  </b></font>fl     <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+     </font>header <font color="#000080">: </font>THeader<font color="#000080">;
+     </font>buffer <font color="#000080">: </font>PByte<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BlankPalette<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>pal <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">767</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+    </font>r   <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>FillChar<font color="#000080">(</font>pal<font color="#000080">,</font><font color="#800000">768</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font>r<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$1012</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>cx<font color="#000080">:=</font><font color="#800000">256</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>dx<font color="#000080">:=</font>Ofs<font color="#000080">(</font>pal<font color="#000080">);
+  </font>r<font color="#000080">.</font>es<font color="#000080">:=</font>Seg<font color="#000080">(</font>pal<font color="#000080">);
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>r<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetPalette<font color="#000080">;
+</font><font color="#FF0000"><b>Const </b></font>Pal16<font color="#000080">:</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">]</font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">=(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">56</font><font color="#000080">,</font><font color="#800000">57</font><font color="#000080">,</font><font color="#800000">58</font><font color="#000080">,</font><font color="#800000">59</font><font color="#000080">,</font><font color="#800000">60</font><font color="#000080">,</font><font color="#800000">61</font><font color="#000080">,</font><font color="#800000">62</font><font color="#000080">,</font><font color="#800000">63</font><font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>palette <font color="#000080">: </font>TPalette<font color="#000080">;  </font><font color="#008000"><i>{ ^ Actual BIOS palette numbers for 16 colour modes }
+    </i></font>BIOSpal <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">767</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+    </font>i       <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>r       <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  For </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>To </b></font>header<font color="#000080">.</font>PSize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>Do Begin
+    </b></font>BlockRead<font color="#000080">(</font>fl<font color="#000080">,</font>palette<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font>header<font color="#000080">.</font>PSize<font color="#000080">&gt;</font><font color="#800000">16 </font><font color="#FF0000"><b>Then Begin
+      </b></font>BIOSpal<font color="#000080">[</font>i<font color="#000080">*</font><font color="#800000">3</font><font color="#000080">]:=</font>palette<font color="#000080">.</font>r <font color="#FF0000"><b>Shr </b></font><font color="#800000">2</font><font color="#000080">;
+      </font>BIOSpal<font color="#000080">[</font>i<font color="#000080">*</font><font color="#800000">3</font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]:=</font>palette<font color="#000080">.</font>g <font color="#FF0000"><b>Shr </b></font><font color="#800000">2</font><font color="#000080">;
+      </font>BIOSpal<font color="#000080">[</font>i<font color="#000080">*</font><font color="#800000">3</font><font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]:=</font>palette<font color="#000080">.</font>b <font color="#FF0000"><b>Shr </b></font><font color="#800000">2</font><font color="#000080">;
+    </font><font color="#FF0000"><b>End Else Begin
+      </b></font>BIOSpal<font color="#000080">[</font>Pal16<font color="#000080">[</font>i<font color="#000080">]*</font><font color="#800000">3</font><font color="#000080">]:=</font>palette<font color="#000080">.</font>r <font color="#FF0000"><b>Shr </b></font><font color="#800000">2</font><font color="#000080">;
+      </font>BIOSpal<font color="#000080">[</font>Pal16<font color="#000080">[</font>i<font color="#000080">]*</font><font color="#800000">3</font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]:=</font>palette<font color="#000080">.</font>g <font color="#FF0000"><b>Shr </b></font><font color="#800000">2</font><font color="#000080">;
+      </font>BIOSpal<font color="#000080">[</font>Pal16<font color="#000080">[</font>i<font color="#000080">]*</font><font color="#800000">3</font><font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]:=</font>palette<font color="#000080">.</font>b <font color="#FF0000"><b>Shr </b></font><font color="#800000">2</font><font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>r<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$1012</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>cx<font color="#000080">:=</font><font color="#800000">256</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>dx<font color="#000080">:=</font>Ofs<font color="#000080">(</font>BIOSpal<font color="#000080">);
+  </font>r<font color="#000080">.</font>es<font color="#000080">:=</font>Seg<font color="#000080">(</font>BIOSpal<font color="#000080">);
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>r<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ShowImage256<font color="#000080">(</font>name<font color="#000080">:</font>PChar<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>dseg<font color="#000080">,</font>width<font color="#000080">,</font>height<font color="#000080">,</font>bytes<font color="#000080">,</font>rows<font color="#000080">,</font>bank<font color="#000080">,</font>handle<font color="#000080">,</font>cp<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+        </b></font><font color="#FF00FF">Mov     dseg,ds
+        Mov     ax,header.Comp.Word[0]
+        Mov     cp,ax
+        Mov     ax,header.Width.Word[0]
+        Test    ax,1
+        Jz      @0I
+        Inc     ax  </font><font color="#008000"><i>{ image is word aligned so adjust width if needed }
+  </i></font><font color="#FF00FF">@0I:  Mov     width,ax
+        Mov     ax,header.Height.Word[0]
+        Mov     height,ax
+        Mov     di,ax
+        Dec     di
+        Mov     ax,VesaMode.Bytes
+        Mov     bytes,ax
+        Mov     ax,VesaMode.Height
+        Mov     rows,ax
+        Mov     es,VesaMode.SegA
+
+        Mov     ax,$3D00
+        Lds     dx,name
+        Int     $21                     </font><font color="#008000"><i>{ Open the file for assembler }
+        </i></font><font color="#FF00FF">Mov     ds,dseg                 </font><font color="#008000"><i>{ Restore the data segment }
+        </i></font><font color="#FF00FF">Jc      @Ex
+        Mov     handle,ax
+
+        Mov     bx,ax
+        Mov     ax,$4200
+        Mov     cx,header.Image.Word[2]
+        Mov     dx,header.Image.Word[0]
+        Int     $21                     </font><font color="#008000"><i>{ Seek to image location }
+        </i></font><font color="#FF00FF">Call    @FR
+        Jmp     @0N
+
+  @FR:  Push    ax
+        Push    cx
+        Push    dx
+        Mov     ds,dseg
+        Mov     bx,handle
+        Mov     cx,bufsize
+        Lds     si,buffer
+        Mov     dx,si
+        Mov     ah,$3F
+        Int     $21
+        Mov     bx,ax                   </font><font color="#008000"><i>{ Bytes left to read from the buffer }
+        </i></font><font color="#FF00FF">Pop     dx
+        Pop     cx
+        Pop     ax
+        RetN
+
+  @0N:  Mov     ax,bytes
+        Mul     di
+        Mov     di,ax
+        Mov     bank,dx
+        Call    @B1                     </font><font color="#008000"><i>{ Set the last line &amp; bank }
+        </i></font><font color="#FF00FF">Mov     dx,width
+
+        Cmp     cp,0
+        Je      @0S
+
+        </font><font color="#008000"><i>{ RLE bitmap }
+  </i></font><font color="#FF00FF">@1S:  Xor     dx,dx                   </font><font color="#008000"><i>{ Set DX as the width count }
+  </i></font><font color="#FF00FF">@10:  Xor     ah,ah                   </font><font color="#008000"><i>{ Clear upper byte }
+        </i></font><font color="#FF00FF">Lodsb                           </font><font color="#008000"><i>{ Get &quot;index&quot; byte }
+        </i></font><font color="#FF00FF">Dec     bx                      </font><font color="#008000"><i>{ Decrement buffer count }
+        </i></font><font color="#FF00FF">Jnz     @11                     </font><font color="#008000"><i>{ Jump if not empty }
+        </i></font><font color="#FF00FF">Call    @FR                     </font><font color="#008000"><i>{ Reload buffer }
+  </i></font><font color="#FF00FF">@11:  Or      al,al
+        Jz      @14                     </font><font color="#008000"><i>{ Jump if following is a string }
+        { Repeat byte }
+        </i></font><font color="#FF00FF">Mov     cx,ax                   </font><font color="#008000"><i>{ else &quot;index&quot; is a repeat count }
+        </i></font><font color="#FF00FF">Add     dx,cx
+        Lodsb                           </font><font color="#008000"><i>{ Load data to repeat &quot;index&quot; times }
+        </i></font><font color="#FF00FF">Dec     bx
+        Jnz     @12                     </font><font color="#008000"><i>{ Jump if buffer isn't empty }
+        </i></font><font color="#FF00FF">Call    @FR
+  @12:  Stosb                           </font><font color="#008000"><i>{ Draw byte to screen }
+        </i></font><font color="#FF00FF">Or      di,di                   </font><font color="#008000"><i>{ Check to see if line crosses bank }
+        </i></font><font color="#FF00FF">Jnz     @13
+        Inc     bank                    </font><font color="#008000"><i>{ Change bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @13:  Loop    @12                     </font><font color="#008000"><i>{ Store all repeated bytes }
+        </i></font><font color="#FF00FF">Jmp     @10
+        </font><font color="#008000"><i>{ Dump string }
+  </i></font><font color="#FF00FF">@14:  Lodsb                           </font><font color="#008000"><i>{ Load &quot;count&quot;, number of bytes in the string }
+        </i></font><font color="#FF00FF">Mov     cx,ax
+        Add     dx,cx
+        Dec     bx
+        Jnz     @1T                     </font><font color="#008000"><i>{ Update buffer count (&amp; buffer contents) }
+        </i></font><font color="#FF00FF">Call    @FR
+  @1T:  Or      al,al
+        Jz      @20
+  @15:  Movsb                           </font><font color="#008000"><i>{ Transfer string to screen }
+        </i></font><font color="#FF00FF">Or      di,di
+        Jnz     @16                     </font><font color="#008000"><i>{ bank checking }
+        </i></font><font color="#FF00FF">Inc     bank
+        Call    @B1
+  @16:  Dec     bx                      </font><font color="#008000"><i>{ Update buffer count, etc }
+        </i></font><font color="#FF00FF">Jnz     @17
+        Call    @FR
+  @17:  Loop    @15                     </font><font color="#008000"><i>{ Repeat for string }
+        </i></font><font color="#FF00FF">Test    al,1                    </font><font color="#008000"><i>{ See if there was an odd numbered count }
+        </i></font><font color="#FF00FF">Jz      @10                     </font><font color="#008000"><i>{ Jump if even }
+        </i></font><font color="#FF00FF">Lodsb                           </font><font color="#008000"><i>{ Clear extra byte, due to word alignment }
+        </i></font><font color="#FF00FF">Dec     bx
+        Jnz     @10                     </font><font color="#008000"><i>{ Update buffer count, etc }
+        </i></font><font color="#FF00FF">Call    @FR
+        Jmp     @10
+  @20:  Sub     di,dx                   </font><font color="#008000"><i>{ Move screen pointer to start of line }
+        </i></font><font color="#FF00FF">Jnc     @21                     </font><font color="#008000"><i>{ Jump if not crossed bank }
+        </i></font><font color="#FF00FF">Dec     bank                    </font><font color="#008000"><i>{ Update bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @21:  Sub     di,bytes                </font><font color="#008000"><i>{ Move to screen line above }
+        </i></font><font color="#FF00FF">Jnc     @23                     </font><font color="#008000"><i>{ Jump if not crossed bank }
+        </i></font><font color="#FF00FF">Dec     bank                    </font><font color="#008000"><i>{ Update bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @23:  Dec     height                  </font><font color="#008000"><i>{ Update line count }
+        </i></font><font color="#FF00FF">Jnz     @1S                     </font><font color="#008000"><i>{ Jump to start if not end of the image }
+        </i></font><font color="#FF00FF">Jmp     @Ex                     </font><font color="#008000"><i>{ Exit if image drawn }
+
+        { Un-compressed bitmap }
+  </i></font><font color="#FF00FF">@0S:  Mov     cx,dx
+        Mov     ax,di
+        Add     ax,cx
+        Jc      @03                     </font><font color="#008000"><i>{ Jump if line crosses bank }
+        </i></font><font color="#FF00FF">Cmp     bx,cx
+        Jle     @03                     </font><font color="#008000"><i>{ Jump if file buffer will run out }
+        </i></font><font color="#FF00FF">Sub     bx,cx                   </font><font color="#008000"><i>{ Update buffer counter }
+        </i></font><font color="#FF00FF">Shr     cx,1
+        Jnc     @01
+        Movsb
+  @01:  Rep     Movsw                   </font><font color="#008000"><i>{ Show line }
+        </i></font><font color="#FF00FF">Sub     di,dx                   </font><font color="#008000"><i>{ Go to next line (above) }
+        </i></font><font color="#FF00FF">Sub     di,bytes
+        Jnc     @02
+        Dec     bank                    </font><font color="#008000"><i>{ See if line above is in another bank }
+        </i></font><font color="#FF00FF">Call    @B1
+  @02:  Dec     height
+        Jnz     @0S
+        Jmp     @Ex
+  @03:  Movsb
+        Or      di,di
+        Jnz     @04
+        Inc     bank
+        Call    @B1
+  @04:  Dec     bx
+        Jnz     @05
+        Call    @FR
+  @05:  Loop    @03
+        Sub     di,dx
+        Jnc     @06
+        Dec     bank
+        Call    @B1
+  @06:  Sub     di,bytes
+        Jnc     @07
+        Dec     bank
+        Call    @B1
+  @07:  Dec     height
+        Jnz     @0S
+        Jmp     @Ex
+
+
+        </font><font color="#008000"><i>{ Set bank }
+  </i></font><font color="#FF00FF">@B1:  Push    ax
+        Push    ds
+        Mov     ds,dseg
+        Mov     al,vesaon
+        Or      al,al
+        Jz      @B3
+        Push    bx
+        Push    dx
+        Mov     dx,bank
+        Xor     bx,bx
+        Mov     ax,64
+        Mul     dx
+        Div     VesaMode.Gran
+        Mov     dx,ax
+        Push    dx
+        Call    VesaMode.WinFunc
+        Pop     dx
+        Inc     bx
+        Call    VesaMode.WinFunc
+        Pop     dx
+        Pop     bx
+  @B3:  Pop     ds
+        Pop     ax
+        RetN
+  @Ex:  Mov     ds,dseg
+        Mov     bx,handle              </font><font color="#008000"><i>{ Close the file }
+        </i></font><font color="#FF00FF">Mov     ah,$3E
+        Int     $21
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ShowImage16<font color="#000080">(</font>name<font color="#000080">:</font>PChar<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>dseg<font color="#000080">,</font>width<font color="#000080">,</font>height<font color="#000080">,</font>bytes<font color="#000080">,</font>rows<font color="#000080">,</font>bank<font color="#000080">,</font>handle<font color="#000080">,</font>cp<font color="#000080">,</font>rc<font color="#000080">,</font>bc<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+        </b></font><font color="#FF00FF">Mov     dseg,ds
+        Mov     ax,header.Comp.Word[0]
+        Mov     cp,ax
+        Mov     ax,header.Width.Word[0]
+        Mov     width,ax
+        Mov     ax,header.Height.Word[0]
+        Mov     height,ax
+        Mov     di,ax
+        Dec     di
+        Mov     ax,VesaMode.Bytes
+        Mov     bytes,ax
+        Mov     ax,VesaMode.Height
+        Mov     rows,ax
+        Mov     es,VesaMode.SegA
+
+        Mov     ax,$3D00
+        Lds     dx,name
+        Int     $21                     </font><font color="#008000"><i>{ Open the file for assembler }
+        </i></font><font color="#FF00FF">Mov     ds,dseg                 </font><font color="#008000"><i>{ Restore the data segment }
+        </i></font><font color="#FF00FF">Jc      @Ex
+        Mov     handle,ax
+
+        Mov     bx,ax
+        Mov     ax,$4200
+        Mov     cx,header.Image.Word[2]
+        Mov     dx,header.Image.Word[0]
+        Int     $21                     </font><font color="#008000"><i>{ Seek to image location }
+        </i></font><font color="#FF00FF">Call    @FR
+        Jmp     @0N
+
+  @FR:  Push    ax
+        Push    bx
+        Push    cx
+        Push    dx
+        Mov     ds,dseg
+        Mov     bx,handle
+        Mov     cx,bufsize
+        Lds     si,buffer
+        Mov     dx,si
+        Mov     ah,$3F
+        Int     $21
+        Mov     bc,ax                   </font><font color="#008000"><i>{ Bytes left to read from the buffer }
+        </i></font><font color="#FF00FF">Pop     dx
+        Pop     cx
+        Pop     bx
+        Pop     ax
+        RetN
+
+  @0N:  Mov     ax,bytes
+        Mul     di
+        Mov     di,ax
+        Mov     bank,dx
+        Call    @B1                     </font><font color="#008000"><i>{ Set the last line &amp; bank }
+        </i></font><font color="#FF00FF">Mov     dx,$3CE
+        Mov     ax,$205
+        Out     dx,ax                   </font><font color="#008000"><i>{ Set Write Mode 2 }
+        </i></font><font color="#FF00FF">Mov     ax,$8008                </font><font color="#008000"><i>{ Initial bit mask }
+
+        </i></font><font color="#FF00FF">Cmp     cp,0
+        Je      @0S
+
+        </font><font color="#008000"><i>{ RLE bitmap }
+  </i></font><font color="#FF00FF">@1S:  Mov     rc,0
+        Mov     ax,$8008
+  @10:  Xor     ch,ch                   </font><font color="#008000"><i>{ Clear upper byte }
+        </i></font><font color="#FF00FF">Mov     cl,[si]                 </font><font color="#008000"><i>{ Get &quot;index&quot; byte }
+        </i></font><font color="#FF00FF">Inc     si
+        Dec     bc                      </font><font color="#008000"><i>{ Decrement buffer count }
+        </i></font><font color="#FF00FF">Jnz     @11                     </font><font color="#008000"><i>{ Jump if not empty }
+        </i></font><font color="#FF00FF">Call    @FR                     </font><font color="#008000"><i>{ Reload buffer }
+  </i></font><font color="#FF00FF">@11:  Or      cl,cl
+        Jz      @14                     </font><font color="#008000"><i>{ Jump if following is a string }
+        { Repeat byte }
+        </i></font><font color="#FF00FF">Shr     cl,1                    </font><font color="#008000"><i>{   Divide the &quot;index&quot; by two }
+        </i></font><font color="#FF00FF">Mov     bl,[si]                 </font><font color="#008000"><i>{ Load data to repeat &quot;index&quot; times }
+        </i></font><font color="#FF00FF">Inc     si
+        Dec     bc
+        Jnz     @12                     </font><font color="#008000"><i>{ Jump if buffer isn't empty }
+        </i></font><font color="#FF00FF">Call    @FR
+  @12:  Rol     bl,4
+        Out     dx,ax
+        Mov     bh,es:[di]
+        Mov     es:[di],bl              </font><font color="#008000"><i>{ Update screen }
+        </i></font><font color="#FF00FF">Ror     ah,1
+        Jnc     @1B
+        Inc     di
+        Jnc     @1B
+        Inc     bank                    </font><font color="#008000"><i>{ Change bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @1B:  Out     dx,ax
+        Rol     bl,4
+        Mov     bh,es:[di]
+        Mov     es:[di],bl
+        Ror     ah,1
+        Jnc     @13
+        Inc     di
+        Inc     rc
+        Jnc     @13
+        Inc     bank                    </font><font color="#008000"><i>{ Change bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @13:  Loop    @12                     </font><font color="#008000"><i>{ Store all repeated bytes }
+        </i></font><font color="#FF00FF">Jmp     @10
+        </font><font color="#008000"><i>{ Dump string }
+  </i></font><font color="#FF00FF">@14:  Mov     cl,[si]                 </font><font color="#008000"><i>{ Load &quot;count&quot;, number of bytes in the string }
+        </i></font><font color="#FF00FF">Inc     si
+        Dec     bc
+        Jnz     @1E                     </font><font color="#008000"><i>{ Update buffer count (&amp; buffer contents) }
+        </i></font><font color="#FF00FF">Call    @FR
+  @1E:  Or      cl,cl
+        Jz      @20
+        Shr     cl,1                    </font><font color="#008000"><i>{ Divide the &quot;count&quot; by 2 }
+        </i></font><font color="#FF00FF">Push    cx
+  @15:  Mov     bl,[si]
+        Inc     si
+        Rol     bl,4
+        Out     dx,ax
+        Mov     bh,es:[di]
+        Mov     es:[di],bl
+        Ror     ah,1
+        Jnc     @1A
+        Inc     di
+        Jnz     @1A                     </font><font color="#008000"><i>{ bank checking }
+        </i></font><font color="#FF00FF">Inc     bank
+        Call    @B1
+  @1A:  Out     dx,ax
+        Rol     bl,4
+        Mov     bh,es:[di]
+        Mov     es:[di],bl
+        Ror     ah,1
+        Jnc     @16
+        Inc     di
+        Inc     rc
+        Jnz     @16
+        Inc     bank
+        Call    @B1
+  @16:  Dec     bc                      </font><font color="#008000"><i>{ Update buffer count, etc }
+        </i></font><font color="#FF00FF">Jnz     @17
+        Call    @FR
+  @17:  Loop    @15                     </font><font color="#008000"><i>{ Repeat for string }
+        </i></font><font color="#FF00FF">Pop     cx
+        Test    cl,1                    </font><font color="#008000"><i>{ See if there was an odd numbered count }
+        </i></font><font color="#FF00FF">Jz      @10                     </font><font color="#008000"><i>{ Jump if even }
+        </i></font><font color="#FF00FF">Mov     cl,[si]                 </font><font color="#008000"><i>{ Clear extra byte, due to word alignment }
+        </i></font><font color="#FF00FF">Inc     si
+        Dec     bc
+        Jnz     @10                     </font><font color="#008000"><i>{ Update buffer count, etc }
+        </i></font><font color="#FF00FF">Call    @FR
+        Jmp     @10
+  @20:  Sub     di,rc                   </font><font color="#008000"><i>{ Move screen pointer to start of line }
+        </i></font><font color="#FF00FF">Jnc     @21                     </font><font color="#008000"><i>{ Jump if not crossed bank }
+        </i></font><font color="#FF00FF">Dec     bank                    </font><font color="#008000"><i>{ Update bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @21:  Sub     di,bytes                </font><font color="#008000"><i>{ Move to screen line above }
+        </i></font><font color="#FF00FF">Jnc     @22                     </font><font color="#008000"><i>{ Jump if not crossed bank }
+        </i></font><font color="#FF00FF">Dec     bank                    </font><font color="#008000"><i>{ Update bank if crossed }
+        </i></font><font color="#FF00FF">Call    @B1
+  @22:  Dec     height                  </font><font color="#008000"><i>{ Update line count }
+        </i></font><font color="#FF00FF">Jnz     @1S                     </font><font color="#008000"><i>{ Jump to start if not end of the image }
+        </i></font><font color="#FF00FF">Jmp     @Ex                     </font><font color="#008000"><i>{ Exit if image drawn }
+
+        { Un-compressed bitmap }
+  </i></font><font color="#FF00FF">@0S:  Mov     ax,width
+        Xor     bx,bx
+        Mov     rc,ax                   </font><font color="#008000"><i>{ Initialize rowcount }
+        </i></font><font color="#FF00FF">Mov     ax,$8008
+  @02:  Out     dx,ax                   </font><font color="#008000"><i>{ Update bit mask register }
+        </i></font><font color="#FF00FF">Mov     cl,[si]                 </font><font color="#008000"><i>{ Load a byte (2 pixels) }
+        </i></font><font color="#FF00FF">Inc     si                      </font><font color="#008000"><i>{ Update buffer pointer }
+        </i></font><font color="#FF00FF">Dec     bc                      </font><font color="#008000"><i>{ Updata buffer count }
+        </i></font><font color="#FF00FF">Jnz     @03
+        Call    @FR                     </font><font color="#008000"><i>{ Reload buffer if necessary }
+  </i></font><font color="#FF00FF">@03:  Ror     cl,4                    </font><font color="#008000"><i>{ Move 1st pixel in low part of CL }
+        </i></font><font color="#FF00FF">Mov     ch,es:[di]              </font><font color="#008000"><i>{ Load latches }
+        </i></font><font color="#FF00FF">Mov     es:[di],cl              </font><font color="#008000"><i>{ Update latches }
+        </i></font><font color="#FF00FF">Ror     ah,1                    </font><font color="#008000"><i>{ Shift bit mask right a pixel }
+        </i></font><font color="#FF00FF">Out     dx,ax                   </font><font color="#008000"><i>{ Update bit mask register }
+        </i></font><font color="#FF00FF">Ror     cl,4                    </font><font color="#008000"><i>{ Move 2nd pixel in low part of CL }
+        </i></font><font color="#FF00FF">Mov     ch,es:[di]              </font><font color="#008000"><i>{ as above 3 steps }
+        </i></font><font color="#FF00FF">Mov     es:[di],cl              </font><font color="#008000"><i>{ ... }
+        </i></font><font color="#FF00FF">Sub     rc,2
+        Jle     @04
+        Ror     ah,1
+        Jnc     @02
+        Inc     di
+        Inc     bx
+        Jnc     @02
+        Inc     bank
+        Call    @B1
+        Jmp     @02
+  @04:  Mov     ax,si                   </font><font color="#008000"><i>{ Discard extra bytes for }
+        </i></font><font color="#FF00FF">Mov     cx,4                    </font><font color="#008000"><i>{ LongInt alignment (?) }
+        </i></font><font color="#FF00FF">And     ax,3
+        Sub     cx,ax
+        And     cx,3
+        Add     si,cx
+        Sub     bc,cx
+        Sub     di,bx
+        Jnc     @06
+        Dec     bank
+        Call    @b1
+  @06:  Sub     di,bytes
+        Jnc     @07
+        Dec     bank
+        Call    @b1
+  @07:  Dec     height
+        Jnz     @0S
+        Jmp     @Ex
+
+        </font><font color="#008000"><i>{ Set bank }
+  </i></font><font color="#FF00FF">@B1:  Push    ax
+        Push    ds
+        Mov     ds,dseg
+        Mov     al,vesaon
+        Or      al,al
+        Jz      @B3
+        Push    bx
+        Push    dx
+        Mov     dx,bank
+        Xor     bx,bx
+        Mov     ax,64
+        Mul     dx
+        Div     VesaMode.Gran
+        Mov     dx,ax
+        Push    dx
+        Call    VesaMode.WinFunc
+        Pop     dx
+        Inc     bx
+        Call    VesaMode.WinFunc
+        Pop     dx
+        Pop     bx
+  @B3:  Pop     ds
+        Pop     ax
+        RetN
+  @Ex:  Mov     ds,dseg
+        Mov     bx,handle              </font><font color="#008000"><i>{ Close the file }
+        </i></font><font color="#FF00FF">Mov     ah,$3E
+        Int     $21
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>ShowBMP<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>fn<font color="#000080">:</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">]</font><font color="#FF0000"><b>Of </b></font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>StrPCopy<font color="#000080">(</font>fn<font color="#000080">,</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+  </font>GetMem<font color="#000080">(</font>buffer<font color="#000080">,</font>bufsize<font color="#000080">);
+  </font><font color="#FF0000"><b>Case </b></font>header<font color="#000080">.</font>PSize <font color="#FF0000"><b>Of
+    </b></font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+         Case </b></font>header<font color="#000080">.</font>Width <font color="#FF0000"><b>Of
+              </b></font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">640  </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$12</font><font color="#000080">);
+            </font><font color="#800000">641</font><font color="#000080">..</font><font color="#800000">800  </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$102</font><font color="#000080">);
+            </font><font color="#800000">801</font><font color="#000080">..</font><font color="#800000">1024 </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$104</font><font color="#000080">);
+           </font><font color="#800000">1025</font><font color="#000080">..</font><font color="#800000">9999 </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$106</font><font color="#000080">);
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+         </font>BlankPalette<font color="#000080">;
+         </font>ShowImage16<font color="#000080">(</font>fn<font color="#000080">);
+       </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font><font color="#800000">17</font><font color="#000080">..</font><font color="#800000">256</font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+         Case </b></font>header<font color="#000080">.</font>Width <font color="#FF0000"><b>Of
+              </b></font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">320  </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$13</font><font color="#000080">);
+            </font><font color="#800000">321</font><font color="#000080">..</font><font color="#800000">640  </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$101</font><font color="#000080">);
+            </font><font color="#800000">641</font><font color="#000080">..</font><font color="#800000">800  </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$103</font><font color="#000080">);
+            </font><font color="#800000">801</font><font color="#000080">..</font><font color="#800000">1024 </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$105</font><font color="#000080">);
+           </font><font color="#800000">1025</font><font color="#000080">..</font><font color="#800000">9999 </font><font color="#000080">: </font>SetMode<font color="#000080">(</font><font color="#800000">$107</font><font color="#000080">);
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+         </font>BlankPalette<font color="#000080">;
+         </font>ShowImage256<font color="#000080">(</font>fn<font color="#000080">);
+       </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>FreeMem<font color="#000080">(</font>buffer<font color="#000080">,</font>bufsize<font color="#000080">);
+  </font>SetPalette<font color="#000080">;
+  </font>Sound<font color="#000080">(</font><font color="#800000">660</font><font color="#000080">);
+  </font>Delay<font color="#000080">(</font><font color="#800000">100</font><font color="#000080">);
+  </font>Sound<font color="#000080">(</font><font color="#800000">880</font><font color="#000080">);
+  </font>Delay<font color="#000080">(</font><font color="#800000">50</font><font color="#000080">);
+  </font>Sound<font color="#000080">(</font><font color="#800000">440</font><font color="#000080">);
+  </font>Delay<font color="#000080">(</font><font color="#800000">75</font><font color="#000080">);
+  </font>NoSound<font color="#000080">;
+
+  </font>ReadKey<font color="#000080">;
+  </font>SetMode<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetPSize<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  If </b></font>header<font color="#000080">.</font>PSize<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>Then Case </b></font>header<font color="#000080">.</font>Bits <font color="#FF0000"><b>Of
+    </b></font><font color="#800000">1 </font><font color="#000080">: </font>header<font color="#000080">.</font>PSize<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">;  </font><font color="#008000"><i>{ These are the only valid bits in a BMP }
+    </i></font><font color="#800000">4 </font><font color="#000080">: </font>header<font color="#000080">.</font>PSize<font color="#000080">:=</font><font color="#800000">16</font><font color="#000080">;
+    </font><font color="#800000">8 </font><font color="#000080">: </font>header<font color="#000080">.</font>PSize<font color="#000080">:=</font><font color="#800000">256</font><font color="#000080">;
+    </font><font color="#800000">24</font><font color="#000080">: </font>header<font color="#000080">.</font>PSize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ A 24 bit image does not have a palette }
+  </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  If </b></font>ParamCount<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>Then Begin
+    </b></font>Assign<font color="#000080">(</font>fl<font color="#000080">,</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+    </font><font color="#008000"><i>{$I-}
+    </i></font>Reset<font color="#000080">(</font>fl<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>If </b></font>IOResult<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>Then Begin
+      </b></font>BlockRead<font color="#000080">(</font>fl<font color="#000080">,</font>header<font color="#000080">,</font><font color="#800000">54</font><font color="#000080">);
+      </font><font color="#FF0000"><b>If </b></font>header<font color="#000080">.</font>ID<font color="#000080">=</font><font color="#800000">$4D42 </font><font color="#FF0000"><b>Then Begin
+        </b></font>SetPSize<font color="#000080">; </font><font color="#008000"><i>{ Set the PSize field in the header if not defined }
+        </i></font>Writeln<font color="#000080">;
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Width  . . . . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>Width<font color="#000080">,</font><font color="#800000">' pixels'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Height . . . . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>Height<font color="#000080">,</font><font color="#800000">' pixels'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Bits per Pixel . '</font><font color="#000080">,</font>header<font color="#000080">.</font>Bits<font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Palette Size . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>PSize<font color="#000080">,</font><font color="#800000">' colours, '</font><font color="#000080">,</font>header<font color="#000080">.</font>PSize<font color="#000080">*</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">' bytes'</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font><font color="#800000">'Compression  . . type '</font><font color="#000080">,</font>header<font color="#000080">.</font>Comp<font color="#000080">);
+        </font><font color="#FF0000"><b>If </b></font>header<font color="#000080">.</font>Comp<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>Then </b></font>Writeln<font color="#000080">(</font><font color="#800000">' (not compressed)'</font><font color="#000080">)
+          </font><font color="#FF0000"><b>Else </b></font>Writeln<font color="#000080">(</font><font color="#800000">' (RLE)'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Image Offset . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>Image<font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Image Size . . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>ISize<font color="#000080">,</font><font color="#800000">' bytes'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'X Resolution . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>XRes<font color="#000080">,</font><font color="#800000">' D/m, '</font><font color="#000080">,</font>header<font color="#000080">.</font>XRes<font color="#000080">*</font><font color="#800000">254 </font><font color="#FF0000"><b>Div </b></font><font color="#800000">10000</font><font color="#000080">,</font><font color="#800000">' DPI'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Y Resolution . . '</font><font color="#000080">,</font>header<font color="#000080">.</font>YRes<font color="#000080">,</font><font color="#800000">' D/m, '</font><font color="#000080">,</font>header<font color="#000080">.</font>YRes<font color="#000080">*</font><font color="#800000">254 </font><font color="#FF0000"><b>Div </b></font><font color="#800000">10000</font><font color="#000080">,</font><font color="#800000">' DPI'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">((</font>header<font color="#000080">.</font>Width<font color="#000080">&lt;</font><font color="#800000">641</font><font color="#000080">)</font><font color="#FF0000"><b>And</b></font><font color="#000080">(</font>header<font color="#000080">.</font>Height<font color="#000080">&lt;</font><font color="#800000">481</font><font color="#000080">)</font><font color="#FF0000"><b>And</b></font><font color="#000080">(</font>header<font color="#000080">.</font>PSize<font color="#000080">&lt;</font><font color="#800000">17</font><font color="#000080">))
+           </font><font color="#FF0000"><b>Or</b></font><font color="#000080">((</font>header<font color="#000080">.</font>Width<font color="#000080">&lt;</font><font color="#800000">321</font><font color="#000080">)</font><font color="#FF0000"><b>And</b></font><font color="#000080">(</font>header<font color="#000080">.</font>Height<font color="#000080">&lt;</font><font color="#800000">201</font><font color="#000080">))</font><font color="#FF0000"><b>Or</b></font><font color="#000080">(</font>IsVesa<font color="#000080">) </font><font color="#FF0000"><b>Then
+        If </b></font>header<font color="#000080">.</font>PSize<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>Then Begin
+          </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Press a key to show the image'</font><font color="#000080">);
+          </font>ReadKey<font color="#000080">;
+          </font>ShowBMP<font color="#000080">;
+        </font><font color="#FF0000"><b>End Else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Cannot display the image without VESA graphics support'</font><font color="#000080">);
+        </font>Close<font color="#000080">(</font>fl<font color="#000080">);
+      </font><font color="#FF0000"><b>End Else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'The file is not a Windows BitMaP file'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>End Else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'File not found, try again'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>End Else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Usage: BMPVIEW &lt;filename&gt;'</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+-----------------------------------------------------------------------------
+</font><font color="#FF0000"><b>Unit </b></font>VESA<font color="#000080">;
+
+</font><font color="#FF0000"><b>Interface
+
+Type </b></font>ModeList<font color="#000080">=</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">32</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Word<font color="#000080">;  </font><font color="#008000"><i>{ List of VESA mode numbers }
+
+     </i></font>TVesaMode<font color="#000080">=</font><font color="#FF0000"><b>Record
+       </b></font>Attr     <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Mode Attributes                   }
+       </i></font>WinA     <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Window A attributes               }
+       </i></font>WinB     <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Window B attributes               }
+       </i></font>Gran     <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Window granularity in K bytes     }
+       </i></font>WinSiz   <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Size of window in K bytes         }
+       </i></font>SegA     <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Segment address of window A       }
+       </i></font>SegB     <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Segment address of window B       }
+       </i></font>WinFunc  <font color="#000080">: </font><font color="#FF0000"><b>Procedure</b></font><font color="#000080">;    </font><font color="#008000"><i>{ Windows positioning function      }
+       </i></font>Bytes    <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Number of bytes per line          }
+       </i></font>Width    <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Number of horizontal pixels       }
+       </i></font>Height   <font color="#000080">: </font>Word<font color="#000080">;         </font><font color="#008000"><i>{ Number of vertical pixels         }
+       </i></font>CharW    <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Width of character cell           }
+       </i></font>CharH    <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Height of character cell          }
+       </i></font>Planes   <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Number of memory planes           }
+       </i></font>Bits     <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Number of bits per pixel          }
+       </i></font>nBanks   <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Number of banks        (not used) }
+       </i></font>Model    <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Memory model type                 }
+       </i></font>Banks    <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Size of bank           (not used) }
+       </i></font>Pages    <font color="#000080">: </font>Byte<font color="#000080">;         </font><font color="#008000"><i>{ Number of image pages             }
+       </i></font>Reserved <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#008000"><i>{ The following are for 15,16,24,32 bit colour modes }
+       </i></font>RedMaskSize   <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Size of Red mask in bits          }
+       </i></font>RedFieldPos   <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Bit position of LSB of Red mask   }
+       </i></font>GreenMaskSize <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Size of Green mask in bits        }
+       </i></font>GreenFieldPos <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Bit position of LSB of Green mask }
+       </i></font>BlueMaskSize  <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Size of Blue mask in bits         }
+       </i></font>BlueFieldPos  <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Bit position of LSB of Blue mask  }
+       </i></font>RsvdMaskSize  <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Size of Reserved mask in bits     }
+       </i></font>RsvdFieldPos  <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Bit pos. of LSB of Reserved mask  }
+       </i></font>DirColModeInf <font color="#000080">: </font>Byte<font color="#000080">;    </font><font color="#008000"><i>{ Direct Colour mode attributes     }
+       </i></font>Filler   <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">215</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">; </font><font color="#008000"><i>{ Not used - filler        }
+     </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+     </font>TVesaInfo<font color="#000080">=</font><font color="#FF0000"><b>Record
+       </b></font>Signature    <font color="#000080">: </font>LongInt<font color="#000080">;   </font><font color="#008000"><i>{ Signature - &quot;VESA&quot;               }
+       </i></font>Version      <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ VESA Version number              }
+       </i></font>OEMName      <font color="#000080">: </font>PChar<font color="#000080">;     </font><font color="#008000"><i>{ Pointer to manufacturer name     }
+       </i></font>Capabilities <font color="#000080">: </font>Longint<font color="#000080">;   </font><font color="#008000"><i>{ Capabilities       (Not used)    }
+       </i></font>List         <font color="#000080">: ^</font>ModeList<font color="#000080">; </font><font color="#008000"><i>{ Pointer to list of VESA modes    }
+       </i></font>TotalMemory  <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Number of 64k memory blocks on card }
+       </i></font>Filler       <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">238</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ 258 byte size due to bug in the Diamond SpeedStar 24X v1.01 BIOS }
+
+
+</i></font><font color="#FF0000"><b>Var  </b></font>VesaMode <font color="#000080">: </font>TVesaMode<font color="#000080">;
+                </font><font color="#008000"><i>{ Contains all info needed for drawing on the screen }
+     </i></font>VesaInfo <font color="#000080">: </font>TVesaInfo<font color="#000080">;
+                </font><font color="#008000"><i>{ Contains info on the VESA BIOS Extensions }
+
+     </i></font>vesaon   <font color="#000080">: </font>Byte<font color="#000080">;
+                </font><font color="#008000"><i>{ Specifies whether a VESA mode is on or not      }
+
+</i></font><font color="#FF0000"><b>Function  </b></font>IsVesa<font color="#000080">:</font>Boolean<font color="#000080">;
+          </font><font color="#008000"><i>{ Detects whether VESA support is present }
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetVesaInfo<font color="#000080">;
+          </font><font color="#008000"><i>{ Get Information on VESA modes, etc }
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetVesaModeInfo<font color="#000080">(</font>md<font color="#000080">:</font>Word<font color="#000080">);
+          </font><font color="#008000"><i>{ Get Information on a VESA mode (md) }
+</i></font><font color="#FF0000"><b>Function  </b></font>SetMode<font color="#000080">(</font>md<font color="#000080">:</font>Word<font color="#000080">):</font>Boolean<font color="#000080">;
+          </font><font color="#008000"><i>{ Sets a video mode (OEM and VESA) }
+</i></font><font color="#FF0000"><b>Function  </b></font>GetMode<font color="#000080">:</font>Word<font color="#000080">;
+          </font><font color="#008000"><i>{ Returns the current video mode }
+</i></font><font color="#FF0000"><b>Function  </b></font>SizeOfVideoState<font color="#000080">:</font>Word<font color="#000080">;
+          </font><font color="#008000"><i>{ Returns the size of the buffer needed to save the video state }
+</i></font><font color="#FF0000"><b>Procedure </b></font>SaveVideoState<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>buf<font color="#000080">);
+          </font><font color="#008000"><i>{ Saves the SVGA video state in the buffer }
+</i></font><font color="#FF0000"><b>Procedure </b></font>RestoreVideoState<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>buf<font color="#000080">);
+          </font><font color="#008000"><i>{ Restores the SVGA video state from the buffer}
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetBank<font color="#000080">(</font>bank<font color="#000080">:</font>Word<font color="#000080">);
+          </font><font color="#008000"><i>{ Set the video bank to draw on }
+</i></font><font color="#FF0000"><b>Function  </b></font>GetBank<font color="#000080">:</font>Word<font color="#000080">;
+          </font><font color="#008000"><i>{ Gets the current active video bank }
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetLineLength<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>len<font color="#000080">:</font>Word<font color="#000080">);
+          </font><font color="#008000"><i>{ Sets the logical scan line length, returns the actual length set }
+</i></font><font color="#FF0000"><b>Function  </b></font>GetLineLength<font color="#000080">:</font>Word<font color="#000080">;
+          </font><font color="#008000"><i>{ Returns the current logical scan line length }
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetDisplayStart<font color="#000080">(</font>pixel<font color="#000080">,</font>line<font color="#000080">:</font>Word<font color="#000080">);
+          </font><font color="#008000"><i>{ Sets the first pixel and line on the display }
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetDisplayStart<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>pixel<font color="#000080">,</font>line<font color="#000080">:</font>Word<font color="#000080">);
+          </font><font color="#008000"><i>{ Returns the first pixel and line on the display }
+
+{---------------------------------------------------------------------------}
+{-----------------------------} </i></font><font color="#FF0000"><b>Implementation </b></font><font color="#008000"><i>{----------------------------}
+{---------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var  </b></font>rp <font color="#000080">: </font>Registers<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>IsVesa<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F03</font><font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+  </font>IsVesa<font color="#000080">:=(</font>rp<font color="#000080">.</font>al<font color="#000080">=</font><font color="#800000">$4F</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetVesaInfo<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F00</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>di<font color="#000080">:=</font>Ofs<font color="#000080">(</font>VesaInfo<font color="#000080">);
+  </font>rp<font color="#000080">.</font>es<font color="#000080">:=</font>Seg<font color="#000080">(</font>VesaInfo<font color="#000080">);
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetVesaModeInfo<font color="#000080">(</font>md<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F01</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>cx<font color="#000080">:=</font>md<font color="#000080">;
+  </font>rp<font color="#000080">.</font>di<font color="#000080">:=</font>Ofs<font color="#000080">(</font>VesaMode<font color="#000080">);
+  </font>rp<font color="#000080">.</font>es<font color="#000080">:=</font>Seg<font color="#000080">(</font>VesaMode<font color="#000080">);
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>SetMode<font color="#000080">(</font>md<font color="#000080">:</font>Word<font color="#000080">):</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>SetMode<font color="#000080">:=</font>True<font color="#000080">; </font>vesaon<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>md<font color="#000080">&gt;</font><font color="#800000">$FF </font><font color="#FF0000"><b>Then Begin
+    </b></font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font>md<font color="#000080">;
+    </font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F02</font><font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font>rp<font color="#000080">.</font>ax<font color="#000080">&lt;&gt;</font><font color="#800000">$4F </font><font color="#FF0000"><b>Then </b></font>SetMode<font color="#000080">:=</font>False <font color="#FF0000"><b>Else </b></font>GetVesaModeInfo<font color="#000080">(</font>md<font color="#000080">);
+  </font><font color="#FF0000"><b>End Else Begin
+    </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font>md<font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+    </font>VesaMode<font color="#000080">.</font>Gran<font color="#000080">:=</font><font color="#800000">64</font><font color="#000080">; </font>vesaon<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font>VesaMode<font color="#000080">.</font>SegA<font color="#000080">:=</font><font color="#800000">$A000</font><font color="#000080">;
+    </font><font color="#FF0000"><b>Case </b></font>md <font color="#FF0000"><b>Of  </b></font><font color="#008000"><i>{ OEM (standard) video modes }
+      </i></font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">7 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin </b></font><font color="#008000"><i>{ Text modes }
+                 </i></font>VesaMode<font color="#000080">.</font>Width<font color="#000080">:=</font><font color="#800000">80</font><font color="#000080">;  </font>VesaMode<font color="#000080">.</font>Height<font color="#000080">:=</font><font color="#800000">25</font><font color="#000080">;
+                 </font><font color="#FF0000"><b>If </b></font>md<font color="#000080">=</font><font color="#800000">7 </font><font color="#FF0000"><b>Then Begin
+                   </b></font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;  </font>VesaMode<font color="#000080">.</font>SegA<font color="#000080">:=</font><font color="#800000">$B000</font><font color="#000080">;
+                 </font><font color="#FF0000"><b>End Else Begin
+                   </b></font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;  </font>VesaMode<font color="#000080">.</font>SegA<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+                 </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+                 </font>VesaMode<font color="#000080">.</font>Bytes<font color="#000080">:=</font><font color="#800000">160</font><font color="#000080">; </font>VesaMode<font color="#000080">.</font>Model<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+               </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#800000">$13 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin  </b></font><font color="#008000"><i>{ 320 x 200 x 256 colours, VGA &amp; MCGA }
+              </i></font>VesaMode<font color="#000080">.</font>Width<font color="#000080">:=</font><font color="#800000">320</font><font color="#000080">; </font>VesaMode<font color="#000080">.</font>Height<font color="#000080">:=</font><font color="#800000">200</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">8</font><font color="#000080">;    </font>VesaMode<font color="#000080">.</font>Model<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bytes<font color="#000080">:=</font><font color="#800000">320</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#800000">$12 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin  </b></font><font color="#008000"><i>{ 640 x 480 x 16 colours, VGA only }
+              </i></font>VesaMode<font color="#000080">.</font>Width<font color="#000080">:=</font><font color="#800000">640</font><font color="#000080">; </font>VesaMode<font color="#000080">.</font>Height<font color="#000080">:=</font><font color="#800000">480</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;    </font>VesaMode<font color="#000080">.</font>Model<font color="#000080">:=</font><font color="#800000">3</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bytes<font color="#000080">:=</font><font color="#800000">80</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#800000">$10 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin  </b></font><font color="#008000"><i>{ 640 x 350 x 16 colours, VGA &amp; EGA with 128k+ }
+              </i></font>VesaMode<font color="#000080">.</font>Width<font color="#000080">:=</font><font color="#800000">640</font><font color="#000080">; </font>VesaMode<font color="#000080">.</font>Height<font color="#000080">:=</font><font color="#800000">350</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;    </font>VesaMode<font color="#000080">.</font>Model<font color="#000080">:=</font><font color="#800000">3</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bytes<font color="#000080">:=</font><font color="#800000">80</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#800000">$0E </font><font color="#000080">: </font><font color="#FF0000"><b>Begin  </b></font><font color="#008000"><i>{ 640 x 200 x 16 colours, VGA &amp; EGA }
+              </i></font>VesaMode<font color="#000080">.</font>Width<font color="#000080">:=</font><font color="#800000">640</font><font color="#000080">; </font>VesaMode<font color="#000080">.</font>Height<font color="#000080">:=</font><font color="#800000">200</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;    </font>VesaMode<font color="#000080">.</font>Model<font color="#000080">:=</font><font color="#800000">3</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bytes<font color="#000080">:=</font><font color="#800000">80</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#800000">$0D </font><font color="#000080">: </font><font color="#FF0000"><b>Begin  </b></font><font color="#008000"><i>{ 320 x 200 x 16 colours, VGA &amp; EGA }
+              </i></font>VesaMode<font color="#000080">.</font>Width<font color="#000080">:=</font><font color="#800000">320</font><font color="#000080">; </font>VesaMode<font color="#000080">.</font>Height<font color="#000080">:=</font><font color="#800000">200</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bits<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;    </font>VesaMode<font color="#000080">.</font>Model<font color="#000080">:=</font><font color="#800000">3</font><font color="#000080">;
+              </font>VesaMode<font color="#000080">.</font>Bytes<font color="#000080">:=</font><font color="#800000">40</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>Else </b></font>SetMode<font color="#000080">:=</font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>GetMode<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F03</font><font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+  </font>GetMode<font color="#000080">:=</font>rp<font color="#000080">.</font>bx<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>SizeOfVideoState<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin  </b></font><font color="#008000"><i>{ Will save/restore all video states }
+  </i></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F04</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>dl<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>cx<font color="#000080">:=</font><font color="#800000">$0F</font><font color="#000080">;  </font><font color="#008000"><i>{ hardware, BIOS, DAC &amp; SVGA states }
+  </i></font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+  </font>SizeOfVideoState<font color="#000080">:=</font>rp<font color="#000080">.</font>bx<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SaveVideoState<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>buf<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F04</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>dl<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>cx<font color="#000080">:=</font><font color="#800000">$0F</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>es<font color="#000080">:=</font>Seg<font color="#000080">(</font>buf<font color="#000080">);
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font>Ofs<font color="#000080">(</font>buf<font color="#000080">);
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>RestoreVideoState<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>buf<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F04</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>dl<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>cx<font color="#000080">:=</font><font color="#800000">$0F</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>es<font color="#000080">:=</font>Seg<font color="#000080">(</font>buf<font color="#000080">);
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font>Ofs<font color="#000080">(</font>buf<font color="#000080">);
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetBank<font color="#000080">(</font>bank<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>winnum<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>winnum<font color="#000080">:=</font>bank<font color="#000080">*</font><font color="#800000">64 </font><font color="#FF0000"><b>Div </b></font>VesaMode<font color="#000080">.</font>Gran<font color="#000080">;
+  </font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F05</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>dx<font color="#000080">:=</font>winnum<font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+  </font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F05</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>dx<font color="#000080">:=</font>winnum<font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>GetBank<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F05</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">$100</font><font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+  </font>GetBank<font color="#000080">:=</font>rp<font color="#000080">.</font>dx<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetLineLength<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>len<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F06</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bl<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>cx<font color="#000080">:=</font>len<font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">); </font><font color="#008000"><i>{ dx:=maximum number of scan lines }
+  </i></font>len<font color="#000080">:=</font>rp<font color="#000080">.</font>cx<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>GetLineLength<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F06</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bl<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">); </font><font color="#008000"><i>{ dx:=maximum number of scan lines }
+  </i></font>GetLineLength<font color="#000080">:=</font>rp<font color="#000080">.</font>cx<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetDisplayStart<font color="#000080">(</font>pixel<font color="#000080">,</font>line<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F07</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>cx<font color="#000080">:=</font>pixel<font color="#000080">;
+  </font>rp<font color="#000080">.</font>dx<font color="#000080">:=</font>line<font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetDisplayStart<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>pixel<font color="#000080">,</font>line<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>rp<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$4F07</font><font color="#000080">;
+  </font>rp<font color="#000080">.</font>bx<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>rp<font color="#000080">);
+  </font>pixel<font color="#000080">:=</font>rp<font color="#000080">.</font>cx<font color="#000080">;
+  </font>line<font color="#000080">:=</font>rp<font color="#000080">.</font>dx<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to WIN-OS2 SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0010.PAS">Original</a><b>]</b></p></body>
+</html>

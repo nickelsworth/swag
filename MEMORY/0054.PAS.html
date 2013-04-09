@@ -1,0 +1,638 @@
+<html>
+<head><title> "Buffers in EMS" by ROLF ERNST</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0054.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+*************** Generalized file I/O buffering *****************
+
+The enclosed TP unit BUFFERS exports a new object BUFFERFILE. This
+object allows to define a variable number of buffers with a buffersize
+of up to $FFE0 bytes each. It exports a number of methods to tailor
+the behaviour of the buffer to a specific applications needs - See the
+following procedures for details in this area:
+
+ - SETWRITEBIAS
+ - SETREADBIAS
+ - RESETBIAS
+ - ENABLEINBOUND
+ - ENABLEOUTBOUND
+ - DISABLEINBOUND
+ - DISABLEOUTBOUND
+
+The buffers may be allocated in expanded memory if desired. Performance
+will be somewhat affected by this fact.
+
+All methods use the same names as their counterparts in the system unit,
+the there should not be any problem implementing them. The only minor
+difference is the fact, that the READ and WRITE procedures do not accept
+the optional fourth parameter, which in the system unit will return the
+number of bytes actually read or written. This was done for performance
+reasons but should be very easy to change.
+
+The unit is implemented using some of Turbo Pascals object oriented
+language constructs (actually my second step in this area). Some of the
+object oriented stuff is not really very pure code - some access to the
+imported data areas is direct, etc. This was done as to achieve some decent
+performance.
+
+Last but not least a small example on how to use the code:
+
+Program Test;
+VAR
+  BF : BufferFile;
+  L  : LongInt;
+begin
+  BF.Init(16384,5,True);
+  BF.SetWriteBias;           {Purely optional - may improve performance}
+  </i></font>BF<font color="#000080">.</font>Assign<font color="#000080">(</font><font color="#800000">'TEST.FIL'</font><font color="#000080">);
+  </font>BF<font color="#000080">.</font>Rewrite<font color="#000080">(</font><font color="#800000">4</font><font color="#000080">);
+  </font><font color="#FF0000"><b>For </b></font>L<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">20000 </font><font color="#FF0000"><b>do </b></font>BF<font color="#000080">.</font>Write<font color="#000080">(</font>L<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font>BF<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>The code <font color="#FF0000"><b>is </b></font>herbey given <font color="#FF0000"><b>to </b></font>the <font color="#FF0000"><b>public </b></font>domain<font color="#000080">. </font><font color="#FF0000"><b>If </b></font>you discover any errors<font color="#000080">,
+</font>I would appreciate <font color="#FF0000"><b>if </b></font>you would let me know<font color="#000080">.
+
+</font>Rolf Ernst <font color="#800000">72311</font><font color="#000080">,</font><font color="#800000">254
+</font><font color="#000080">}
+
+</font><font color="#FF0000"><b>Unit </b></font>Buffers<font color="#000080">;
+
+</font><font color="#FF0000"><b>InterFace
+</b></font><font color="#008000"><i>{*********************************************************************}
+{****              Written 1989 by Rolf Ernst                     ****}
+{****                                                             ****}
+{****  Code requires Turbo Professional for the expanded memory   ****}
+{****  access. The procedures used should not take more than a    ****}
+{****  few lines to reproduce though.                             ****}
+{****                                                             ****}
+{****  This code is hereby in the public domain.                  ****}
+{*********************************************************************}
+
+</i></font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">, </font>TpEms<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>PtrRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Ofs<font color="#000080">, </font>Seg <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>BigBlock <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+  </font>BigBlockPtr <font color="#000080">= ^</font>BigBlock<font color="#000080">;
+  </font>BufferPtr <font color="#000080">= ^</font>BufferDesc<font color="#000080">;
+  </font>BufferDesc <font color="#000080">= </font><font color="#FF0000"><b>object
+    </b></font>BufferAddr <font color="#000080">: </font>BigBlockPtr<font color="#000080">;
+    </font>EmsHandle  <font color="#000080">: </font>Word<font color="#000080">;
+    </font>InEms      <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>Size       <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Next       <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#FF0000"><b>Constructor </b></font>Init<font color="#000080">(</font>BufferSize <font color="#000080">: </font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+    </font><font color="#FF0000"><b>Function    </b></font>Map<font color="#000080">(</font>Offset<font color="#000080">, </font>Length <font color="#000080">: </font>Word<font color="#000080">) : </font>BigBlockPtr<font color="#000080">; </font><font color="#FF0000"><b>Virtual</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>Destructor  </b></font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>FileBufferPtr <font color="#000080">= ^</font>FileBufferDesc<font color="#000080">;
+  </font>FileBufferDesc <font color="#000080">= </font><font color="#FF0000"><b>Object</b></font><font color="#000080">(</font>BufferDesc<font color="#000080">)
+    </font>PosBuffer   <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>BytesUsed   <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Initialized <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>Modified    <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>Constructor </b></font>Init<font color="#000080">(</font>BufferSize <font color="#000080">: </font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>BufferChain <font color="#000080">= </font><font color="#FF0000"><b>object
+    </b></font>NumberOfBuffers<font color="#000080">, </font>BlockSize<font color="#000080">:</font>Word<font color="#000080">;
+    </font>BufferHead<font color="#000080">, </font>BufferTail <font color="#000080">: </font>FileBufferPtr<font color="#000080">;
+    </font><font color="#FF0000"><b>Procedure </b></font>Init<font color="#000080">(</font>BufSize<font color="#000080">, </font>BufNum <font color="#000080">: </font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+    </font><font color="#FF0000"><b>Procedure </b></font>ChainAtEnd<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>B <font color="#000080">: </font>FileBufferPtr<font color="#000080">);
+    </font><font color="#FF0000"><b>Function  </b></font>BuffersUnUsed<font color="#000080">:</font>Word<font color="#000080">;
+    </font><font color="#FF0000"><b>Procedure </b></font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>BufferFile<font color="#000080">=</font><font color="#FF0000"><b>Object
+    </b></font>F              <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+    </font>FSize          <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>CurrentPos     <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>RecordSize     <font color="#000080">: </font>Word<font color="#000080">;
+    </font>BlockSize      <font color="#000080">: </font>Word<font color="#000080">;
+    </font>BufferS        <font color="#000080">: </font>BufferChain<font color="#000080">;
+    </font>FlushAll       <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>ReadAll        <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>NoBufferReads  <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>NoBufferWrites <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>NoBufferIng    <font color="#000080">: </font>Boolean<font color="#000080">;
+
+    </font><font color="#FF0000"><b>Procedure </b></font>Init<font color="#000080">(</font>BufSize<font color="#000080">, </font>BufNum<font color="#000080">:</font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+              </font><font color="#008000"><i>{Initialize BufNum buffers for the file, each being
+               Bufsize bytes big - use Expanded memory if UseEms is TRUE}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Flush<font color="#000080">;
+              </font><font color="#008000"><i>{Write all modified buffers to disk - does not cause DOS to
+               flush its buffers}
+
+    </i></font><font color="#FF0000"><b>Function  </b></font>FreeBuffer <font color="#000080">: </font>FileBufferPtr<font color="#000080">;
+              </font><font color="#008000"><i>{Find an available Buffer - Flush a buffer if necessary}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Read<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>A<font color="#000080">; </font>NumRecs <font color="#000080">: </font>Word<font color="#000080">);
+              </font><font color="#008000"><i>{Read a record buffered}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>DisableOutBound<font color="#000080">;
+              </font><font color="#008000"><i>{Disable buffering when writing to a file}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Write<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>A<font color="#000080">; </font>NumRecs <font color="#000080">: </font>Word<font color="#000080">);
+              </font><font color="#008000"><i>{Write a record buffered}
+
+    </i></font><font color="#FF0000"><b>Function  </b></font>Eof<font color="#000080">:</font>Boolean<font color="#000080">;
+              </font><font color="#008000"><i>{Return true if the current position in the file is at its end}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Seek<font color="#000080">(</font>NewPos <font color="#000080">: </font>LongInt<font color="#000080">);
+              </font><font color="#008000"><i>{Go to a new position in the file}
+
+    </i></font><font color="#FF0000"><b>Function  </b></font>FileSize<font color="#000080">:</font>LongInt<font color="#000080">;
+              </font><font color="#008000"><i>{Returns the size of a buffered file taking any data in the
+               buffers into consideration}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Assign<font color="#000080">(</font>Name <font color="#000080">: </font>PathStr<font color="#000080">);
+              </font><font color="#008000"><i>{Assign a name to a buffered file}
+
+    </i></font><font color="#FF0000"><b>Function  </b></font>FilePos<font color="#000080">:</font>LongInt<font color="#000080">;
+              </font><font color="#008000"><i>{Returns the current position in a buffered file}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Rewrite<font color="#000080">(</font>RecSize <font color="#000080">: </font>Word<font color="#000080">);
+              </font><font color="#008000"><i>{Create a new file or overwrite an existing one}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Reset<font color="#000080">(</font>RecSize<font color="#000080">:</font>Word<font color="#000080">);
+              </font><font color="#008000"><i>{Open an existing file}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>SetWriteBias<font color="#000080">;
+              </font><font color="#008000"><i>{Indicate, that the majority of the file operations will be
+               sequential writes - when a buffer needs to be flushed ALL
+               buffers will be flushed}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>SetReadBias<font color="#000080">;
+              </font><font color="#008000"><i>{Indicate, that the majority of the file operations will be
+               sequential reads - when a buffer needs to be read ALL buffers
+               will be read from disk}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>ResetBias<font color="#000080">;
+              </font><font color="#008000"><i>{Reset file access characteristics to its default values}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>DisableInBound<font color="#000080">;
+              </font><font color="#008000"><i>{Disable buffering when reading from a dataset}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>EnableInBound<font color="#000080">;
+              </font><font color="#008000"><i>{Enable buffering when reading from a dataset}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>EnableOutBound<font color="#000080">;
+              </font><font color="#008000"><i>{Enable buffering when writing to a dataset}
+
+    </i></font><font color="#FF0000"><b>Procedure </b></font>Done<font color="#000080">;
+              </font><font color="#008000"><i>{Close the file and free all buffers}
+
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Implementation
+
+
+
+Procedure </b></font>EmsError<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Severe Error in EMS handler'</font><font color="#000080">);
+  </font>readln<font color="#000080">;
+  </font>halt<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>MemToEms<font color="#000080">(</font>BytesIn <font color="#000080">: </font>LongInt<font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MemToEms<font color="#000080">:=(</font>BytesIn<font color="#000080">+</font><font color="#800000">16383</font><font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">14</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>MapBuffer<font color="#000080">(</font>Handle <font color="#000080">: </font>Word<font color="#000080">; </font>BytesInBuffer<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>I <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  For </b></font>I<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>Pred<font color="#000080">(</font>MemToEms<font color="#000080">(</font>BytesInBuffer<font color="#000080">)) </font><font color="#FF0000"><b>do begin
+    If Not </b></font>MapEmsPage<font color="#000080">(</font>Handle<font color="#000080">,</font>i<font color="#000080">,</font>i<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>EmsError<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>SetWriteBias<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FlushAll<font color="#000080">:=</font>True<font color="#000080">;
+  </font>ReadAll<font color="#000080">:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>DisableInBound<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NoBufferReads<font color="#000080">:=</font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>EnableInBound<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NoBufferReads<font color="#000080">:=</font>false<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>DisableOutBound<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Flush<font color="#000080">;
+  </font>NoBufferWrites<font color="#000080">:=</font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>EnableOutBound<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NoBufferWrites<font color="#000080">:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>ResetBias<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FlushAll<font color="#000080">:=</font>False<font color="#000080">;
+  </font>ReadAll<font color="#000080">:=</font>False<font color="#000080">;
+  </font>NoBufferReads<font color="#000080">:=</font>False<font color="#000080">;
+  </font>NoBufferWrites<font color="#000080">:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>SetReadBias<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FlushAll<font color="#000080">:=</font>False<font color="#000080">;
+  </font>ReadAll<font color="#000080">:=</font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Constructor </b></font>BufferDesc<font color="#000080">.</font>Init<font color="#000080">(</font>BufferSize <font color="#000080">: </font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>InEms<font color="#000080">:=</font>UseEms <font color="#FF0000"><b>and </b></font>EmsInstalled <font color="#FF0000"><b>and
+    </b></font><font color="#000080">(</font>EmsPagesAvail<font color="#000080">&gt;=</font>MemToEms<font color="#000080">(</font>Buffersize<font color="#000080">));
+  </font>Size<font color="#000080">:=</font>BufferSize<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>InEms <font color="#FF0000"><b>then begin
+    </b></font>EmsHandle<font color="#000080">:=</font>AllocateEMSPages<font color="#000080">(</font>MemToEms<font color="#000080">(</font>Size<font color="#000080">));
+    </font><font color="#FF0000"><b>If </b></font>EmsHandle<font color="#000080">=</font>EmsErrorCode <font color="#FF0000"><b>then </b></font>EmsError<font color="#000080">;
+    </font>BufferAddr<font color="#000080">:=</font>EmsPageFramePtr<font color="#000080">;
+  </font><font color="#FF0000"><b>end else </b></font>GetMem<font color="#000080">(</font>BufferAddr<font color="#000080">,</font>Size<font color="#000080">);
+  </font>Next<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>BufferDesc<font color="#000080">.</font>Map<font color="#000080">(</font>Offset<font color="#000080">, </font>Length <font color="#000080">: </font>Word<font color="#000080">) : </font>BigBlockPtr<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>HighOffset <font color="#000080">: </font>Word<font color="#000080">;
+  </font>MyPointer  <font color="#000080">: </font>BigBlockPTr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MyPointer<font color="#000080">:=</font>BufferAddr<font color="#000080">;
+  </font>Inc<font color="#000080">(</font>PtrRec<font color="#000080">(</font>MyPointer<font color="#000080">).</font>Ofs<font color="#000080">,</font>Offset<font color="#000080">);
+  </font>Map<font color="#000080">:=</font>MyPointer<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>InEms <font color="#FF0000"><b>then begin
+    </b></font>HighOffset<font color="#000080">:=</font>Pred<font color="#000080">(</font>Offset<font color="#000080">+</font>Length<font color="#000080">);
+    </font>Offset<font color="#000080">:=</font>Offset <font color="#FF0000"><b>Shr </b></font><font color="#800000">14</font><font color="#000080">;
+    </font>HighOffset<font color="#000080">:=</font>HighOffset <font color="#FF0000"><b>shr </b></font><font color="#800000">14</font><font color="#000080">;
+    </font><font color="#FF0000"><b>repeat
+      If Not </b></font>MapEmsPage<font color="#000080">(</font>EMSHandle<font color="#000080">,</font>Offset<font color="#000080">,</font>Offset<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>EmsError<font color="#000080">;
+      </font>INC<font color="#000080">(</font>Offset<font color="#000080">);
+    </font><font color="#FF0000"><b>until </b></font>Offset<font color="#000080">&gt;</font>HighOffset<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Destructor </b></font>BufferDesc<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  IF </b></font>InEms <font color="#FF0000"><b>then begin
+    If Not </b></font>DeallocateEmsHandle<font color="#000080">(</font>Emshandle<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>EmsError<font color="#000080">;
+  </font><font color="#FF0000"><b>end else </b></font>FreeMem<font color="#000080">(</font>BufferAddr<font color="#000080">,</font>Size<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Constructor </b></font>FileBufferDesc<font color="#000080">.</font>Init<font color="#000080">(</font>BufferSize <font color="#000080">: </font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>BufferDesc<font color="#000080">.</font>Init<font color="#000080">(</font>BufferSize<font color="#000080">, </font>UseEms<font color="#000080">);
+  </font>Initialized<font color="#000080">:=</font>False<font color="#000080">;
+  </font>Modified<font color="#000080">:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferChain<font color="#000080">.</font>Init<font color="#000080">(</font>BufSize<font color="#000080">, </font>BufNum <font color="#000080">: </font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>I <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NumberOfBuffers<font color="#000080">:=</font>BufNum<font color="#000080">;
+  </font>BufferTail<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>BufNum <font color="#FF0000"><b>do begin
+    </b></font>New<font color="#000080">(</font>BufferHead<font color="#000080">,</font>Init<font color="#000080">(</font>BufSize<font color="#000080">,</font>UseEms<font color="#000080">));
+    </font>BufferHead<font color="#000080">^.</font>Next<font color="#000080">:=</font>BufferTail<font color="#000080">;
+    </font>BufferTail<font color="#000080">:=</font>BufferHead<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>BufferTail<font color="#000080">^.</font>Next<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil do </b></font>BufferTail<font color="#000080">:=</font>BufferTail<font color="#000080">^.</font>Next<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferChain<font color="#000080">.</font>ChainAtEnd<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>B <font color="#000080">: </font>FileBufferPtr<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>BufPtr<font color="#000080">:</font>FileBufferPtr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font><font color="#000080">(</font>NumberOfBuffers<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>B<font color="#000080">&lt;&gt;</font>BufferTail<font color="#000080">) </font><font color="#FF0000"><b>then begin
+    </b></font>BufferTail<font color="#000080">^.</font>Next<font color="#000080">:=</font>B<font color="#000080">;
+    </font>BufferTail<font color="#000080">:=</font>B<font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>B<font color="#000080">=</font>BufferHead <font color="#FF0000"><b>then begin
+      </b></font>BufferHead<font color="#000080">:=</font>B<font color="#000080">^.</font>Next<font color="#000080">;
+      </font>B<font color="#000080">^.</font>Next<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end else begin
+      </b></font>Bufptr<font color="#000080">:=</font>BufferHead<font color="#000080">;
+      </font><font color="#FF0000"><b>While </b></font>BufPtr<font color="#000080">^.</font>Next<font color="#000080">&lt;&gt;</font>B <font color="#FF0000"><b>do </b></font>Bufptr<font color="#000080">:=</font>BufPtr<font color="#000080">^.</font>Next<font color="#000080">;
+      </font>BufPtr<font color="#000080">^.</font>Next<font color="#000080">:=</font>B<font color="#000080">^.</font>Next<font color="#000080">;
+      </font>B<font color="#000080">^.</font>Next<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Init<font color="#000080">(</font>BufSize<font color="#000080">, </font>BufNum<font color="#000080">:</font>Word<font color="#000080">; </font>UseEms <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>I <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font><font color="#000080">(</font>BufSize<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>BufNum<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+    </b></font>NoBufferIng<font color="#000080">:=</font>True<font color="#000080">;
+    </font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>UseEms<font color="#000080">:=</font>UseEms <font color="#FF0000"><b>and </b></font>EmsInstalled <font color="#FF0000"><b>and
+    </b></font><font color="#000080">(</font>EmsPagesAvail<font color="#000080">&gt;=</font>BufNum <font color="#000080">* </font>MemToEms<font color="#000080">(</font>Bufsize<font color="#000080">));
+  </font>Buffers<font color="#000080">.</font>Init<font color="#000080">(</font>BufSize<font color="#000080">, </font>BufNum<font color="#000080">, </font>USeEms<font color="#000080">);
+  </font>FlushAll<font color="#000080">:=</font>False<font color="#000080">;
+  </font>ReadAll<font color="#000080">:=</font>False<font color="#000080">;
+  </font>NoBufferReads<font color="#000080">:=</font>False<font color="#000080">;
+  </font>NoBufferWrites<font color="#000080">:=</font>False<font color="#000080">;
+  </font>NoBuffering<font color="#000080">:=</font>False<font color="#000080">;
+  </font>BlockSize<font color="#000080">:=</font>BufSize<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>BufferFile<font color="#000080">.</font>FreeBuffer<font color="#000080">:</font>FileBufferPtr<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>BufPtr<font color="#000080">,</font>SavePtr <font color="#000080">: </font>FileBufferPtr<font color="#000080">;
+  </font>LowPos <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>MyPointer <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>BufPtr<font color="#000080">:=</font>Buffers<font color="#000080">.</font>BufferHead<font color="#000080">;
+  </font>LowPos<font color="#000080">:=</font><font color="#800000">$7fffffff</font><font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>BufPtr<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil do begin
+    With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+      If </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>Modified<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>initialized<font color="#000080">) </font><font color="#FF0000"><b>then begin
+        </b></font>FreeBuffer<font color="#000080">:=</font>BufPtr<font color="#000080">;
+        </font>Modified<font color="#000080">:=</font>False<font color="#000080">;
+        </font>FreeBuffer<font color="#000080">:=</font>BufPtr<font color="#000080">;
+        </font>Buffers<font color="#000080">.</font>ChainAtEnd<font color="#000080">(</font>BufPtr<font color="#000080">);
+        </font>Exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>If </b></font>PosBuffer<font color="#000080">&lt;</font>LowPos <font color="#FF0000"><b>then begin
+        </b></font>LowPos<font color="#000080">:=</font>PosBuffer<font color="#000080">;
+        </font>SavePtr<font color="#000080">:=</font>BufPtr<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>BufPtr<font color="#000080">:=</font>Next<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>FlushAll <font color="#FF0000"><b>then begin
+    </b></font>Flush<font color="#000080">;
+    </font>FreeBuffer<font color="#000080">:=</font>Buffers<font color="#000080">.</font>BufferHead<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>With </b></font>SavePtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+    </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>PosBuffer<font color="#000080">);
+    </font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>BytesUsed<font color="#000080">);
+    </font>BlockWrite<font color="#000080">(</font>F<font color="#000080">,</font>MyPointer<font color="#000080">^,</font>BytesUsed<font color="#000080">);
+    </font>BytesUsed<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font>Modified<font color="#000080">:=</font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>FreeBuffer<font color="#000080">:=</font>SavePtr<font color="#000080">;
+  </font>Buffers<font color="#000080">.</font>ChainAtEnd<font color="#000080">(</font>SavePtr<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Flush<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>BufPtr <font color="#000080">: </font>FileBufferPtr<font color="#000080">;
+  </font>MyPointer <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font>BufPtr<font color="#000080">:=</font>Buffers<font color="#000080">.</font>BufferHead<font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>BufPtr<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil do begin
+    With </b></font>BufPTr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+      If </b></font>Modified <font color="#FF0000"><b>then begin
+        </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>PosBuffer<font color="#000080">);
+        </font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>BytesUsed<font color="#000080">);
+        </font>BlockWrite<font color="#000080">(</font>F<font color="#000080">,</font>BufferAddr<font color="#000080">^,</font>BytesUsed<font color="#000080">);
+        </font>Modified<font color="#000080">:=</font>False<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>BufPtr<font color="#000080">:=</font>Next<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function  </b></font>BufferCHain<font color="#000080">.</font>BuffersUnUsed<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>BufPtr <font color="#000080">: </font>FileBufferPtr<font color="#000080">;
+  </font>Count <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Count<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>BufPtr<font color="#000080">:=</font>BufferHead<font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>BufPtr<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil do begin
+    With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+      If </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>Initialized<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>Modified<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Inc<font color="#000080">(</font>Count<font color="#000080">);
+      </font>BufPtr<font color="#000080">:=</font>Next<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>BuffersUnUsed<font color="#000080">:=</font>Count<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>BufferFile<font color="#000080">.</font>FileSize<font color="#000080">:</font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>FileSize<font color="#000080">:=</font>System<font color="#000080">.</font>FIleSize<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>else
+    </b></font>FileSize<font color="#000080">:=</font>Fsize <font color="#FF0000"><b>div </b></font>RecordSize<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>BufferFile<font color="#000080">.</font>FilePos<font color="#000080">:</font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>FilePos<font color="#000080">:=</font>System<font color="#000080">.</font>FilePos<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>else
+    </b></font>FilePos<font color="#000080">:=</font>CurrentPos <font color="#FF0000"><b>div </b></font>RecordSize<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Read<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>A<font color="#000080">; </font>NumRecs <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>I<font color="#000080">,</font>J    <font color="#000080">: </font>Word<font color="#000080">;
+  </font>BufPtr   <font color="#000080">:  </font>FileBufferPtr<font color="#000080">;
+  </font>TargetPtr <font color="#000080">: </font>BigBlockPtr<font color="#000080">;
+  </font>More  <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>BaseBufferToGet <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>MyPointer <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>BlockRead<font color="#000080">(</font>F<font color="#000080">,</font>A<font color="#000080">,</font>NuMRecs<font color="#000080">) </font><font color="#FF0000"><b>else begin
+    </b></font>NumRecs<font color="#000080">:=</font>NumRecs<font color="#000080">*</font>RecordSize<font color="#000080">;
+    </font>TargetPtr<font color="#000080">:=@</font>A<font color="#000080">;
+    </font><font color="#FF0000"><b>Repeat
+      </b></font>BaseBufferToGet<font color="#000080">:=</font>CurrentPos<font color="#000080">-(</font>CurrentPos <font color="#FF0000"><b>Mod </b></font>BlockSize<font color="#000080">);
+      </font>BufPtr<font color="#000080">:=</font>Buffers<font color="#000080">.</font>BufferHead<font color="#000080">;
+      </font>More<font color="#000080">:=</font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>BufPtr<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>More <font color="#FF0000"><b>Do begin
+        With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+          If </b></font><font color="#000080">(</font>PosBuffer<font color="#000080">=</font>BaseBufferToGet<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Initialized <font color="#FF0000"><b>then </b></font>more<font color="#000080">:=</font>False <font color="#FF0000"><b>else
+          </b></font>BufPtr<font color="#000080">:=</font>Next<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>If </b></font>BufPtr<font color="#000080">=</font><font color="#FF0000"><b>Nil then begin
+        If </b></font>NoBufferReads <font color="#FF0000"><b>then begin
+          </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>CurrentPos<font color="#000080">);
+          </font>BlockRead<font color="#000080">(</font>F<font color="#000080">,</font>TargetPtr<font color="#000080">^,</font>NumRecs<font color="#000080">);
+          </font>Inc<font color="#000080">(</font>CurrentPos<font color="#000080">,</font>NumRecs<font color="#000080">);
+          </font>exit<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>BufPtr<font color="#000080">:=</font>FreeBuffer<font color="#000080">;
+        </font><font color="#FF0000"><b>With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+          </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>BaseBufferToGet<font color="#000080">);
+          </font>PosBuffer<font color="#000080">:=</font>BaseBufferToGet<font color="#000080">;
+          </font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>BlockSize<font color="#000080">);
+          </font>BlockRead<font color="#000080">(</font>F<font color="#000080">,</font>MyPointer<font color="#000080">^,</font>BlockSize<font color="#000080">,</font>BytesUsed<font color="#000080">);
+          </font>Initialized<font color="#000080">:=</font>True<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>If </b></font>ReadAll <font color="#FF0000"><b>then begin
+          </b></font>J<font color="#000080">:=</font>Buffers<font color="#000080">.</font>BuffersUnUsed<font color="#000080">;
+          </font><font color="#FF0000"><b>If </b></font>J<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Dec<font color="#000080">(</font>j<font color="#000080">);
+          </font>I<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>I<font color="#000080">&lt;= </font>J<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>BufPtr<font color="#000080">^.</font>BytesUsed<font color="#000080">=</font>BlockSize<font color="#000080">) </font><font color="#FF0000"><b>do begin
+            </b></font>Inc<font color="#000080">(</font>BaseBufferToGet<font color="#000080">,</font>BlockSize<font color="#000080">);
+            </font>BufPtr<font color="#000080">:=</font>FreeBuffer<font color="#000080">;
+            </font><font color="#FF0000"><b>With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+              </b></font>PosBuffer<font color="#000080">:=</font>BaseBufferToGet<font color="#000080">;
+              </font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>BlockSize<font color="#000080">);
+              </font>BlockRead<font color="#000080">(</font>F<font color="#000080">,</font>MyPointer<font color="#000080">^,</font>BlockSize<font color="#000080">,</font>BytesUsed<font color="#000080">);
+              </font>Initialized<font color="#000080">:=</font>True<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>Inc<font color="#000080">(</font>I<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end else begin
+        With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+          </b></font>J<font color="#000080">:=</font>CurrentPos<font color="#000080">-</font>PosBuffer<font color="#000080">;
+          </font>I<font color="#000080">:=</font>BytesUsed<font color="#000080">-</font>j<font color="#000080">;
+          </font><font color="#FF0000"><b>If </b></font>I<font color="#000080">&gt;</font>NumRecs <font color="#FF0000"><b>then </b></font>I<font color="#000080">:=</font>NumRecs<font color="#000080">;
+          </font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font>J<font color="#000080">,</font>I<font color="#000080">);
+          </font>Move<font color="#000080">(</font>MyPointer<font color="#000080">^,</font>TargetPtr<font color="#000080">^,</font>I<font color="#000080">);
+          </font>Inc<font color="#000080">(</font>CurrentPos<font color="#000080">,</font>I<font color="#000080">);
+          </font>Dec<font color="#000080">(</font>NumRecs<font color="#000080">,</font>I<font color="#000080">);
+          </font>Inc<font color="#000080">(</font>PtrRec<font color="#000080">(</font>TargetPtr<font color="#000080">).</font>Ofs<font color="#000080">,</font>I<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font>NumRecs<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Write<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>A<font color="#000080">; </font>NumRecs <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>I<font color="#000080">,</font>J <font color="#000080">: </font>WOrd<font color="#000080">;
+  </font>BufPtr <font color="#000080">: </font>FileBufferPtr<font color="#000080">;
+  </font>TargetPTr<font color="#000080">,</font>MyPointer <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>BaseBufferToGet <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>BytesNeeded <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>OK<font color="#000080">,</font>More <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>BlockWrite<font color="#000080">(</font>F<font color="#000080">,</font>A<font color="#000080">,</font>NumRecs<font color="#000080">) </font><font color="#FF0000"><b>else begin
+    </b></font>TargetPtr<font color="#000080">:=@</font>A<font color="#000080">;
+    </font>NumRecs<font color="#000080">:=</font>NumRecs<font color="#000080">*</font>RecordSize<font color="#000080">;
+    </font><font color="#FF0000"><b>Repeat
+      </b></font>BaseBufferToGet<font color="#000080">:=</font>CUrrentPos<font color="#000080">-(</font>CurrentPos <font color="#FF0000"><b>Mod </b></font>BlockSize<font color="#000080">);
+      </font>BufPtr<font color="#000080">:=</font>Buffers<font color="#000080">.</font>BufferHead<font color="#000080">;
+      </font>More<font color="#000080">:=</font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>BufPtr<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>More <font color="#FF0000"><b>Do begin
+        With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+          If </b></font><font color="#000080">(</font>Initialized<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>BaseBufferToGet<font color="#000080">=</font>PosBuffer<font color="#000080">) </font><font color="#FF0000"><b>then begin
+            </b></font>BytesNeeded<font color="#000080">:=</font>CurrentPos<font color="#000080">-</font>PosBuffer<font color="#000080">+</font>NumRecs<font color="#000080">;
+            </font><font color="#FF0000"><b>If </b></font>BytesNeeded<font color="#000080">&gt;</font>BytesUsed <font color="#FF0000"><b>then begin
+              If </b></font>BytesNeeded<font color="#000080">&gt;</font>BlockSize <font color="#FF0000"><b>then </b></font>BytesUsed<font color="#000080">:=</font>BlockSize <font color="#FF0000"><b>else
+              </b></font>BytesUsed<font color="#000080">:=</font>BytesNeeded<font color="#000080">;
+              </font>Fsize<font color="#000080">:=</font>BaseBufferToGet<font color="#000080">+</font>BytesUsed<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>More<font color="#000080">:=</font>False<font color="#000080">;
+          </font><font color="#FF0000"><b>end else </b></font>BufPtr<font color="#000080">:=</font>Next<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>If </b></font>BufPtr<font color="#000080">=</font><font color="#FF0000"><b>Nil then begin
+        If </b></font>NoBufferWrites <font color="#FF0000"><b>then begin
+          If </b></font>BaseBufferToGet<font color="#000080">&lt;&gt;</font>CurrentPos <font color="#FF0000"><b>then begin
+            </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>CurrentPos<font color="#000080">);
+            </font>BlockWrite<font color="#000080">(</font>F<font color="#000080">,</font>A<font color="#000080">,</font>NumRecs<font color="#000080">);
+            </font>Inc<font color="#000080">(</font>CurrentPos<font color="#000080">,</font>NumRecs<font color="#000080">);
+            </font>exit<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>BufPtr<font color="#000080">:=</font>FreeBuffer<font color="#000080">;
+        </font><font color="#FF0000"><b>With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+          </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>BaseBufferToGet<font color="#000080">);
+          </font>PosBuffer<font color="#000080">:=</font>BaseBufferToGet<font color="#000080">;
+          </font><font color="#FF0000"><b>If </b></font>PosBuffer<font color="#000080">&lt;</font>SyStem<font color="#000080">.</font>FileSize<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>then begin
+            </b></font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>BlockSize<font color="#000080">);
+            </font>BlockRead<font color="#000080">(</font>F<font color="#000080">,</font>MyPointer<font color="#000080">^,</font>BlockSize<font color="#000080">,</font>BytesUsed<font color="#000080">);
+          </font><font color="#FF0000"><b>end else </b></font>BytesUsed<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+          </font>Initialized<font color="#000080">:=</font>True<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end else begin
+        With </b></font>BufPtr<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+          </b></font>J<font color="#000080">:=</font>CurrentPos<font color="#000080">-</font>PosBuffer<font color="#000080">;
+          </font>I<font color="#000080">:=</font>BytesUsed<font color="#000080">-</font>j<font color="#000080">;
+          </font><font color="#FF0000"><b>If </b></font>I<font color="#000080">&gt;</font>NumRecs <font color="#FF0000"><b>then </b></font>I<font color="#000080">:=</font>NumRecs<font color="#000080">;
+          </font>MyPointer<font color="#000080">:=</font>Map<font color="#000080">(</font>J<font color="#000080">,</font>I<font color="#000080">);
+          </font>Move<font color="#000080">(</font>TargetPtr<font color="#000080">^,</font>MyPointer<font color="#000080">^,</font>I<font color="#000080">);
+          </font>Modified<font color="#000080">:=</font>True<font color="#000080">;
+          </font>Inc<font color="#000080">(</font>CurrentPos<font color="#000080">,</font>I<font color="#000080">);
+          </font>Dec<font color="#000080">(</font>NumRecs<font color="#000080">,</font>I<font color="#000080">);
+          </font>Inc<font color="#000080">(</font>PtrRec<font color="#000080">(</font>TargetPtr<font color="#000080">).</font>Ofs<font color="#000080">,</font>I<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font>NumRecs<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>BufferFile<font color="#000080">.</font>Eof<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>Eof<font color="#000080">:=</font>System<font color="#000080">.</font>Eof<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>else
+    </b></font>Eof<font color="#000080">:=</font>CurrentPos<font color="#000080">=</font>Fsize<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Seek<font color="#000080">(</font>NewPos <font color="#000080">: </font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  If </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>System<font color="#000080">.</font>Seek<font color="#000080">(</font>F<font color="#000080">,</font>Newpos<font color="#000080">) </font><font color="#FF0000"><b>else
+    </b></font>CurrentPos<font color="#000080">:=</font>NewPos<font color="#000080">*</font>RecordSize<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Assign<font color="#000080">(</font>Name <font color="#000080">: </font>PathStr<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>System<font color="#000080">.</font>Assign<font color="#000080">(</font>F<font color="#000080">,</font>Name<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Rewrite<font color="#000080">(</font>RecSize<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>RecordSize<font color="#000080">:=</font>RecSize<font color="#000080">;
+  </font><font color="#FF0000"><b>If Not </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>Recsize<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>System<font color="#000080">.</font>Rewrite<font color="#000080">(</font>F<font color="#000080">,</font>RecSize<font color="#000080">);
+  </font>Fsize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>CurrentPos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Reset<font color="#000080">(</font>RecSize <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>RecordSize<font color="#000080">:=</font>RecSize<font color="#000080">;
+  </font><font color="#FF0000"><b>If Not </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>RecSize<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>System<font color="#000080">.</font>Reset<font color="#000080">(</font>F<font color="#000080">,</font>RecSize<font color="#000080">);
+  </font>Fsize<font color="#000080">:=</font>System<font color="#000080">.</font>FileSize<font color="#000080">(</font>F<font color="#000080">);
+  </font>CurrentPos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferChain<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  repeat
+    with </b></font>BufferHead<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+      </b></font>BufferTail<font color="#000080">:=</font>BufferHead<font color="#000080">^.</font>Next<font color="#000080">;
+      </font>Dispose<font color="#000080">(</font>BufferHead<font color="#000080">,</font>Done<font color="#000080">);
+      </font>BufferHead<font color="#000080">:=</font>BufferTail<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>Bufferhead<font color="#000080">=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>BufferFile<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>BufferTail <font color="#000080">: </font>BufferPtr<font color="#000080">;
+  </font>Ok <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Flush<font color="#000080">;
+  </font>Close<font color="#000080">(</font>F<font color="#000080">);
+  </font><font color="#FF0000"><b>If Not </b></font>NoBuffering <font color="#FF0000"><b>then </b></font>Buffers<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0054.PAS">Original</a><b>]</b></p></body>
+</html>

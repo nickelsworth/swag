@@ -1,0 +1,133 @@
+<html>
+<head><title> "Display "ON SCREEN" Clock" by TREVOR J. CARLSEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0002.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>Unit </b></font>Clock<font color="#000080">;
+</font><font color="#008000"><i>{
+  Author:  Trevor J Carlsen 
+  Purpose: Demonstrate a simple &quot;on screen&quot; clock.
+  
+  This demo Unit works by &quot;hooking&quot; the timer interrupt ($1c). This
+  interrupt is called by the hardware interrupt ($08) approximately 18.2
+  times every second and normally consists of a simple return instruction
+  unless some other application has already hooked it.
+  
+  Because the routine is called roughly 18 times every second it is
+  important that any processing it contains is optimised as much as
+  possible.  Obviously the best way to do this is by assembly language but
+  in this demo I have used almost pure Turbo Pascal and have set up a
+  counter Variable and any processing is only done every 6 calls.  This is
+  more than sufficient and minimises processing. The routine is by no
+  means perfect - there will be a minor irregularity For the final 10
+  seconds of each day and For about half a second each hour. Better this
+  than to waste valuable processing time in the interrupt by coding it
+  out.
+  
+  Because Dos is not re-entrant it is also important that the routine make
+  no calls to any Procedure or Function that makes use of Dos For its
+  operation. Thus no Writeln, Write can be used.  To display the time on
+  screen an Array is addressed directly to screen memory.  Any changes in
+  this Array are thus reflected on the screen.  The downside to this is
+  that on older CGAs this would cause a &quot;snow&quot; effect and code would be
+  needed to eliminate this. It also means that the TP Procedure GetTime
+  cannot be used.  So the time is calculated from the value stored at the
+  clock tick counter location.
+  
+  To display an on-screen clock all that is required is For a Programmer
+  to include this Unit in the Uses declaration of the Program.}
+  
+</i></font><font color="#FF0000"><b>Interface
+
+Const
+  </b></font>DisplayClock <font color="#000080">: </font>Boolean <font color="#000080">= </font>True<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+</b></font><font color="#008000"><i>{ Everything is private to this Unit }
+
+</i></font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>line          <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ Change as required For position of display on screen }
+  </i></font>column        <font color="#000080">= </font><font color="#800000">72</font><font color="#000080">;                               </font><font color="#008000"><i>{ Top left corner is 0,0 }
+  </i></font>ScreenPos     <font color="#000080">= (</font>line <font color="#000080">* </font><font color="#800000">160</font><font color="#000080">) + (</font>column <font color="#000080">* </font><font color="#800000">2</font><font color="#000080">);
+  </font>Colour        <font color="#000080">= </font><font color="#800000">$1f</font><font color="#000080">;                                       </font><font color="#008000"><i>{ White on Blue }
+  </i></font>ZeroChar      <font color="#000080">= </font>Colour <font color="#FF0000"><b>shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font>ord<font color="#000080">(</font><font color="#800000">'0'</font><font color="#000080">); 
+  </font>Colon         <font color="#000080">= </font>Colour <font color="#FF0000"><b>shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font>ord<font color="#000080">(</font><font color="#800000">':'</font><font color="#000080">);
+</font><font color="#FF0000"><b>Type
+  </b></font>timestr       <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word<font color="#000080">;
+  </font>timeptr       <font color="#000080">= ^</font>timestr<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>time          <font color="#000080">: </font>timeptr<font color="#000080">;
+  </font>OldInt1c      <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>ExitSave      <font color="#000080">: </font>Pointer<font color="#000080">;
+
+</font><font color="#008000"><i>{$F+}
+ </i></font><font color="#FF0000"><b>Procedure </b></font>Int1cISR<font color="#000080">; </font>interrupt<font color="#000080">;
+  </font><font color="#008000"><i>{ This will be called every clock tick by hardware interrupt $08 }
+  </i></font><font color="#FF0000"><b>Const
+    </b></font>count       <font color="#000080">: </font>Integer <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;                  </font><font color="#008000"><i>{ To keep track of our calls }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>hr          <font color="#000080">: </font>Word <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$6e</font><font color="#000080">;
+    </font>ticks       <font color="#000080">: </font>Word <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$6c</font><font color="#000080">; 
+                  </font><font color="#008000"><i>{ This location keeps the number of clock ticks since 00:00}
+    </i></font>min<font color="#000080">,
+    </font>sec         <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>seconds     <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    Asm </b></font><font color="#FF00FF">cli </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>DisplayClock <font color="#FF0000"><b>then begin
+      </b></font>inc<font color="#000080">(</font>count<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>count <font color="#000080">= </font><font color="#800000">6 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ ticks to update the display } </i></font><font color="#FF0000"><b>begin
+        </b></font>count       <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ equality check and assignment faster than mod 9 }
+        </i></font>seconds     <font color="#000080">:= </font>ticks <font color="#000080">* </font>LongInt<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">182</font><font color="#000080">;       </font><font color="#008000"><i>{ speed = no Reals }
+        </i></font>min         <font color="#000080">:= (</font>seconds <font color="#FF0000"><b>div </b></font><font color="#800000">60</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font><font color="#800000">60</font><font color="#000080">;
+        </font>sec         <font color="#000080">:= </font>seconds <font color="#FF0000"><b>mod </b></font><font color="#800000">60</font><font color="#000080">;
+
+      </font><font color="#008000"><i>{ The following statements are what actually display the on-screen time}
+
+        </i></font>time<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]    := </font>ZeroChar <font color="#000080">+ (</font>hr <font color="#FF0000"><b>div </b></font><font color="#800000">10</font><font color="#000080">);         </font><font color="#008000"><i>{ first Char of hours }
+        </i></font>time<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]    := </font>ZeroChar <font color="#000080">+ (</font>hr <font color="#FF0000"><b>mod </b></font><font color="#800000">10</font><font color="#000080">);        </font><font color="#008000"><i>{ second Char of hours }
+        </i></font>time<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">]    := </font>Colon<font color="#000080">;
+        </font>time<font color="#000080">^[</font><font color="#800000">3</font><font color="#000080">]    := </font>ZeroChar <font color="#000080">+ (</font>min <font color="#FF0000"><b>div </b></font><font color="#800000">10</font><font color="#000080">);      </font><font color="#008000"><i>{ first Char of minutes }
+        </i></font>time<font color="#000080">^[</font><font color="#800000">4</font><font color="#000080">]    := </font>ZeroChar <font color="#000080">+ (</font>min <font color="#FF0000"><b>mod </b></font><font color="#800000">10</font><font color="#000080">);     </font><font color="#008000"><i>{ second Char of minutes }
+        </i></font>time<font color="#000080">^[</font><font color="#800000">5</font><font color="#000080">]    := </font>Colon<font color="#000080">;
+        </font>time<font color="#000080">^[</font><font color="#800000">6</font><font color="#000080">]    := </font>ZeroChar <font color="#000080">+ (</font>sec <font color="#FF0000"><b>div </b></font><font color="#800000">10</font><font color="#000080">);      </font><font color="#008000"><i>{ first Char of seconds }
+        </i></font>time<font color="#000080">^[</font><font color="#800000">7</font><font color="#000080">]    := </font>ZeroChar <font color="#000080">+ (</font>sec <font color="#FF0000"><b>mod </b></font><font color="#800000">10</font><font color="#000080">);     </font><font color="#008000"><i>{ second Char of seconds }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ if count = 6 }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ if DisplayClock }
+    </i></font><font color="#FF0000"><b>Asm         
+      </b></font><font color="#FF00FF">sti
+      pushf                                  </font><font color="#008000"><i>{ push flags to set up For IRET }
+      </i></font><font color="#FF00FF">call OldInt1c;                              </font><font color="#008000"><i>{ Call old ISR entry point }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Int1cISR }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>ClockExitProc<font color="#000080">;
+  </font><font color="#008000"><i>{ This Procedure is VERY important as you have hooked the timer interrupt  }
+  { and therefore if this is omitted when the Unit is terminated your        }
+  { system will crash in an unpredictable and possibly damaging way.         }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ExitProc <font color="#000080">:= </font>ExitSave<font color="#000080">;
+    </font>SetIntVec<font color="#000080">(</font><font color="#800000">$1c</font><font color="#000080">,</font>OldInt1c<font color="#000080">);               </font><font color="#008000"><i>{ This &quot;unhooks&quot; the timer vector }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Initialise<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>mode <font color="#000080">: </font>Byte <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$49</font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>mode <font color="#000080">= </font><font color="#800000">7 </font><font color="#FF0000"><b>then                                </b></font><font color="#008000"><i>{ must be a mono adaptor }
+      </i></font>time <font color="#000080">:= </font>ptr<font color="#000080">(</font><font color="#800000">$b000</font><font color="#000080">,</font>ScreenPos<font color="#000080">)
+    </font><font color="#FF0000"><b>else                                       </b></font><font color="#008000"><i>{ colour adaptor of some kind }
+      </i></font>time <font color="#000080">:= </font>ptr<font color="#000080">(</font><font color="#800000">$b800</font><font color="#000080">,</font>ScreenPos<font color="#000080">);      
+    </font>GetIntVec<font color="#000080">(</font><font color="#800000">$1c</font><font color="#000080">,</font>OldInt1c<font color="#000080">);              </font><font color="#008000"><i>{ Get old timer vector and save it }
+    </i></font>ExitSave <font color="#000080">:= </font>ExitProc<font color="#000080">;                          </font><font color="#008000"><i>{ Save old Exit Procedure }
+    </i></font>ExitProc <font color="#000080">:= @</font>ClockExitProc<font color="#000080">;                 </font><font color="#008000"><i>{ Setup a new Exit Procedure }
+    </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$1c</font><font color="#000080">,@</font>Int1cISR<font color="#000080">);   </font><font color="#008000"><i>{ Hook the timer vector to the new Procedure }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ Initialise }  
+  
+</i></font><font color="#FF0000"><b>begin 
+  </b></font>Initialise<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0002.PAS">Original</a><b>]</b></p></body>
+</html>

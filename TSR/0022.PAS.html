@@ -1,0 +1,818 @@
+<html>
+<head><title> "A Working TSR" by MIKE CHAMBERS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0022.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+---------------------------------------------------------------------------
+ MD&gt; How do you write something so it is interup driven?
+
+ MD&gt; Can anyone post some simple code to perhaps count a number
+ MD&gt; up by one and display it to the screen while at the same
+ MD&gt; time allowing another part of the program do what ever it's
+ MD&gt; suppose to.?
+
+Marek:
+
+The features to which you refer constitute writing a TSR program.
+These programs are executed and terminate, but stay resident in
+system memory.  Prior to termination they insert themselves into
+the Interrupt Service Routine chain of a known interrupt vector.
+
+This programming was simplified somewhat in turbo Pascal Release
+4 or 5 with the addition of the Keep, GetIntVec and SetIntVec
+procedures of the DOS unit.  However, these procedures are only
+a small fraction of the coding needed to write reliable TSR's.
+This fact explains the lack of simple code examples.
+
+To write good TSR's you need to read about them and play with
+someone else's code for a while. (I've coded pascal for 17 years,
+but my first TSR took about 3 days to debug).  For a solid
+Pascal reference, try Tom Swan's 'Mastering Turbo Pascal'.
+To figure out what the interrupt functions are doing, I recommend
+Ralf Brown's &amp; Jim Kyle's 'PC Interrupts'.  The book is derived
+from their well-known interrupt list (INTERnn.ZIP) available
+on many programming oriented BBS systems.  The index of the book
+is well worth the money.  Finally, I recommend Ed Mitchell's
+&quot;Borland Pascal Developer's Guide&quot;. Ed's TSR code is thorough
+and documented with education in mind.  Since I'm quoting
+ED's book here, please buy a copy if you find the code useful.
+
+Good luck
+
+-------------------------------------------------------------------------
+                             TSR Code Example
+-------------------------------------------------------------------------
+}
+
+{ TSR.PAS
+  Sample TSR application written in Turbo Pascal.
+  IMPORTANT!
+  This TSR operates only in TEXT mode, and, as
+  written, supports only 80 x 25 sized screens
+  (not 43- or 50- line display modes).
+
+  This TSR will only operate on DOS 3.x or newer
+  versions of DOS.
+
+  Use this code as an example to write your own TSR code.
+  Modify the $M compiler directive, below, to specify
+  the maximum stack size, minimum heap and maximum heap
+  required for your TSR application.
+
+  Please see the text and other source comments
+  for important restrictions.
+
+  TSRs can be DANGEROUS, so be careful.
+}
+
+{$S-}
+{$M 3072, 0, 512}
+</i></font><font color="#FF0000"><b>uses
+  </b></font>Crt<font color="#000080">, </font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font><font color="#008000"><i>{ Defines an array to store the screen image.
+  For greater efficiency, your code may want to save only
+  the portion of the screen that is changed by your TSR
+  code. This implementation saves the entire screen image,
+  at popup time, for the greatest flexibility. }
+  </i></font>TSavedVideo<font color="#000080">=</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">24</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">79</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word<font color="#000080">;
+  </font>PSavedVideo<font color="#000080">=^</font>TSavedVideo<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ The following items define the TSR's identification
+string. }
+</i></font><font color="#FF0000"><b>type
+  </b></font>String8<font color="#000080">=</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">8</font><font color="#000080">];
+</font><font color="#FF0000"><b>const
+  </b></font>IdStr1<font color="#000080">:</font>String8<font color="#000080">=</font><font color="#800000">'TP7RTSR'</font><font color="#000080">;
+  </font>IdStr2<font color="#000080">:</font>String8<font color="#000080">=</font><font color="#800000">'TSRInUse'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>CPURegisters<font color="#000080">: </font>Registers<font color="#000080">;
+    </font><font color="#008000"><i>{ General register structure for Intr calls. }
+  </i></font>CursorStartLine<font color="#000080">: </font>Byte<font color="#000080">;
+    </font><font color="#008000"><i>{ Stores cursor shape information. }
+  </i></font>CursorEndLine<font color="#000080">: </font>Byte<font color="#000080">;
+    </font><font color="#008000"><i>{ Stores cursor shape information. }
+  </i></font>DiskInUse<font color="#000080">: </font>Word<font color="#000080">;
+    </font><font color="#008000"><i>{ Tracks INT 13 calls in progress. }
+  </i></font>MadeActive<font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#008000"><i>{ TRUE if this TSR has been asked to pop up. }
+  </i></font>OurSP<font color="#000080">: </font>Word<font color="#000080">;
+  </font>OurSS<font color="#000080">: </font>Word<font color="#000080">;
+    </font><font color="#008000"><i>{ Saved copies of our SS and SP registers. }
+  </i></font>PInt09<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ Saved address of keyboard handler. }
+  </i></font>PInt12<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ Saved address of GetMemorySize interrupt. }
+  </i></font>PInt1B<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ Ctrl-Break interrupt address. }
+  </i></font>PInt24<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ DOS Critical error handler. }
+  </i></font>PInt28<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ Saved address of background task scheduler. }
+  </i></font>PInt1C<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ Saved address of timer handler. }
+  </i></font>PInDosFlag<font color="#000080">: ^</font>Word<font color="#000080">;
+    </font><font color="#008000"><i>{ Points to DOS's InDos flag. }
+  </i></font>VideoMem<font color="#000080">: </font>PSavedVideo<font color="#000080">;
+    </font><font color="#008000"><i>{ Points to actual video memory area. }
+  </i></font>SavedVideo<font color="#000080">:</font>TSavedVideo<font color="#000080">;
+    </font><font color="#008000"><i>{ Stores the video memory when TSR is popped up. }
+  </i></font>SavedWindMin<font color="#000080">: </font>Word<font color="#000080">;
+   </font><font color="#008000"><i>{ Holds saved copy of WindMin for restoring window. }
+  </i></font>SavedWindMax<font color="#000080">: </font>Word<font color="#000080">;
+   </font><font color="#008000"><i>{ Holds saved copy of WindMax for restoring window. }
+  </i></font>SavedSS<font color="#000080">,
+  </font>SavedSP<font color="#000080">: </font>Word<font color="#000080">;
+   </font><font color="#008000"><i>{ Saves caller stack registers; must be global
+   to store in fixed memory location, not on local
+   stack of interrupted process. }
+  </i></font>SavedX<font color="#000080">,
+  </font>SavedY<font color="#000080">: </font>Word<font color="#000080">;
+    </font><font color="#008000"><i>{ Stores X, Y cursor prior to TSR popup }
+    { for restoration when TSR goes away. }
+  </i></font>TempPtr<font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#008000"><i>{ Used internally to DoUnInstall. }
+  </i></font>TSRInUse<font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#008000"><i>{ Set TRUE during processing to avoid double
+    activation. }
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SaveDisplay<font color="#000080">;
+</font><font color="#008000"><i>{ Copies the content of video memory to an internal
+  array structure. Saves the cursor location and cursor
+  shape definitions. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>CursorLines<font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ Save cursor location. }
+  </i></font>SavedX <font color="#000080">:= </font>WhereX<font color="#000080">;
+  </font>SavedY <font color="#000080">:= </font>WhereY<font color="#000080">;
+  </font><font color="#008000"><i>{ Saved existing window values. }
+  </i></font>SavedWindMin <font color="#000080">:= </font>WindMin<font color="#000080">;
+  </font>SavedWindMax <font color="#000080">:= </font>WindMax<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Get and save current cursor shape. }
+  </i></font><font color="#FF0000"><b>with </b></font>CPURegisters <font color="#FF0000"><b>do
+  begin
+    </b></font>AH <font color="#000080">:= </font><font color="#800000">$03</font><font color="#000080">;
+    </font>BH <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>CPURegisters<font color="#000080">);
+    </font>CursorStartLine <font color="#000080">:= </font>CH<font color="#000080">;
+    </font>CursorEndLine<font color="#000080">:= </font>CL<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Get equipment-type information. If Monochrome
+    adapter in use, then point to $B000; otherwise use the
+    color memory area. }
+  </i></font>Intr<font color="#000080">( </font><font color="#800000">$11</font><font color="#000080">, </font>CPURegisters <font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font><font color="#000080">((</font>CPURegisters<font color="#000080">.</font>AX <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">7</font><font color="#000080">) = </font><font color="#800000">3 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>VideoMem <font color="#000080">:= </font>Ptr<font color="#000080">( </font><font color="#800000">$B000</font><font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+    </font>CursorLines <font color="#000080">:= </font><font color="#800000">15</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+    </b></font>VideoMem <font color="#000080">:= </font>Ptr<font color="#000080">( </font><font color="#800000">$B800</font><font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+    </font>CursorLines <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>SavedVideo <font color="#000080">:= </font>VideoMem<font color="#000080">^;
+
+  </font><font color="#008000"><i>{ Change cursor shape to block cursor. }
+  </i></font><font color="#FF0000"><b>with </b></font>CPURegisters <font color="#FF0000"><b>do
+  begin
+    </b></font>AH <font color="#000080">:= </font><font color="#800000">$01</font><font color="#000080">;
+    </font>CH <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>CL <font color="#000080">:= </font>CursorLines<font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>CPURegisters<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ SaveDisplay }
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>RestoreDisplay<font color="#000080">;
+</font><font color="#008000"><i>{ Always called sometime after calling SaveDisplay.
+  Restores the video display to its state prior to the
+  TSR popping up. }
+</i></font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ Restore screen content. }
+  </i></font>VideoMem<font color="#000080">^ := </font>SavedVideo<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Restore cursor shape. }
+  </i></font><font color="#FF0000"><b>with </b></font>CPURegisters <font color="#FF0000"><b>do
+  begin
+    </b></font>AH <font color="#000080">:= </font><font color="#800000">$01</font><font color="#000080">;
+    </font>CH <font color="#000080">:= </font>CursorStartLine<font color="#000080">;
+    </font>CL <font color="#000080">:= </font>CursorEndLine<font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>CPURegisters<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Resize window so the GotoXY (below) will work. }
+  </i></font>Window <font color="#000080">(</font>Lo<font color="#000080">(</font>SavedWindMin<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">, </font>Hi<font color="#000080">(</font>SavedWindMin<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,
+          </font>Lo<font color="#000080">(</font>SavedWindMax<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">, </font>Hi<font color="#000080">(</font>SavedWindMax<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+  </font>Gotoxy <font color="#000080">( </font>SavedX<font color="#000080">, </font>SavedY <font color="#000080">);
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Restore Display }
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TrapCriticalErrors<font color="#000080">;
+</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ INT 24H }
+{
+This handler is enabled only while the TSR is popped
+up on-screen.
+
+This handler exists solely to catch any DOS
+critical errors and is a crude method of doing so. Since
+this routine does nothing, any critical errors that
+occur while the TSR is popped up are ignored--which
+could be very dangerous. Also, if another TSR or ISR
+pops up after this one, it may get the critical
+error that was intended for this TSR.
+NOTE: Normally, this could be an &quot;interrupt&quot; type
+procedure. However, Turbo Pascal pushes and then pops
+all registers prior to the IRET instruction. By writing
+this as an assembler routine, this generates the IRET
+directly, followed by one superfluous RET instruction
+generated by the assembler, resulting in substantial
+code savings.
+}
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">IRET
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ TrapCriticalErrors }
+
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>CBreakCheck<font color="#000080">;
+</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ INT 1BH }
+
+{ This routine results in a no operation; when hooked to
+the INT 1B Ctrl-Break interrupt handler, it causes
+nothing to happen when Ctrl-Break or Ctrl-C are pressed.
+This routine is hooked only when the TSR is popped up. }
+</i></font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">IRET
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ CBreakCheck }
+
+
+
+
+</i></font><font color="#FF0000"><b>function </b></font>GetKey <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#008000"><i>{ Pauses for input of a
+single keystroke from the keyboard and returns the ASCII
+value. In the case where an Extended keyboard key is
+pressed, GetKey returns the ScanCode + 256. The Turbo
+Pascal ReadKey function is called to perform the
+keystroke input. This routine returns a 0 when an Extended
+key has been typed (for example, left or right arrow)
+and we must read the next byte to determine the Scan
+code.
+}
+</i></font><font color="#FF0000"><b>var
+  </b></font>Ch <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ While waiting for a key to be pressed, call
+  the INT $28 DOS Idle interrupt to allow background
+  tasks a chance to run. }
+  </i></font><font color="#FF0000"><b>repeat
+    asm
+      </b></font><font color="#FF00FF">int $28
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>KeyPressed<font color="#000080">;
+  </font>Ch <font color="#000080">:= </font>ReadKey<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Ord<font color="#000080">(</font>Ch<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>GetKey <font color="#000080">:= </font>Ord<font color="#000080">(</font>Ch<font color="#000080">)   </font><font color="#008000"><i>{ Return normal ASCII value. }
+  </i></font><font color="#FF0000"><b>else
+    </b></font><font color="#008000"><i>{ Read the DOS Extended SCAN code that follows. }
+    </i></font>GetKey <font color="#000080">:= </font>Ord<font color="#000080">(</font>ReadKey<font color="#000080">) + </font><font color="#800000">256</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;</font><font color="#008000"><i>{GetKey}
+
+
+
+
+</i></font><font color="#FF0000"><b>procedure  </b></font>DoPopUpFunction<font color="#000080">;
+</font><font color="#008000"><i>{ This procedure is the &quot;guts&quot; of the popup
+  application. You can code your own application here, if
+  you want. Be sure to read the text for important
+  restrictions on what can be written in a TSR.
+
+  As implemented here, this popup displays a table
+  of ASCII values.
+}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>UpperLeftX<font color="#000080">=</font><font color="#800000">10</font><font color="#000080">;
+  </font>UpperLeftY<font color="#000080">=</font><font color="#800000">5</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Define upper-left corner of TSR's popup window. }
+
+  </i></font>LowerLeftX<font color="#000080">=</font><font color="#800000">70</font><font color="#000080">;
+  </font>LowerRightY<font color="#000080">=</font><font color="#800000">20</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Define lower-right corner of TSR's popup window. }
+
+  </i></font>Width<font color="#000080">=</font>LowerLeftX <font color="#000080">- </font>UpperLeftX <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+  </font>Height<font color="#000080">=</font>LowerRightY <font color="#000080">- </font>UpperLeftY <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Calculated width and height of popup window. }
+  </i></font>MinX<font color="#000080">=</font><font color="#800000">6</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Distance from left edge to display ASCII table. }
+  </i></font>RightEdge<font color="#000080">=</font><font color="#800000">8</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Marks the right edge (Width-RightEdge) of table. }
+  </i></font>MinY<font color="#000080">=</font><font color="#800000">4</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Distance from top of window to start ASCII Table. }
+  </i></font>ValuesPerLine<font color="#000080">=</font>Width<font color="#000080">-</font><font color="#800000">8 </font><font color="#000080">- </font>MinX<font color="#000080">;
+    </font><font color="#008000"><i>{ Computed number of ASCII values in each line. }
+  </i></font>NumLines<font color="#000080">=</font><font color="#800000">255 </font><font color="#FF0000"><b>div </b></font>ValuesPerLine<font color="#000080">;
+    </font><font color="#008000"><i>{ Computed number of lines in the ASCII table. }
+  </i></font>KEY_LEFTARROW <font color="#000080">= </font><font color="#800000">331</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Keystroke values for extended keyboard codes. }
+  </i></font>KEY_RIGHTARROW <font color="#000080">= </font><font color="#800000">333</font><font color="#000080">;
+  </font>KEY_DOWNARROW <font color="#000080">= </font><font color="#800000">336</font><font color="#000080">;
+  </font>KEY_UPARROW <font color="#000080">= </font><font color="#800000">328</font><font color="#000080">;
+  </font>KEY_ESCAPE <font color="#000080">= </font><font color="#800000">27</font><font color="#000080">;
+  </font>KEY_ENTER <font color="#000080">= </font><font color="#800000">13</font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>PutChar<font color="#000080">( </font>X<font color="#000080">, </font>Y<font color="#000080">: </font>Integer<font color="#000080">; </font>ChCode<font color="#000080">: </font>Char <font color="#000080">);
+</font><font color="#008000"><i>{ Writes the single character ChCode to the screen
+at (X, Y), where (X, Y) is relative to the TSR popup
+window. This routine is used for displaying the ASCII
+table because the usual Pascal Write() translates ASCII
+7 to a bell ring, and ASCII 13 and 10 to carriage return
+and line feed. By using the PC BIOS routine directly, we
+bypass Pascal's translation of these characters. }
+</i></font><font color="#FF0000"><b>begin
+  with  </b></font>CPURegisters  <font color="#FF0000"><b>do
+  begin
+    </b></font><font color="#008000"><i>{ Move the cursor to adjusted (X, Y). }
+    </i></font>AH <font color="#000080">:= </font><font color="#800000">$02</font><font color="#000080">;
+    </font>BH <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>DH <font color="#000080">:= </font>UpperLeftY <font color="#000080">+ </font>Y <font color="#000080">- </font><font color="#800000">2</font><font color="#000080">;
+    </font>DL <font color="#000080">:= </font>UpperLeftX <font color="#000080">+ </font>X <font color="#000080">- </font><font color="#800000">2</font><font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>CPURegisters<font color="#000080">);
+
+    </font><font color="#008000"><i>{ Output the character to the current cursor location. }
+    </i></font>AH <font color="#000080">:= </font><font color="#800000">$09</font><font color="#000080">;
+    </font>AL <font color="#000080">:= </font>byte<font color="#000080">(</font>ChCode<font color="#000080">);
+    </font>BH <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>BL <font color="#000080">:= </font><font color="#800000">3 </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4 </font><font color="#000080">+ </font><font color="#800000">14</font><font color="#000080">;
+      </font><font color="#008000"><i>{ Background=color 3; Foreground=color 14 }
+    </i></font>CX <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>CPURegisters<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{PutChar}
+
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>ASCIICode<font color="#000080">: </font>Integer<font color="#000080">;
+    </font><font color="#008000"><i>{ Computed from X, Y location in table. }
+  </i></font>I<font color="#000080">: </font>Integer<font color="#000080">;
+    </font><font color="#008000"><i>{ For loop index variable. }
+  </i></font>TextLine<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font>Width<font color="#000080">];
+    </font><font color="#008000"><i>{ Buffer to hold width of window's text. }
+  </i></font>X<font color="#000080">, </font>Y<font color="#000080">: </font>Integer<font color="#000080">;
+    </font><font color="#008000"><i>{ Tracks cursor location in ASCII table. }
+  </i></font>Ch <font color="#000080">: </font>Integer<font color="#000080">;
+    </font><font color="#008000"><i>{ Holds the keystroke typed. }
+
+</i></font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{DoPopUpFunction}
+  { Select White text on Cyan background for
+  { Set up a viewing window; makes calculation
+  of X, Y easier. }
+  </i></font>Window<font color="#000080">(</font>UpperLeftX<font color="#000080">, </font>UpperLeftY<font color="#000080">, </font>LowerLeftX<font color="#000080">, </font>LowerRightY<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Enclose the window by drawing a border around
+  it and filling the interior with blanks. }
+  </i></font>FillChar<font color="#000080">( </font>TextLine<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>Width<font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+  </font>TextLine<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>Chr<font color="#000080">( </font>Width <font color="#000080">);
+  </font>TextLine<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>chr<font color="#000080">( </font><font color="#800000">179 </font><font color="#000080">);
+  </font>TextLine<font color="#000080">[</font>Width<font color="#000080">] := </font>chr<font color="#000080">( </font><font color="#800000">179 </font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>for </b></font>I <font color="#000080">:= </font><font color="#800000">2 </font><font color="#FF0000"><b>to </b></font>Height <font color="#000080">- </font><font color="#800000">2 </font><font color="#FF0000"><b>do
+  begin
+    </b></font>Gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font>I<font color="#000080">);
+    </font>Write<font color="#000080">( </font>TextLine <font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>FillChar<font color="#000080">( </font>TextLine<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>Width<font color="#000080">, </font>Chr<font color="#000080">(</font><font color="#800000">196</font><font color="#000080">));
+  </font>TextLine<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>Chr<font color="#000080">( </font><font color="#800000">218 </font><font color="#000080">);
+  </font>TextLine<font color="#000080">[</font>Width<font color="#000080">] := </font>Chr<font color="#000080">( </font><font color="#800000">191 </font><font color="#000080">);
+  </font>Gotoxy<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+  </font>Write<font color="#000080">( </font>TextLine <font color="#000080">);
+
+  </font>TextLine<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>Chr<font color="#000080">( </font><font color="#800000">192 </font><font color="#000080">);
+  </font>TextLine<font color="#000080">[</font>Width<font color="#000080">] := </font>Chr<font color="#000080">( </font><font color="#800000">217 </font><font color="#000080">);
+  </font>Gotoxy <font color="#000080">( </font><font color="#800000">1</font><font color="#000080">, </font>Height <font color="#000080">- </font><font color="#800000">1 </font><font color="#000080">);
+  </font>Write<font color="#000080">( </font>TextLine <font color="#000080">);
+
+  </font><font color="#008000"><i>{ Display window title }
+  </i></font>Gotoxy <font color="#000080">( </font>Width <font color="#FF0000"><b>div </b></font><font color="#800000">2 </font><font color="#000080">-</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">2 </font><font color="#000080">);
+  </font>Write<font color="#000080">( </font><font color="#800000">'Table of ASCII Values' </font><font color="#000080">);
+
+  </font><font color="#008000"><i>{ Draw the ASCII table on the display }
+  </i></font>X <font color="#000080">:= </font>MinX<font color="#000080">;
+  </font>Y <font color="#000080">:= </font>MinY<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do
+  begin
+    </b></font>PutChar<font color="#000080">( </font>X<font color="#000080">, </font>Y<font color="#000080">, </font>Chr<font color="#000080">(</font>I<font color="#000080">) );
+    </font>Inc<font color="#000080">(</font>X<font color="#000080">);
+    </font><font color="#FF0000"><b>If  </b></font>X <font color="#000080">= (</font>Width<font color="#000080">-</font>RightEdge<font color="#000080">)  </font><font color="#FF0000"><b>then
+    begin
+      </b></font>Inc<font color="#000080">( </font>Y <font color="#000080">);
+      </font>X <font color="#000080">:= </font>MinX<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Gotoxy <font color="#000080">( </font>Width <font color="#FF0000"><b>div </b></font><font color="#800000">2 </font><font color="#000080">- </font><font color="#800000">20 </font><font color="#000080">, </font><font color="#800000">11 </font><font color="#000080">);
+  </font>Write<font color="#000080">(</font><font color="#800000">'Use arrow keys to navigate; Esc when done'</font><font color="#000080">);
+  </font>X <font color="#000080">:= </font>MinX<font color="#000080">; </font>Y <font color="#000080">:= </font>MinY<font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    </b></font><font color="#008000"><i>{ Compute ASCII code and value at X, Y }
+    </i></font>ASCIICode <font color="#000080">:= (</font>X<font color="#000080">-</font>MinX <font color="#000080">+ (</font>Y<font color="#000080">-</font>MinY<font color="#000080">)*</font>ValuesPerLine<font color="#000080">);
+    </font>Gotoxy <font color="#000080">(</font>Width <font color="#FF0000"><b>div </b></font><font color="#800000">2 </font><font color="#000080">- </font><font color="#800000">11 </font><font color="#000080">, </font><font color="#800000">13</font><font color="#000080">);
+    </font><font color="#008000"><i>{ NOTE: This allows display of
+    &quot;ASCII codes&quot; greater than 256 if cursor
+    moves into blank area in table. }
+    </i></font>Write<font color="#000080">(</font><font color="#800000">'Character= '</font><font color="#000080">, </font><font color="#800000">'  ASCII='</font><font color="#000080">,</font>ASCIICode<font color="#000080">:</font><font color="#800000">3</font><font color="#000080">);
+    </font>PutChar<font color="#000080">(</font>Width <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">13</font><font color="#000080">, </font>Chr<font color="#000080">(</font>ASCIICode<font color="#000080">));
+    </font><font color="#008000"><i>{ Display that value, below }
+    </i></font>Gotoxy <font color="#000080">( </font>X<font color="#000080">, </font>Y <font color="#000080">);
+    </font>Ch <font color="#000080">:= </font>GetKey<font color="#000080">;
+    </font><font color="#FF0000"><b>Case  </b></font>Ch  <font color="#FF0000"><b>Of
+      </b></font>KEY_LEFTARROW<font color="#000080">:  </font><font color="#FF0000"><b>if  </b></font>X <font color="#000080">&gt; </font>MinX  <font color="#FF0000"><b>then  </b></font>Dec<font color="#000080">(</font>X<font color="#000080">);
+      </font>KEY_RIGHTARROW<font color="#000080">:
+        </font><font color="#FF0000"><b>if  </b></font>X <font color="#000080">&lt; (</font>Width <font color="#000080">- </font>RightEdge <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">)  </font><font color="#FF0000"><b>then  </b></font>Inc<font color="#000080">(</font>X<font color="#000080">);
+      </font>KEY_DOWNARROW<font color="#000080">: </font><font color="#FF0000"><b>if  </b></font>Y <font color="#000080">&lt; (</font>MinY<font color="#000080">+</font>NumLines<font color="#000080">)  </font><font color="#FF0000"><b>then </b></font>Inc<font color="#000080">(</font>Y<font color="#000080">);
+      </font>KEY_UPARROW<font color="#000080">:  </font><font color="#FF0000"><b>if    </b></font>Y <font color="#000080">&gt; </font>MinY  <font color="#FF0000"><b>then    </b></font>Dec<font color="#000080">(</font>Y<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>until  </b></font>Ch <font color="#000080">= </font><font color="#800000">27</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ End of TSR popup code. }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{DoPopUpFunction}
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>RunPopUp<font color="#000080">;
+</font><font color="#008000"><i>{ Switches from system stack to TSR's stack. Calls
+DoPopUpFunction to run the actual TSR application. This
+keeps all the ugly details separate from the
+application. Note that while the TSR is up on the
+screen, and only while the TSR is up, we trap the
+Ctrl-Break and DOS critical errors interrupt. We do
+nothing when we see them except return, thereby ignoring
+the interrupts. }
+</i></font><font color="#FF0000"><b>begin
+ </b></font><font color="#008000"><i>{ Switch stacks. }
+   </i></font><font color="#FF0000"><b>asm
+     </b></font><font color="#FF00FF">CLI
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>SavedSS <font color="#000080">:= </font>SSeg<font color="#000080">;
+   </font>SavedSP <font color="#000080">:= </font>SPtr<font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+     </b></font><font color="#FF00FF">MOV   SS, OurSS
+     MOV   SP, OurSP
+     STI
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>GetIntVec<font color="#000080">( </font><font color="#800000">$1B</font><font color="#000080">, </font>PInt1B <font color="#000080">);
+     </font><font color="#008000"><i>{ Disable Ctrl-Break checking. }
+   </i></font>SetIntVec<font color="#000080">( </font><font color="#800000">$1B</font><font color="#000080">, @</font>CBreakCheck <font color="#000080">);
+   </font>GetIntVec<font color="#000080">( </font><font color="#800000">$24</font><font color="#000080">, </font>PInt24 <font color="#000080">);
+     </font><font color="#008000"><i>{ Trap DOS critical errors. }
+   </i></font>SetIntVec<font color="#000080">( </font><font color="#800000">$24</font><font color="#000080">, @</font>TrapCriticalErrors <font color="#000080">);
+   </font>SaveDisplay<font color="#000080">;
+
+   </font>DoPopUpFunction<font color="#000080">;
+
+   </font>RestoreDisplay<font color="#000080">;
+   </font>SetIntVec<font color="#000080">( </font><font color="#800000">$24</font><font color="#000080">, </font>PInt24 <font color="#000080">);
+     </font><font color="#008000"><i>{ Reenable DOS critical error trapping. }
+   </i></font>SetIntVec<font color="#000080">( </font><font color="#800000">$1B</font><font color="#000080">, </font>PInt1B <font color="#000080">);
+     </font><font color="#008000"><i>{ Reenable Ctrl-C trapping. }
+   { Restore stacks. }
+   </i></font><font color="#FF0000"><b>asm
+     </b></font><font color="#FF00FF">CLI
+     MOV   SS, SavedSS
+     MOV   SP, SavedSP
+     STI
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{RunPopUp}
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>BackgroundInt<font color="#000080">;
+</font>interrupt<font color="#000080">;
+</font><font color="#008000"><i>{ INT 28H }
+{ This routine is hooked in the DOS INT 28H chain,
+known variously as the DOSOK or DOSIdle interrupt. The
+idea is that when applications are doing nothing except
+waiting for a keystroke, they can call INT 28
+repeatedly. INT 28 runs through a chain of applications
+that each get a crack at running.
+
+The keyboard interrupt handler watches for the
+magic TSR popup key. Some of the time it runs the TSR
+popup directly; when DOS is doing something, however, it
+can't run the TSR. So, it sets a flag saying &quot;Hey, INT
+28, if you see this flag set, then do the TSR.&quot; So the
+INT 28 code, here, examines the flag. If the flag is set, INT 28
+knows that the TSR was activated, so it calls it now.
+We can do this because DOS calls INT 28 only if it's safe
+for something else to run.
+}
+</i></font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ Call saved INT 28H handler. }
+  </i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">PUSHF
+    CALL PInt28
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if  </b></font>MadeActive  <font color="#FF0000"><b>then
+  begin
+    </b></font>TSRInUse <font color="#000080">:= </font>True<font color="#000080">;
+    </font>MadeActive <font color="#000080">:= </font>False<font color="#000080">;
+    </font>RunPopUp<font color="#000080">;
+    </font>TSRInUse <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{BackgroundInt}
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>KeyboardInt<font color="#000080">;
+</font>interrupt<font color="#000080">;
+</font><font color="#008000"><i>{ INT 09H }
+{ Examines all keyboard interrupts. First calls the
+existing interrupt handler. If our TSR is NOT currently
+running, then it checks for the magic pop keystrokes. If
+the TSR is already running, then we do not want to
+activate it again, so we ignore keystroke checking when
+the TSR is already alive and on-screen.
+
+Several bytes in low memory contain keyboard status
+information. By checking the values in these bytes,
+various &quot;not normal&quot; key combinations can be detected.
+As implemented here, the TSR is made active by pressing
+the left Alt key, plus the SysRq key (Print Screen on my
+PC). You can change these keystrokes to something else.
+}
+</i></font><font color="#FF0000"><b>const
+  </b></font>CallTSRMask <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+  </font><font color="#008000"><i>{ ACTIVATE TSR = left Alt key + SysRq key }
+</i></font><font color="#FF0000"><b>var
+  </b></font>ScanCode<font color="#000080">: </font>byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$18</font><font color="#000080">;
+    </font><font color="#008000"><i>{ One of the keyboard status bytes. }
+</i></font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ Call existing keyboard interrupt handler. }
+  </i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">PUSHF
+    CALL PINT09
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if  not </b></font>TSRInUse  <font color="#FF0000"><b>then
+    if  </b></font><font color="#000080">(</font>ScanCode <font color="#FF0000"><b>and </b></font>CallTSRMask<font color="#000080">) = </font>CallTSRMask  <font color="#FF0000"><b>then
+    begin
+      </b></font><font color="#008000"><i>{ The TSR has been activated. }
+      </i></font>TSRInUse <font color="#000080">:= </font>True<font color="#000080">;
+        </font><font color="#008000"><i>{ Set to TRUE to prevent reactivation of this TSR. }
+      </i></font><font color="#FF0000"><b>if  </b></font><font color="#000080">(</font>PInDosFlag<font color="#000080">^ = </font><font color="#800000">0</font><font color="#000080">)  </font><font color="#FF0000"><b>then
+      begin
+        </b></font><font color="#008000"><i>{ If in &quot;Safe&quot; DOS area, then pop up now. }
+        </i></font>MadeActive <font color="#000080">:= </font>False<font color="#000080">; </font><font color="#008000"><i>{ So INT $28 won't call us. }
+        </i></font>RunPopUp<font color="#000080">;
+        </font>TSRInUse <font color="#000080">:= </font>False<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+        </b></font>MadeActive <font color="#000080">:= </font>True<font color="#000080">;
+          </font><font color="#008000"><i>{ o/w, set flag let INT 28 call us when ok. }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{KeyboardInt}
+
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DoUnInstall <font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Removed<font color="#000080">: </font>Boolean <font color="#000080">); </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{ These are &quot;local&quot; to OurInt12; it is safer to store them in the
+TSR's global data area than to place them on the stack as
+local variables. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>IdStr <font color="#000080">: ^</font>String8<font color="#000080">;
+  </font>MessageNum <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>OurInt12
+  <font color="#000080">(</font>_AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP<font color="#000080">:</font>Word<font color="#000080">);
+</font>interrupt<font color="#000080">;
+</font><font color="#008000"><i>{ INT 12H }
+{ Intercepts INT 12H calls. If the ES:BX register
+just happens to point to IdStr1, then the command-line
+TSR program just called in. If this is the case, the
+other registers could be used to pass a message to the
+running TSR. Here, it's used by the running TSR to return
+a pointer to another string, confirming that the TSR is
+indeed running.
+}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>DeInstallOk<font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IdStr <font color="#000080">:= </font>Ptr<font color="#000080">( </font>ES<font color="#000080">, </font>BX <font color="#000080">);
+    </font><font color="#008000"><i>{ Check to see if ES:BX points to the }
+    { magic ID string }
+  </i></font><font color="#FF0000"><b>If  </b></font>IdStr<font color="#000080">^ = </font>IdStr1  <font color="#FF0000"><b>then
+    </b></font>MessageNum <font color="#000080">:= </font>CX
+  <font color="#FF0000"><b>else
+  begin
+    </b></font>MessageNum <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#008000"><i>{ No message rcvd; this is normal DOS call. }
+    </i></font><font color="#FF0000"><b>asm
+       </b></font><font color="#FF00FF">pushf
+       call    PInt12
+       mov     _AX, ax
+         </font><font color="#008000"><i>{ AX returns the memory size value. }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if  </b></font>MessageNum <font color="#000080">&gt; </font><font color="#800000">0   </font><font color="#FF0000"><b>then
+  </b></font><font color="#008000"><i>{ Process a message directed to this TSR. }
+  </i></font><font color="#FF0000"><b>begin
+    case  </b></font>MessageNum  <font color="#FF0000"><b>of
+      </b></font><font color="#800000">1</font><font color="#000080">:  </font><font color="#FF0000"><b>begin
+          </b></font><font color="#008000"><i>{ Returns pointer to IdStr2 indicating this
+          TSR is here. }
+            </i></font>ES <font color="#000080">:= </font>Seg<font color="#000080">(</font>IdStr2<font color="#000080">);
+            </font>BX <font color="#000080">:= </font>Ofs<font color="#000080">(</font>IdStr2<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#800000">2</font><font color="#000080">:  </font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ Performs request to uninstall the TSR. }
+            </i></font>DoUnInstall <font color="#000080">(</font>DeInstallOk<font color="#000080">);
+            </font><font color="#FF0000"><b>if   </b></font>DeInstallOk  <font color="#FF0000"><b>then
+              </b></font>CX <font color="#000080">:= </font><font color="#800000">0 </font><font color="#008000"><i>{ Report success. }
+            </i></font><font color="#FF0000"><b>else
+              </b></font>CX <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">; </font><font color="#008000"><i>{ Report failure. }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{OurInt12}
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DoUnInstall <font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Removed<font color="#000080">: </font>Boolean <font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ See if any TSRs have loaded in memory after us.
+  If another TSR has loaded after us, then we really
+  cannot safely terminate this TSR. Why? Because when they
+  terminate, they may reset their interrupts to point back
+  to this TSR. And if this TSR is no longer in memory,
+  uh-oh... }
+
+  </i></font>Removed <font color="#000080">:= </font>True<font color="#000080">;
+  </font>GetIntVec<font color="#000080">( </font><font color="#800000">$28</font><font color="#000080">, </font>TempPtr <font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font>TempPtr <font color="#000080">&lt;&gt; @</font>BackgroundInt  <font color="#FF0000"><b>then
+    </b></font>Removed <font color="#000080">:= </font>False<font color="#000080">;
+  </font>GetIntVec<font color="#000080">( </font><font color="#800000">$12</font><font color="#000080">, </font>TempPtr <font color="#000080">);
+  </font><font color="#FF0000"><b>If  </b></font>TempPtr <font color="#000080">&lt;&gt; @</font>OurInt12  <font color="#FF0000"><b>then
+    </b></font>Removed <font color="#000080">:= </font>False<font color="#000080">;
+
+  </font>GetIntVec<font color="#000080">( </font><font color="#800000">$09</font><font color="#000080">, </font>TempPtr <font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font>TempPtr <font color="#000080">&lt;&gt; @</font>KeyBoardInt  <font color="#FF0000"><b>then
+    </b></font>Removed <font color="#000080">:= </font>False<font color="#000080">;
+
+  </font><font color="#FF0000"><b>if  </b></font>Removed  <font color="#FF0000"><b>then
+  begin
+    </b></font><font color="#008000"><i>{ Restore interrupts }
+    </i></font>SetIntVec<font color="#000080">( </font><font color="#800000">$28</font><font color="#000080">, </font>PInt28 <font color="#000080">);
+    </font>SetIntVec<font color="#000080">( </font><font color="#800000">$12</font><font color="#000080">, </font>PInt12 <font color="#000080">);
+    </font>SetIntVec<font color="#000080">( </font><font color="#800000">$09</font><font color="#000080">, </font>PInt09 <font color="#000080">);
+
+    </font><font color="#008000"><i>{ Free up memory allocated to this program using
+    INT 21 Func=49H &quot;Release memory&quot;. }
+    </i></font>CPURegisters<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$49</font><font color="#000080">;
+    </font>CPURegisters<font color="#000080">.</font>ES <font color="#000080">:= </font>PrefixSeg<font color="#000080">;</font><font color="#008000"><i>{ Current program's PSP }
+    </i></font>Intr<font color="#000080">( </font><font color="#800000">$21</font><font color="#000080">, </font>CPURegisters <font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{DoUnInstall}
+
+
+
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>InstallTSR <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>AlreadyInstalled<font color="#000080">: </font>Boolean <font color="#000080">);
+</font><font color="#008000"><i>{ Installs all interrupt handlers for this TSR. }
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>PSPPtr <font color="#000080">: ^</font>Word<font color="#000080">;
+  </font>IdStr <font color="#000080">: ^</font>String8<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+
+  </b></font><font color="#008000"><i>{ Check to see if the TSR is already running by
+  executing INT 12 with ES:BX pointing to IdStr1. If,
+  after calling INT 12, ES:BX points to IdStr2, then the
+  TSR is running since it must have intercepted INT 12 and
+  set ES:BX to those return values. }
+
+  </i></font><font color="#FF0000"><b>with  </b></font>CPURegisters  <font color="#FF0000"><b>do
+  begin
+    </b></font>ES <font color="#000080">:= </font>Seg<font color="#000080">(</font>IdStr1<font color="#000080">);
+    </font>BX <font color="#000080">:= </font>Ofs<font color="#000080">(</font>IdStr1<font color="#000080">);
+    </font>CX <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>Intr<font color="#000080">( </font><font color="#800000">$12</font><font color="#000080">, </font>CPURegisters <font color="#000080">);
+    </font>IdStr <font color="#000080">:= </font>Ptr<font color="#000080">( </font>ES<font color="#000080">, </font>BX <font color="#000080">);
+    </font><font color="#FF0000"><b>if  </b></font>IdStr<font color="#000080">^ = </font>IdStr2  <font color="#FF0000"><b>then
+    begin
+       </b></font>AlreadyInstalled <font color="#000080">:= </font>True<font color="#000080">;
+       </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{ TSR hasn't been installed, so install our
+    INT 12 driver. }
+    </i></font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">cli
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>GetIntVec<font color="#000080">( </font><font color="#800000">$12</font><font color="#000080">, </font>PInt12 <font color="#000080">);
+    </font>SetIntVec<font color="#000080">( </font><font color="#800000">$12</font><font color="#000080">, @</font>OurInt12 <font color="#000080">);
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">sti
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>AlreadyInstalled <font color="#000080">:= </font>False<font color="#000080">;
+  </font>MadeActive <font color="#000080">:= </font>False<font color="#000080">;
+  </font>DiskInUse <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Check to see if TSR is already installed. }
+  </i></font>TSRInUse <font color="#000080">:= </font>False<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Deallocate DOS Environment block if not needed. }
+  { Comment out this code if you need to access
+    environment strings. }
+  </i></font>PSPPtr <font color="#000080">:= </font>Ptr<font color="#000080">( </font>PrefixSeg<font color="#000080">, </font><font color="#800000">$2C </font><font color="#000080">);
+  </font>CPURegisters<font color="#000080">.</font>AX <font color="#000080">:= </font><font color="#800000">$4900</font><font color="#000080">;
+  </font>CPURegisters<font color="#000080">.</font>ES <font color="#000080">:= </font>PSPPtr<font color="#000080">^;
+  </font>Intr<font color="#000080">( </font><font color="#800000">$21</font><font color="#000080">, </font>CPURegisters<font color="#000080">);
+
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">cli
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Save and set INT 28H, background process interrupt. }
+  </i></font>GetIntVec<font color="#000080">( </font><font color="#800000">$28</font><font color="#000080">, </font>PInt28 <font color="#000080">);
+  </font>SetIntVec<font color="#000080">( </font><font color="#800000">$28</font><font color="#000080">, @</font>BackgroundInt <font color="#000080">);
+
+  </font><font color="#008000"><i>{ Save and set INT 09H, the keyboard interrupt handler. }
+  </i></font>GetIntVec<font color="#000080">( </font><font color="#800000">$09</font><font color="#000080">, </font>PInt09 <font color="#000080">);
+  </font>SetIntVec<font color="#000080">( </font><font color="#800000">$09</font><font color="#000080">, @</font>KeyboardInt <font color="#000080">);
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">sti
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Initialize pointer to DOS's InDos flag. }
+  { Uses INT 21H Function 34H to retrieve a pointer to the
+  InDos flag. The result is returned in the ES:BX
+  registers. }
+  </i></font>CPURegisters<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$34</font><font color="#000080">;
+  </font>Intr<font color="#000080">( </font><font color="#800000">$21</font><font color="#000080">, </font>CPURegisters <font color="#000080">);
+  </font>PInDosFlag <font color="#000080">:= </font>Ptr<font color="#000080">( </font>CPURegisters<font color="#000080">.</font>ES<font color="#000080">, </font>CPURegisters<font color="#000080">.</font>BX <font color="#000080">);
+
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">CLI
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ Save our SS:SP for later use. }
+  </i></font>OurSS <font color="#000080">:= </font>SSeg<font color="#000080">;
+  </font>OurSP <font color="#000080">:= </font>SPtr<font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">STI
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{InstallTSR}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>InstallError<font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{program}
+  </i></font>InstallTSR<font color="#000080">( </font>InstallError <font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font>InstallError  <font color="#FF0000"><b>then
+  begin
+    </b></font><font color="#008000"><i>{ This means that the TSR is already running.
+      In that case, see if the command line requests
+      an uninstall. }
+    </i></font><font color="#FF0000"><b>if  </b></font><font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) = </font><font color="#800000">'/u'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) = </font><font color="#800000">'/U'</font><font color="#000080">)  </font><font color="#FF0000"><b>then
+      </b></font><font color="#008000"><i>{ Send an Uninstall message to the TSR }
+      </i></font><font color="#FF0000"><b>with  </b></font>CPURegisters  <font color="#FF0000"><b>do
+      begin
+        </b></font>ES <font color="#000080">:= </font>Seg<font color="#000080">(</font>IdStr1<font color="#000080">);
+        </font>BX <font color="#000080">:= </font>Ofs<font color="#000080">(</font>IdStr1<font color="#000080">);
+        </font>CX <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font>Intr<font color="#000080">( </font><font color="#800000">$12</font><font color="#000080">, </font>CPURegisters <font color="#000080">);
+        </font><font color="#FF0000"><b>if  </b></font>CX <font color="#000080">= </font><font color="#800000">0  </font><font color="#FF0000"><b>then
+          </b></font>Writeln<font color="#000080">(</font><font color="#800000">'TSR is now uninstalled.'</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else
+          </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Unable to uninstall.'</font><font color="#000080">);
+        </font>Exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+    else
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'!!!TSR is already installed!!!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+    </b></font>Writeln<font color="#000080">(</font><font color="#800000">'TSR is now resident.'</font><font color="#000080">);
+    </font>Keep<font color="#000080">( </font><font color="#800000">0 </font><font color="#000080">);
+     </font><font color="#008000"><i>{ Exit to DOS, leaving program memory-resident. }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">. </font><font color="#008000"><i>{program}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0022.PAS">Original</a><b>]</b></p></body>
+</html>

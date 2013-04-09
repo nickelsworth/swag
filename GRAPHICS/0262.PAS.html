@@ -1,0 +1,191 @@
+<html>
+<head><title> "PCX Cache for graphics" by SCOTT TUNSTALL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0262.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+  Gayle, could you please make sure that this is packaged with KOJAKVGA
+  3.3, as that is the only unit that uses PCXCache at the moment.
+  Thanks.
+
+
+  FILENAME : PCXCACHE.PAS
+
+  AUTHOR   : SCOTT TUNSTALL B.Sc
+
+  CREATION : 24TH NOVEMBER 1996
+  DATE
+
+  PURPOSE  : TO SUPPLEMENT KOJAKVGA'S PCX WRITING ROUTINES WHICH
+             SHOULD NOW BE 200% FASTER THAN THE OLDER
+             CONTINUOUS DISK ACCESS ROUTINES USED IN NEWGRAPH
+             AND OLDER KOJAKVGA VERSIONS.
+
+             THIS UNIT WILL WORK WITH ANY FILE-TYPE HOWEVER.
+
+
+  TESTING  : TESTED ON P133 W/ 800Mb HARD DISK CAP.
+  INFO       (Guess who's started work then? :) )
+
+
+
+  DISCLAIMER : USE THIS UNIT AT YOUR OWN RISK. I TAKE NO
+               RESPONSIBILITY FOR ANY DAMAGE CAUSED TO YOUR
+               PC HARDWARE OR FILES CAUSED BY THESE ROUTINES.
+
+               THEY WORK FINE ON MY PC.
+
+
+}
+
+
+
+
+</i></font><font color="#FF0000"><b>Unit </b></font>PCXCache<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Interface
+Procedure </b></font>InitCache<font color="#000080">(</font>FileName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>DoAppend<font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>FlushCache<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>CacheByte<font color="#000080">(</font>TheByte<font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>CloseCache<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Implementation
+
+Const </b></font>PCXCacheVersion <font color="#000080">= </font><font color="#800000">$100</font><font color="#000080">;   </font><font color="#008000"><i>{ Version 1.00 }
+
+</i></font><font color="#FF0000"><b>Var
+    </b></font>CacheHandle<font color="#000080">:                </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+    </font>CacheFile<font color="#000080">:                  </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+    </font>ContDiskWrite<font color="#000080">:              </font>boolean<font color="#000080">;
+    </font>CachePtr<font color="#000080">:                   </font>pointer<font color="#000080">;
+    </font>CacheSeg<font color="#000080">:                   </font>word<font color="#000080">;
+    </font>CacheOffs<font color="#000080">:                  </font>word<font color="#000080">;
+    </font>CacheReload<font color="#000080">:                </font>word<font color="#000080">;   </font><font color="#008000"><i>{ To reload CacheOffs }
+    </i></font>CacheStored<font color="#000080">:                </font>word<font color="#000080">;
+    </font>CacheSize<font color="#000080">:                  </font>word<font color="#000080">;
+
+
+
+</font><font color="#008000"><i>{ Initialise cache.
+
+  Expects: FileName is obvious.
+           DoAppend, if set TRUE means 'being writing data at
+           end of file &lt;FileName&gt;
+
+  Returns: Nothing
+
+  Affects: I'm NOT documenting registers affected again!
+}
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitCache<font color="#000080">(</font>FileName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>DoAppend<font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>CacheMemFree<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>CacheFile<font color="#000080">:=</font>FileName<font color="#000080">;
+     </font>CacheMemFree<font color="#000080">:=</font>MaxAvail<font color="#000080">;
+     </font><font color="#FF0000"><b>If </b></font>CacheMemFree <font color="#000080">&lt; </font><font color="#800000">1024 </font><font color="#FF0000"><b>Then        </b></font><font color="#008000"><i>{ If &lt; 1K then no point in cache }
+        </i></font>ContDiskWrite<font color="#000080">:=</font>True
+     <font color="#FF0000"><b>Else
+         Begin
+         </b></font>ContDiskWrite<font color="#000080">:=</font>False<font color="#000080">;
+         </font>GetMem<font color="#000080">(</font>CachePtr<font color="#000080">,</font>CacheMemFree<font color="#000080">);
+         </font>CacheSize<font color="#000080">:=</font>CacheMemFree<font color="#000080">;
+         </font>CacheStored<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;               </font><font color="#008000"><i>{ Num of bytes storedin cache
+                                         When CacheStored = CacheSize
+                                         then all data is written to
+                                         disk }
+
+         { You didn't think I was going to totally avoid assembler,
+           did you? :) }
+
+         </i></font><font color="#FF0000"><b>Asm </b></font><font color="#FF00FF">LES DI,CachePtr
+             MOV CacheSeg  ,ES
+             MOV CacheOffs   ,DI
+             MOV CacheReload ,DI
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+     </font>Assign<font color="#000080">(</font>CacheHandle<font color="#000080">,</font>CacheFile<font color="#000080">);
+     </font>Rewrite<font color="#000080">(</font>CacheHandle<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+     </font><font color="#FF0000"><b>If </b></font>DoAppend <font color="#FF0000"><b>Then
+        </b></font>Seek<font color="#000080">(</font>CacheHandle<font color="#000080">,</font>FileSize<font color="#000080">(</font>CacheHandle<font color="#000080">));
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+</font><font color="#008000"><i>{
+  Dump what's currently in the cache to disk. The cache need not
+  be full.
+}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>FlushCache<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     If </b></font><font color="#000080">(</font>CacheStored <font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>And Not </b></font>ContDiskWrite <font color="#FF0000"><b>Then  </b></font><font color="#008000"><i>{ Can't write 0 bytes ! }
+        </i></font><font color="#FF0000"><b>Begin
+        </b></font>BlockWrite<font color="#000080">(</font>CacheHandle<font color="#000080">,</font>CachePtr<font color="#000080">^,</font>CacheStored<font color="#000080">);
+        </font>CacheOffs<font color="#000080">:=</font>CacheReload<font color="#000080">;
+        </font>CacheStored<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+</font><font color="#008000"><i>{ OK, so it only works with bytes at a time, but it's STILL faster than
+  continuous disk access, innit? :)
+
+  If you feel like it, create CacheWord, cacheLong etc.
+}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>CacheByte<font color="#000080">(</font>TheByte<font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+     If Not </b></font>ContDiskWrite <font color="#FF0000"><b>Then
+        Begin
+        </b></font>Mem<font color="#000080">[</font>CacheSeg<font color="#000080">:</font>CacheOffs<font color="#000080">]:=</font>TheByte<font color="#000080">;
+        </font>Inc<font color="#000080">(</font>CacheOffs<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>CacheStored<font color="#000080">);
+        </font><font color="#FF0000"><b>If </b></font>CacheStored <font color="#000080">= </font>CacheSize <font color="#FF0000"><b>Then
+           </b></font>FlushCache<font color="#000080">;
+        </font><font color="#FF0000"><b>End
+     Else
+         </b></font>BlockWrite<font color="#000080">(</font>CacheHandle<font color="#000080">,</font>TheByte<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+</font><font color="#008000"><i>{ Finish with cache }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>CloseCache<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>FlushCache<font color="#000080">;                        </font><font color="#008000"><i>{ In case there's any bytes left }
+     </i></font><font color="#FF0000"><b>If Not </b></font>ContDiskWrite <font color="#FF0000"><b>Then
+        Begin
+        </b></font>FreeMem<font color="#000080">(</font>CachePtr<font color="#000080">,</font>CacheSize<font color="#000080">);
+        </font>CachePtr<font color="#000080">:=</font><font color="#FF0000"><b>Nil</b></font><font color="#000080">;                  </font><font color="#008000"><i>{ Indicates cache done with }
+        </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+     </font>Close<font color="#000080">(</font>CacheHandle<font color="#000080">);                </font><font color="#008000"><i>{ Close cache file }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+</font><font color="#008000"><i>{ So you can check version capabilities }
+
+</i></font><font color="#FF0000"><b>Function </b></font>GetVersion<font color="#000080">:</font>word<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+   </b></font><font color="#FF00FF">MOV AX,PCXCacheVersion
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+</font><font color="#008000"><i>{ Announce PCXCache routine. }
+
+</i></font><font color="#FF0000"><b>Begin
+     </b></font>Writeln<font color="#000080">;
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'PCX-Cache routines for KOJAKVGA 3.xx units (C) 1996 Scott Tunstall.'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'This unit is FREEWARE. Please distribute source/compiled code'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'freely in it''s original, unaltered state.'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0262.PAS">Original</a><b>]</b></p></body>
+</html>

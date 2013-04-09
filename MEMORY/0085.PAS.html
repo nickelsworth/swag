@@ -1,0 +1,706 @@
+<html>
+<head><title> "Heap Management" by ANDY COOPER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0085.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>Unit </b></font>HeapChk<font color="#000080">;
+</font><font color="#008000"><i>{$R-,S-}
+
+(************************************************************************
+ *                                                                      *
+ *                             HeapChk.pas                              *
+ *                                                                      *
+ *                     Copyright (c) Andy Cooper 1991                   *
+ *                                                                      *
+ *     May be used and distributed for non commercial use without       *
+ *     restriction.  All commercial rights reserved.                    *
+ *                                                                      *
+ *                                                                      *
+ *   WARNING:  This code may be version specific and has been tested    *
+ *             with Turbo Pascal version 6.0 only.  Must be compiled    *
+ *             with range and stack checking off.                       *
+ *                                                                      *
+ *                                                                      *
+ *   The unit HeapChk MUST be the first unit in the uses statement of   *
+ *   the primary file.  It does not (and in fact should not) have to be *
+ *   included in any other units.                                       *
+ *                                                                      *
+ *   On exit from the program the file HEAPCHK.TXT will contain         *
+ *   information about the run.                                         *
+ *                                                                      *
+ *   HeapChk error triggers                                             *
+ *                                                                      *
+ *      If an attempt is made to return a heap area that does not       *
+ *      match the original allocation an error is flagged and the       *
+ *      contents of the heap structure is written to the file.          *
+ *                                                                      *
+ *      If an attempt is made to return a non existing heap area the    *
+ *      contents of the heap structure is written to the file.          *
+ *                                                                      *
+ *      If RELEASE is called with free heap areas below the MARK,       *
+ *      turbo pascal discards the memory instead of returning it.       *
+ *      HeapChk flags this condition, sums the areas lost and           *
+ *      optionally lists the areas to be discarded                      *
+ *                                                                      *
+ *      If HeapChk determines that the freelist is corrupted an error   *
+ *      is flagged.                                                     *
+ *                                                                      *
+ *   Content of HEAPCHK.TXT                                             *
+ *                                                                      *
+ *      Heapchk.txt contains an entry for every error condition         *
+ *      encountered.  If level is &gt; 2 then the program will be          *
+ *      terminated otherwise a warning is recorded.                     *
+ *                                                                      *
+ *      The error or warning printout will contain one line for each    *
+ *      active heap area consisting of the pointer value returned,      *
+ *      requested length, address of instruction AFTER the call to      *
+ *      NEW / GETMEM and a best guess at the caller to the procedure    *
+ *      that issued the getmem.  This is useful for turbovision etc     *
+ *      as you can find where you were in your code, ie where were      *
+ *      you when you called the tv procedure.  To use these addresses   *
+ *      run the program under turbo debugger, obtain the printout, then *
+ *      use the GO &lt;ctrl-g&gt; function to find the calling code.  NOTE    *
+ *      the IDE find error function does not work.                      *
+ *                                                                      *
+ *      There will be an entry for each call to MARK and if the free    *
+ *      list is corrupted it will be dumped.                            *
+ *                                                                      *
+ *                                                                      *
+ ************************************************************************)
+
+</i></font><font color="#FF0000"><b>interface
+  procedure </b></font>displaystats<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>level           <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;              </font><font color="#008000"><i>{&gt; 2 causes error halt, &lt;= 2 warning}
+  </i></font>prtreleaseon    <font color="#000080">= </font>false<font color="#000080">;          </font><font color="#008000"><i>{if true dumps heap areas discarded }
+                                    {when release is called             }
+
+  </i></font>hex <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char <font color="#000080">= </font><font color="#800000">'0123456789abcdef'</font><font color="#000080">;
+
+  </font>precsize        <font color="#000080">= </font><font color="#800000">500</font><font color="#000080">;            </font><font color="#008000"><i>{maximum number of pointer entries}
+  </i></font>Heaprec         <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Markrec         <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+
+  </font>ptrofl          <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+  </font>ptrnotfound     <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+  </font>ptrbadlength    <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+  </font>getmembusyerr   <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+  </font>freemembusyerr  <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font>BadFreeList     <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+  </font>markrecnotfound <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;
+  </font>CannotMark      <font color="#000080">= </font><font color="#800000">8</font><font color="#000080">;
+  </font>CannotRelease   <font color="#000080">= </font><font color="#800000">9</font><font color="#000080">;
+
+  </font>errorcodes <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of string</b></font><font color="#000080">[</font><font color="#800000">60</font><font color="#000080">] =
+    (</font><font color="#800000">'Internal Error - Heap structure overflow'</font><font color="#000080">,
+     </font><font color="#800000">'Program Error - Attempting to return non-allocated memory'</font><font color="#000080">,
+     </font><font color="#800000">'Program Error - FreeMem length does not match area allocated'</font><font color="#000080">,
+     </font><font color="#800000">'Internal Error - Recursive call to getmem'</font><font color="#000080">,
+     </font><font color="#800000">'Internal Error - Recursive call to freemem'</font><font color="#000080">,
+     </font><font color="#800000">'Heap Failure - Free List Corrupted'</font><font color="#000080">,
+     </font><font color="#800000">'Release failed - No matching mark pointer'</font><font color="#000080">,
+     </font><font color="#800000">'Mark Failed - Free list not empty'</font><font color="#000080">,
+     </font><font color="#800000">'Release Failed - Free list not empty'
+     </font><font color="#000080">);
+
+</font><font color="#FF0000"><b>type
+  </b></font>prec <font color="#000080">= </font><font color="#FF0000"><b>record
+           </b></font>p           <font color="#000080">: </font>pointer<font color="#000080">;
+           </font>l<font color="#000080">,
+           </font>f           <font color="#000080">: </font>word<font color="#000080">;
+           </font>caller<font color="#000080">,                   </font><font color="#008000"><i>{address of next instruction after }
+                                     {the code that called getmem       }
+           </i></font>pcaller     <font color="#000080">: </font>pointer<font color="#000080">;    </font><font color="#008000"><i>{&quot;best guess&quot; at the previous caller}
+         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>freelst <font color="#000080">= </font><font color="#FF0000"><b>record
+              </b></font>next  <font color="#000080">: </font>pointer<font color="#000080">;
+              </font>bytes<font color="#000080">,
+              </font>paras <font color="#000080">: </font>word<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>fake <font color="#000080">= </font><font color="#FF0000"><b>record
+           case </b></font>boolean <font color="#FF0000"><b>of
+             </b></font>true  <font color="#000080">: (</font>ptr <font color="#000080">: </font>pointer<font color="#000080">);
+             </font>false <font color="#000080">: (</font>pofs<font color="#000080">,
+                      </font>pseg  <font color="#000080">: </font>word<font color="#000080">)
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>getmembusyflag<font color="#000080">,
+  </font>freemembusyflag <font color="#000080">: </font>word<font color="#000080">;
+  </font>pprev<font color="#000080">,
+  </font>pretto<font color="#000080">,
+  </font>pgetmem<font color="#000080">,
+  </font>pfreemem        <font color="#000080">: </font>pointer<font color="#000080">;
+  </font>orphaned<font color="#000080">,
+  </font>lostheap<font color="#000080">,
+  </font>lg<font color="#000080">,</font>lf<font color="#000080">,</font>lm<font color="#000080">,</font>lr     <font color="#000080">: </font>longint<font color="#000080">;
+  </font>precarray       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>precsize<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>prec<font color="#000080">;
+  </font>pindx           <font color="#000080">: </font>integer<font color="#000080">;
+  </font>savexit         <font color="#000080">: </font>pointer<font color="#000080">;
+  </font>lfile           <font color="#000080">: </font>text<font color="#000080">;
+  </font>progname        <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>implementation
+uses
+  </b></font>crt<font color="#000080">,</font>printer<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>displaystats<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'There were '</font><font color="#000080">,</font>lg<font color="#000080">,</font><font color="#800000">' calls to new/getmem'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'There were '</font><font color="#000080">,</font>lf<font color="#000080">,</font><font color="#800000">' calls to dispose/freemem'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'There were '</font><font color="#000080">,</font>lm<font color="#000080">,</font><font color="#800000">' calls to mark'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'There were '</font><font color="#000080">,</font>lr<font color="#000080">,</font><font color="#800000">' calls to release'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'There were '</font><font color="#000080">,</font>lostheap<font color="#000080">,</font><font color="#800000">' Bytes lost'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>hexptr<font color="#000080">(</font>p<font color="#000080">:</font>pointer<font color="#000080">):</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>f <font color="#000080">: </font>fake<font color="#000080">;
+    </font>s <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>f<font color="#000080">.</font>ptr <font color="#000080">:= </font>p<font color="#000080">;
+    </font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>hex<font color="#000080">[(</font>hi<font color="#000080">(</font>f<font color="#000080">.</font>pseg<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">)];
+    </font>s<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>hex<font color="#000080">[</font>hi<font color="#000080">(</font>f<font color="#000080">.</font>pseg<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$f</font><font color="#000080">];
+    </font>s<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] := </font>hex<font color="#000080">[(</font>lo<font color="#000080">(</font>f<font color="#000080">.</font>pseg<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">)];
+    </font>s<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] := </font>hex<font color="#000080">[</font>lo<font color="#000080">(</font>f<font color="#000080">.</font>pseg<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$f</font><font color="#000080">];
+    </font>s<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] := </font><font color="#800000">':'</font><font color="#000080">;
+    </font>s<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] := </font>hex<font color="#000080">[(</font>hi<font color="#000080">(</font>f<font color="#000080">.</font>pofs<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">)];
+    </font>s<font color="#000080">[</font><font color="#800000">7</font><font color="#000080">] := </font>hex<font color="#000080">[</font>hi<font color="#000080">(</font>f<font color="#000080">.</font>pofs<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$f</font><font color="#000080">];
+    </font>s<font color="#000080">[</font><font color="#800000">8</font><font color="#000080">] := </font>hex<font color="#000080">[(</font>lo<font color="#000080">(</font>f<font color="#000080">.</font>pofs<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">)];
+    </font>s<font color="#000080">[</font><font color="#800000">9</font><font color="#000080">] := </font>hex<font color="#000080">[</font>lo<font color="#000080">(</font>f<font color="#000080">.</font>pofs<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$f</font><font color="#000080">];
+    </font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>chr<font color="#000080">(</font><font color="#800000">9</font><font color="#000080">);
+    </font>hexptr <font color="#000080">:= </font>s
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>prtrec<font color="#000080">(</font>i<font color="#000080">:</font>integer<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    </b></font>write<font color="#000080">(</font>lfile<font color="#000080">,</font>i<font color="#000080">:</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">' Ptr = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>p<font color="#000080">),
+                            </font><font color="#800000">' Len = '</font><font color="#000080">,</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>l<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,
+                            </font><font color="#800000">'  Caller = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>caller<font color="#000080">),
+                            </font><font color="#800000">'  PCaller = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>pcaller<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>f <font color="#000080">= </font>markrec <font color="#FF0000"><b>then
+      </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">' Mark Record'</font><font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>error<font color="#000080">(</font>errno<font color="#000080">:</font>word<font color="#000080">;</font>p<font color="#000080">:</font>pointer<font color="#000080">;</font>l<font color="#000080">:</font>word<font color="#000080">);
+  </font><font color="#008000"><i>{called on error if level &gt; 2}
+  </i></font><font color="#FF0000"><b>var
+    </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font>errorcodes<font color="#000080">[</font>errno<font color="#000080">]);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'Ptr = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">' Len = '</font><font color="#000080">,</font>l<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>errno <font color="#000080">= </font>cannotrelease <font color="#FF0000"><b>then
+      </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'Freelist = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>freelist<font color="#000080">));
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'******* Dump of heap structure *******'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>pindx <font color="#FF0000"><b>do
+      </b></font>prtrec<font color="#000080">(</font>i<font color="#000080">);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'******* End of heap structure *******'#13#10</font><font color="#000080">);
+    </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">80</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">);
+    </font>normvideo<font color="#000080">;
+    </font>clrscr<font color="#000080">;
+    </font>halt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>warning<font color="#000080">(</font>errno<font color="#000080">:</font>word<font color="#000080">;</font>p<font color="#000080">:</font>pointer<font color="#000080">;</font>l<font color="#000080">:</font>word<font color="#000080">);
+  </font><font color="#008000"><i>{called on error if level &lt;= 2}
+  </i></font><font color="#FF0000"><b>var
+    </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font>errorcodes<font color="#000080">[</font>errno<font color="#000080">]);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'Ptr = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">' Len = '</font><font color="#000080">,</font>l<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>errno <font color="#000080">= </font>cannotrelease <font color="#FF0000"><b>then
+      </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'Freelist = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>freelist<font color="#000080">));
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'******* Dump of heap structure *******'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>pindx <font color="#FF0000"><b>do
+      </b></font>prtrec<font color="#000080">(</font>i<font color="#000080">);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'******* End of heap structure *******'#13#10</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>NormPtr<font color="#000080">(</font>p<font color="#000080">:</font>pointer<font color="#000080">):</font>longint<font color="#000080">;
+  </font><font color="#008000"><i>{normalize pointer}
+  </i></font><font color="#FF0000"><b>var
+    </b></font>sp <font color="#000080">: </font>fake<font color="#000080">;
+    </font>l  <font color="#000080">: </font>longint<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>sp<font color="#000080">.</font>ptr <font color="#000080">:= </font>p<font color="#000080">;
+    </font>l <font color="#000080">:= </font>sp<font color="#000080">.</font>pseg<font color="#000080">;
+    </font>l <font color="#000080">:= </font>l<font color="#000080">*</font><font color="#800000">16</font><font color="#000080">;
+    </font>l <font color="#000080">:= </font>l <font color="#000080">+ </font>sp<font color="#000080">.</font>pofs<font color="#000080">;
+    </font>NormPtr <font color="#000080">:= </font>l<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CheckFreeList<font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>p    <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>lhp<font color="#000080">,
+    </font>lho<font color="#000080">,
+    </font>lhf  <font color="#000080">: </font>longint<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>p <font color="#000080">:= </font>freelist<font color="#000080">;
+    </font>lhp <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>HeapPtr<font color="#000080">);
+    </font>lho <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>HeapOrg<font color="#000080">);
+    </font><font color="#FF0000"><b>while </b></font>p <font color="#000080">&lt;&gt; </font>heapptr <font color="#FF0000"><b>do
+      begin
+        </b></font>lhf <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>p<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lhf <font color="#000080">&gt; </font>lhp<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>lhf <font color="#000080">&lt; </font>lho<font color="#000080">) </font><font color="#FF0000"><b>then
+          </b></font>error<font color="#000080">(</font>BadFreelist<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else
+          </b></font>p <font color="#000080">:= </font>freelst<font color="#000080">(</font>p<font color="#000080">^).</font>next
+      <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>PrintFreeList<font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>p    <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>lhf<font color="#000080">,
+    </font>lhp<font color="#000080">,
+    </font>lho  <font color="#000080">: </font>longint<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>p <font color="#000080">:= </font>freelist<font color="#000080">;
+    </font>lhp <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>HeapPtr<font color="#000080">);
+    </font>lho <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>HeapOrg<font color="#000080">);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'********** Dump of Free List *********'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>while </b></font>p <font color="#000080">&lt;&gt; </font>heapptr <font color="#FF0000"><b>do
+      begin
+        </b></font>lhf <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>p<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lhf <font color="#000080">&gt; </font>lhp<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>lhf <font color="#000080">&lt; </font>lho<font color="#000080">) </font><font color="#FF0000"><b>then
+          </b></font>error<font color="#000080">(</font>BadFreelist<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else
+          begin
+            </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">' Ptr = '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">' Len = '</font><font color="#000080">,</font>freelst<font color="#000080">(</font>p<font color="#000080">^).</font>bytes<font color="#000080">+</font>freelst<font color="#000080">(</font>p<font color="#000080">^).</font>paras <font color="#FF0000"><b>shl </b></font><font color="#800000">2</font><font color="#000080">);
+            </font>p <font color="#000080">:= </font>freelst<font color="#000080">(</font>p<font color="#000080">^).</font>next
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'********** End of Free List *********'#13#10</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>delrec<font color="#000080">(</font>indx<font color="#000080">:</font>integer<font color="#000080">);
+  </font><font color="#008000"><i>{delete record from array}
+  </i></font><font color="#FF0000"><b>begin
+    if </b></font>indx <font color="#000080">&lt;&gt; </font>pindx <font color="#FF0000"><b>then
+      </b></font>move<font color="#000080">(</font>precarray<font color="#000080">[</font>indx<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">],</font>precarray<font color="#000080">[</font>indx<font color="#000080">],(</font>pindx<font color="#000080">-</font>indx<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">);
+    </font>dec<font color="#000080">(</font>pindx<font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyMark<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>p<font color="#000080">:</font>pointer<font color="#000080">);</font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{Duplicate tp mark instead of hooking entry point}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>inc<font color="#000080">(</font>lm<font color="#000080">);
+    </font>checkfreelist<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>heapptr <font color="#000080">&lt;&gt; </font>freelist <font color="#FF0000"><b>then
+      if </b></font>level <font color="#000080">&gt; </font><font color="#800000">2 </font><font color="#FF0000"><b>then
+        </b></font>error<font color="#000080">(</font>CannotMark<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>warning<font color="#000080">(</font>CannotMark<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+    </font>p <font color="#000080">:= </font>heapptr<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>pindx<font color="#000080">+</font><font color="#800000">1 </font><font color="#000080">&gt; </font>precsize <font color="#FF0000"><b>then
+      </b></font>error<font color="#000080">(</font>ptrofl<font color="#000080">,</font><font color="#FF0000"><b>nil</b></font><font color="#000080">,</font>pindx<font color="#000080">);
+    </font>inc<font color="#000080">(</font>pindx<font color="#000080">);
+    </font>precarray<font color="#000080">[</font>pindx<font color="#000080">].</font>p <font color="#000080">:= </font>heapptr<font color="#000080">;
+    </font>precarray<font color="#000080">[</font>pindx<font color="#000080">].</font>f <font color="#000080">:= </font>Markrec<font color="#000080">;
+    </font>precarray<font color="#000080">[</font>pindx<font color="#000080">].</font>l <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>precarray<font color="#000080">[</font>pindx<font color="#000080">].</font>caller <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font>precarray<font color="#000080">[</font>pindx<font color="#000080">].</font>pcaller <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyRelease<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>p<font color="#000080">:</font>pointer<font color="#000080">);</font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{duplicate tp release instead of hooking entry point}
+  </i></font><font color="#FF0000"><b>var
+    </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+    </font>l<font color="#000080">,
+    </font>lhp<font color="#000080">,
+    </font>lhf  <font color="#000080">: </font>longint<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>inc<font color="#000080">(</font>lr<font color="#000080">);
+    </font>checkfreelist<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>normptr<font color="#000080">(</font>freelist<font color="#000080">) &lt; </font>normptr<font color="#000080">(</font>p<font color="#000080">) </font><font color="#FF0000"><b>then
+      if </b></font>level <font color="#000080">&gt; </font><font color="#800000">2 </font><font color="#FF0000"><b>then
+        </b></font>error<font color="#000080">(</font>CannotRelease<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>warning<font color="#000080">(</font>CannotRelease<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+    </font>i <font color="#000080">:= </font>pindx<font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>i<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and not </b></font><font color="#000080">((</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>p<font color="#000080">=</font>p<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>f<font color="#000080">=</font>MarkRec<font color="#000080">)) </font><font color="#FF0000"><b>do
+      </b></font>dec<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>error<font color="#000080">(</font>MarkRecNotFound<font color="#000080">,</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>normptr<font color="#000080">(</font>freelist<font color="#000080">) &lt; </font>normptr<font color="#000080">(</font>p<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>printfreelist<font color="#000080">;
+
+    </font>lhp <font color="#000080">:= </font>normptr<font color="#000080">(</font>p<font color="#000080">);
+    </font><font color="#FF0000"><b>while </b></font>freelist <font color="#000080">&lt;&gt; </font>heapptr <font color="#FF0000"><b>do
+      begin
+        </b></font>lhf <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>freelist<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>lhf <font color="#000080">&lt; </font>lhp <font color="#FF0000"><b>then
+          </b></font>lostheap <font color="#000080">:= </font>lostheap <font color="#000080">+ </font>freelst<font color="#000080">(</font>freelist<font color="#000080">^).</font>bytes<font color="#000080">+</font>freelst<font color="#000080">(</font>freelist<font color="#000080">^).</font>paras <font color="#FF0000"><b>shl </b></font><font color="#800000">2</font><font color="#000080">;
+        </font>freelist <font color="#000080">:= </font>freelst<font color="#000080">(</font>freelist<font color="#000080">^).</font>next
+      <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>delrec<font color="#000080">(</font>i<font color="#000080">);                          </font><font color="#008000"><i>{delete mark record}
+    {******************************}
+    {   This is waht tp does!!!    }
+    </i></font>heapptr <font color="#000080">:= </font>p<font color="#000080">;
+    </font>freelist <font color="#000080">:= </font>p<font color="#000080">;
+    </font><font color="#008000"><i>{******************************}
+    </i></font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>l <font color="#000080">:= </font>NormPtr<font color="#000080">(</font>p<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>prtreleaseon <font color="#FF0000"><b>then
+      </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'****** Discarding Pointers above '</font><font color="#000080">,</font>hexptr<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">' ******'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>while </b></font>i <font color="#000080">&lt;= </font>pindx <font color="#FF0000"><b>do
+      if </b></font>l <font color="#000080">&gt; </font>NormPtr<font color="#000080">(</font>Precarray<font color="#000080">[</font>i<font color="#000080">].</font>p<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>inc<font color="#000080">(</font>i<font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        begin
+          if </b></font>prtreleaseon <font color="#FF0000"><b>then
+            </b></font>prtrec<font color="#000080">(</font>i<font color="#000080">);
+          </font>DelRec<font color="#000080">(</font>i<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>prtreleaseon <font color="#FF0000"><b>then
+      </b></font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'**************** End of Discard ****************'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Getmem_Return<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{ this code intercepts the return from tp's heap allocation
+      stuff and stores the actual pointer value into the array}
+    </i></font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">add  [word ptr lg],1
+        jnc  @@1
+        inc  [word ptr lg+2]
+        @@1:
+        dec  getmembusyflag
+        mov  bx,pindx
+        inc  pindx
+        shl  bx,1                   </font><font color="#008000"><i>{pindx * 16}
+        </i></font><font color="#FF00FF">shl  bx,1
+        shl  bx,1
+        shl  bx,1
+        add  bx,offset precarray    </font><font color="#008000"><i>{heap record base}
+        </i></font><font color="#FF00FF">mov  [bx],ax                </font><font color="#008000"><i>{store returned pointer}
+        </i></font><font color="#FF00FF">mov  [bx+2],dx
+        mov  bx,offset pretto       </font><font color="#008000"><i>{retrieve return to address}
+        </i></font><font color="#FF00FF">jmp  dword ptr [bx]         </font><font color="#008000"><i>{ and jump }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Intercept_Getmem<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">mov  ax,[bp+2]                  </font><font color="#008000"><i>{take a guess at the previous}
+        </i></font><font color="#FF00FF">mov  [word ptr pprev],ax        </font><font color="#008000"><i>{procedure call return address}
+        </i></font><font color="#FF00FF">mov  ax,[bp+4]
+        mov  [word ptr pprev+2],ax
+        push bp                          </font><font color="#008000"><i>{duplicate original code}
+        </i></font><font color="#FF00FF">mov  bp,sp
+        cmp  getmembusyflag,0
+        je   @@1
+        mov  ax,getmembusyerr
+        push ax
+        xor  ax,ax
+        push ax
+        push ax
+        push ax
+        call error
+        @@1:
+        call CheckFreelist
+        inc  getmembusyflag
+        mov  ax,[bp+2]                   </font><font color="#008000"><i>{intercept return address}
+        </i></font><font color="#FF00FF">mov  [word ptr pretto],ax        </font><font color="#008000"><i>{from getmem and...}
+        </i></font><font color="#FF00FF">mov  ax,[bp+4]
+        mov  [word ptr pretto+2],ax
+        mov  ax,offset Getmem_Return     </font><font color="#008000"><i>{replace it with ours}
+        </i></font><font color="#FF00FF">mov  [bp+2],ax
+        mov  ax,seg Getmem_Return
+        mov  [bp+4],ax
+
+        mov  bx,pindx                    </font><font color="#008000"><i>{get heap buffer indx}
+        </i></font><font color="#FF00FF">inc  bx
+        cmp  bx,precsize                 </font><font color="#008000"><i>{check it for overflow}
+        </i></font><font color="#FF00FF">jle  @@2
+        mov  ax,ptrofl
+        push ax
+        xor  ax,ax
+        push ax
+        push ax
+        push ax
+        call error                      </font><font color="#008000"><i>{display error and halt}
+
+      </i></font><font color="#FF00FF">@@2:
+        dec  bx
+        shl  bx,1                       </font><font color="#008000"><i>{pindx * 16}
+        </i></font><font color="#FF00FF">shl  bx,1
+        shl  bx,1
+        shl  bx,1
+        add  bx,offset precarray        </font><font color="#008000"><i>{base of array}
+        </i></font><font color="#FF00FF">mov  ax,HeapRec
+        mov  [bx+6],ax                  </font><font color="#008000"><i>{flag Heaprec}
+        </i></font><font color="#FF00FF">mov  ax,[word ptr pretto]       </font><font color="#008000"><i>{Callers address}
+        </i></font><font color="#FF00FF">mov  [bx+8],ax
+        mov  ax,[word ptr pretto+2]
+        mov  [bx+10],ax
+        mov  ax,[word ptr pprev]       </font><font color="#008000"><i>{Callers address}
+        </i></font><font color="#FF00FF">mov  [bx+12],ax
+        mov  ax,[word ptr pprev+2]
+        mov  [bx+14],ax
+        </font><font color="#008000"><i>{**********  This must be last as ax must contain length *********}
+        </i></font><font color="#FF00FF">mov  ax,[bp+6]                  </font><font color="#008000"><i>{length of heap request}
+        </i></font><font color="#FF00FF">mov  [bx+4],ax                  </font><font color="#008000"><i>{  to heap structure}
+        </i></font><font color="#FF00FF">mov  bx,offset pgetmem
+        jmp  dword ptr [bx]             </font><font color="#008000"><i>{jump back to execute getmem}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Intercept_Freemem<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ on entry the stack contains a pointer to the memory to be freed and
+    it's length.  The operation is verified and then the heap freemem
+    procedure is called.  Note that the ax register must be conditioned}
+
+    </i></font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">push bp                          </font><font color="#008000"><i>{duplicate existing code}
+        </i></font><font color="#FF00FF">mov  bp,sp
+        cmp  FreememBusyFlag,0           </font><font color="#008000"><i>{check for recursive call}
+        </i></font><font color="#FF00FF">je   @@1
+        mov  ax,FreememBusyErr
+        push ax
+        xor  ax,ax
+        push ax
+        push ax
+        push ax
+        call error
+      @@1:
+        add  word ptr lf,1
+        jnc  @@99
+        inc  word ptr lf+2
+      @@99:
+        call CheckFreelist
+        inc  FreememBusyFlag
+        mov  bx,pindx
+        mov  cx,bx
+        shl  bx,1                       </font><font color="#008000"><i>{pindx * 16}
+        </i></font><font color="#FF00FF">shl  bx,1
+        shl  bx,1
+        shl  bx,1
+        add  bx,offset precarray        </font><font color="#008000"><i>{base of array}
+      </i></font><font color="#FF00FF">@@2:
+        jcxz @@3
+        dec  cx
+        sub  bx,16
+        mov  ax,[bp+10]                 </font><font color="#008000"><i>{check pointer segment}
+        </i></font><font color="#FF00FF">cmp  ax,[bx+2]                  </font><font color="#008000"><i>{ to stored values}
+        </i></font><font color="#FF00FF">jne  @@2
+        mov  ax,[bp+8]                  </font><font color="#008000"><i>{check pointer offset}
+        </i></font><font color="#FF00FF">cmp  ax,[bx]
+        jne  @@2
+        mov  ax,heaprec
+        cmp  ax,[bx+6]
+        jne  @@2                        </font><font color="#008000"><i>{heap record}
+        </i></font><font color="#FF00FF">mov  ax,[bp+6]                  </font><font color="#008000"><i>{check length of area}
+        </i></font><font color="#FF00FF">cmp  ax,[bx+4]
+        je   @@4
+        dec  freemembusyflag
+        mov  ax,ptrbadlength            </font><font color="#008000"><i>{pointer found but bad length}
+        </i></font><font color="#FF00FF">push ax
+        mov  ax,[bp+10]
+        push ax
+        mov  ax,[bp+8]
+        push ax
+        mov  ax,[bp+6]
+        push ax
+        call error
+      @@3:                              </font><font color="#008000"><i>{attempting to return a non}
+        </i></font><font color="#FF00FF">dec  freemembusyflag
+        mov  ax,ptrnotfound             </font><font color="#008000"><i>{ allocated area}
+        </i></font><font color="#FF00FF">push ax
+        mov  ax,[bp+10]
+        push ax
+        mov  ax,[bp+8]
+        push ax
+        mov  ax,[bp+6]
+        push ax
+        call error
+      @@4:                              </font><font color="#008000"><i>{found a good area}
+        </i></font><font color="#FF00FF">inc  cx
+        cmp  cx,pindx                   </font><font color="#008000"><i>{if not last allocated then}
+        </i></font><font color="#FF00FF">je   @@5
+        mov  ax,ds                      </font><font color="#008000"><i>{  close up the hole}
+        </i></font><font color="#FF00FF">mov  es,ax
+        mov  di,bx                      </font><font color="#008000"><i>{addr of record to delete}
+        </i></font><font color="#FF00FF">mov  si,di
+        add  si,16                      </font><font color="#008000"><i>{addr of next record}
+        </i></font><font color="#FF00FF">mov  ax,pindx
+        sub  ax,cx                      </font><font color="#008000"><i>{number of records to move}
+        </i></font><font color="#FF00FF">mov  cx,ax
+        shl  cx,1                       </font><font color="#008000"><i>{  multiplied by 16}
+        </i></font><font color="#FF00FF">shl  cx,1
+        shl  cx,1
+        shl  cx,1
+        cld
+        rep  movsb
+      @@5:
+        dec  pindx                     </font><font color="#008000"><i>{decrement heaparray ptr}
+        </i></font><font color="#FF00FF">dec  freemembusyflag
+        mov  ax,[bp+6]
+        mov  bx,offset pfreemem
+        jmp  dword ptr [bx]
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Find_Procs<font color="#000080">;</font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>label
+    </b></font>lmark<font color="#000080">,
+    </font>lgetmem<font color="#000080">,
+    </font>lfreemem<font color="#000080">,
+    </font>lrelease<font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>tmp <font color="#000080">: </font>pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    asm
+      </b></font><font color="#008000"><i>{*********************************************
+       retrieve the address of the getmem procedure
+       and patch in the intercept code
+       *********************************************}
+        </i></font><font color="#FF00FF">mov  bx,offset lgetmem
+        add  bx,5
+        mov  ax,word ptr [cs:bx]
+        mov  [word ptr pgetmem],ax
+        add  [word ptr pgetmem],6
+        inc  bx
+        inc  bx
+        mov  dx,word ptr [cs:bx]
+        mov  [word ptr pgetmem+2],dx
+        mov  es,dx
+        mov  bx,ax
+        mov  byte ptr [es:bx],$EA  </font><font color="#008000"><i>{jmp far}
+        </i></font><font color="#FF00FF">mov  ax,offset Intercept_Getmem
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  ax,seg Intercept_Getmem
+        inc  bx
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  al,$90
+        inc  bx
+        inc  bx
+        mov  byte ptr [es:bx],al
+
+      </font><font color="#008000"><i>{********************************************
+       Now get the address of the freemem procedure
+       and patch in the intercept code
+       ********************************************}
+        </i></font><font color="#FF00FF">mov  bx,offset lfreemem
+        add  bx,11
+        mov  ax,word ptr [cs:bx]
+        mov  [word ptr pfreemem],ax
+        add  [word ptr pfreemem],6
+        inc  bx
+        inc  bx
+        mov  dx,word ptr [cs:bx]
+        mov  [word ptr pfreemem+2],dx
+        mov  es,dx
+        mov  bx,ax
+        mov  byte ptr [es:bx],$EA  </font><font color="#008000"><i>{jmp far}
+        </i></font><font color="#FF00FF">mov  ax,offset Intercept_Freemem
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  ax,seg Intercept_Freemem
+        inc  bx
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  al,$90
+        inc  bx
+        inc  bx
+        mov  byte ptr [es:bx],al
+      </font><font color="#008000"><i>{********************************************
+       Now get the address of the Mark procedure
+       and patch in the intercept code
+       ********************************************}
+        </i></font><font color="#FF00FF">mov  bx,offset lmark
+        add  bx,6
+        mov  bx,word ptr [cs:bx]
+        mov  byte ptr [es:bx],$EA  </font><font color="#008000"><i>{jmp far}
+        </i></font><font color="#FF00FF">mov  ax,offset MyMark
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  ax,seg MyMark
+        inc  bx
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  al,$90
+        inc  bx
+        inc  bx
+        mov  byte ptr [es:bx],al
+      </font><font color="#008000"><i>{********************************************
+       Now get the address of the Release procedure
+       and patch in the intercept code
+       ********************************************}
+        </i></font><font color="#FF00FF">mov  bx,offset lRelease
+        add  bx,6
+        mov  bx,word ptr [cs:bx]
+        mov  byte ptr [es:bx],$EA  </font><font color="#008000"><i>{jmp far}
+        </i></font><font color="#FF00FF">mov  ax,offset MyRelease
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  ax,seg MyRelease
+        inc  bx
+        inc  bx
+        mov  word ptr [es:bx],ax
+        mov  al,$90
+        inc  bx
+        inc  bx
+        mov  byte ptr [es:bx],al
+        mov  sp,bp
+        pop  bp
+        retf
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>lgetmem<font color="#000080">:
+    </font>getmem<font color="#000080">(</font>tmp<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font>lfreemem<font color="#000080">:
+    </font>freemem<font color="#000080">(</font>tmp<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font>lmark<font color="#000080">:
+    </font>mark<font color="#000080">(</font>tmp<font color="#000080">);
+    </font>lrelease<font color="#000080">:
+    </font>release<font color="#000080">(</font>tmp<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>cleanup<font color="#000080">;</font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>i        <font color="#000080">: </font>integer<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    if </b></font>pindx <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      begin
+        </b></font>orphaned <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'******* Unreleased Heap On Exit *******'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>pindx <font color="#FF0000"><b>do
+          begin
+            </b></font>orphaned <font color="#000080">:= </font>orphaned<font color="#000080">+</font>precarray<font color="#000080">[</font>i<font color="#000080">].</font>l<font color="#000080">;
+            </font>prtrec<font color="#000080">(</font>i<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'******* End of Unreleased Heap ********'#13#10</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">#13#10'        ******* Total heap operations *******'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'   Gets      Frees      Marks     Releases  Lost Heap  Orphaned Heap'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'---------- ---------- ---------- ---------- ---------- -------------'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font>lfile<font color="#000080">,</font>lg<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>lf<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>lm<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>lr<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>lostheap<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>Orphaned<font color="#000080">:</font><font color="#800000">13</font><font color="#000080">);
+    </font>close<font color="#000080">(</font>lfile<font color="#000080">);
+    </font>exitproc <font color="#000080">:= </font>savexit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>progname <font color="#000080">:= </font>paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font>lg <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>lf <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>lm <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>lr <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>lostheap <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>orphaned <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>getmembusyflag <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>freemembusyflag <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>pindx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>assign<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'heapchk.txt'</font><font color="#000080">);
+  </font>rewrite<font color="#000080">(</font>lfile<font color="#000080">);
+  </font>Writeln<font color="#000080">(</font>lfile<font color="#000080">,</font><font color="#800000">'Heap Data for program '</font><font color="#000080">,</font>progname<font color="#000080">,</font><font color="#800000">#13#10</font><font color="#000080">);
+  </font>savexit <font color="#000080">:= </font>exitproc<font color="#000080">;
+  </font>exitproc <font color="#000080">:= @</font>cleanup<font color="#000080">;
+  </font>Find_Procs<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0085.PAS">Original</a><b>]</b></p></body>
+</html>

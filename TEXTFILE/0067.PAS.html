@@ -1,0 +1,193 @@
+<html>
+<head><title> "Smooth Viewer" by AARON SCHROEDER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0067.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+  Since it looks like things are moving quite slowly here, I thought I'd
+post a text viewer that I wrote. Actually, A guy named Jon Merkel
+posted the original code that showed me how to smoothly scroll text. I
+just modified it to read files and keep track of where in the file it's
+at and stuff. I was going to make it read straight binary files so it
+would display all those extended ascii characters, but I figured it'd
+be a lot easier this way.
+    Basically, it just reads the file 102 lines at a time. It starts out
+by filling the video memory with 204 lines of text and then updates it
+as needed. I guess there really isn't a fliesize limit.. Actually there
+would be   ummm  FilePs is a longint so it'd be 2147483647*80. Well,
+by the time you got that size file, it'd take a couple years to scroll
+becuase my method of seeking a text file leaves MUCH to be desired!
+    Please modify this and make it faster! I didn't spend much time on it,
+and if i worked on it again, I'd probably load more than 204 lines of the
+file into some temp array and then just use MOVE to transfer that data
+to video memory.
+    Anyways, do what you wish, but please don't dis me for bad code becuase
+as I said, I didn't spend much time on this.. just thought you'd all like
+to see it.. Enjoy!
+ BTW, I already posted this in the FIDO pascal echo.
+}
+{----------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>program </b></font>View<font color="#000080">;
+</font><font color="#FF0000"><b>const
+    </b></font>DownKey <font color="#000080">= </font><font color="#800000">$50</font><font color="#000080">;                          </font><font color="#008000"><i>{ Scan code for the down arrow }
+    </i></font>UpKey   <font color="#000080">= </font><font color="#800000">$48</font><font color="#000080">;                          </font><font color="#008000"><i>{ Scan code for the up arrow   }
+    </i></font>EscKey  <font color="#000080">= </font><font color="#800000">$1</font><font color="#000080">;                           </font><font color="#008000"><i>{ Scan code for the escape key }
+    </i></font>done<font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+    </font>start<font color="#000080">: </font>integer <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+    </font>velocity<font color="#000080">: </font>integer <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>Tfile <font color="#000080">: </font>text<font color="#000080">;                           </font><font color="#008000"><i>{Text File to read in duh!}
+  </i></font>FilePs<font color="#000080">,</font>OldPs <font color="#000080">: </font>LongInt<font color="#000080">;                 </font><font color="#008000"><i>{File Positions maybe?}
+  </i></font>StLoad<font color="#000080">,</font>EndFile <font color="#000080">: </font>Boolean<font color="#000080">;               </font><font color="#008000"><i>{Tell if at end or start of file}
+  </i></font>character<font color="#000080">: </font><font color="#FF0000"><b>record </b></font>ch<font color="#000080">:</font>char<font color="#000080">; </font>attr<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{Jon's Record GLOBALLY}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Error<font color="#000080">(</font>num<font color="#000080">:</font>byte<font color="#000080">);                </font><font color="#008000"><i>{Returns error if used wrong}
+ </i></font><font color="#FF0000"><b>Begin
+   </b></font>Writeln<font color="#000080">;
+   </font><font color="#FF0000"><b>Case </b></font>Num <font color="#FF0000"><b>of
+     </b></font><font color="#800000">1 </font><font color="#000080">: </font>Writeln<font color="#000080">(</font><font color="#800000">'Error 1 !  Proper usage is:  VIEW &lt;FileName&gt;'</font><font color="#000080">);
+     </font><font color="#800000">2 </font><font color="#000080">: </font>Writeln<font color="#000080">(</font><font color="#800000">'Invalid File! Be sure full name/path/ext is included.'</font><font color="#000080">);
+   </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font>Writeln<font color="#000080">;  </font>Halt<font color="#000080">;
+ </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Initialize<font color="#000080">;                           </font><font color="#008000"><i>{ Initialize the program    }
+</i></font><font color="#FF0000"><b>var
+  </b></font>j<font color="#000080">, </font>k<font color="#000080">, </font>offset <font color="#000080">: </font>word<font color="#000080">;                         </font><font color="#008000"><i>{counters and video offset}
+  </i></font>z<font color="#000080">,</font>x          <font color="#000080">: </font>byte<font color="#000080">;                         </font><font color="#008000"><i>{Counters and stuff}
+  </i></font>s            <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;                       </font><font color="#008000"><i>{Read file into this}
+</i></font><font color="#FF0000"><b>begin
+  asm </b></font><font color="#FF00FF">mov ax,3; int 10h; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;                     </font><font color="#008000"><i>{ Set 80x25 text mode   }
+  </i></font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">in al,21h; or al,2; out 21h,al; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;        </font><font color="#008000"><i>{ Disable the keyboard  }
+  </i></font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">mov ax,0100h; mov cx,2000h; int 10h; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ Hide the cursor       }
+  </i></font>FillChar<font color="#000080">(</font>mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">], </font><font color="#800000">32768</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);               </font><font color="#008000"><i>{ clear video memory    }
+  </i></font>j<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;  </font>StLoad <font color="#000080">:= </font>TRUE<font color="#000080">;  </font>FilePs <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>j<font color="#000080">&lt;</font><font color="#800000">203</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>eof<font color="#000080">(</font>Tfile<font color="#000080">)) </font><font color="#FF0000"><b>do begin
+    </b></font>z<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;  </font>x<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;  </font>s<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;                          </font><font color="#008000"><i>{Init variables}
+    </i></font>Readln<font color="#000080">(</font>TFile<font color="#000080">,</font>s<font color="#000080">);
+    </font>offset <font color="#000080">:= </font>j<font color="#000080">*</font><font color="#800000">160</font><font color="#000080">;
+    </font>character<font color="#000080">.</font>attr <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+    </font><font color="#FF0000"><b>for </b></font>k <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>do begin
+      </b></font>character<font color="#000080">.</font>ch <font color="#000080">:= </font>s<font color="#000080">[</font>k<font color="#000080">];
+      </font>memw<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font>offset<font color="#000080">] := </font>word<font color="#000080">(</font>character<font color="#000080">);  </font><font color="#008000"><i>{display character and Attr}
+      </i></font>inc<font color="#000080">(</font>offset<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>inc<font color="#000080">(</font>j<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>Eof<font color="#000080">(</font>Tfile<font color="#000080">) </font><font color="#FF0000"><b>Then </b></font>EndFile <font color="#000080">:= </font>TRUE <font color="#FF0000"><b>Else </b></font>EndFIle <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font>OldPs <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font>FilePs<font color="#000080">:=</font><font color="#800000">204</font><font color="#000080">;        </font><font color="#008000"><i>{Init file positions}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetScreenStart<font color="#000080">(</font>ScanLine<font color="#000080">:</font>word<font color="#000080">);            </font><font color="#008000"><i>{ MAIN PROCEDURE !!!!   }
+</i></font><font color="#FF0000"><b>var
+  </b></font>StartAddress<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>StartAddress <font color="#000080">:= (</font>ScanLine <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">)*</font><font color="#800000">80</font><font color="#000080">;
+  </font>portw<font color="#000080">[</font><font color="#800000">$3D4</font><font color="#000080">] := </font>hi<font color="#000080">(</font>StartAddress<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font><font color="#800000">$0C</font><font color="#000080">;    </font><font color="#008000"><i>{ Set start address     }
+  </i></font>portw<font color="#000080">[</font><font color="#800000">$3D4</font><font color="#000080">] := </font>lo<font color="#000080">(</font>StartAddress<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font><font color="#800000">$0D</font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat until </b></font>port<font color="#000080">[</font><font color="#800000">$3DA</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">8</font><font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">;               </font><font color="#008000"><i>{ wait for retrace      }
+  </i></font>portw<font color="#000080">[</font><font color="#800000">$3D4</font><font color="#000080">] := (</font>ScanLine <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font><font color="#800000">8</font><font color="#000080">;     </font><font color="#008000"><i>{ Set start scanline    }
+  </i></font><font color="#FF0000"><b>repeat until </b></font>port<font color="#000080">[</font><font color="#800000">$3DA</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">8</font><font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;                </font><font color="#008000"><i>{ wait out retrace      }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Forwards<font color="#000080">;                   </font><font color="#008000"><i>{Reads next 102 lines in the file}
+ </i></font><font color="#FF0000"><b>Var
+   </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;      </font>z<font color="#000080">,</font>x <font color="#000080">: </font>byte<font color="#000080">;            </font><font color="#008000"><i>{junk}
+   </i></font>offset <font color="#000080">: </font>word<font color="#000080">;                      </font><font color="#008000"><i>{didn't we already go thru this one?}
+ </i></font><font color="#FF0000"><b>Begin
+   </b></font>StLoad <font color="#000080">:= </font>FALSE<font color="#000080">;                    </font><font color="#008000"><i>{no longer start of file}
+   </i></font>Move<font color="#000080">(</font>Mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">102</font><font color="#000080">*</font><font color="#800000">160</font><font color="#000080">],</font>Mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">],</font><font color="#800000">16320</font><font color="#000080">);
+
+    </font><font color="#008000"><i>{This procedure is done so that when we reach the end of video mem,
+      we move the last half of memory to the top and load 102 more lines
+      neat huh? Actually it's VERY SLow.. especially if your dealing with
+      a file that's ohh say more than a meg!}
+   </i></font>SetScreenStart<font color="#000080">(</font>start<font color="#000080">);
+   </font>FillChar<font color="#000080">(</font>Mem<font color="#000080">[</font><font color="#800000">$b800</font><font color="#000080">:</font><font color="#800000">16320</font><font color="#000080">],</font><font color="#800000">16320</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+   </font>z<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;   </font>OldPs <font color="#000080">:= </font>FilePs<font color="#000080">-</font><font color="#800000">102</font><font color="#000080">;  </font><font color="#008000"><i>{Preserve File Position in OldPs}
+   </i></font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>Eof<font color="#000080">(</font>Tfile<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>z<font color="#000080">&lt;</font><font color="#800000">102</font><font color="#000080">) </font><font color="#FF0000"><b>do Begin
+     </b></font>Inc<font color="#000080">(</font>z<font color="#000080">);  </font>Inc<font color="#000080">(</font>FilePs<font color="#000080">);
+     </font>Readln<font color="#000080">(</font>Tfile<font color="#000080">,</font>s<font color="#000080">);
+     </font>offset <font color="#000080">:= (</font>z<font color="#000080">+</font><font color="#800000">102</font><font color="#000080">)*</font><font color="#800000">160</font><font color="#000080">;
+     </font>character<font color="#000080">.</font>attr <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>x <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>do begin
+       </b></font>character<font color="#000080">.</font>ch <font color="#000080">:= </font>s<font color="#000080">[</font>x<font color="#000080">];
+       </font>memw<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font>offset<font color="#000080">] := </font>word<font color="#000080">(</font>character<font color="#000080">);
+       </font>inc<font color="#000080">(</font>offset<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>If </b></font>eof<font color="#000080">(</font>Tfile<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>EndFile <font color="#000080">:= </font>TRUE<font color="#000080">;   </font><font color="#008000"><i>{We have reached the end!}
+ </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Backwards<font color="#000080">;                   </font><font color="#008000"><i>{Backs up 102 lines in file}
+ </i></font><font color="#FF0000"><b>Var
+   </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;        </font>x<font color="#000080">,</font>z <font color="#000080">: </font>byte<font color="#000080">;
+   </font>cnt <font color="#000080">: </font>longint<font color="#000080">;     </font>Offset <font color="#000080">: </font>word<font color="#000080">;
+ </font><font color="#FF0000"><b>Begin
+   </b></font>Move<font color="#000080">(</font>mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">],</font>mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">102</font><font color="#000080">*</font><font color="#800000">160</font><font color="#000080">],</font><font color="#800000">16320</font><font color="#000080">);
+   </font>SetScreenStart<font color="#000080">(</font>start<font color="#000080">);
+   </font>FillChar<font color="#000080">(</font>Mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">],</font><font color="#800000">16320</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+   </font>Reset<font color="#000080">(</font>Tfile<font color="#000080">);
+   </font>cnt<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>While </b></font>cnt <font color="#000080">&lt; (</font>OldPs<font color="#000080">-</font><font color="#800000">102</font><font color="#000080">) </font><font color="#FF0000"><b>do Begin  </b></font><font color="#008000"><i>{slow way to seek a text file}
+     </i></font>inc<font color="#000080">(</font>cnt<font color="#000080">);
+     </font>Readln<font color="#000080">(</font>Tfile<font color="#000080">);
+   </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font>Dec<font color="#000080">(</font>FilePs<font color="#000080">,</font><font color="#800000">102</font><font color="#000080">); </font>Dec<font color="#000080">(</font>OldPs<font color="#000080">,</font><font color="#800000">102</font><font color="#000080">);   </font><font color="#008000"><i>{get our file position right!}
+   </i></font><font color="#FF0000"><b>If </b></font>OldPs <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>StLoad <font color="#000080">:= </font>TRUE<font color="#000080">;
+   </font>z<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;                                 </font><font color="#008000"><i>{De ja vu!}
+   </i></font><font color="#FF0000"><b>While </b></font>z<font color="#000080">&lt;</font><font color="#800000">102 </font><font color="#FF0000"><b>do Begin
+     </b></font>Inc<font color="#000080">(</font>z<font color="#000080">);
+     </font>Readln<font color="#000080">(</font>Tfile<font color="#000080">,</font>S<font color="#000080">);
+     </font>offset <font color="#000080">:= (</font>z<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">160</font><font color="#000080">;
+     </font>Character<font color="#000080">.</font>attr <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>x <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>do begin
+       </b></font>character<font color="#000080">.</font>ch <font color="#000080">:= </font>s<font color="#000080">[</font>x<font color="#000080">];
+       </font>memw<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font>offset<font color="#000080">] := </font>word<font color="#000080">(</font>character<font color="#000080">);
+       </font>inc<font color="#000080">(</font>offset<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>For </b></font>z <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">102 </font><font color="#FF0000"><b>do </b></font>Readln<font color="#000080">(</font>Tfile<font color="#000080">,</font>s<font color="#000080">);   </font><font color="#008000"><i>{get back to right position}
+ </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{/////////////// Main Program//////////////////////////////////////////////}
+</i></font><font color="#FF0000"><b>begin
+    If </b></font>ParamCount <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>Then </b></font>Error<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+    </font>Assign<font color="#000080">(</font>Tfile<font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));                  </font><font color="#008000"><i>{load our text file}
+    {$I-} </i></font>Reset<font color="#000080">(</font>Tfile<font color="#000080">);  </font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>If </b></font>IoResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>Then </b></font>Error<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+    </font>Initialize<font color="#000080">;
+    </font><font color="#FF0000"><b>repeat
+        case </b></font>port<font color="#000080">[</font><font color="#800000">$60</font><font color="#000080">] </font><font color="#FF0000"><b>of                               </b></font><font color="#008000"><i>{ Check keypress    }
+            </i></font>DownKey <font color="#000080">: </font>inc<font color="#000080">(</font>velocity<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+            </font>UpKey   <font color="#000080">: </font>dec<font color="#000080">(</font>velocity<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+            </font>EscKey  <font color="#000080">: </font>done <font color="#000080">:= </font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>inc<font color="#000080">(</font>start<font color="#000080">, </font>velocity<font color="#000080">);                   </font><font color="#008000"><i>{ update screen position    }
+        </i></font><font color="#FF0000"><b>if </b></font>word<font color="#000080">(</font>start<font color="#000080">) &gt; (</font><font color="#800000">203</font><font color="#000080">-</font><font color="#800000">24</font><font color="#000080">)*</font><font color="#800000">16 </font><font color="#FF0000"><b>then
+            if </b></font>start <font color="#000080">&lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin   </b></font><font color="#008000"><i>{Hit top}
+                </i></font><font color="#FF0000"><b>If not </b></font>StLoad <font color="#FF0000"><b>Then Begin
+                  </b></font>start <font color="#000080">:= (</font><font color="#800000">102</font><font color="#000080">)*</font><font color="#800000">16</font><font color="#000080">-</font>velocity<font color="#000080">;    </font><font color="#008000"><i>{kinda glitchy}
+                  </i></font>BackWards<font color="#000080">;
+                </font><font color="#FF0000"><b>End Else Begin
+                  </b></font>Start <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                  </font>velocity <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end
+            else begin      </b></font><font color="#008000"><i>{hit bottom}
+                </i></font><font color="#FF0000"><b>If Not </b></font>EndFile <font color="#FF0000"><b>Then Begin
+                  </b></font>start <font color="#000080">:= (</font><font color="#800000">102</font><font color="#000080">-</font><font color="#800000">25</font><font color="#000080">)*</font><font color="#800000">16</font><font color="#000080">+</font>velocity<font color="#000080">;   </font><font color="#008000"><i>{same as   ^^^^}
+                  </i></font>Forwards<font color="#000080">;
+                </font><font color="#FF0000"><b>End Else Begin
+                  </b></font>start <font color="#000080">:= (</font><font color="#800000">203</font><font color="#000080">-</font><font color="#800000">24</font><font color="#000080">)*</font><font color="#800000">16</font><font color="#000080">;
+                  </font>velocity <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>velocity <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>dec<font color="#000080">(</font>velocity<font color="#000080">)
+        </font><font color="#FF0000"><b>else if </b></font>velocity <font color="#000080">&lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>velocity<font color="#000080">);
+        </font>SetScreenStart<font color="#000080">(</font>start<font color="#000080">);                      </font><font color="#008000"><i>{ set screen position   }
+    </i></font><font color="#FF0000"><b>until </b></font>done<font color="#000080">;
+    </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">in al,21h; and al,253; out 21h,al; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;         </font><font color="#008000"><i>{ enable keyboard   }
+    </i></font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">mov ax,3; int 10h; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;                         </font><font color="#008000"><i>{ reset text mode   }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0067.PAS">Original</a><b>]</b></p></body>
+</html>

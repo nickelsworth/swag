@@ -1,0 +1,307 @@
+<html>
+<head><title> "Icons Manipulation" by ALFONS HOOGERVORST</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to WIN-OS2 SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0065.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Here my tiny icofuncs unit for Windows. As I recall it, I also posted the C
+version in windows.prog. Here my special translation for you Pascal users.
+Note: the undocumented DumpIcon function I use, works 100% guaranteed in Win16.
+Users of Win32 (NOT Win32s) should resort to the documented GetIconInfo. Now is
+this code useful? I don't know. Perhaps if you want to convert your icons to
+their monochrome equivalents. Well anyway, try it.
+
+Bye, Alfons (2:500/121.6252 or a.hoogervorst@dosgg.nl)
+
+{ icofuncs.pas.
+  Originally written in Pascal, then translated to C, reconverted to
+  Pascal, then again to C.
+
+  First posted in WINDOWS.PROG. Should have come to you through other
+  mail areas. Perhaps it's already translated to other languages.
+  But this one is authorized by me &lt;g&gt;.
+
+  No copyrights claimed: I donate the source to the public domain.
+  If you use it in your code, I won't mind my name appearing in any
+  credits. It's such a nice name :-).
+
+  Written by Alfons Hoogervorst
+  Internet E-mail &lt;a.hoogervorst@dosgg.nl&gt;
+  Fido     E-mail &lt;2:500/121.6252 (Alfons Hoogervorst)&gt;
+
+  Only works with Win16. For Win32 users: use the GetIconInfo function.
+}
+</i></font><font color="#FF0000"><b>unit </b></font>icofuncs<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+uses
+  </b></font>WinTypes<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>HINSTANCE <font color="#000080">= </font>THandle<font color="#000080">; </font><font color="#008000"><i>{ Clashes with System.hInstance :-) }
+  </i></font>HGLOBAL   <font color="#000080">= </font>THandle<font color="#000080">;
+
+  </font><font color="#008000"><i>{ When you resourcelock an HICON or HCURSOR you'll get a pointer to a
+    TCursorIconInfo structure. }
+  </i></font>PCursorIconInfo <font color="#000080">= ^</font>TCursorIconInfo<font color="#000080">;
+  </font>TCursorIconInfo <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>ptHotSpot<font color="#000080">: </font>TPoint<font color="#000080">;
+    </font>wWidth<font color="#000080">, </font>wHeight<font color="#000080">, </font>wWidthBytes<font color="#000080">: </font>Word<font color="#000080">;
+    </font>byPlanes<font color="#000080">, </font>byBitsPix<font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>DumpIcon<font color="#000080">(</font>AInfo<font color="#000080">: </font>PCursorIconInfo<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>HeaderLen<font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>var </b></font>AndBits<font color="#000080">, </font>XORMask<font color="#000080">: </font>Pointer<font color="#000080">): </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>ColorToMonoIcon<font color="#000080">(</font>hInst<font color="#000080">: </font>HINSTANCE<font color="#000080">; </font>hIconIn<font color="#000080">: </font>HICON<font color="#000080">): </font>HICON<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>IconToCursor<font color="#000080">(</font>hInst<font color="#000080">: </font>HINSTANCE<font color="#000080">; </font>hIconIn<font color="#000080">: </font>HICON<font color="#000080">; </font>nHotSpotX<font color="#000080">,
+  </font>nHotSpotY<font color="#000080">: </font>Integer<font color="#000080">): </font>HCURSOR<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+uses
+  </b></font>WinProcs<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>COLORWHITE <font color="#000080">= </font><font color="#800000">$00FFFFFF</font><font color="#000080">;
+  </font>COLORHALF  <font color="#000080">= </font>Longint<font color="#000080">(</font>COLORWHITE <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">);
+  </font>COLORBLACK <font color="#000080">= </font>Longint<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font>COLORMAXDISTANCE  <font color="#000080">= </font>Longint<font color="#000080">(</font><font color="#800000">3 </font><font color="#000080">* </font>Longint<font color="#000080">(</font><font color="#800000">$ff </font><font color="#000080">* </font><font color="#800000">$ff</font><font color="#000080">));
+  </font>COLORHALFDISTANCE <font color="#000080">= </font>Longint<font color="#000080">(</font>COLORMAXDISTANCE <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">);
+
+</font><font color="#008000"><i>{ In my C module the next x functions were macros. I could have created
+  some inline functions, but I didn't do this for the sake of
+  &quot;portability&quot; (whatever that means in PASCAL world)
+}
+
+{ What a pity Turbo Pascal doesn't support unsigned long integers }
+</i></font><font color="#FF0000"><b>function </b></font>ColorDistance<font color="#000080">(</font>r<font color="#000080">, </font>g<font color="#000080">, </font>b<font color="#000080">: </font>Word<font color="#000080">): </font>Longint<font color="#000080">; </font><font color="#FF0000"><b>near</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ To get the real distance you should take the square root of
+    ColorDistance, but this is (ofcourse) unnecessary.
+    By the by: casting to Longint absolutely necessary. Try it without
+    the casts, and see what happens :-) }
+  </i></font>ColorDistance <font color="#000080">:= </font>Longint<font color="#000080">(</font>r <font color="#000080">* </font>r<font color="#000080">) + </font>Longint<font color="#000080">(</font>g <font color="#000080">* </font>g<font color="#000080">) + </font>Longint<font color="#000080">(</font>b <font color="#000080">* </font>b<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Conv2Mono<font color="#000080">(</font>r<font color="#000080">, </font>g<font color="#000080">, </font>b<font color="#000080">: </font>Integer<font color="#000080">): </font>Longint<font color="#000080">; </font><font color="#FF0000"><b>near</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>ColorDistance<font color="#000080">(</font>r<font color="#000080">, </font>g<font color="#000080">, </font>b<font color="#000080">) &gt; </font>COLORHALFDISTANCE <font color="#FF0000"><b>then
+    </b></font>CONV2MONO <font color="#000080">:= </font>COLORWHITE
+  <font color="#FF0000"><b>else </b></font>CONV2MONO <font color="#000080">:= </font>COLORBLACK
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ DumpIcon. This is a not documented function. Look in Undocumented Windows
+  what it's doing or how it works. Or mail me. }
+</i></font><font color="#FF0000"><b>function </b></font>DumpIcon<font color="#000080">; </font><font color="#FF0000"><b>external </b></font><font color="#800000">'USER' </font>index <font color="#800000">459</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ColorToMonoIcon<font color="#000080">(</font>hInst<font color="#000080">: </font>HINSTANCE<font color="#000080">; </font>hIconIn<font color="#000080">: </font>HICON<font color="#000080">): </font>HICON<font color="#000080">;
+</font><font color="#FF0000"><b>label </b></font><font color="#008000"><i>{ For goto haters only &lt;g&gt; }
+  </i></font>c2mi_unlockicon<font color="#000080">, </font>c2mi_freebits<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>hdcScreen<font color="#000080">, </font>hdcSource<font color="#000080">, </font>hdcResult<font color="#000080">: </font>HDC<font color="#000080">;
+  </font>hbmpSource<font color="#000080">, </font>hbmpResult<font color="#000080">: </font>HBITMAP<font color="#000080">;
+  </font>lpIcon<font color="#000080">: </font>PCursorIconInfo<font color="#000080">;
+  </font>dwColor<font color="#000080">: </font>Longint<font color="#000080">;
+  </font>lpAnd<font color="#000080">, </font>lpXor<font color="#000080">: </font>PChar<font color="#000080">;
+  </font>bmp<font color="#000080">: </font>TBitmap<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ColorToMonoIcon <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>lpIcon <font color="#000080">:= </font>PCursorIconInfo<font color="#000080">(</font>LockResource<font color="#000080">(</font>HGLOBAL<font color="#000080">(</font>hIconIn<font color="#000080">)));
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lpIcon <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lpIcon<font color="#000080">^.</font>byPlanes <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>lpIcon<font color="#000080">^.</font>byBitsPix <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    goto </b></font>c2mi_unlockicon<font color="#000080">;
+
+  </font><font color="#008000"><i>{   Init. DCs. Icons Init DC's. Icons always seem to have device
+      dependent bitmaps. On a 4 bpp screen device, icon bitmaps have a
+      4 bpp DDB format. That's why a GetDIBits-conversion doesn't work.
+      So, the resulting mono icon is not real monochrome. It looks
+      monochrome, but it's just based on a device dependent bitmap }
+  </i></font>hdcScreen <font color="#000080">:= </font>GetDC<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font>hdcSource <font color="#000080">:= </font>CreateCompatibleDC<font color="#000080">(</font>hdcScreen<font color="#000080">);
+  </font>hdcResult <font color="#000080">:= </font>CreateCompatibleDC<font color="#000080">(</font>hdcScreen<font color="#000080">);
+  </font>hbmpSource <font color="#000080">:= </font>CreateCompatibleBitmap<font color="#000080">(</font>hdcScreen<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">,
+    </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">);
+  </font>hbmpResult <font color="#000080">:= </font>CreateCompatibleBitmap<font color="#000080">(</font>hdcScreen<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">,
+    </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">);
+  </font>ReleaseDC<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>hdcScreen<font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcSource <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>hdcResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>hbmpResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or
+     </b></font><font color="#000080">(</font>hbmpSource <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then goto </b></font>c2mi_freebits<font color="#000080">;
+
+  </font>hbmpSource <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcSource<font color="#000080">, </font>hbmpSource<font color="#000080">);
+  </font>hbmpResult <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcResult<font color="#000080">, </font>hbmpResult<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Draw &amp; convert icon, OK not fast... First we need to black out
+    source (hbmResult will contain XOR-bitmap }
+  </i></font>PatBlt<font color="#000080">(</font>hdcSource<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">, </font>BLACKNESS<font color="#000080">);
+  </font>DrawIcon<font color="#000080">(</font>hdcSource<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>hIconIn<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>bmp<font color="#000080">.</font>bmWidth <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">) </font><font color="#FF0000"><b>do
+    for </b></font>bmp<font color="#000080">.</font>bmHeight <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin
+      </b></font>dwColor <font color="#000080">:= </font>GetPixel<font color="#000080">(</font>hdcSource<font color="#000080">, </font>bmp<font color="#000080">.</font>bmWidth<font color="#000080">, </font>bmp<font color="#000080">.</font>bmHeight<font color="#000080">);
+      </font>SetPixel<font color="#000080">(</font>hdcResult<font color="#000080">, </font>bmp<font color="#000080">.</font>bmWidth<font color="#000080">, </font>bmp<font color="#000080">.</font>bmHeight<font color="#000080">, </font>Conv2Mono<font color="#000080">(
+         </font>GetRValue<font color="#000080">(</font>dwColor<font color="#000080">), </font>GetGValue<font color="#000080">(</font>dwColor<font color="#000080">),
+         </font>GetBValue<font color="#000080">(</font>dwColor<font color="#000080">)))
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ OK to restore old state of DC }
+  </i></font>hbmpSource <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcSource<font color="#000080">, </font>hbmpSource<font color="#000080">);
+  </font>hbmpResult <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcResult<font color="#000080">, </font>hbmpResult<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Now a starter's guide on creating icons. First we need a pointer
+    to our new data. We could use the data of lpIcon, but since this
+    struct is undocumented I've switched to paranoid level 100.
+    Win32 (not Win32s) offers the function GetIconInfo, so for
+    32-bits apps use GetIconInfo, not DumpIcon }
+  </i></font>DumpIcon<font color="#000080">(</font>lpIcon<font color="#000080">, </font>Word<font color="#000080">(</font>bmp<font color="#000080">.</font>bmWidth<font color="#000080">), </font>Pointer<font color="#000080">(</font>lpAnd<font color="#000080">), </font>Pointer<font color="#000080">(</font>lpXor<font color="#000080">));
+  </font>GetObject<font color="#000080">(</font>hbmpResult<font color="#000080">, </font>sizeof<font color="#000080">(</font>TBitmap<font color="#000080">), @</font>bmp<font color="#000080">);
+  </font>dwColor <font color="#000080">:= </font>bmp<font color="#000080">.</font>bmWidthBytes <font color="#000080">* </font>bmp<font color="#000080">.</font>bmHeight <font color="#000080">* </font>bmp<font color="#000080">.</font>bmPlanes<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Must allocate a little bit o' memory }
+  </i></font>GetMem<font color="#000080">(</font>lpXor<font color="#000080">, </font>dwColor<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lpXor <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then goto </b></font>c2mi_freebits<font color="#000080">;
+  </font>GetBitmapBits<font color="#000080">(</font>hbmpResult<font color="#000080">, </font>dwColor<font color="#000080">, </font>lpXor<font color="#000080">);
+  </font>ColorToMonoIcon <font color="#000080">:= </font>CreateIcon<font color="#000080">(</font>hInst<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">,
+    </font>lpIcon<font color="#000080">^.</font>byPlanes<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>byBitsPix<font color="#000080">, </font>lpAnd<font color="#000080">, </font>lpXor<font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>lpXor<font color="#000080">, </font>dwColor<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Labels for goto haters only }
+</i></font>c2mi_freebits<font color="#000080">:
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hbmpResult <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteObject<font color="#000080">(</font>hbmpResult<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hbmpSource <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteObject<font color="#000080">(</font>hbmpSource<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcSource <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteDC<font color="#000080">(</font>hdcSource<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcResult <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteDC<font color="#000080">(</font>hdcResult<font color="#000080">);
+
+</font>c2mi_unlockicon<font color="#000080">:
+  </font>UnlockResource<font color="#000080">(</font>HGLOBAL<font color="#000080">(</font>hIconIn<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>IconToCursor<font color="#000080">(</font>hInst<font color="#000080">: </font>HINSTANCE<font color="#000080">; </font>hIconIn<font color="#000080">: </font>HICON<font color="#000080">; </font>nHotSpotX<font color="#000080">,
+  </font>nHotSpotY<font color="#000080">: </font>Integer<font color="#000080">): </font>HCURSOR<font color="#000080">;
+</font><font color="#FF0000"><b>label
+  </b></font>i2c_freebits<font color="#000080">, </font>i2c_unlockicon<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>hPseudoMonoIcon<font color="#000080">: </font>HICON<font color="#000080">;
+  </font>hdcScreen<font color="#000080">, </font>hdcMonoIcon<font color="#000080">, </font>hdcPseudoMonoIcon<font color="#000080">: </font>HDC<font color="#000080">;
+  </font>hbmpMonoIcon<font color="#000080">, </font>hbmpPseudoMonoIcon<font color="#000080">: </font>HBITMAP<font color="#000080">;
+  </font>MonoIconBitmap<font color="#000080">: </font>TBitmap<font color="#000080">;
+  </font>lpXor<font color="#000080">, </font>lpAnd<font color="#000080">: </font>PChar<font color="#000080">;
+  </font>lpIcon<font color="#000080">: </font>PCursorIconInfo<font color="#000080">;
+  </font>dummy<font color="#000080">: </font>Longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IconToCursor <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>hPseudoMonoIcon <font color="#000080">:= </font>ColorToMonoIcon<font color="#000080">(</font>hInst<font color="#000080">, </font>hIconIn<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hPseudoMonoIcon <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font>lpIcon <font color="#000080">:= </font>PCursorIconInfo<font color="#000080">(</font>LockResource<font color="#000080">(</font>HGLOBAL<font color="#000080">(</font>hIconIn<font color="#000080">)));
+  </font><font color="#FF0000"><b>if </b></font>lpIcon <font color="#000080">= </font><font color="#FF0000"><b>nil then </b></font>exit<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Create GDI objects }
+  </i></font>hdcScreen <font color="#000080">:= </font>GetDC<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font>hdcMonoIcon <font color="#000080">:= </font>CreateCompatibleDC<font color="#000080">(</font>hdcScreen<font color="#000080">);
+  </font>hdcPseudoMonoIcon <font color="#000080">:= </font>CreateCompatibleDC<font color="#000080">(</font>hdcScreen<font color="#000080">);
+  </font>hbmpMonoIcon <font color="#000080">:= </font>CreateCompatibleBitmap<font color="#000080">(</font>hdcMonoIcon<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">,
+    </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">);
+  </font>hbmpPseudoMonoIcon <font color="#000080">:= </font>CreateCompatibleBitmap<font color="#000080">(</font>hdcScreen<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">,
+    </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">);
+  </font>ReleaseDC<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>hdcScreen<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Sanity checks }
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcMonoIcon <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>hdcPseudoMonoIcon <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>hbmpMonoIcon <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or
+     </b></font><font color="#000080">(</font>hbmpPseudoMonoIcon <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then goto </b></font>i2c_freebits<font color="#000080">;
+
+  </font>hbmpPseudoMonoIcon <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcPseudoMonoIcon<font color="#000080">,
+    </font>hbmpPseudoMonoIcon<font color="#000080">);
+  </font>hbmpMonoIcon <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcMonoIcon<font color="#000080">, </font>hbmpMonoIcon<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Recreate Xor mask }
+  </i></font>PatBlt<font color="#000080">(</font>hdcPseudoMonoIcon<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">,
+    </font>BLACKNESS<font color="#000080">);
+  </font>DrawIcon<font color="#000080">(</font>hdcPseudoMonoIcon<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>hPseudoMonoIcon<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Convert to mono icon }
+  </i></font>SetBkColor<font color="#000080">(</font>hdcPseudoMonoIcon<font color="#000080">, </font>COLORWHITE<font color="#000080">);
+  </font>BitBlt<font color="#000080">(</font>hdcMonoIcon<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">,
+    </font>hdcPseudoMonoIcon<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>SRCCOPY<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Reselect old bitmaps }
+  </i></font>hbmpPseudoMonoIcon <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcPseudoMonoIcon<font color="#000080">,
+    </font>hbmpPseudoMonoIcon<font color="#000080">);
+  </font>hbmpMonoIcon <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcMonoIcon<font color="#000080">, </font>hbmpMonoIcon<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Now we have a monochrome XOR bitmap. Time to get the XOR and
+    AND masks }
+  </i></font>GetObject<font color="#000080">(</font>hbmpMonoIcon<font color="#000080">, </font>sizeof<font color="#000080">(</font>TBitmap<font color="#000080">), @</font>MonoIconBitmap<font color="#000080">);
+  </font>DumpIcon<font color="#000080">(</font>lpIcon<font color="#000080">, </font>Word<font color="#000080">(</font>dummy<font color="#000080">), </font>Pointer<font color="#000080">(</font>lpAnd<font color="#000080">), </font>Pointer<font color="#000080">(</font>lpXor<font color="#000080">));
+  </font>dummy <font color="#000080">:= </font>MonoIconBitmap<font color="#000080">.</font>bmWidthBytes <font color="#000080">* </font>MonoIconBitmap<font color="#000080">.</font>bmHeight <font color="#000080">*
+    </font>MonoIconBitmap<font color="#000080">.</font>bmPlanes<font color="#000080">;
+  </font>GetMem<font color="#000080">(</font>lpXor<font color="#000080">, </font>dummy<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lpXor <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then goto </b></font>i2c_freebits<font color="#000080">;
+  </font>GetBitmapBits<font color="#000080">(</font>hbmpMonoIcon<font color="#000080">, </font>dummy<font color="#000080">, </font>lpXor<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Create cursor }
+  </i></font>IconToCursor <font color="#000080">:= </font>CreateCursor<font color="#000080">(</font>hInst<font color="#000080">, </font>nHotSpotX<font color="#000080">, </font>nHotSpotY<font color="#000080">,
+    </font>lpIcon<font color="#000080">^.</font>wWidth<font color="#000080">, </font>lpIcon<font color="#000080">^.</font>wHeight<font color="#000080">, </font>lpAnd<font color="#000080">, </font>lpXor<font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>lpXor<font color="#000080">, </font>dummy<font color="#000080">);
+
+</font>i2c_freebits<font color="#000080">:
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hbmpPseudoMonoIcon <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteObject<font color="#000080">(</font>hbmpPseudoMonoIcon<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hbmpMonoIcon <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteObject<font color="#000080">(</font>hbmpMonoIcon<font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcPseudoMonoIcon <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteDC<font color="#000080">(</font>hdcPseudoMonoIcon<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcMonoIcon <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteDC<font color="#000080">(</font>hdcMonoIcon<font color="#000080">);
+
+</font>i2c_unlockicon<font color="#000080">:
+  </font>UnlockResource<font color="#000080">(</font>HGLOBAL<font color="#000080">(</font>hIconIn<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>IconToBitmap<font color="#000080">(</font>hIconIn<font color="#000080">: </font>HICON<font color="#000080">): </font>HBITMAP<font color="#000080">;
+</font><font color="#FF0000"><b>label </b></font>itb_freebitmap<font color="#000080">, </font>itb_freedc<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>hbmpBitmap<font color="#000080">: </font>HBITMAP<font color="#000080">;
+  </font>hdcScreen<font color="#000080">, </font>hdcBitmap<font color="#000080">: </font>HDC<font color="#000080">;
+  </font>x<font color="#000080">, </font>y<font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IconToBitmap <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+   </font>x <font color="#000080">:= </font>GetSystemMetrics<font color="#000080">(</font>SM_CXICON<font color="#000080">);
+   </font>y <font color="#000080">:= </font>GetSystemMetrics<font color="#000080">(</font>SM_CYICON<font color="#000080">);
+
+   </font>hdcScreen <font color="#000080">:= </font>GetDC<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+   </font>hdcBitmap <font color="#000080">:= </font>CreateCompatibleDC<font color="#000080">(</font>hdcScreen<font color="#000080">);
+   </font>hbmpBitmap <font color="#000080">:= </font>CreateCompatibleBitmap<font color="#000080">(</font>hdcScreen<font color="#000080">, </font>x<font color="#000080">, </font>y<font color="#000080">);
+   </font>ReleaseDC<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>hdcScreen<font color="#000080">);
+
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcBitmap <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>hbmpBitmap <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then goto </b></font>itb_freebitmap<font color="#000080">;
+
+   </font>hbmpBitmap <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcBitmap<font color="#000080">, </font>hbmpBitmap<font color="#000080">);
+   </font>PatBlt<font color="#000080">(</font>hdcBitmap<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>x<font color="#000080">, </font>y<font color="#000080">, </font>WHITENESS<font color="#000080">);
+   </font>DrawIcon<font color="#000080">(</font>hdcBitmap<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>hIconIn<font color="#000080">);
+   </font>IconToBitmap <font color="#000080">:= </font>SelectObject<font color="#000080">(</font>hdcBitmap<font color="#000080">, </font>hbmpBitmap<font color="#000080">);
+   </font><font color="#FF0000"><b>goto </b></font>itb_freedc<font color="#000080">;
+
+   </font><font color="#008000"><i>(* Are there any goto haters out there??? *)
+</i></font>itb_freebitmap<font color="#000080">:
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hbmpBitmap <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteObject<font color="#000080">(</font>hbmpBitmap<font color="#000080">);
+
+</font>itb_freedc<font color="#000080">:
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>hdcBitmap <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>DeleteDC<font color="#000080">(</font>hdcBitmap<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>CursorToIcon<font color="#000080">(</font>hInst<font color="#000080">: </font>HINSTANCE<font color="#000080">; </font>hCursorIn<font color="#000080">: </font>HCURSOR<font color="#000080">): </font>HICON<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>lpCursor<font color="#000080">: </font>PCursorIconInfo<font color="#000080">;
+  </font>wDummy<font color="#000080">: </font>Word<font color="#000080">;
+  </font>lpAnd<font color="#000080">, </font>lpXor<font color="#000080">: </font>POinter<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorToIcon <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>lpCursor <font color="#000080">:= </font>PCursorIconInfo<font color="#000080">(</font>LockResource<font color="#000080">(</font>HGLOBAL<font color="#000080">(</font>hCursorIn<font color="#000080">)));
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lpCursor <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>DumpIcon<font color="#000080">(</font>lpCursor<font color="#000080">, </font>wDummy<font color="#000080">, </font>lpAnd<font color="#000080">, </font>lpXor<font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>CursorToIcon <font color="#000080">:= </font>CreateIcon<font color="#000080">(</font>hInst<font color="#000080">, </font>lpCursor<font color="#000080">^.</font>wWidth<font color="#000080">,
+      </font>lpCursor<font color="#000080">^.</font>wHeight<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>lpAnd<font color="#000080">, </font>lpXor<font color="#000080">);
+  </font>UnlockResource<font color="#000080">(</font>HGLOBAL<font color="#000080">(</font>hCursorIn<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to WIN-OS2 SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0065.PAS">Original</a><b>]</b></p></body>
+</html>

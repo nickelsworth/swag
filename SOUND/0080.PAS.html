@@ -1,0 +1,414 @@
+<html>
+<head><title> "Nice WAV player" by BENGT HOLGERSSON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0080.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>program </b></font>player<font color="#000080">;
+</font><font color="#FF0000"><b>uses </b></font>dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Param<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">63</font><font color="#000080">];
+  </font>BytesRead<font color="#000080">,</font>BlockSize<font color="#000080">,</font>BlockRest<font color="#000080">:</font>Word<font color="#000080">;
+  </font>dataptr<font color="#000080">,</font>pp<font color="#000080">:</font>pointer<font color="#000080">;
+  </font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>I<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>SampRateDiv<font color="#000080">,</font>times<font color="#000080">:</font>byte<font color="#000080">;
+  </font>reverse<font color="#000080">,</font>wavinfo<font color="#000080">:</font>boolean<font color="#000080">;
+  </font>fmt<font color="#000080">: </font><font color="#FF0000"><b>record
+    </b></font>wFormatTag<font color="#000080">:</font>word<font color="#000080">;
+    </font>nChannels<font color="#000080">:</font>word<font color="#000080">;
+    </font>nSamplesPerSec<font color="#000080">:</font>longint<font color="#000080">;
+    </font>nAvgBytesPerSec<font color="#000080">:</font>longint<font color="#000080">;
+    </font>nBlockAlign<font color="#000080">:</font>word<font color="#000080">;
+    </font>wBitsPerSample<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>PlaySound<font color="#000080">(</font>bufptr<font color="#000080">:</font>pointer<font color="#000080">;</font>bufctr<font color="#000080">:</font>longint<font color="#000080">;</font>ratediv<font color="#000080">,</font>times<font color="#000080">:</font>word<font color="#000080">)
+;</font><font color="#008000"><i>{assember;}
+  </i></font><font color="#FF0000"><b>var
+    </b></font>old_int8 <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>timesleft <font color="#000080">:</font>word<font color="#000080">;
+    </font>savemask<font color="#000080">:</font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>begin</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+        </b></font><font color="#FF00FF">jmp     @PlayMain
+
+  @int8_out_spk:
+        xor     al,al
+        out     42h,al
+        mov     al,cl
+        out     42h,al
+        mov     ax,dx
+        or      ax,si
+        jz      @ready
+        dec     bl
+        jnz     @skip
+        mov     bl,bh
+        mov     al,es:[di]
+        shr     al,1
+        shr     al,1
+        inc     al
+        mov     cl,al
+        inc     di
+        jnz     @noseg
+        mov     ax,es
+        add     ax,1000h
+        mov     es,ax
+  @noseg:
+        sub     si,+01
+        sbb     dx,+00
+  @skip:
+        mov     al,20h
+        out     20h,al
+        iret
+  @ready:
+        mov     ch,0ffh
+        jmp     @skip
+
+
+  @PlayMain:
+        cli
+        mov     ax,3508h
+        int     21h                    </font><font color="#008000"><i>{ get int vector 08 in es:bx }
+        </i></font><font color="#FF00FF">mov     word ptr old_int8,bx
+        mov     word ptr old_int8+2,es
+        in      al,21h                 </font><font color="#008000"><i>{ interruptmask }
+        </i></font><font color="#FF00FF">mov     savemask,al
+        mov     al,0ffh                </font><font color="#008000"><i>{ disable all interrupts }
+        </i></font><font color="#FF00FF">out     21h,al
+        sti
+        push    ds
+        mov     ax,cs
+        mov     ds,ax
+        mov     dx,offset @int8_out_spk
+        mov     ax,2508h
+        int     21h                    </font><font color="#008000"><i>{ set int vector 08 to ds:dx }
+        </i></font><font color="#FF00FF">pop     ds
+        mov     al,34h
+        out     43h,al                 </font><font color="#008000"><i>{ timer 0 mode }
+        </i></font><font color="#FF00FF">mov     al,36h                 </font><font color="#008000"><i>{ 22khz }
+        </i></font><font color="#FF00FF">out     40h,al
+        xor     al,al
+        out     40h,al
+        mov     al,90h
+        out     43h,al                 </font><font color="#008000"><i>{ timer 2 mode }
+        </i></font><font color="#FF00FF">in      al,61h                 </font><font color="#008000"><i>{ enable speaker }
+        </i></font><font color="#FF00FF">or      al,3
+        out     61h,al
+        mov     cx,times
+        mov     timesleft,cx
+        mov     cl,20h
+        mov     bx,ratediv
+        mov     bh,bl
+        les     si,bufctr
+        mov     dx,es
+        les     di,bufptr
+  @nexttime:
+        push    di                     </font><font color="#008000"><i>{ bufptrlo }
+        </i></font><font color="#FF00FF">push    es                     </font><font color="#008000"><i>{ bufptrhi }
+        </i></font><font color="#FF00FF">push    si                     </font><font color="#008000"><i>{ bufctrlo }
+        </i></font><font color="#FF00FF">push    dx                     </font><font color="#008000"><i>{ bufctrhi }
+        </i></font><font color="#FF00FF">push    bx                     </font><font color="#008000"><i>{ ratediv  }
+        </i></font><font color="#FF00FF">xor     ch,ch                  </font><font color="#008000"><i>{ readyflag = false }
+        </i></font><font color="#FF00FF">mov     al,0feh                </font><font color="#008000"><i>{ enable timerinterrupt }
+        </i></font><font color="#FF00FF">out     21h,al
+  @notready:
+        or      ch,ch
+        jz      @notready
+        cli
+        mov     al,0ffh                </font><font color="#008000"><i>{ disable all interrupts }
+        </i></font><font color="#FF00FF">out     21h,al
+        sti
+        pop     bx                     </font><font color="#008000"><i>{ ratediv }
+        </i></font><font color="#FF00FF">pop     dx                     </font><font color="#008000"><i>{ bufctrhi }
+        </i></font><font color="#FF00FF">pop     si                     </font><font color="#008000"><i>{ bufctrlo }
+        </i></font><font color="#FF00FF">pop     es                     </font><font color="#008000"><i>{ bufptrhi }
+        </i></font><font color="#FF00FF">pop     di                     </font><font color="#008000"><i>{ bufptrlo }
+        </i></font><font color="#FF00FF">dec     word ptr timesleft     </font><font color="#008000"><i>{ more times ? }
+        </i></font><font color="#FF00FF">jnz     @nexttime
+        in      al,61h                 </font><font color="#008000"><i>{ disable speaker }
+        </i></font><font color="#FF00FF">and     al,0fch
+        out     61h,al
+        mov     al,34h
+        out     43h,al                 </font><font color="#008000"><i>{ timer 0 mode }
+        </i></font><font color="#FF00FF">mov     al,0
+        out     40h,al                 </font><font color="#008000"><i>{ timer 0 clock }
+        </i></font><font color="#FF00FF">out     40h,al                 </font><font color="#008000"><i>{ timer 0 clock }
+        </i></font><font color="#FF00FF">mov     al,0b6h
+        out     43h,al                 </font><font color="#008000"><i>{ timer mode }
+        </i></font><font color="#FF00FF">mov     ax,533h
+        out     42h,al                 </font><font color="#008000"><i>{ timer 2 spkr }
+        </i></font><font color="#FF00FF">mov     al,ah
+        out     42h,al                 </font><font color="#008000"><i>{ timer 2 spkr }
+        </i></font><font color="#FF00FF">push    ds
+        lds     dx,dword ptr old_int8
+        mov     ax,2508h
+        int     21h                    </font><font color="#008000"><i>{ set intrpt vector al to ds:dx }
+        </i></font><font color="#FF00FF">pop     ds
+        mov     al,savemask            </font><font color="#008000"><i>{ enable timer and keyboard }
+        </i></font><font color="#FF00FF">out     21h,al
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ The following procedure is also used to half the samplerate }
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>Stereo2Mono<font color="#000080">(</font>bufptr<font color="#000080">:</font>pointer<font color="#000080">;</font>bufctr<font color="#000080">:</font>longint<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+        </b></font><font color="#FF00FF">les     si,bufctr
+        mov     dx,es
+        les     di,bufptr
+        push    ds
+        mov     ax,es
+        mov     ds,ax
+        mov     bx,di
+  @s2mNext:
+        mov     ax,dx
+        or      ax,si
+        jz      @s2mRdy
+        xor     ah,ah
+        mov     al,es:[di]
+        mov     cx,ax
+        mov     al,es:[di+1]
+        add     ax,cx
+        shr     ax,1
+        mov     ds:[bx],al
+        inc     di
+        jnz     @noseg1
+        mov     ax,es
+        add     ax,1000h
+        mov     es,ax
+  @noseg1:
+        inc     di
+        jnz     @noseg2
+        mov     ax,es
+        add     ax,1000h
+        mov     es,ax
+  @noseg2:
+        inc     bx
+        jnz     @noseg3
+        mov     ax,ds
+        add     ax,1000h
+        mov     ds,ax
+  @noseg3:
+        sub     si,+01
+        sbb     dx,+00
+        jmp     @s2mNext
+  @s2mRdy:
+        pop     ds
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>ReverseData<font color="#000080">(</font>bufptr<font color="#000080">:</font>pointer<font color="#000080">;</font>bufctr<font color="#000080">:</font>longint<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+        </b></font><font color="#FF00FF">push    ds
+        les     bx,bufctr
+        mov     dx,es
+        les     di,bufptr
+        mov     si,di
+        add     si,bx                  </font><font color="#008000"><i>{ offset=offset+bufctrlo }
+        </i></font><font color="#FF00FF">mov     ax,dx
+        adc     ax,0                   </font><font color="#008000"><i>{ bufctrhi=bufctrhi+carry }
+        </i></font><font color="#FF00FF">mov     cl,12
+        shl     ax,cl
+        mov     cx,ax
+        mov     ax,es
+        add     ax,cx
+        mov     ds,ax                  </font><font color="#008000"><i>{ds = segment of end of buffer}
+        </i></font><font color="#FF00FF">shr     dx,1
+        rcr     bx,1                   </font><font color="#008000"><i>{ Bufctr = Bufctr / 2 }
+  </i></font><font color="#FF00FF">@RevNext:
+        mov     ax,bx
+        or      ax,dx
+        jz      @RevRdy
+        sub     si,+01
+        jnc     @Rnoseg1
+        mov     ax,ds
+        sub     ax,1000h
+        mov     ds,ax
+  @Rnoseg1:
+        mov     al,es:[di]             </font><font color="#008000"><i>{ swap bytes }
+        </i></font><font color="#FF00FF">xchg    al,ds:[si]
+        mov     es:[di],al
+        inc     di
+        jnz     @Rnoseg2
+        mov     ax,es
+        add     ax,1000h
+        mov     es,ax
+  @Rnoseg2:
+        sub     bx,+01
+        sbb     dx,+00
+        jmp     @RevNext
+  @RevRdy:
+        pop     ds
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>ReadFormat<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>str<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+    </font>chunksize<font color="#000080">:</font>longint<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>str<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font><font color="#800000">4</font><font color="#000080">);
+    </font>str<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font><font color="#800000">#4</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>str<font color="#000080">=</font><font color="#800000">'fmt ' </font><font color="#FF0000"><b>then begin
+      </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>chunksize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>writeln<font color="#000080">(</font><font color="#800000">'  ''fmt '' size='</font><font color="#000080">,</font>chunksize<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>chunksize<font color="#000080">=</font><font color="#800000">16 </font><font color="#FF0000"><b>then begin
+        </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>fmt<font color="#000080">,</font>sizeof<font color="#000080">(</font>fmt<font color="#000080">));
+        </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then with </b></font>fmt <font color="#FF0000"><b>do begin
+          </b></font>writeln<font color="#000080">(</font><font color="#800000">'    wFormatTag='</font><font color="#000080">,</font>wFormatTag<font color="#000080">);
+          </font>writeln<font color="#000080">(</font><font color="#800000">'    nChannels='</font><font color="#000080">,</font>nChannels<font color="#000080">);
+          </font>writeln<font color="#000080">(</font><font color="#800000">'    nSamplesPerSec='</font><font color="#000080">,</font>nSamplesPerSec<font color="#000080">);
+          </font>writeln<font color="#000080">(</font><font color="#800000">'    nAvgBytesPerSec='</font><font color="#000080">,</font>nAvgBytesPerSec<font color="#000080">);
+          </font>writeln<font color="#000080">(</font><font color="#800000">'    nBlockAlign='</font><font color="#000080">,</font>nBlockAlign<font color="#000080">);
+          </font>writeln<font color="#000080">(</font><font color="#800000">'    wBitsPerSample='</font><font color="#000080">,</font>wBitsPerSample<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>fmt<font color="#000080">.</font>wFormatTag<font color="#000080">&lt;&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+          </b></font>writeln<font color="#000080">(</font><font color="#800000">'Unknown Format ('</font><font color="#000080">,</font>fmt<font color="#000080">.</font>wFormatTag<font color="#000080">,</font><font color="#800000">')!'</font><font color="#000080">);
+          </font>halt<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>case </b></font>word<font color="#000080">(</font>fmt<font color="#000080">.</font>nSamplesPerSec<font color="#000080">) </font><font color="#FF0000"><b>of
+          </b></font><font color="#800000">33075</font><font color="#000080">..</font><font color="#800000">65535</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#800000">16538</font><font color="#000080">..</font><font color="#800000">33074</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#800000">9188</font><font color="#000080">..</font><font color="#800000">16537</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">;
+          </font><font color="#800000">6432</font><font color="#000080">..</font><font color="#800000">9187</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">3</font><font color="#000080">;
+          </font><font color="#800000">4962</font><font color="#000080">..</font><font color="#800000">6431</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;
+          </font><font color="#800000">4043</font><font color="#000080">..</font><font color="#800000">4961</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">5</font><font color="#000080">;
+          </font><font color="#800000">3413</font><font color="#000080">..</font><font color="#800000">4042</font><font color="#000080">:</font>sampratediv<font color="#000080">:=</font><font color="#800000">6</font><font color="#000080">;
+          </font><font color="#FF0000"><b>else </b></font>halt<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>writeln<font color="#000080">(</font><font color="#800000">'''fmt '' chunksize error ('</font><font color="#000080">,</font>chunksize<font color="#000080">,</font><font color="#800000">')!'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else </b></font>writeln<font color="#000080">(</font><font color="#800000">'''fmt'' chunk not found!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>PROCEDURE </b></font>PlayWAVE<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;</font>sampratediv<font color="#000080">,</font>times<font color="#000080">:</font>byte<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>str<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+    </font>DataSize<font color="#000080">,</font>l1<font color="#000080">:</font>longint<font color="#000080">;
+    </font>p1<font color="#000080">,</font>p2<font color="#000080">:</font>pointer<font color="#000080">;
+    </font>s<font color="#000080">,</font>o<font color="#000080">:</font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>str<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font><font color="#800000">4</font><font color="#000080">);
+    </font>str<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font><font color="#800000">#4</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>str<font color="#000080">=</font><font color="#800000">'data' </font><font color="#FF0000"><b>then begin
+      </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>DataSize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>writeln<font color="#000080">(</font><font color="#800000">'  ''data'' size='</font><font color="#000080">,</font>Datasize<font color="#000080">);
+      </font><font color="#FF0000"><b>If </b></font>MaxAvail<font color="#000080">&gt;</font>DataSize <font color="#FF0000"><b>THEN BEGIN
+        if </b></font>DataSize<font color="#000080">&lt;</font><font color="#800000">$FFF0 </font><font color="#FF0000"><b>then </b></font>Blocksize<font color="#000080">:=</font>DataSize <font color="#FF0000"><b>else </b></font>Blocksize<font color="#000080">:=</font><font color="#800000">$8000</font><font color="#000080">;
+        </font>GetMem<font color="#000080">(</font>pp<font color="#000080">,</font>BlockSize<font color="#000080">);
+        </font>DataPtr<font color="#000080">:=</font>pp<font color="#000080">;
+        </font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>pp<font color="#000080">^,</font>BlockSize<font color="#000080">,</font>bytesread<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>BlockSize<font color="#000080">&lt;</font>DataSize <font color="#FF0000"><b>then begin
+          For </b></font>I<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>DataSize <font color="#FF0000"><b>div </b></font>BlockSize<font color="#000080">) </font><font color="#FF0000"><b>do begin
+            </b></font>GetMem<font color="#000080">(</font>pp<font color="#000080">,</font>BlockSize<font color="#000080">);
+            </font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>pp<font color="#000080">^,</font>Blocksize<font color="#000080">,</font>bytesread<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>BlockRest<font color="#000080">:=</font>DataSize <font color="#FF0000"><b>mod </b></font>BlockSize<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>BlockRest<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+            </b></font>GetMem<font color="#000080">(</font>pp<font color="#000080">,</font>BlockRest<font color="#000080">);
+            </font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>pp<font color="#000080">^,</font>BlockRest<font color="#000080">,</font>bytesread<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>fmt<font color="#000080">.</font>nChannels<font color="#000080">=</font><font color="#800000">2 </font><font color="#FF0000"><b>then begin
+          if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>Write<font color="#000080">(</font><font color="#800000">'Converting to mono..'</font><font color="#000080">);
+          </font>Stereo2Mono<font color="#000080">(</font>DataPtr<font color="#000080">,</font>DataSize<font color="#000080">);
+          </font>DataSize<font color="#000080">:=</font>DataSize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>sampratediv<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+          </b></font>sampratediv<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>Write<font color="#000080">(</font><font color="#800000">'Dividing to half samplerate..'</font><font color="#000080">);
+          </font>Stereo2Mono<font color="#000080">(</font>DataPtr<font color="#000080">,</font>DataSize<font color="#000080">);
+          </font>DataSize<font color="#000080">:=</font>DataSize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>reverse <font color="#FF0000"><b>then </b></font>ReverseData<font color="#000080">(</font>DataPtr<font color="#000080">,</font>DataSize<font color="#000080">);
+        </font>PlaySound<font color="#000080">(</font>DataPtr<font color="#000080">,</font>DataSize<font color="#000080">,</font>SampRateDiv<font color="#000080">,</font>Times<font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Not enough memory!'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else </b></font>writeln<font color="#000080">(</font><font color="#800000">'''data'' chunk not found!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>ReadRIFF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>str<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+    </font>RIFFsize<font color="#000080">,</font>Chunksize<font color="#000080">:</font>longint<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>str<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font><font color="#800000">4</font><font color="#000080">);
+    </font>str<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font><font color="#800000">#4</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>str<font color="#000080">=</font><font color="#800000">'RIFF' </font><font color="#FF0000"><b>then begin
+      </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>RIFFsize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>wavinfo <font color="#FF0000"><b>then </b></font>writeln<font color="#000080">(</font><font color="#800000">'''RIFF'' size='</font><font color="#000080">,</font>RIFFsize<font color="#000080">);
+      </font><font color="#FF0000"><b>REPEAT
+        </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>str<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font><font color="#800000">4</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>str<font color="#000080">=</font><font color="#800000">'WAVE' </font><font color="#FF0000"><b>then begin
+          </b></font>ReadFormat<font color="#000080">(</font>f<font color="#000080">);
+          </font>PlayWAVE<font color="#000080">(</font>f<font color="#000080">,</font>sampratediv<font color="#000080">,</font>times<font color="#000080">);
+        </font><font color="#FF0000"><b>end
+        else begin
+          </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>Chunksize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+          </font>seek<font color="#000080">(</font>f<font color="#000080">,</font>filepos<font color="#000080">(</font>f<font color="#000080">)+</font>Chunksize<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>until </b></font>filepos<font color="#000080">(</font>f<font color="#000080">)&gt;=</font>RIFFsize<font color="#000080">+</font><font color="#800000">8</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'No RIFF header found!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>ShowHelp<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>Writeln<font color="#000080">(</font><font color="#800000">'PLAYWAV  Bengt Holgersson 1991'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'Use: PLAYWAV filename [/N:times] [/R] [/I]'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'  /N:4   Play WAV 4 times'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'  /R     Play WAV backwards'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'  /I     Show info about WAV'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>procedure </b></font>Getoption<font color="#000080">(</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>ch<font color="#000080">:</font>char<font color="#000080">;
+    </font>W<font color="#000080">:</font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>length<font color="#000080">(</font>s<font color="#000080">)&lt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+    </font>ch<font color="#000080">:=</font>s<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">];
+    </font><font color="#FF0000"><b>case </b></font>upcase<font color="#000080">(</font>ch<font color="#000080">) </font><font color="#FF0000"><b>of
+      </b></font><font color="#800000">'R'</font><font color="#000080">:</font>reverse<font color="#000080">:=</font>true<font color="#000080">;
+      </font><font color="#800000">'N'</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+            if </b></font>s<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]&lt;&gt;</font><font color="#800000">':' </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+            </font>val<font color="#000080">(</font>copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">255</font><font color="#000080">),</font>times<font color="#000080">,</font>w<font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>w<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>times<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+              </b></font>writeln<font color="#000080">(</font><font color="#800000">'times should be in the range 1-65535'</font><font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#800000">'I'</font><font color="#000080">:</font>wavinfo<font color="#000080">:=</font>true<font color="#000080">;
+      </font><font color="#800000">'?'</font><font color="#000080">:</font>showhelp<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>paramcount <font color="#000080">&lt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    </b></font>showhelp<font color="#000080">;
+    </font>halt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>wavinfo<font color="#000080">:=</font>false<font color="#000080">;
+  </font>reverse<font color="#000080">:=</font>false<font color="#000080">;
+  </font>Times<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>paramcount <font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    for </b></font>i<font color="#000080">:=</font><font color="#800000">2 </font><font color="#FF0000"><b>to </b></font>paramcount <font color="#FF0000"><b>do </b></font>getoption<font color="#000080">(</font>paramstr<font color="#000080">(</font>i<font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>filemode<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>Param<font color="#000080">:=</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Param<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">'/' </font><font color="#FF0000"><b>then begin
+    </b></font>getoption<font color="#000080">(</font>Param<font color="#000080">);
+    </font>halt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">,</font>Param<font color="#000080">)=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Param<font color="#000080">:=</font>Param<font color="#000080">+</font><font color="#800000">'.WAV'</font><font color="#000080">;
+  </font>assign<font color="#000080">(</font>f<font color="#000080">,</font>Param<font color="#000080">);
+  </font>reset<font color="#000080">(</font>f<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>Ioresult<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>ReadRIFF<font color="#000080">(</font>f<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>writeln<font color="#000080">(</font><font color="#800000">'File not found!'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0080.PAS">Original</a><b>]</b></p></body>
+</html>

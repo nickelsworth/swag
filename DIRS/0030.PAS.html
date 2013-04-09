@@ -1,0 +1,489 @@
+<html>
+<head><title> "Directory Object" by LARRY HADLEY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DIRS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+  Next in this continuing series of code: the actual directry
+  object.
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>Dirs<font color="#000080">;
+</font><font color="#008000"><i>{
+  A directory management object from a concept originally by Allan
+  Holub, as discussed in Byte Dec/93 (Vol 18, No 13, page 213)
+
+  Turbo Pascal code by Larry Hadley, tested using BP7.
+}
+</i></font><font color="#FF0000"><b>INTERFACE
+
+Uses </b></font>Sort<font color="#000080">, </font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+   </b></font>pSortSR <font color="#000080">= ^</font>oSortSR<font color="#000080">;
+   </font>oSortSR <font color="#000080">= </font><font color="#FF0000"><b>OBJECT</b></font><font color="#000080">(</font>oSortTree<font color="#000080">)
+      </font><font color="#FF0000"><b>procedure   </b></font>DeleteNode<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Node<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font>callbackproc <font color="#000080">= </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">(</font>name <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>lev <font color="#000080">:</font>integer<font color="#000080">);
+
+   </font>prec  <font color="#000080">= ^</font>searchrec<font color="#000080">;
+
+   </font>pentry <font color="#000080">= ^</font>entry<font color="#000080">;
+   </font>entry  <font color="#000080">= </font><font color="#FF0000"><b>record
+      </b></font>fil          <font color="#000080">:</font>prec<font color="#000080">;
+      </font>next<font color="#000080">, </font>last   <font color="#000080">:</font>pentry<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font>pdir  <font color="#000080">= ^</font>dir<font color="#000080">;
+   </font>dir   <font color="#000080">= </font><font color="#FF0000"><b>record
+      </b></font>flist  <font color="#000080">:</font>pentry<font color="#000080">;
+      </font>count  <font color="#000080">:</font>word<font color="#000080">;
+      </font>path   <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font>pDirectry <font color="#000080">= ^</font>Directry<font color="#000080">;
+   </font>Directry  <font color="#000080">= </font><font color="#FF0000"><b>OBJECT
+      </b></font>dirroot   <font color="#000080">:</font>pdir<font color="#000080">;
+
+      </font><font color="#FF0000"><b>constructor </b></font>Init<font color="#000080">(</font>path<font color="#000080">, </font>filespec <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>attribute <font color="#000080">:</font>byte<font color="#000080">);
+      </font><font color="#FF0000"><b>destructor  </b></font>Done<font color="#000080">;
+
+      </font><font color="#FF0000"><b>procedure   </b></font>Load<font color="#000080">(</font>path<font color="#000080">, </font>filespec <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>attribute <font color="#000080">:</font>byte<font color="#000080">);
+      </font><font color="#FF0000"><b>procedure   </b></font>Sort<font color="#000080">;
+      </font><font color="#FF0000"><b>procedure   </b></font>Print<font color="#000080">;
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+   </b></font>NotDir  <font color="#000080">= </font>ReadOnly<font color="#000080">+</font>Hidden<font color="#000080">+</font>SysFile<font color="#000080">+</font>VolumeID<font color="#000080">+</font>Archive<font color="#000080">;
+   </font>dosattr <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char <font color="#000080">= </font><font color="#800000">'.rhsvdaxx'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>TraverseTree<font color="#000080">(</font>root <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>pcallproc <font color="#000080">:</font>pointer<font color="#000080">; </font>do_depth <font color="#000080">:</font>boolean<font color="#000080">);
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+var
+   </b></font>treeroot <font color="#000080">:</font>pSortSR<font color="#000080">; </font><font color="#008000"><i>{ sorting tree object }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>disposelist<font color="#000080">(</font>ls <font color="#000080">:</font>pentry<font color="#000080">);
+</font><font color="#FF0000"><b>var
+   </b></font>lso <font color="#000080">:</font>pentry<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   while </b></font>ls<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL do
+   begin
+      </b></font>dispose<font color="#000080">(</font>ls<font color="#000080">^.</font>fil<font color="#000080">);
+      </font>lso <font color="#000080">:= </font>ls<font color="#000080">;
+      </font>ls <font color="#000080">:= </font>ls<font color="#000080">^.</font>next<font color="#000080">;
+      </font>dispose<font color="#000080">(</font>lso<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Define oSortSR.DeleteNode method so object knows how to dispose of
+  individual data pointers in the event that &quot;Done&quot; is called before
+  tree is empty. }
+</i></font><font color="#FF0000"><b>procedure   </b></font>oSortSR<font color="#000080">.</font>DeleteNode<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Node<font color="#000080">);
+</font><font color="#FF0000"><b>var
+   </b></font>pNode <font color="#000080">:</font>pRec <font color="#FF0000"><b>ABSOLUTE </b></font>Node<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>dispose<font color="#000080">(</font>pNode<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>constructor </b></font>Directry<font color="#000080">.</font>Init<font color="#000080">(</font>path<font color="#000080">, </font>filespec <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>attribute <font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+   </b></font>pathspec <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+   </font>node     <font color="#000080">:</font>pentry<font color="#000080">;
+   </font>i        <font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>FillChar<font color="#000080">(</font>Self<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Self<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+   </font>Load<font color="#000080">(</font>path<font color="#000080">, </font>filespec<font color="#000080">, </font>attribute<font color="#000080">); </font><font color="#008000"><i>{ scan specified directory }
+   </i></font><font color="#FF0000"><b>if </b></font>dirroot<font color="#000080">^.</font>count<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then         </b></font><font color="#008000"><i>{ if no files were found, abort }
+   </i></font><font color="#FF0000"><b>begin
+      if </b></font>dirroot<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+      begin
+         </b></font>disposelist<font color="#000080">(</font>dirroot<font color="#000080">^.</font>flist<font color="#000080">);
+         </font>dispose<font color="#000080">(</font>dirroot<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>FAIL<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#008000"><i>{ the following code expands the pathspec to a full qualified path }
+   </i></font>pathspec <font color="#000080">:= </font>dirroot<font color="#000080">^.</font>path<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">;
+   </font>node <font color="#000080">:= </font>dirroot<font color="#000080">^.</font>flist<font color="#000080">;
+   </font><font color="#FF0000"><b>while </b></font><font color="#000080">((</font>node<font color="#000080">^.</font>fil<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>node<font color="#000080">^.</font>fil<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'..'</font><font color="#000080">)) </font><font color="#FF0000"><b>and
+         </b></font><font color="#000080">(</font>node<font color="#000080">^.</font>next<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>do
+      </b></font>node <font color="#000080">:= </font>node<font color="#000080">^.</font>next<font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>node<font color="#000080">^.</font>fil<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'..' </font><font color="#FF0000"><b>then
+      </b></font>pathspec <font color="#000080">:= </font>pathspec<font color="#000080">+</font><font color="#800000">'.'
+   </font><font color="#FF0000"><b>else
+      </b></font>pathspec <font color="#000080">:= </font>pathspec<font color="#000080">+</font>node<font color="#000080">^.</font>fil<font color="#000080">^.</font>name<font color="#000080">;
+   </font>pathspec <font color="#000080">:= </font>FExpand<font color="#000080">(</font>pathspec<font color="#000080">);
+   </font>i <font color="#000080">:= </font>Length<font color="#000080">(</font>pathspec<font color="#000080">);
+   </font><font color="#FF0000"><b>repeat
+      </b></font>Dec<font color="#000080">(</font>i<font color="#000080">);
+   </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>i<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>pathspec<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">'\'</font><font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>i<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+   begin
+      </b></font>Delete<font color="#000080">(</font>pathspec<font color="#000080">, </font>i<font color="#000080">, </font>Length<font color="#000080">(</font>pathspec<font color="#000080">));
+      </font>dirroot<font color="#000080">^.</font>path <font color="#000080">:= </font>pathspec<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>destructor  </b></font>Directry<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   if </b></font>dirroot<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+   begin
+      </b></font>disposelist<font color="#000080">(</font>dirroot<font color="#000080">^.</font>flist<font color="#000080">);
+      </font>dispose<font color="#000080">(</font>dirroot<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure   </b></font>Directry<font color="#000080">.</font>Load<font color="#000080">(</font>path<font color="#000080">, </font>filespec <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>attribute <font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#008000"><i>{ scan a specified directory with a specified wildcard and attribute
+  byte }
+</i></font><font color="#FF0000"><b>var
+   </b></font>count   <font color="#000080">: </font>word<font color="#000080">;
+   </font>pstr    <font color="#000080">: </font>pathstr<font color="#000080">;
+   </font>dstr    <font color="#000080">: </font>dirstr<font color="#000080">;
+   </font>srec    <font color="#000080">: </font>SearchRec<font color="#000080">;
+   </font>dirx    <font color="#000080">: </font>pdir<font color="#000080">;
+   </font>firstfl<font color="#000080">, </font>thisfl<font color="#000080">, </font>lastfl  <font color="#000080">: </font>pentry<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>count <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font>New<font color="#000080">(</font>firstfl<font color="#000080">);
+   </font><font color="#FF0000"><b>with </b></font>firstfl<font color="#000080">^ </font><font color="#FF0000"><b>do
+   begin
+      </b></font>next <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">; </font>last <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">; </font>New<font color="#000080">(</font>fil<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>thisfl <font color="#000080">:= </font>firstfl<font color="#000080">; </font>lastfl <font color="#000080">:= </font>firstfl<font color="#000080">;
+   </font>dstr  <font color="#000080">:= </font>path<font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>path <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>dstr <font color="#000080">:= </font><font color="#800000">'.'</font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>dstr<font color="#000080">[</font>Length<font color="#000080">(</font>dstr<font color="#000080">)]&lt;&gt;</font><font color="#800000">'\' </font><font color="#FF0000"><b>then </b></font>dstr <font color="#000080">:= </font>dstr<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>filespec <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>filespec <font color="#000080">:= </font><font color="#800000">'*.*'</font><font color="#000080">;
+   </font>pstr <font color="#000080">:= </font>dstr<font color="#000080">+</font>filespec<font color="#000080">;
+
+   </font>FindFirst<font color="#000080">(</font>pstr<font color="#000080">, </font>attribute<font color="#000080">, </font>srec<font color="#000080">);
+   </font><font color="#FF0000"><b>while </b></font>DosError<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>do </b></font><font color="#008000"><i>{ while new files are found... }
+   </i></font><font color="#FF0000"><b>begin
+      if </b></font>srec<font color="#000080">.</font>attr <font color="#000080">= (</font>srec<font color="#000080">.</font>attr <font color="#FF0000"><b>and </b></font>attribute<font color="#000080">) </font><font color="#FF0000"><b>then
+ </b></font><font color="#008000"><i>{ make sure the attribute byte matches our required atttribute mask }
+      </i></font><font color="#FF0000"><b>begin
+         if </b></font>count<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+ </b></font><font color="#008000"><i>{ if this is NOT first file found, link in new node }
+         </i></font><font color="#FF0000"><b>begin
+            </b></font>New<font color="#000080">(</font>thisfl<font color="#000080">);
+            </font>lastfl<font color="#000080">^.</font>next <font color="#000080">:= </font>thisfl<font color="#000080">;
+            </font>thisfl<font color="#000080">^.</font>last <font color="#000080">:= </font>lastfl<font color="#000080">;
+            </font>thisfl<font color="#000080">^.</font>next <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+            </font>New<font color="#000080">(</font>thisfl<font color="#000080">^.</font>fil<font color="#000080">);
+            </font>lastfl <font color="#000080">:= </font>thisfl<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font>thisfl<font color="#000080">^.</font>fil<font color="#000080">^ := </font>srec<font color="#000080">;
+         </font>Inc<font color="#000080">(</font>count<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>FindNext<font color="#000080">(</font>srec<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#008000"><i>{ construct root node }
+   </i></font>New<font color="#000080">(</font>dirx<font color="#000080">);
+   </font><font color="#FF0000"><b>with </b></font>dirx<font color="#000080">^ </font><font color="#FF0000"><b>do
+      </b></font>flist <font color="#000080">:= </font>firstfl<font color="#000080">;
+   </font>dirx<font color="#000080">^.</font>path  <font color="#000080">:= </font>path<font color="#000080">;  </font><font color="#008000"><i>{ path specifier for directory list }
+   </i></font>dirx<font color="#000080">^.</font>count <font color="#000080">:= </font>count<font color="#000080">; </font><font color="#008000"><i>{ number of files in the list }
+
+   </i></font><font color="#FF0000"><b>if </b></font>dirroot<font color="#000080">=</font><font color="#FF0000"><b>NIL then
+      </b></font>dirroot <font color="#000080">:= </font>dirx
+   <font color="#FF0000"><b>else
+   begin
+      </b></font>disposelist<font color="#000080">(</font>dirroot<font color="#000080">^.</font>flist<font color="#000080">);
+      </font>dispose<font color="#000080">(</font>dirroot<font color="#000080">);
+      </font>dirroot <font color="#000080">:= </font>dirx<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ The following function is the far-local function needed for the
+  SORT method (which uses the sort unit posted earlier)
+  Note that this is hard-coded to sort by filename, then extension.
+  I plan to rewrite this later to allow user-selectable sort
+  parameters and ordering. }
+</i></font><font color="#FF0000"><b>function </b></font>Comp<font color="#000080">(</font>d1<font color="#000080">, </font>d2 <font color="#000080">:</font>pointer<font color="#000080">):</font>integer<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>var
+      </b></font>data1 <font color="#000080">:</font>pRec <font color="#FF0000"><b>ABSOLUTE </b></font>d1<font color="#000080">;
+      </font>data2 <font color="#000080">:</font>pRec <font color="#FF0000"><b>ABSOLUTE </b></font>d2<font color="#000080">;
+      </font>name1<font color="#000080">, </font>name2<font color="#000080">, </font>ext1<font color="#000080">, </font>ext2  <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>begin
+ </b></font><font color="#008000"><i>{ This assures that the '.' and '..' dirs will always be the first
+   listed. }
+      </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>data1<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>data1<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'..'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+         </b></font>Comp <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+         </font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>data2<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>data2<font color="#000080">^.</font>name<font color="#000080">=</font><font color="#800000">'..'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+         </b></font>Comp <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+         </font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>with </b></font>data1<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+         </b></font>name1 <font color="#000080">:= </font>Copy<font color="#000080">(</font>name<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>name<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+         </font>ext1  <font color="#000080">:= </font>Copy<font color="#000080">(</font>name<font color="#000080">, </font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>name<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>with </b></font>data2<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+         </b></font>name2 <font color="#000080">:= </font>Copy<font color="#000080">(</font>name<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>name<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+         </font>ext2  <font color="#000080">:= </font>Copy<font color="#000080">(</font>name<font color="#000080">, </font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>name<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>name1<font color="#000080">=</font>name2 <font color="#FF0000"><b>then
+ </b></font><font color="#008000"><i>{ If filename portion is equal, use extension to resolve tie }
+      </i></font><font color="#FF0000"><b>begin
+         if </b></font>ext1<font color="#000080">=</font>ext2 <font color="#FF0000"><b>then
+ </b></font><font color="#008000"><i>{ There should be NO equal filenames, but handle anyways for
+   completeness... }
+            </i></font>Comp <font color="#000080">:= </font><font color="#800000">0
+         </font><font color="#FF0000"><b>else
+            if </b></font>ext1<font color="#000080">&gt;</font>ext2 <font color="#FF0000"><b>then
+               </b></font>Comp <font color="#000080">:= </font><font color="#800000">1
+            </font><font color="#FF0000"><b>else
+               </b></font>Comp <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+         if </b></font>name1<font color="#000080">&gt;</font>name2 <font color="#FF0000"><b>then
+            </b></font>Comp <font color="#000080">:= </font><font color="#800000">1
+         </font><font color="#FF0000"><b>else
+            </b></font>Comp <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Sort method uses the sort unit to sort the collected directory
+  entries. }
+</i></font><font color="#FF0000"><b>procedure   </b></font>Directry<font color="#000080">.</font>Sort<font color="#000080">;
+</font><font color="#FF0000"><b>var
+   </b></font>s1<font color="#000080">, </font>s2 <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+   </font>p1     <font color="#000080">:</font>pentry<font color="#000080">;
+
+ </font><font color="#008000"><i>{ This local procedure keeps code more readable }
+   </i></font><font color="#FF0000"><b>procedure </b></font>UpdatePtr<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>prev <font color="#000080">:</font>pentry<font color="#000080">; </font>NewEntry <font color="#000080">:</font>pointer<font color="#000080">);
+   </font><font color="#FF0000"><b>begin
+      if </b></font>NewEntry<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then </b></font><font color="#008000"><i>{ check to see if tree is empty }
+      </i></font><font color="#FF0000"><b>begin
+         </b></font>New<font color="#000080">(</font>prev<font color="#000080">^.</font>next<font color="#000080">);
+         </font>prev<font color="#000080">^.</font>next<font color="#000080">^.</font>fil  <font color="#000080">:= </font>NewEntry<font color="#000080">;
+         </font>prev<font color="#000080">^.</font>next<font color="#000080">^.</font>last <font color="#000080">:= </font>prev<font color="#000080">;
+         </font>prev <font color="#000080">:= </font>prev<font color="#000080">^.</font>next<font color="#000080">;
+         </font>prev<font color="#000080">^.</font>next <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+         </b></font>prev <font color="#000080">:= </font>prev<font color="#000080">^.</font>next<font color="#000080">;
+       </font><font color="#008000"><i>{ tree is empty, flag &quot;done&quot; with NIL pointer }
+   </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   </b></font>p1 <font color="#000080">:= </font>dirroot<font color="#000080">^.</font>flist<font color="#000080">;
+   </font>New<font color="#000080">(</font>treeroot<font color="#000080">, </font>Init<font color="#000080">(</font>Comp<font color="#000080">));
+</font><font color="#008000"><i>{ Create a sort tree, point to our COMP function }
+   </i></font><font color="#FF0000"><b>while </b></font>p1<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL do
+</b></font><font color="#008000"><i>{ Go through our linked list and insert the items into the sorting
+  tree, dispose of original nodes as we go. }
+   </i></font><font color="#FF0000"><b>begin
+      if </b></font>p1<font color="#000080">^.</font>last<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+         </b></font>dispose<font color="#000080">(</font>p1<font color="#000080">^.</font>last<font color="#000080">);
+      </font>treeroot<font color="#000080">^.</font>InsertNode<font color="#000080">(</font>p1<font color="#000080">^.</font>fil<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>p1<font color="#000080">^.</font>next<font color="#000080">=</font><font color="#FF0000"><b>NIL then
+      begin
+         </b></font>dispose<font color="#000080">(</font>p1<font color="#000080">);
+         </font>p1 <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+         </b></font>p1 <font color="#000080">:= </font>p1<font color="#000080">^.</font>next<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Reconstruct directory list from sorted tree }
+   </i></font>New<font color="#000080">(</font>dirroot<font color="#000080">^.</font>flist<font color="#000080">);
+   </font><font color="#FF0000"><b>with </b></font>dirroot<font color="#000080">^ </font><font color="#FF0000"><b>do
+   begin
+      </b></font>flist<font color="#000080">^.</font>next <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+      </font>flist<font color="#000080">^.</font>last <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+      </font>flist<font color="#000080">^.</font>fil <font color="#000080">:= </font>treeroot<font color="#000080">^.</font>ReadLeftNode<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>dirroot<font color="#000080">^.</font>flist<font color="#000080">^.</font>fil<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+   begin
+      </b></font>p1 <font color="#000080">:= </font>dirroot<font color="#000080">^.</font>flist<font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font>p1<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL do
+         </b></font>UpdatePtr<font color="#000080">(</font>p1<font color="#000080">, </font>treeroot<font color="#000080">^.</font>ReadLeftNode<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ We're done with sorting tree... }
+   </i></font>dispose<font color="#000080">(</font>treeroot<font color="#000080">, </font>Done<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure   </b></font>Directry<font color="#000080">.</font>Print<font color="#000080">;
+</font><font color="#008000"><i>{ currently prints the entire list, may modify this later to allow
+  selective printing }
+</i></font><font color="#FF0000"><b>var
+   </b></font>s<font color="#000080">, </font>s1 <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+   </font>e     <font color="#000080">:</font>pentry<font color="#000080">;
+   </font>dt    <font color="#000080">:</font>DateTime<font color="#000080">;
+   </font>dbg   <font color="#000080">:</font>byte<font color="#000080">;
+
+   </font><font color="#FF0000"><b>procedure </b></font>DoDateEle<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>sb <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>de <font color="#000080">:</font>word<font color="#000080">);
+   </font><font color="#FF0000"><b>begin
+      </b></font>Str<font color="#000080">(</font>de<font color="#000080">, </font>sb<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>Length<font color="#000080">(</font>sb<font color="#000080">)=</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ Add leading 0's}
+         </i></font>sb <font color="#000080">:= </font><font color="#800000">'0'</font><font color="#000080">+</font>sb<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   if </b></font>dirroot<font color="#000080">=</font><font color="#FF0000"><b>NIL then </b></font>EXIT<font color="#000080">; </font><font color="#008000"><i>{ make sure empty dirs aren't attempted }
+   </i></font>e <font color="#000080">:= </font>dirroot<font color="#000080">^.</font>flist<font color="#000080">;
+   </font><font color="#FF0000"><b>while </b></font>e<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL do
+   begin
+      </b></font>s <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>with </b></font>e<font color="#000080">^.</font>fil<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+         </b></font>dbg <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+         </font><font color="#FF0000"><b>repeat
+            case </b></font>dbg <font color="#FF0000"><b>of </b></font><font color="#008000"><i>{ parse attribute bits }
+              </i></font><font color="#800000">1</font><font color="#000080">: </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[(</font>attr <font color="#FF0000"><b>and </b></font><font color="#800000">$01</font><font color="#000080">)];
+              </font><font color="#800000">2</font><font color="#000080">: </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[(</font>attr <font color="#FF0000"><b>and </b></font><font color="#800000">$02</font><font color="#000080">)];
+              </font><font color="#800000">3</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>attr <font color="#FF0000"><b>and </b></font><font color="#800000">$04</font><font color="#000080">) = </font><font color="#800000">$04 </font><font color="#FF0000"><b>then
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]
+                 </font><font color="#FF0000"><b>else
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">];
+              </font><font color="#800000">4</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>attr <font color="#FF0000"><b>and </b></font><font color="#800000">$08</font><font color="#000080">) = </font><font color="#800000">$08 </font><font color="#FF0000"><b>then
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]
+                 </font><font color="#FF0000"><b>else
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">];
+              </font><font color="#800000">5</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>attr <font color="#FF0000"><b>and </b></font><font color="#800000">$10</font><font color="#000080">) = </font><font color="#800000">$10 </font><font color="#FF0000"><b>then
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">]
+                 </font><font color="#FF0000"><b>else
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">];
+              </font><font color="#800000">6</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>attr <font color="#FF0000"><b>and </b></font><font color="#800000">$20</font><font color="#000080">) = </font><font color="#800000">$20 </font><font color="#FF0000"><b>then
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">]
+                 </font><font color="#FF0000"><b>else
+                    </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">];
+              </font><font color="#FF0000"><b>else
+                 </b></font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dosattr<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">];
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>Inc<font color="#000080">(</font>dbg<font color="#000080">);
+         </font><font color="#FF0000"><b>until </b></font>dbg<font color="#000080">&gt;</font><font color="#800000">8</font><font color="#000080">;
+         </font>s <font color="#000080">:= </font>s<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">;
+   </font><font color="#008000"><i>{ Kludge to make sure that extremely large files (&gt;=100MB) don't
+     overflow size field... }
+         </i></font><font color="#FF0000"><b>if </b></font>size<font color="#000080">&lt;</font><font color="#800000">100000000 </font><font color="#FF0000"><b>then
+            </b></font>Str<font color="#000080">(</font>size<font color="#000080">:</font><font color="#800000">8</font><font color="#000080">, </font>s1<font color="#000080">)
+         </font><font color="#FF0000"><b>else
+         begin
+            </b></font>Str<font color="#000080">((</font>size <font color="#FF0000"><b>div </b></font><font color="#800000">1000</font><font color="#000080">):</font><font color="#800000">7</font><font color="#000080">, </font>s1<font color="#000080">); </font><font color="#008000"><i>{ decimal kilobytes }
+            </i></font>s1 <font color="#000080">:= </font>s1<font color="#000080">+</font><font color="#800000">'k'</font><font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">;
+   </font><font color="#008000"><i>{ Format date/time fields }
+         </i></font>UnpackTime<font color="#000080">(</font>Time<font color="#000080">, </font>dt<font color="#000080">);
+         </font><font color="#008000"><i>{month}
+         </i></font>DoDateEle<font color="#000080">(</font>s1<font color="#000080">, </font>dt<font color="#000080">.</font>month<font color="#000080">); </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">'/'</font><font color="#000080">;
+         </font><font color="#008000"><i>{day}
+         </i></font>DoDateEle<font color="#000080">(</font>s1<font color="#000080">, </font>dt<font color="#000080">.</font>day<font color="#000080">);   </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">'/'</font><font color="#000080">;
+         </font><font color="#008000"><i>{year}
+         </i></font>DoDateEle<font color="#000080">(</font>s1<font color="#000080">, </font>dt<font color="#000080">.</font>year<font color="#000080">);  </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">;
+         </font><font color="#008000"><i>{hour}
+         </i></font>DoDateEle<font color="#000080">(</font>s1<font color="#000080">, </font>dt<font color="#000080">.</font>hour<font color="#000080">);  </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">':'</font><font color="#000080">;
+         </font><font color="#008000"><i>{minutes}
+         </i></font>DoDateEle<font color="#000080">(</font>s1<font color="#000080">, </font>dt<font color="#000080">.</font>min<font color="#000080">);   </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">':'</font><font color="#000080">;
+         </font><font color="#008000"><i>{seconds}
+         </i></font>DoDateEle<font color="#000080">(</font>s1<font color="#000080">, </font>dt<font color="#000080">.</font>sec<font color="#000080">);   </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>s1<font color="#000080">+</font><font color="#800000">' - '</font><font color="#000080">;
+         </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>dirroot<font color="#000080">^.</font>path<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">+</font>name<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>Writeln<font color="#000080">(</font>s<font color="#000080">); </font>s <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font>e <font color="#000080">:= </font>e<font color="#000080">^.</font>next<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>Writeln<font color="#000080">; </font>Writeln<font color="#000080">(</font><font color="#800000">'  '</font><font color="#000080">, </font>dirroot<font color="#000080">^.</font>count<font color="#000080">, </font><font color="#800000">' files found.'</font><font color="#000080">); </font>Writeln<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ If TraverseTree is not given a callback procedure, this one is
+  used. }
+</i></font><font color="#FF0000"><b>procedure   </b></font>DefaultCallback<font color="#000080">(</font>name <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>lev <font color="#000080">:</font>integer<font color="#000080">); </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+   </b></font>s <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const
+   </b></font>spaces <font color="#000080">= </font><font color="#800000">'                                               '</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>s <font color="#000080">:= </font>Copy<font color="#000080">(</font>spaces<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>lev<font color="#000080">*</font><font color="#800000">4</font><font color="#000080">); </font>s <font color="#000080">:= </font>s<font color="#000080">+</font>name<font color="#000080">;
+   </font>Writeln<font color="#000080">(</font>s<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ TraverseTree is untested as yet, rest of code (above) works fine.
+  Note that TraverseTree is NOT a member method of DIRECTRY. Read
+  the BYTE Dec/93 article for a clarification of why it is good
+  that it not be a member.}
+</i></font><font color="#FF0000"><b>procedure </b></font>TraverseTree<font color="#000080">(</font>root <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>pcallproc <font color="#000080">:</font>pointer<font color="#000080">; </font>do_depth <font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>var
+   </b></font>level    <font color="#000080">:</font>integer<font color="#000080">;
+   </font>fullpath <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+   </font>rootdir  <font color="#000080">:</font>pdir<font color="#000080">;
+</font><font color="#FF0000"><b>const
+   </b></font>callproc <font color="#000080">: </font>callbackproc <font color="#000080">= </font>DefaultCallBack<font color="#000080">;
+
+ </font><font color="#008000"><i>{ Actual recursive procedure to scan down directory structure
+   using the DIRECTRY object. }
+   </i></font><font color="#FF0000"><b>procedure </b></font>Tree<font color="#000080">(</font>newroot <font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>callee <font color="#000080">:</font>callbackproc<font color="#000080">; </font>do_last <font color="#000080">:</font>boolean<font color="#000080">);
+   </font><font color="#FF0000"><b>var
+      </b></font>subdirs  <font color="#000080">:</font>pdirectry<font color="#000080">;
+      </font>direntry <font color="#000080">:</font>pentry<font color="#000080">;
+
+      </font><font color="#FF0000"><b>Procedure </b></font>DoDir<font color="#000080">;
+      </font><font color="#FF0000"><b>begin
+         </b></font>New<font color="#000080">(</font>subdirs<font color="#000080">, </font>Init<font color="#000080">(</font>newroot<font color="#000080">, </font><font color="#800000">'*.*'</font><font color="#000080">, </font>NotDir<font color="#000080">));
+         </font><font color="#FF0000"><b>if </b></font>subdirs<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+         begin
+            </b></font>subdirs<font color="#000080">^.</font>sort<font color="#000080">;
+            </font>direntry <font color="#000080">:= </font>subdirs<font color="#000080">^.</font>dirroot<font color="#000080">^.</font>flist<font color="#000080">;
+            </font><font color="#FF0000"><b>while </b></font>direntry<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL do
+            begin
+               </b></font>fullpath <font color="#000080">:= </font>newroot<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">+</font>direntry<font color="#000080">^.</font>fil<font color="#000080">^.</font>name<font color="#000080">;
+               </font>callee<font color="#000080">(</font>newroot<font color="#000080">, </font>level<font color="#000080">);
+               </font>direntry <font color="#000080">:= </font>direntry<font color="#000080">^.</font>next<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>dispose<font color="#000080">(</font>subdirs<font color="#000080">, </font>done<font color="#000080">);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font><font color="#FF0000"><b>begin
+      if not</b></font><font color="#000080">(</font>do_last<font color="#000080">) </font><font color="#FF0000"><b>then
+         </b></font>DoDir<font color="#000080">;
+
+      </font>New<font color="#000080">(</font>subdirs<font color="#000080">, </font>Init<font color="#000080">(</font>newroot<font color="#000080">, </font><font color="#800000">'*.*'</font><font color="#000080">, </font>directory<font color="#000080">));
+
+      </font><font color="#FF0000"><b>if </b></font>subdirs<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+      begin
+         </b></font>subdirs<font color="#000080">^.</font>sort<font color="#000080">;
+         </font>direntry <font color="#000080">:= </font>subdirs<font color="#000080">^.</font>dirroot<font color="#000080">^.</font>flist<font color="#000080">;
+         </font><font color="#FF0000"><b>while </b></font>direntry<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL do
+         begin
+            </b></font>Inc<font color="#000080">(</font>level<font color="#000080">);
+            </font>fullpath <font color="#000080">:= </font>newroot<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">+</font>direntry<font color="#000080">^.</font>fil<font color="#000080">^.</font>name<font color="#000080">;
+            </font>Tree<font color="#000080">(</font>fullpath<font color="#000080">, </font>callee<font color="#000080">, </font>do_last<font color="#000080">);
+            </font>dec<font color="#000080">(</font>level<font color="#000080">);
+            </font>direntry <font color="#000080">:= </font>direntry<font color="#000080">^.</font>next<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font>dispose<font color="#000080">(</font>subdirs<font color="#000080">, </font>done<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font>do_last <font color="#FF0000"><b>then
+         </b></font>DoDir<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   </b></font>level <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+   </font><font color="#FF0000"><b>if </b></font>pcallproc<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL then
+      </b></font>callproc <font color="#000080">:= </font>callbackproc<font color="#000080">(</font>pcallproc<font color="#000080">^);
+
+   </font>root <font color="#000080">:= </font>fexpand<font color="#000080">(</font>root<font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>root<font color="#000080">[</font>Length<font color="#000080">(</font>root<font color="#000080">)]=</font><font color="#800000">'\' </font><font color="#FF0000"><b>then
+      </b></font>Delete<font color="#000080">(</font>root<font color="#000080">, </font>Length<font color="#000080">(</font>root<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">);
+
+   </font><font color="#FF0000"><b>if not</b></font><font color="#000080">(</font>do_depth<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>callproc<font color="#000080">(</font>root<font color="#000080">, </font>level<font color="#000080">);
+
+   </font>Tree<font color="#000080">(</font>root<font color="#000080">, </font>callproc<font color="#000080">, </font>do_depth<font color="#000080">);
+
+   </font><font color="#FF0000"><b>if </b></font>do_depth <font color="#FF0000"><b>then
+      </b></font>callproc<font color="#000080">(</font>root<font color="#000080">, </font>level<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DIRS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p></body>
+</html>

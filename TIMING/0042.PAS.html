@@ -1,0 +1,352 @@
+<html>
+<head><title> "Timer Unit" by JACOB LISTER <LISTERJA@WERO.EE.CIT.</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TIMING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0042.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{  +-------------------------------------------------------------------+
+   |  Project  : Generic             |  Filename    : TIMERINT.PAS     |
+   |  Coded By : Lost (Jacob Lister) |  Version     : 1.0              |   
+   |--========-------------+---------+--========-----------------------|
+   |  Date     : 05/07/97  |  Created                                  |
+   |             06/07/97  |  Got it working                           |
+   |             24/07/97  |  Interrupt handler now saves state of     |
+   |                       |  flags                                    |
+   |             21/08/97  |  Cleaned up for SWAG release              |
+   |--========-------------+--========---------------------------------|
+   |  Purpose  : General purpose timer interrupt functions, allow many |
+   |             handlers to be strung onto the one timer, and         |
+   |             re-programs the clock rate as nessacary               |
+   |  Notes    : There are some very messy fiddles used here to get the|
+   |             interrupt handler working with the sub-fuction record |
+   |             table, this is OK because the crappy code is confined |
+   |             to this unit.  Take care of what procedures you use   |
+   |             this unit to call, for example 'writeln' will behave  |
+   |             unstabily if it is being called by both an IRQ and    |
+   |             other code at the same time, this goes for most       |
+   |             procedures.                                           |
+   |  Wish List: Optimize the interrupt handler (timer cirtical)       |
+   |--========---------------------------------------------------------|
+   |  Credits  : Some interrupt programming info from SWAG             |
+   +--========---------------------------------------------------------+  }
+{ Usage : to install a handler, call the 'install_handler' with a pointer
+          to your procedure and the interval rate in Hz that it is to be
+          called.  You handlers MUST be far code, force this by adding
+          the directive 'far' to the procedure header, eg
+             procedure mytest; far;
+          Your procedures are free to use all CPU registers as the unit
+          handles preserving these.
+          I beleive it is possible for procedures in different units to
+          use different data segments, if this is the case for your code,
+          your handlers must point DS to their own data segment, to do
+          this, put these lines at the start of your handler:
+             asm
+                mov ax, seg @data
+                mov ds, ax
+             end;
+          You can de-install handlers by calling 'remove_handler',
+          alternativly the program will handle all de-installation on
+          exit }
+
+</i></font><font color="#FF0000"><b>unit </b></font>timerint<font color="#000080">;
+
+</font><font color="#FF0000"><b>INTERFACE
+
+procedure </b></font>install_handler<font color="#000080">(</font>address <font color="#000080">: </font>pointer<font color="#000080">; </font>rate <font color="#000080">: </font>longint<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>remove_handler<font color="#000080">(</font>address <font color="#000080">: </font>pointer<font color="#000080">);
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+uses </b></font>dos<font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>USE32 <font color="#000080">= </font><font color="#800000">$66</font><font color="#000080">;                      </font><font color="#008000"><i>{32 bit instruction prefix}
+
+</i></font><font color="#FF0000"><b>const </b></font>clock_rate <font color="#000080">= </font><font color="#800000">1192755</font><font color="#000080">;             </font><font color="#008000"><i>{Timer rate (Hz)}
+      </i></font>dos_rate <font color="#000080">= </font><font color="#800000">63356</font><font color="#000080">;                 </font><font color="#008000"><i>{The rate dos service call is called}
+</i></font><font color="#FF0000"><b>var </b></font>tick_rate <font color="#000080">: </font>longint<font color="#000080">;                </font><font color="#008000"><i>{The current timer rate}
+    </i></font>dos_tick  <font color="#000080">: </font>longint<font color="#000080">;                </font><font color="#008000"><i>{number of ticks since last dos
+                                         timer service called }
+    </i></font>old_handler <font color="#000080">: </font>pointer<font color="#000080">;              </font><font color="#008000"><i>{Variable to save old int 8 handler}
+    </i></font>old_exit  <font color="#000080">: </font>pointer<font color="#000080">;                </font><font color="#008000"><i>{save for exit chain}
+
+</i></font><font color="#FF0000"><b>type </b></font>timer_int_function <font color="#000080">= </font><font color="#FF0000"><b>record
+   </b></font>address <font color="#000080">: </font>pointer<font color="#000080">;                   </font><font color="#008000"><i>{Pointer to the handler}
+   </i></font>rate    <font color="#000080">: </font>longint<font color="#000080">;                   </font><font color="#008000"><i>{Required rate in timer ticks}
+   </i></font>ticks   <font color="#000080">: </font>longint<font color="#000080">;                   </font><font color="#008000"><i>{ticks since last call}
+   </i></font>active  <font color="#000080">: </font>boolean<font color="#000080">;                   </font><font color="#008000"><i>{Is this handler active?}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>t_address  <font color="#000080">= </font><font color="#800000">$0</font><font color="#000080">;                  </font><font color="#008000"><i>{Address values for the timer record}
+      </i></font>t_rate     <font color="#000080">= </font><font color="#800000">$4</font><font color="#000080">;                  </font><font color="#008000"><i>{Needed, as they cannot be directly}
+      </i></font>t_ticks    <font color="#000080">= </font><font color="#800000">$8</font><font color="#000080">;                  </font><font color="#008000"><i>{derived for the inline ASM}
+      </i></font>t_active   <font color="#000080">= </font><font color="#800000">$C</font><font color="#000080">;
+      </font>t_size     <font color="#000080">= </font><font color="#800000">$D</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>num_handlers <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>timer_ints <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>num_handlers<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>timer_int_function<font color="#000080">;
+
+</font><font color="#008000"><i>{Variables for interrupt service rountine.}
+</i></font><font color="#FF0000"><b>var </b></font>call_adr <font color="#000080">: </font>pointer<font color="#000080">;
+
+
+</font><font color="#008000"><i>{Re-programs the timer to genererate an interrupt every 'ticks' ticks }
+</i></font><font color="#FF0000"><b>procedure </b></font>set_clock_rate<font color="#000080">(</font>ticks <font color="#000080">: </font>longint<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+   </b></font>port<font color="#000080">[</font><font color="#800000">$43</font><font color="#000080">] := </font><font color="#800000">$36</font><font color="#000080">;
+   </font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font>lo<font color="#000080">(</font>ticks<font color="#000080">);
+   </font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font>hi<font color="#000080">(</font>ticks<font color="#000080">);
+   </font>tick_rate <font color="#000080">:= </font>ticks<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{  +-------------------------------------------------------------------+
+   |  Procedure : find_clock_rate                                      |
+   |  Callers   : install_handler, remove_handler                      |
+   |  Purpose   : Finds the maximum clock rate needed, and sets the    |
+   |              timer to run at that rate                            |
+   +--========---------------------------------------------------------+
+   |  Input     : nothing                                              |
+   |  Output    : nothing                                              |
+   |  Destroys  : nothing                                              |
+   +--========---------------------------------------------------------+
+   |  Notes     :                                                      |
+   +--========---------------------------------------------------------+   }
+</i></font><font color="#FF0000"><b>procedure </b></font>find_clock_rate<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>byte<font color="#000080">;
+    </font>max_rate <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>max_rate <font color="#000080">:= </font>dos_rate<font color="#000080">;
+   </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>num_handlers <font color="#FF0000"><b>do
+     if </b></font><font color="#000080">(</font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>active <font color="#000080">= </font>true<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>rate <font color="#000080">&lt; </font>max_rate<font color="#000080">)
+        </font><font color="#FF0000"><b>then </b></font>max_rate <font color="#000080">:= </font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>rate<font color="#000080">;
+   </font>set_clock_rate<font color="#000080">(</font>max_rate<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{  +-------------------------------------------------------------------+
+   |  Procedure : install_handler                                      |
+   |  Callers   : Anything                                             |
+   |  Purpose   : Installs an interrupt handling funtion on to the     |
+   |              interrupt.  If the requested rate cannot be handled  |
+   |              by the current clock rate, the clock rate is changed |
+   +--========---------------------------------------------------------+
+   |  Input     : address - Pointer to code to run on interrupt        |
+   |              rate    - the rate at which the hander is to run     |
+   |                        (in Hz)                                    |
+   |  Output    :                                                      |
+   |  Destroys  : nothing                                              |
+   +--========---------------------------------------------------------+
+   |  Notes     :                                                      |
+   +--========---------------------------------------------------------+   }
+</i></font><font color="#FF0000"><b>procedure </b></font>install_handler<font color="#000080">(</font>address <font color="#000080">: </font>pointer<font color="#000080">; </font>rate <font color="#000080">: </font>longint<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>handler_tick_rate <font color="#000080">: </font>longint<font color="#000080">;
+    </font>i                 <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>port<font color="#000080">[</font><font color="#800000">$43</font><font color="#000080">] := </font><font color="#800000">$36</font><font color="#000080">;                    </font><font color="#008000"><i>{lower clock rate so interrupts don't}
+   </i></font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;                      </font><font color="#008000"><i>{occur which we are installing handler}
+   </i></font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+
+   </font>handler_tick_rate <font color="#000080">:= </font>clock_rate <font color="#FF0000"><b>div </b></font>rate<font color="#000080">;
+
+   </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>num_handlers <font color="#FF0000"><b>do begin
+      if</b></font><font color="#000080">(</font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>active <font color="#000080">= </font>false<font color="#000080">) </font><font color="#FF0000"><b>then begin
+         </b></font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>active   <font color="#000080">:= </font>true<font color="#000080">;
+         </font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>address  <font color="#000080">:= </font>address<font color="#000080">;
+         </font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>rate     <font color="#000080">:= </font>handler_tick_rate<font color="#000080">;
+         </font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>ticks    <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font>break<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>find_clock_rate<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{  +-------------------------------------------------------------------+
+   |  Procedure : remove_handler                                       |
+   |  Callers   : Anything                                             |
+   |  Purpose   : Searches for the a specified interrupt handler, and  |
+   |              removes it, then re-adjusts the clock rate if        |
+   |              nessecary                                            |
+   +--========---------------------------------------------------------+
+   |  Input     : address - pointer to handler routine to remove       |
+   |  Output    : nothing                                              |
+   |  Destroys  : info for specified handler                           |
+   +--========---------------------------------------------------------+
+   |  Notes     : Destroys the first found case of routine.  If more   |
+   |              than one instance of the same handler function, only |
+   |              the first will be destroyed.                         |
+   +--========---------------------------------------------------------+   }
+</i></font><font color="#FF0000"><b>procedure </b></font>remove_handler<font color="#000080">(</font>address <font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>port<font color="#000080">[</font><font color="#800000">$43</font><font color="#000080">] := </font><font color="#800000">$36</font><font color="#000080">;                    </font><font color="#008000"><i>{lower clock rate so interrupts don't}
+   </i></font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;                      </font><font color="#008000"><i>{occur which we are removing handler}
+   </i></font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>num_handlers <font color="#FF0000"><b>do
+      if </b></font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>address <font color="#000080">= </font>address <font color="#FF0000"><b>then
+         </b></font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>active <font color="#000080">:= </font>false<font color="#000080">;
+   </font>find_clock_rate<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{  +-------------------------------------------------------------------+
+   |  Procedure : interrupt_handler                                    |
+   |  Callers   : interrupt 8                                          |
+   |  Purpose   : Dispacthes many timer functions off the one timer    |
+   |              interrupt as required.  Calls the original DOS IRQ8  |
+   |              handler as required                                  |
+   +--========---------------------------------------------------------+
+   |  Input     : nothing                                              |
+   |  Output    : nothing                                              |
+   |  Destroys  : nothing                                              |
+   +--========---------------------------------------------------------+
+   |  Notes     :                                                      |
+   +--========---------------------------------------------------------+   }
+</i></font><font color="#FF0000"><b>procedure </b></font>interrupt_handler<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">pushf
+   db USE32; pusha
+   push ds
+   push es
+   push ss
+
+   mov ax, seg @data
+   mov ds, ax
+
+   mov di, OFFSET timer_ints            </font><font color="#008000"><i>{Point to our handlers}
+   </i></font><font color="#FF00FF">mov cl, num_handlers                 </font><font color="#008000"><i>{Get the number of handlers}
+ </i></font><font color="#FF00FF">@@L0:
+   mov al, 0
+   cmp [di+t_active], al
+   jz @@Next_Handle                     </font><font color="#008000"><i>{Check if handle is active}
+
+   </i></font><font color="#FF00FF">db USE32; mov ax, [di+t_ticks]
+   db USE32; add ax, word ptr tick_rate
+   db USE32; cmp ax, [di+t_rate]
+
+   jl @@Next_Handle                     </font><font color="#008000"><i>{Is it time for the next handle call?}
+   </i></font><font color="#FF00FF">db USE32; sub ax, [di+t_rate]        </font><font color="#008000"><i>{reset our tick count}
+
+   </i></font><font color="#FF00FF">db USE32; mov bx, [di+t_address]
+   db USE32; mov word ptr call_adr, bx
+
+   push ax
+   push cx
+   push di
+   push ds
+   CALL call_adr
+   pop ds
+   pop di
+   pop cx
+   pop ax
+
+ @@Next_Handle:
+   db USE32; mov [di+t_ticks], ax       </font><font color="#008000"><i>{Save back the handle tick info}
+   </i></font><font color="#FF00FF">add di, t_size
+   dec cl
+   jnz @@L0
+
+   mov al,$20
+   out $20,al
+
+   db USE32; mov ax, word ptr dos_tick
+   db USE32; add ax, word ptr tick_rate
+   db USE32; mov word ptr dos_tick, ax
+   db USE32; cmp ax, 0000; dw 1         </font><font color="#008000"><i>{next dos call?}
+   </i></font><font color="#FF00FF">jl @@NoDos
+   db USE32; sub ax, 0000h; dw 1
+   db USE32; mov word ptr dos_tick, ax  </font><font color="#008000"><i>{reset dos rate counter}
+
+   </i></font><font color="#FF00FF">pushf
+   call [old_handler]                   </font><font color="#008000"><i>{never returns}
+
+  </i></font><font color="#FF00FF">@@NoDos:
+
+   pop ss
+   pop es
+   pop ds
+   db USE32; popa
+   popf
+   iret
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Clean up code runs when program finishes, resets the timer interrupt
+  handler, and resets the clock }
+</i></font><font color="#FF0000"><b>procedure </b></font>timer_exit<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   asm </b></font><font color="#FF00FF">cli </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>ExitProc <font color="#000080">:= </font>old_exit<font color="#000080">;
+   </font>port<font color="#000080">[</font><font color="#800000">$43</font><font color="#000080">] := </font><font color="#800000">$36</font><font color="#000080">;
+   </font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+   </font>port<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+   </font>setintvec<font color="#000080">(</font><font color="#800000">8</font><font color="#000080">, </font>old_handler<font color="#000080">);
+   </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">sti </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>num_handlers <font color="#FF0000"><b>do </b></font>timer_ints<font color="#000080">[</font>i<font color="#000080">].</font>active <font color="#000080">:= </font>false<font color="#000080">;
+   </font>tick_rate <font color="#000080">:= </font><font color="#800000">65536</font><font color="#000080">;
+   </font>dos_tick <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+   </font>getintvec<font color="#000080">(</font><font color="#800000">8</font><font color="#000080">,</font>old_handler<font color="#000080">);
+   </font>setintvec<font color="#000080">(</font><font color="#800000">8</font><font color="#000080">,@</font>interrupt_handler<font color="#000080">);
+   </font>old_exit <font color="#000080">:= </font>ExitProc<font color="#000080">;
+   </font>ExitProc <font color="#000080">:= @</font>timer_exit<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{---------------------------------- CUT HERE -------------------------------}
+
+</i></font><font color="#FF0000"><b>program </b></font>timertst<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses </b></font>timerint<font color="#000080">, </font>crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>toggle_light<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>const </b></font>screen <font color="#000080">= </font><font color="#800000">$B800</font><font color="#000080">;
+      </font>lchr   <font color="#000080">= </font><font color="#800000">$0CFE</font><font color="#000080">;
+      </font>dchr   <font color="#000080">= </font><font color="#800000">$04FE</font><font color="#000080">;
+</font><font color="#FF0000"><b>var   </b></font>adr    <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>adr <font color="#000080">:= (</font>y<font color="#000080">*</font><font color="#800000">80</font><font color="#000080">+</font>x<font color="#000080">)*</font><font color="#800000">2</font><font color="#000080">;
+   </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>memW<font color="#000080">[</font>screen<font color="#000080">:</font>adr<font color="#000080">] &lt;&gt; </font>lchr<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>memW<font color="#000080">[</font>screen<font color="#000080">:</font>adr<font color="#000080">] := </font>lchr
+      <font color="#FF0000"><b>else </b></font>memW<font color="#000080">[</font>screen<font color="#000080">:</font>adr<font color="#000080">] := </font>dchr<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>test1<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>toggle_light<font color="#000080">(</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>test2<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>toggle_light<font color="#000080">(</font><font color="#800000">13</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>test3<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>toggle_light<font color="#000080">(</font><font color="#800000">21</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>test4<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>toggle_light<font color="#000080">(</font><font color="#800000">29</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>test5<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>toggle_light<font color="#000080">(</font><font color="#800000">37</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   </b></font>clrscr<font color="#000080">;
+   </font>writeln<font color="#000080">(</font><font color="#800000">'+------------------------------------------+'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'|           TIMERINT UNIT EXAMPLE          |'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'+------------------------------------------+'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'|   1 Hz    2 Hz    5 Hz    10 Hz   100 Hz |'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'|   +-+     +-+     +-+     +-+     +-+    |'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'|   | |     | |     | |     | |     | |    |'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'|   +-+     +-+     +-+     +-+     +-+    |'</font><font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'+------------------------------------------+'</font><font color="#000080">);
+   </font>install_handler<font color="#000080">(@</font>test1<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+   </font>install_handler<font color="#000080">(@</font>test2<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+   </font>install_handler<font color="#000080">(@</font>test3<font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+   </font>install_handler<font color="#000080">(@</font>test4<font color="#000080">, </font><font color="#800000">10</font><font color="#000080">);
+   </font>install_handler<font color="#000080">(@</font>test5<font color="#000080">, </font><font color="#800000">100</font><font color="#000080">);
+
+   </font><font color="#FF0000"><b>repeat
+   until </b></font>keypressed<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TIMING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0042.PAS">Original</a><b>]</b></p></body>
+</html>

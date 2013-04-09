@@ -1,0 +1,145 @@
+<html>
+<head><title> "PROTECTED MODE Stuff" by RAPHAEL VANNEY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0064.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+ SM&gt; I have a bit of a problem with pascal 7 protected mode,
+ SM&gt; I have a TSR (assembly) that does my comms work for me.
+ SM&gt; I use intr(regs) with various settings to the registers to collect
+ SM&gt; data from the TSR. However when in protected mode my TSR seems
+ SM&gt; to be unavailable.
+
+ SM&gt; Do I need to switch to real mode from the app.
+ SM&gt; (if so how, I can't find it in the manual).
+
+Yes. This is not documented in the manual, though.
+
+ SM&gt; Do I need to modify my TSR.
+ SM&gt; I presume not because I'm sure that the mouse drivers can be got
+ SM&gt; to work.
+
+The problem is that interrupt calls in protected mode use
+protected mode interrupt handlers. RTM.EXE converts protected
+mode interrupts to real mode ones, for 'known' interrupts
+(ie INT $21, some functions of INT $10, INT $33 (mouse)...)
+
+What you need is to call the DPMI function that lets you issue
+a real mode interrupt. What follows should help you (let me know
+if it's not clear enough;-))
+}
+
+{ DPMI tools }
+
+{$X+,G+}
+
+{$IfNDef DPMI}
+     </i></font>You don<font color="#800000">'t need that.
+</font><font color="#008000"><i>{$EndIf}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>MinDPMI<font color="#000080">;
+
+</font><font color="#FF0000"><b>Interface
+
+Type </b></font>TRealModeRegs <font color="#000080">=
+     </font><font color="#FF0000"><b>Record
+          Case </b></font>Integer <font color="#FF0000"><b>Of
+          </b></font><font color="#800000">0</font><font color="#000080">: ( </font>EDI<font color="#000080">, </font>ESI<font color="#000080">, </font>EBP<font color="#000080">, </font>EXX<font color="#000080">, </font>EBX<font color="#000080">, </font>EDX<font color="#000080">, </font>ECX<font color="#000080">, </font>EAX<font color="#000080">: </font>Longint<font color="#000080">;
+               </font>Flags<font color="#000080">, </font>ES<font color="#000080">, </font>DS<font color="#000080">, </font>FS<font color="#000080">, </font>GS<font color="#000080">, </font>IP<font color="#000080">, </font>CS<font color="#000080">, </font>SP<font color="#000080">, </font>SS<font color="#000080">: </font>Word<font color="#000080">);
+          </font><font color="#800000">1</font><font color="#000080">: ( </font>DI<font color="#000080">,</font>DIH<font color="#000080">, </font>SI<font color="#000080">, </font>SIH<font color="#000080">, </font>BP<font color="#000080">, </font>BPH<font color="#000080">, </font>XX<font color="#000080">, </font>XXH<font color="#000080">: </font>Word<font color="#000080">;
+               </font><font color="#FF0000"><b>Case </b></font>Integer <font color="#FF0000"><b>of
+                 </b></font><font color="#800000">0</font><font color="#000080">: (</font>BX<font color="#000080">, </font>BXH<font color="#000080">, </font>DX<font color="#000080">, </font>DXH<font color="#000080">, </font>CX<font color="#000080">, </font>CXH<font color="#000080">, </font>AX<font color="#000080">, </font>AXH<font color="#000080">: </font>Word<font color="#000080">);
+                 </font><font color="#800000">1</font><font color="#000080">: (</font>BL<font color="#000080">, </font>BH<font color="#000080">, </font>BLH<font color="#000080">, </font>BHH<font color="#000080">, </font>DL<font color="#000080">, </font>DH<font color="#000080">, </font>DLH<font color="#000080">, </font>DHH<font color="#000080">,
+                     </font>CL<font color="#000080">, </font>CH<font color="#000080">, </font>CLH<font color="#000080">, </font>CHH<font color="#000080">, </font>AL<font color="#000080">, </font>AH<font color="#000080">, </font>ALH<font color="#000080">, </font>AHH<font color="#000080">: </font>Byte<font color="#000080">));
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+     </font>TLowMemoryBlock     <font color="#000080">=
+     </font><font color="#FF0000"><b>Record
+          </b></font>ProtectedPtr   <font color="#000080">: </font>Pointer<font color="#000080">;
+          </font>RealSegment    <font color="#000080">: </font>Word<font color="#000080">;
+          </font>Size           <font color="#000080">: </font>Word<font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ClearRegs<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>RealRegs <font color="#000080">: </font>TRealModeRegs<font color="#000080">);
+
+</font><font color="#FF0000"><b>Function </b></font>RealModeInt<font color="#000080">(    </font>IntNo          <font color="#000080">: </font>Byte<font color="#000080">;
+                         </font><font color="#FF0000"><b>Var </b></font>RealRegs   <font color="#000080">: </font>TRealModeRegs<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{ IMPORTANT notes :
+     - If SS and SP in RealRegs are set to 0, the DPMI server provides
+       a 30 bytes stack. If not, the specified stack is used.    }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>AllocateLowMem<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Pt <font color="#000080">: </font>TLowMemoryBlock<font color="#000080">; </font>Size <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>FreeLowMem<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Pt <font color="#000080">: </font>TLowMemoryBlock<font color="#000080">);
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetProtectedIntVec<font color="#000080">(</font>No <font color="#000080">: </font>Byte<font color="#000080">; </font>p <font color="#000080">: </font>Pointer<font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>GetProtectedIntVec<font color="#000080">(</font>No <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>p <font color="#000080">: </font>Pointer<font color="#000080">);
+
+</font><font color="#FF0000"><b>Implementation
+
+Uses </b></font>WinAPI<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>TDouble   <font color="#000080">=
+     </font><font color="#FF0000"><b>Record
+          </b></font>Lo<font color="#000080">, </font>Hi    <font color="#000080">: </font>Word<font color="#000080">;
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ClearRegs<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>FillChar<font color="#000080">(</font>RealRegs<font color="#000080">, </font>SizeOf<font color="#000080">(</font>RealRegs<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>RealModeInt<font color="#000080">(    </font>IntNo          <font color="#000080">: </font>Byte<font color="#000080">;
+                         </font><font color="#FF0000"><b>Var </b></font>RealRegs   <font color="#000080">: </font>TRealModeRegs<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+     </b></font><font color="#FF00FF">Mov  AX, $0300
+     Mov  BL, IntNo
+     XOr  BH, BH
+     XOr  CX, CX
+     LES  DI, RealRegs
+     Int  $31
+     Mov  AX, 0               </font><font color="#008000"><i>{ Not XOr }
+     </i></font><font color="#FF00FF">JNC  @Ok
+     Inc  AX
+@Ok:
+     Or   AX, AX
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>AllocateLowMem<font color="#000080">;
+</font><font color="#FF0000"><b>Var  </b></font>Adr  <font color="#000080">: </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>Adr<font color="#000080">:=</font>GlobalDOSAlloc<font color="#000080">(</font>Size<font color="#000080">);
+     </font><font color="#FF0000"><b>If </b></font>Adr<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>Then </b></font>Size<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+     </font>Pt<font color="#000080">.</font>ProtectedPtr<font color="#000080">:=</font>Ptr<font color="#000080">(</font>TDouble<font color="#000080">(</font>Adr<font color="#000080">).</font>Lo<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+     </font>Pt<font color="#000080">.</font>RealSegment<font color="#000080">:=</font>TDouble<font color="#000080">(</font>Adr<font color="#000080">).</font>Hi<font color="#000080">;
+     </font>Pt<font color="#000080">.</font>Size<font color="#000080">:=</font>Size<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>FreeLowMem<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>GlobalDOSFree<font color="#000080">(</font>Seg<font color="#000080">(</font>Pt<font color="#000080">.</font>ProtectedPtr<font color="#000080">^));
+     </font>FillChar<font color="#000080">(</font>Pt<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Pt<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);           </font><font color="#008000"><i>{ Fills with NIL }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetProtectedIntVec<font color="#000080">(</font>No <font color="#000080">: </font>Byte<font color="#000080">; </font>p <font color="#000080">: </font>Pointer<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+     </b></font><font color="#FF00FF">Mov  AX, $0205
+     Mov  BL, No
+     Mov  CX, TDouble[p].Hi        </font><font color="#008000"><i>{ Selector }
+     </i></font><font color="#FF00FF">Mov  DX, TDouble[p].Lo        </font><font color="#008000"><i>{ Offset }
+     </i></font><font color="#FF00FF">Int  $31
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetProtectedIntVec<font color="#000080">(</font>No <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>p <font color="#000080">: </font>Pointer<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+     </b></font><font color="#FF00FF">Mov  AX, $0204
+     Mov  BL, No
+     Int  $31
+     LES  DI, p
+     </font><font color="#008000"><i>{ Mov  ES:[DI], DX }
+     { Mov  ES:[DI+2], CX }
+     </i></font><font color="#FF00FF">Mov  TDouble[ES:DI].Lo, DX
+     Mov  TDouble[ES:DI].Hi, CX
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0064.PAS">Original</a><b>]</b></p></body>
+</html>

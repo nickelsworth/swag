@@ -1,0 +1,465 @@
+<html>
+<head><title> "Fast Disk File Text Reading" by DON STRENCZEWILK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0074.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A+,B-,D+,E-,F-,I-,L+,N-,O-,R-,S-,V-}
+{$M 16384,0,655360}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>RLINE<font color="#000080">;
+
+</font><font color="#008000"><i>(*********************************************************************
+                   Fast disk file text reading operations.
+
+        Address comments, complaints, suggestions on CompuServe to
+                       Don Strenczewilk [72617,132]
+
+
+    This unit contains a fast reading object designed for high speed
+    reading standard ASCII disk files.
+
+    The RLINE unit uses about 600 bytes of your programs code space,
+    and 0 data.
+
+    All of RLobject's methods return the result of their operation in
+    the RFerror field, except for methods: FFilePos and FClose, which
+    have no error codes.  RFerror should be checked after each call to
+    one of the methods that set it, because it is re-set with each
+    method call.
+
+**********************************************************************)
+  </i></font><font color="#FF0000"><b>Interface
+</b></font><font color="#008000"><i>(*********************************************************************)
+
+</i></font><font color="#FF0000"><b>USES
+  </b></font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+  </b></font>RFobject <font color="#000080">= </font><font color="#FF0000"><b>OBJECT
+      </b></font>_Handle  <font color="#000080">: </font>Word<font color="#000080">;        </font><font color="#008000"><i>{ File handle }
+      </i></font>_BufPtr  <font color="#000080">: </font>Pointer<font color="#000080">;     </font><font color="#008000"><i>{ BufOfs, BufSeg}
+      </i></font>_Bpo<font color="#000080">,                   </font><font color="#008000"><i>{ Current buffer position }
+      </i></font>_BSize<font color="#000080">,                 </font><font color="#008000"><i>{ Buffer size in bytes }
+      </i></font>_BLeft<font color="#000080">,                 </font><font color="#008000"><i>{ Bytes left in buffer to scan }
+      </i></font>_NBufs   <font color="#000080">: </font>Word<font color="#000080">;        </font><font color="#008000"><i>{ Number of buffers read. = 0 if none. }
+      </i></font>_TotBytesInBuf <font color="#000080">: </font>Word<font color="#000080">;  </font><font color="#008000"><i>{ Total bytes that were read into current buffer.}
+      </i></font>RFerror <font color="#000080">: </font>Word<font color="#000080">;</font>	      <font color="#008000"><i>{ RFobject's IOResult }
+
+      </i></font><font color="#FF0000"><b>PROCEDURE </b></font>FOpen<font color="#000080">(</font>Fn      <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;  </font><font color="#008000"><i>{ Name of file to open. }
+</i></font>		      DBSize  <font color="#000080">: </font>Word<font color="#000080">;     </font><font color="#008000"><i>{ Size of buffer. 512 bytes minimum. }
+</i></font>		      <font color="#FF0000"><b>VAR </b></font>BufP<font color="#000080">);          </font><font color="#008000"><i>{ Disk buffer to use. }
+      </i></font><font color="#FF0000"><b>PROCEDURE </b></font>FClose<font color="#000080">;
+      </font><font color="#FF0000"><b>PROCEDURE </b></font>FReadLn<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>S <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">); </font><font color="#008000"><i>{ String variable to read next line to. }
+      </i></font><font color="#FF0000"><b>PROCEDURE </b></font>FRead<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Ch  <font color="#000080">: </font>Char<font color="#000080">);  </font><font color="#008000"><i>{ Char variable to read next line to. }
+      </i></font><font color="#FF0000"><b>FUNCTION  </b></font>FFilePos <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font><font color="#FF0000"><b>PROCEDURE </b></font>FSeek<font color="#000080">(</font>FPo <font color="#000080">: </font>LongInt<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+  </font>RFextendedP <font color="#000080">= ^</font>RFextended<font color="#000080">;
+  </font>RFextended <font color="#000080">= </font><font color="#FF0000"><b>Object</b></font><font color="#000080">(</font>RFobject<font color="#000080">)
+    </font>FileName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+
+    </font><font color="#FF0000"><b>CONSTRUCTOR </b></font>Init<font color="#000080">(</font>Fn <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;</font>	  <font color="#008000"><i>{ Name of file to open. }
+</i></font>		     DBSize <font color="#000080">: </font>Word<font color="#000080">;       </font><font color="#008000"><i>{ Size of buffer. }
+</i></font>		     <font color="#FF0000"><b>VAR </b></font>BufP<font color="#000080">);           </font><font color="#008000"><i>{ Address of disk buffer }
+    </i></font><font color="#FF0000"><b>Destructor </b></font>Done<font color="#000080">;
+    </font><font color="#FF0000"><b>FUNCTION </b></font>FileSize <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font><font color="#FF0000"><b>Function </b></font>RFerrorString <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>PROCEDURE </b></font>Reset<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+  </b></font>BufRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Lno <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ The first line number in the buffer }
+    </i></font>FP  <font color="#000080">: </font>LongInt<font color="#000080">;  </font><font color="#008000"><i>{ file position of first line in buffer. }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>MaxBufs <font color="#000080">= </font><font color="#800000">8191</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+  </b></font>BufferArray <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxBufs<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BufRec<font color="#000080">;
+
+</font><font color="#008000"><i>{ When FileOfLines is initialized with SizeForBuffer = 256, it can index
+  files up to 2,096,896 bytes long.
+{ With SizeForBuffer = 4096, it will handle files up to 33,550,336 bytes. }
+
+  </i></font>FileOfLinesPtr <font color="#000080">= ^</font>FileOfLines<font color="#000080">;
+  </font>FileOfLines <font color="#000080">= </font><font color="#FF0000"><b>Object</b></font><font color="#000080">(</font>RFextended<font color="#000080">)
+    </font>TBuf <font color="#000080">: </font>Pointer<font color="#000080">;</font>		<font color="#008000"><i>{ Disk buffer pointer. }
+    </i></font>BufSize <font color="#000080">: </font>Integer<font color="#000080">;</font>		<font color="#008000"><i>{ Disk buffer size. }
+    </i></font>LastLineNum <font color="#000080">: </font>LongInt<font color="#000080">;      </font><font color="#008000"><i>{ Last line number accessed. }
+    </i></font>LastLine <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;          </font><font color="#008000"><i>{ Last line read. }
+    </i></font>TotalLines <font color="#000080">: </font>LongInt<font color="#000080">;       </font><font color="#008000"><i>{ Total lines in file. }
+    </i></font>BufRay <font color="#000080">: ^</font>BufferArray<font color="#000080">;      </font><font color="#008000"><i>{ Index of buffers for paging. }
+    </i></font>NBuffers <font color="#000080">: </font>Integer<font color="#000080">;
+
+    </font><font color="#FF0000"><b>Constructor </b></font>Init<font color="#000080">(</font>FN <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font>		     SizeForBuffer <font color="#000080">: </font>Word<font color="#000080">);
+    </font><font color="#FF0000"><b>Destructor </b></font>Done<font color="#000080">;
+    </font><font color="#FF0000"><b>PROCEDURE </b></font>SeekLine<font color="#000080">(</font>Row <font color="#000080">: </font>LongInt<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(*---------------------------------------------------------------------
+PROCEDURE RFobject.FOpen
+
+A file must first be successfully opened with a call to FOpen, before any of
+the other routines are used.
+
+A buffer must be declared to be passed the FOpen.  There are no restrictions
+on the location of the buffer, so it can be a global or local variable, or
+allocated with New() or GetMem().
+
+
+PROCEDURE FOpen(Fn  : STRING;  { Name of file to open. }
+		DBSize : Word; { Size of buffer. 512 bytes minimum. }
+		VAR BufP);     { Disk buffer to use. }
+
+  If successful:
+    Sets RFerror to 0.
+
+  If not successful:
+    Sets RFerror to DOS error code if a DOS error occured,
+    or error 12 (Invalid File Access Code) if the buffer size is 0.
+
+NOTES:
+  The SYSTEM unit FileMode variable is used as the DOS File Access Mode
+  passed to DOS function $3D, to open the file.  Actually, the low 3 bits
+  are set to zero, specifying Read-Only access, but the high 5 file
+  sharing bits are passed.
+
+TRAPS:
+  If using a buffer allocated with New() or GetMem(), be sure to use the
+  caret after it for the BufP parameter. Ie. RF.FOpen(Fn, BSize, BufP^);
+
+Never call FOpen twice with the same RFobject variable without calling
+FCLOSE first.
+
+EXAMPLE:
+VAR
+  RF : RFobject;
+  Buffer : Array[1..2048] of Char;
+BEGIN
+  System.FileMode := 0;
+  RF.FOpen('HELLO.PAS', Sizeof(Buffer), Buffer);
+  If RFerror = 0
+  THEN Writeln('Success')
+  ELSE Writeln('Error: ', i);
+...
+
+--------------------------------------------------------------------------
+PROCEDURE RFobject.FClose  - When done with the file, it must be closed
+			     with a call to FClose:
+
+PROCEDURE FClose;
+
+Closes previously opened RFrec.
+Returns nothing.
+
+This procedure attempts to identify whether the file has been previously
+opened before it attempts to ask DOS to close it.  It does not attempt to
+close the file if:
+
+ a) RF.BSize = 0. PROCEDURE FOpen sets RF.BSize to 0 if DOS open failed.
+or
+ b) RF.Handle &lt; 5, in which case it would be a standard DOS handle, which
+    shouln't be closed.
+
+TRAP: A problem that could occur with this scheme would be if (the file was
+never even attempted to be opened by FOpen) AND (the handle = the handle of
+a file that is currently opened somewhere else in the program).
+
+----------------------------------------------------------------------
+PROCEDURE RFobject.FReadLn
+
+FReadLn - Reads a string of characters up to the next ^M, or
+	  the physical end of file, whichever comes first.
+	  ^Z is ignored if it occurs at the end of the file.
+	  If a ^Z appears before the end of the file, it is passed
+	  on to &quot;S&quot;.
+
+	  VAR &quot;S&quot;, which receives the string, MUST be of TYPE STRING
+	  or STRING[255].
+
+	  The maximum length of the string returned to caller is 255
+	  characters.  If more than 255 characters are passed in the
+	  file before ^M or &lt;EOF&gt;, the remaining characters are
+	  discarded.
+
+
+PROCEDURE FReadLn(VAR S   : STRING); { String variable to read next line to. }
+
+On success:
+  Sets RFerror to 0.
+  S = next string read from file RF.Handle.
+On failure:
+  Sets RFerror to DOS error code,
+  or $FFFF if End of File
+
+Works like a Turbo Pascal Readln(F, S); except:
+    (1) It works only with disk files.
+    (2) Only reads type STRING. ie. not integers, words, or any other type.
+    (3) It is much faster.
+    (4) Doesn't stop when a ^Z is encountered before end of file.  If a ^Z
+	is encountered AT the end of file, it is stripped.  Any ^Z's
+	encountered before the physical end of the file are passed on
+	to the string.
+    (5) RFerror is set to $FFFF after calling this if the physical
+	end of file is reached.  The value of &quot;S&quot; is invalid when the
+	$FFFF end of file result is set.
+
+----------------------------------------------------------------------
+PROCEDURE RFobject.FRead - Reads the next character from the file:
+
+PROCEDURE FRead(VAR Ch  : Char);  { Char variable to read next line to. }
+
+Works the same as FReadLn but returns one character instead of a string.
+All characters are passed on to Ch except ^Z if it occurs at end of file.
+Any ^Z found before the physical end of file is passed on to Ch.
+
+If successful:
+  Sets RFerror to 0.
+  Ch = next character in the file.
+
+If failed:
+  Sets RFerror to either DOS error code,
+  or $FFFF if physical End of File
+
+----------------------------------------------------------------------
+Function RFobject.FFilePos - Returns current file position for use with FSeek.
+
+FUNCTION FFilePos : LongInt;
+
+Returns current file position. RF must have been previously opened.
+If FFilePos is called before FOpen is called successfully, the results
+will be meaningless.
+
+----------------------------------------------------------------------
+PROCEDURE RFobject.FSeek - Seeks to position FPo in previously opened RF.
+
+PROCEDURE FSeek(FPo : LongInt) : Word;
+
+If successful,
+  RFerror is set to 0.
+
+If failed,
+  RFerror is set to DOS error code.
+
+To Reset the file, call RFSeek with FPo := 0.  Ie. FSeek(0);
+
+On a normal ^M^J ascii file, FFilePos will most often return the position of
+the ^J after a call to FReadLn.  Because FReadLn strips leading ^J's, this
+shouldn't be a problem.  But, bear that in mind if using the FFilePos
+results for your own untyped file routines.
+
+(****************************************************************************)
+</i></font><font color="#FF0000"><b>Implementation
+</b></font><font color="#008000"><i>(****************************************************************************)
+
+{ RFOBJECT ----------------------------------------------------------------}
+
+  {$L RLINE.OBJ}
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>RFobject<font color="#000080">.</font>FOpen<font color="#000080">(</font>Fn    <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font>			   DBSize <font color="#000080">: </font>Word<font color="#000080">;
+</font>			   <font color="#FF0000"><b>VAR </b></font>BufP<font color="#000080">); </font><font color="#FF0000"><b>EXTERNAL</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>RFobject<font color="#000080">.</font>FClose<font color="#000080">; </font><font color="#FF0000"><b>EXTERNAL</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>RFobject<font color="#000080">.</font>FReadLn<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>S <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">); </font><font color="#FF0000"><b>EXTERNAL</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>RFobject<font color="#000080">.</font>FRead<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Ch <font color="#000080">: </font>Char<font color="#000080">); </font><font color="#FF0000"><b>EXTERNAL</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>RFobject<font color="#000080">.</font>FSeek<font color="#000080">(</font>FPo <font color="#000080">: </font>LongInt<font color="#000080">); </font><font color="#FF0000"><b>EXTERNAL</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FUNCTION  </b></font>RFobject<font color="#000080">.</font>FFilePos <font color="#000080">: </font>LongInt<font color="#000080">; </font><font color="#FF0000"><b>EXTERNAL</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ RFEXTENDED --------------------------------------------------------------}
+
+  </i></font><font color="#FF0000"><b>CONSTRUCTOR </b></font>RFextended<font color="#000080">.</font>Init<font color="#000080">(</font>Fn <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;   </font><font color="#008000"><i>{ Name of file to open. }
+</i></font>			      DBSize <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#008000"><i>{ Size of buffer. }
+</i></font>			      <font color="#FF0000"><b>VAR </b></font>BufP<font color="#000080">);     </font><font color="#008000"><i>{ Address of disk buffer }
+  </i></font><font color="#FF0000"><b>BEGIN
+    </b></font>FileName <font color="#000080">:= </font>FExpand<font color="#000080">(</font>Fn<font color="#000080">);
+    </font>FOpen<font color="#000080">(</font>Fn<font color="#000080">, </font>DBSize<font color="#000080">, </font>BufP<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>FUNCTION </b></font>RFextended<font color="#000080">.</font>FileSize <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>VAR
+    </b></font>r <font color="#000080">: </font>registers<font color="#000080">;
+    </font>Fpos <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>FPos <font color="#000080">:= </font>FFilePos<font color="#000080">; </font><font color="#008000"><i>{ save current file position }
+    </i></font><font color="#FF0000"><b>with </b></font>r <font color="#FF0000"><b>do begin
+      </b></font>ax <font color="#000080">:= </font><font color="#800000">$4202</font><font color="#000080">;
+      </font>bx <font color="#000080">:= </font>_handle<font color="#000080">;
+      </font>cx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>dx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>msdos<font color="#000080">(</font>r<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>flags <font color="#FF0000"><b>and </b></font>fcarry <font color="#000080">&lt;&gt; </font><font color="#800000">0
+      </font><font color="#FF0000"><b>then </b></font>RFerror <font color="#000080">:= </font>ax
+      <font color="#FF0000"><b>else </b></font>FileSize <font color="#000080">:= (</font>longint<font color="#000080">(</font>dx<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">16</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font>ax<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>_TotBytesInBuf <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ Force FSeek to move file pointer. }
+    </i></font>FSeek<font color="#000080">(</font>FPos<font color="#000080">);          </font><font color="#008000"><i>{ restore current file position }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Function </b></font>RFextended<font color="#000080">.</font>RFerrorString <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{ Converts RFerror to a string. }
+  </i></font><font color="#FF0000"><b>VAR
+    </b></font>S <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+  </font><font color="#FF0000"><b>BEGIN
+    CASE </b></font>RFerror <font color="#FF0000"><b>OF
+      </b></font><font color="#800000">0 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'Success'</font><font color="#000080">;           </font><font color="#008000"><i>{ it's not an error. }
+      </i></font><font color="#800000">100 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'Attempted to read past End Of File.'</font><font color="#000080">;
+      </font><font color="#800000">101 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'Disk write error.'</font><font color="#000080">;
+      </font><font color="#800000">102 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'File not assigned.'</font><font color="#000080">;
+      </font><font color="#800000">103 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'File not opened.'</font><font color="#000080">;
+      </font><font color="#800000">104 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'File not open for input.'</font><font color="#000080">;
+
+      </font><font color="#800000">2 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'File not found.'</font><font color="#000080">;
+      </font><font color="#800000">3 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'Path not found.'</font><font color="#000080">;
+      </font><font color="#800000">4 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'Too many files opened.'</font><font color="#000080">;
+      </font><font color="#800000">5 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'File access denied.'</font><font color="#000080">;
+      </font><font color="#800000">6 </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'Invalid file handle.'</font><font color="#000080">;
+      </font><font color="#800000">$FFFF </font><font color="#000080">: </font>S <font color="#000080">:= </font><font color="#800000">'End Of File.'</font><font color="#000080">; </font><font color="#008000"><i>{ special EOF number, unique to FRead and FReadln }
+      </i></font><font color="#800000">200 </font><font color="#000080">: </font>s <font color="#000080">:= </font><font color="#800000">'Divide by zero.  Buffersize = 0?'</font><font color="#000080">;
+    </font><font color="#FF0000"><b>ELSE BEGIN
+</b></font>	   Str<font color="#000080">(</font>RFerror<font color="#000080">, </font>S<font color="#000080">);
+           </font>S <font color="#000080">:= </font><font color="#800000">'IOerror '</font><font color="#000080">+</font>S<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>RFerrorString <font color="#000080">:= </font>S<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>RFextended<font color="#000080">.</font>Reset<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>FSeek<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>DESTRUCTOR </b></font>RFextended<font color="#000080">.</font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>Fclose<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ FILEOFLINES -------------------------------------------------------}
+
+  </i></font><font color="#FF0000"><b>Constructor </b></font>FileOfLines<font color="#000080">.</font>Init<font color="#000080">(</font>FN <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>SizeForBuffer <font color="#000080">: </font>Word<font color="#000080">);
+  </font><font color="#FF0000"><b>VAR
+    </b></font>F <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+    </font>L<font color="#000080">, </font>RamNeeded<font color="#000080">, </font>FSize <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>BufNum <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>TBuf <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font>BufRay <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font>LastLineNum <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>LastLine <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font>TotalLines <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>If </b></font>MaxAvail <font color="#000080">&gt; </font>SizeForBuffer			<font color="#008000"><i>{ create the disk buffer }
+    </i></font><font color="#FF0000"><b>THEN </b></font>BufSize <font color="#000080">:= </font>SizeForBuffer
+    <font color="#FF0000"><b>ELSE </b></font>BufSize <font color="#000080">:= </font>MaxAvail<font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>BufSize <font color="#000080">&gt;= </font><font color="#800000">256
+    </font><font color="#FF0000"><b>Then </b></font>GetMem<font color="#000080">(</font>TBuf<font color="#000080">,</font>BufSize<font color="#000080">)
+    </font><font color="#FF0000"><b>Else </b></font>Fail<font color="#000080">;
+
+    </font>FileName <font color="#000080">:= </font>FExpand<font color="#000080">(</font>Fn<font color="#000080">);</font>			<font color="#008000"><i>{ open the file. }
+    </i></font>FOpen<font color="#000080">(</font>FileName<font color="#000080">, </font>BufSize<font color="#000080">, </font>TBuf<font color="#000080">^);
+    </font><font color="#FF0000"><b>IF </b></font>RFError <font color="#000080">= </font><font color="#800000">0
+    </font><font color="#FF0000"><b>THEN </b></font>FSize <font color="#000080">:= </font>FileSize<font color="#000080">;
+
+    </font><font color="#FF0000"><b>IF </b></font>RFerror <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      </b></font>Exit<font color="#000080">;  </font><font color="#008000"><i>{ Don't fail so RFerror can be polled in calling routine. }
+
+    </i></font>NBuffers <font color="#000080">:= ((</font>FSize <font color="#FF0000"><b>DIV </b></font>BufSize<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">); </font><font color="#008000"><i>{ allocate ram for bufferarray }
+    </i></font>RamNeeded <font color="#000080">:= </font>NBuffers <font color="#000080">* </font>SizeOf<font color="#000080">(</font>BufRec<font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>MaxAvail <font color="#000080">&lt; </font>RamNeeded<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>NBuffers <font color="#000080">&gt; </font>MaxBufs<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Done<font color="#000080">;
+      </font>Fail<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>GetMem<font color="#000080">(</font>BufRay<font color="#000080">, </font>RamNeeded<font color="#000080">);
+
+    </font><font color="#008000"><i>{ Index the file. }
+    </i></font>BufNum <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>With </b></font>BufRay<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>Do BEGIN
+      </b></font>Lno <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font>FP <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+    </font>FReadLn<font color="#000080">(</font>LastLine<font color="#000080">);
+    </font><font color="#FF0000"><b>While </b></font>RFerror <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>Inc<font color="#000080">(</font>TotalLines<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>_NBufs <font color="#000080">&gt; </font>BufNum<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>BufNum <font color="#000080">&lt; </font>NBuffers<font color="#000080">) </font><font color="#FF0000"><b>Then BEGIN
+</b></font>	Inc<font color="#000080">(</font>BufNum<font color="#000080">);
+</font>	<font color="#FF0000"><b>With </b></font>BufRay<font color="#000080">^[</font>BufNum<font color="#000080">] </font><font color="#FF0000"><b>DO BEGIN
+</b></font>	  Lno <font color="#000080">:= </font>Succ<font color="#000080">(</font>TotalLines<font color="#000080">);
+</font>	  FP <font color="#000080">:= </font>FFilePos<font color="#000080">;
+</font>	<font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>FReadLn<font color="#000080">(</font>LastLine<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>IF </b></font>RFError <font color="#000080">= </font><font color="#800000">$FFFF </font><font color="#008000"><i>{ make it to EOF with no problems? }
+    </i></font><font color="#FF0000"><b>THEN </b></font>Reset<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Destructor </b></font>FileOfLines<font color="#000080">.</font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    If </b></font>BufRay <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil Then </b></font>Freemem<font color="#000080">(</font>BufRay<font color="#000080">,</font>NBuffers <font color="#000080">* </font>SizeOf<font color="#000080">(</font>BufRec<font color="#000080">));
+    </font><font color="#FF0000"><b>If </b></font>TBuf <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil Then </b></font>FreeMem<font color="#000080">(</font>TBuf<font color="#000080">,</font>BufSize<font color="#000080">);
+    </font>BufRay <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font>TBuf <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font>FClose<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>FileOfLines<font color="#000080">.</font>SeekLine<font color="#000080">(</font>Row <font color="#000080">: </font>LongInt<font color="#000080">);
+  </font><font color="#008000"><i>{ Seeks and reads row and puts in string LastLine }
+  </i></font><font color="#FF0000"><b>VAR
+    </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    If </b></font>Row <font color="#000080">&gt; </font>TotalLines <font color="#FF0000"><b>THEN BEGIN
+      </b></font>RFerror <font color="#000080">:= </font><font color="#800000">100</font><font color="#000080">; </font><font color="#008000"><i>{ Attempt to read past end of file. }
+      </i></font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Row <font color="#000080">&lt;&gt; </font>LastLineNum<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>i <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+      </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>i <font color="#000080">&lt;= </font>NBuffers<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>BufRay<font color="#000080">^[</font>i<font color="#000080">].</font>Lno <font color="#000080">&lt; </font>Row<font color="#000080">) </font><font color="#FF0000"><b>Do </b></font>Inc<font color="#000080">(</font>i<font color="#000080">);
+      </font>Dec<font color="#000080">(</font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>With </b></font>BufRay<font color="#000080">^[</font>i<font color="#000080">] </font><font color="#FF0000"><b>DO BEGIN
+</b></font>	FSeek<font color="#000080">(</font>FP<font color="#000080">);
+</font>	<font color="#FF0000"><b>IF </b></font>RFerror <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+</b></font>	  FReadLn<font color="#000080">(</font>LastLine<font color="#000080">);
+</font>	  LastLineNum <font color="#000080">:= </font>Lno<font color="#000080">;
+</font>	<font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>RFerror <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>LastLineNum <font color="#000080">&lt; </font>Row<font color="#000080">) </font><font color="#FF0000"><b>DO
+    BEGIN
+      </b></font>FReadLn<font color="#000080">(</font>LastLine<font color="#000080">);
+      </font>Inc<font color="#000080">(</font>LastLineNum<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ---------------------   RLINE.OBJ needed for this unit ------------ }
+{ cut this block out.  Save as RLINE.XX.  decode with  XX3402 :
+
+{                      XX3402 d RLINE.XX                               }
+{  the file RLINE.OBJ will be created                                  }
+
+</i></font><font color="#000080">*</font>XX3402<font color="#000080">-</font><font color="#800000">000883</font><font color="#000080">-</font><font color="#800000">310792</font><font color="#000080">--</font><font color="#800000">72</font><font color="#000080">--</font><font color="#800000">85</font><font color="#000080">-</font><font color="#800000">14039</font><font color="#000080">-------</font>RLINE<font color="#000080">.</font>OBJ<font color="#000080">--</font><font color="#800000">1</font><font color="#000080">-</font><font color="#FF0000"><b>OF</b></font><font color="#000080">--</font><font color="#800000">1
+</font>U<font color="#000080">+</font>g<font color="#000080">+</font><font color="#800000">0</font>J7AGIt39Y3HHSC66<font color="#000080">++++</font><font color="#800000">3</font>FpQa7j623nQqJhMalZQW<font color="#000080">+</font>UJaJmQqZjPW<font color="#000080">+</font>l9X<font color="#000080">+</font>lW6UF<font color="#000080">+</font><font color="#800000">21</font>d
+xId42kZGH2ZCFGt<font color="#000080">-</font>IooIW<font color="#000080">+</font>A<font color="#000080">+</font>ECZAZU6<font color="#000080">++</font><font color="#800000">4</font>WK<font color="#000080">-</font>U<font color="#000080">+</font><font color="#800000">2</font>F23IEIOM<font color="#000080">-</font>k<font color="#000080">-</font><font color="#800000">6</font><font color="#000080">+++</font><font color="#800000">0</font><font color="#000080">+</font>E2JZUM<font color="#000080">+-</font><font color="#800000">2</font>BDF2J3
+a<font color="#000080">+</font>Q<font color="#000080">+</font><font color="#800000">81</font>o0<font color="#000080">+</font>k2<font color="#000080">-</font>xMk9<font color="#000080">++</font>V4GIl3HIx2FE<font color="#000080">+</font>QY<font color="#000080">-</font>I<font color="#000080">+++</font><font color="#800000">6</font>CIYNDEYd3EpF<font color="#000080">+</font>FYxEFIs8<font color="#000080">+++</font>uY<font color="#000080">-</font>M<font color="#000080">+++</font><font color="#800000">6</font>D
+IYNDEYd3EpF<font color="#000080">+</font>FYBAHpB3Pk<font color="#000080">++</font>Xt<font color="#000080">+</font>L<font color="#000080">+++</font><font color="#800000">02374</font>Ho78FIBIE2NGFI32H2s<font color="#000080">++</font>E0vY<font color="#000080">-</font>I<font color="#000080">+++</font><font color="#800000">6</font>CIYND
+EYd3EpF<font color="#000080">+</font>FZ73EIFU<font color="#000080">+</font>E1tY<font color="#000080">-</font>I<font color="#000080">+++</font><font color="#800000">6</font>CIYNDEYd3EpF<font color="#000080">+</font>FZB3FIiX<font color="#000080">+</font>E0eY<font color="#000080">-</font>U<font color="#000080">+++</font><font color="#800000">6</font>FIYNDEYd3EpF<font color="#000080">+
+</font>FYN7H2JEHpAH<font color="#000080">+</font>U<font color="#000080">-</font><font color="#800000">7</font>W<font color="#000080">+</font>E<font color="#000080">+</font>E86<font color="#000080">-</font>YO<font color="#000080">--+</font>U6<font color="#000080">++</font><font color="#800000">3</font>Qnk9Y7<font color="#000080">+</font>DCfLwBJWym1v349p<font color="#000080">-</font>u85U<font color="#000080">++</font>UCDslLME
+z8mtI<font color="#000080">++</font>ukLA0WgW9yVM5wuEaW<font color="#000080">+</font>oK5wFy<font color="#000080">-</font>iX5znZ41bI3i<font color="#000080">+</font>k<font color="#000080">+</font>um48kvExnG3m4GO7<font color="#000080">-</font>Mh41WO7
+FEX3RUcaWLI0XBUaWII2Aw<font color="#000080">+</font>aWIIE5sjZLQcC<font color="#000080">+</font><font color="#800000">3</font>K9vAFy<font color="#000080">-</font>WO1TEU<font color="#000080">+</font>R<font color="#000080">+</font>waWlrcTjy1ykFq<font color="#000080">-</font><font color="#800000">9E</font>y
+nG49tJr8<font color="#000080">-+</font><font color="#800000">09</font>wchD06hL<font color="#000080">+</font>cjuWlyAk6vMh1zB6MjKlJs4QVu9mCAKzoQAVxYaU5bz4cTNRE37
+WIwCsk9skvXzzzb15iAO7c<font color="#000080">+</font>w0bI2GLEFFctT<font color="#000080">-</font><font color="#800000">9</font>Xz<font color="#000080">+</font><font color="#800000">0</font>j0R<font color="#000080">-</font>kvm5M0WwX2TUe8kU9<font color="#000080">-</font>eiAA<font color="#000080">+</font>ze8
+oB5dwuLFoTCY5wBJWykSz1DGWwf3LUO9TkOCFkE9Hkdo2cjrIP<font color="#000080">+</font>BwetMR0K9mCWZzst5<font color="#000080">-</font>CVZ
+zrDdDTzzRGA8obETE6Z50chD<font color="#000080">+</font>UBD1cZD<font color="#000080">-</font>igEWLw4WIw88w36WwXcRzwnk6Z52<font color="#000080">-</font>y9tJr80<font color="#000080">+-</font>J
+WymAqjn3LUMnmEhD0bERWrQ4zow8zoQ4XZw2l5s8d1D<font color="#000080">+</font>WIQEXhe9tJr80<font color="#000080">+</font><font color="#800000">1</font>c<font color="#000080">+</font>Txmw2a7Hkca
+WUJ5WLw4l5s8eijRJMjg5gJq<font color="#000080">-</font>XD70ok6REKsm<font color="#000080">+</font><font color="#800000">1</font>fIsh40chK1DTlE1Z215I4UrkC<font color="#000080">+</font><font color="#800000">5</font>IYIYW7
+F<font color="#000080">+</font>knojRY06gQWwW5mfU<font color="#000080">+</font>EgoVKb6bXYE2Wxvcdzu9wr6PWoECCw7r<font color="#000080">-</font>PVY<font color="#000080">+</font>CgD8w87F<font color="#000080">+</font>e9F<font color="#000080">+</font><font color="#800000">61
+</font>kcZ2<font color="#000080">-</font>XD<font color="#000080">+</font>WIEE5sjZLQc6<font color="#000080">+</font><font color="#800000">3</font>K9vAFy<font color="#000080">-</font>XDG7ch31<font color="#000080">+</font>j<font color="#000080">+</font>R<font color="#000080">-</font>F67chB0DTV7chB<font color="#000080">-</font>WMfHE61kMDG<font color="#000080">+</font><font color="#800000">6</font>jZ
+LQc2<font color="#000080">+</font>CeQ<font color="#000080">-</font>U123EM<font color="#000080">-+</font>Lq8<font color="#000080">+</font>U<font color="#000080">++</font>R<font color="#000080">+++
+***** </font><font color="#FF0000"><b>END OF </b></font>BLOCK <font color="#800000">1 </font><font color="#000080">*****
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0074.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,179 @@
+<html>
+<head><title> "Another B-Spline Curve" by SEAN PALMER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0027.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+SEAN PALMER
+
+I've been playing around with it as a way to make 'heat-seeking
+missiles' in games. Very interesting...
+
+What I do is have the points set up as follows:
+
+1   : current position
+2&amp;3 : current speed + the current position
+4   : destination
+
+and update current position by indexing somewhere into the curve (like
+at $100 out of $FFFF
+
+This works very well. Problem is that I don't know of a good way to
+change the speed.
+
+Here is a simple demo that makes a dot chase the mouse cursor (needs
+VGA as written) that shows what I mean.
+
+If ANYBODY can make this work smoother or improve on it in any way I
+would appreciate being told how... 8)
+}
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>mouse<font color="#000080">, </font>crt<font color="#000080">;  </font><font color="#008000"><i>{ you will need to change accesses to the mouse unit }
+               { to use a mouse package that you provide }
+</i></font><font color="#FF0000"><b>type
+  </b></font>coord <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>CurveDataRec <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65521 </font><font color="#FF0000"><b>div </b></font>sizeof<font color="#000080">(</font>coord<font color="#000080">)] </font><font color="#FF0000"><b>of </b></font>coord<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>nSteps <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font><font color="#800000">8</font><font color="#000080">;  </font><font color="#008000"><i>{about 8 for smoothness (dots), 4 for speed (lines)}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>color <font color="#000080">: </font>byte<font color="#000080">;
+  </font>src<font color="#000080">, </font>spd<font color="#000080">,
+  </font>dst<font color="#000080">, </font>mov1<font color="#000080">,
+  </font>mov2 <font color="#000080">: </font>coord<font color="#000080">;
+  </font>i <font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>plot<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>mem<font color="#000080">[</font><font color="#800000">$A000 </font><font color="#000080">: </font>y <font color="#000080">* </font><font color="#800000">320 </font><font color="#000080">+ </font>x<font color="#000080">] := </font>color<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>fracMul<font color="#000080">(</font>f<font color="#000080">, </font>f2 <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>Inline</b></font><font color="#000080">(
+  </font><font color="#800000">$58</font><font color="#000080">/                   </font><font color="#008000"><i>{pop ax}
+  </i></font><font color="#800000">$5B</font><font color="#000080">/                   </font><font color="#008000"><i>{pop bx}
+  </i></font><font color="#800000">$F7</font><font color="#000080">/</font><font color="#800000">$E3</font><font color="#000080">/               </font><font color="#008000"><i>{mul bx}
+  </i></font><font color="#800000">$89</font><font color="#000080">/</font><font color="#800000">$D0</font><font color="#000080">);              </font><font color="#008000"><i>{mov ax,dx}
+
+</i></font><font color="#FF0000"><b>function </b></font>mul<font color="#000080">(</font>f<font color="#000080">, </font>f2 <font color="#000080">: </font>word<font color="#000080">) : </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>inline</b></font><font color="#000080">(
+  </font><font color="#800000">$58</font><font color="#000080">/                   </font><font color="#008000"><i>{pop ax}
+  </i></font><font color="#800000">$5B</font><font color="#000080">/                   </font><font color="#008000"><i>{pop bx}
+  </i></font><font color="#800000">$F7</font><font color="#000080">/</font><font color="#800000">$E3</font><font color="#000080">);              </font><font color="#008000"><i>{mul bx}
+
+
+{this is the original full BSpline routine}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>drawBSpline<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>d0 <font color="#000080">: </font>coord<font color="#000080">; </font>nPoints <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>const
+  </b></font>nsa  <font color="#000080">= </font><font color="#800000">$10000 </font><font color="#FF0000"><b>div </b></font><font color="#800000">6</font><font color="#000080">;
+  </font>nsb  <font color="#000080">= </font><font color="#800000">$20000 </font><font color="#FF0000"><b>div </b></font><font color="#800000">3</font><font color="#000080">;
+  </font>step <font color="#000080">= </font><font color="#800000">$10000 </font><font color="#FF0000"><b>div </b></font>nSteps<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">, </font>xx<font color="#000080">, </font>yy <font color="#000080">: </font>word<font color="#000080">;
+  </font>t1<font color="#000080">, </font>t2<font color="#000080">, </font>t3 <font color="#000080">: </font>word<font color="#000080">;
+  </font>c1<font color="#000080">, </font>c2<font color="#000080">, </font>c3<font color="#000080">, </font>c4 <font color="#000080">: </font>word<font color="#000080">;
+  </font>d <font color="#000080">: </font>curveDataRec <font color="#FF0000"><b>absolute </b></font>d0<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>t1 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>color <font color="#000080">:= </font><font color="#800000">32 </font><font color="#000080">+ </font><font color="#800000">2</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>nPoints <font color="#000080">- </font><font color="#800000">4 </font><font color="#FF0000"><b>do
+  begin
+    </b></font><font color="#008000"><i>{algorithm converted from Steve Enns' original Basic subroutine}
+    </i></font><font color="#FF0000"><b>repeat
+      </b></font>t2 <font color="#000080">:= </font>fracMul<font color="#000080">(</font>t1<font color="#000080">, </font>t1<font color="#000080">);
+      </font>t3 <font color="#000080">:= </font>fracMul<font color="#000080">(</font>t2<font color="#000080">, </font>t1<font color="#000080">);
+      </font>c1 <font color="#000080">:= (</font>integer<font color="#000080">(</font>t2 <font color="#000080">- </font>t1<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">) + </font>nsa <font color="#000080">- </font>fracmul<font color="#000080">(</font>nsa<font color="#000080">, </font>t3<font color="#000080">);
+      </font>c2 <font color="#000080">:= (</font>t3 <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) + </font>nsb <font color="#000080">- </font>t2<font color="#000080">;
+      </font>c3 <font color="#000080">:= ((</font>t2 <font color="#000080">+ </font>t1 <font color="#000080">- </font>t3<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) + </font>nsa<font color="#000080">;
+      </font>c4 <font color="#000080">:= </font>fracmul<font color="#000080">(</font>nsa<font color="#000080">, </font>t3<font color="#000080">);
+      </font>xx <font color="#000080">:= (</font>mul<font color="#000080">(</font>c1<font color="#000080">, </font>d<font color="#000080">[</font>i<font color="#000080">].</font>x<font color="#000080">) + </font>mul<font color="#000080">(</font>c2<font color="#000080">, </font>d<font color="#000080">[</font>i <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">].</font>x<font color="#000080">) +
+             </font>mul<font color="#000080">(</font>c3<font color="#000080">, </font>d<font color="#000080">[</font>i <font color="#000080">+ </font><font color="#800000">2</font><font color="#000080">].</font>x<font color="#000080">) + </font>mul<font color="#000080">(</font>c4<font color="#000080">, </font>d<font color="#000080">[</font>i <font color="#000080">+ </font><font color="#800000">3</font><font color="#000080">].</font>x<font color="#000080">)) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+      </font>yy <font color="#000080">:= (</font>mul<font color="#000080">(</font>c1<font color="#000080">, </font>d<font color="#000080">[</font>i<font color="#000080">].</font>y<font color="#000080">) + </font>mul<font color="#000080">(</font>c2<font color="#000080">, </font>d<font color="#000080">[</font>i <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">].</font>y<font color="#000080">) +
+             </font>mul<font color="#000080">(</font>c3<font color="#000080">, </font>d<font color="#000080">[</font>i <font color="#000080">+ </font><font color="#800000">2</font><font color="#000080">].</font>y<font color="#000080">) + </font>mul<font color="#000080">(</font>c4<font color="#000080">, </font>d<font color="#000080">[</font>i <font color="#000080">+ </font><font color="#800000">3</font><font color="#000080">].</font>y<font color="#000080">)) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+      </font>plot<font color="#000080">(</font>xx<font color="#000080">, </font>yy<font color="#000080">);
+      </font>inc<font color="#000080">(</font>t1<font color="#000080">, </font>step<font color="#000080">);
+    </font><font color="#FF0000"><b>until </b></font>t1 <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{this is why nSteps must be even power of 2}
+    </i></font>inc<font color="#000080">(</font>color<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{find 1/nth point in BSpline}  {this is what does the B-Spline work}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>moveTowards<font color="#000080">(</font>d1<font color="#000080">, </font>d2<font color="#000080">, </font>d3<font color="#000080">, </font>d4 <font color="#000080">: </font>coord<font color="#000080">; </font>t1 <font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>mov <font color="#000080">: </font>coord<font color="#000080">);
+</font><font color="#FF0000"><b>const
+  </b></font>nsa <font color="#000080">= </font><font color="#800000">$10000 </font><font color="#FF0000"><b>div </b></font><font color="#800000">6</font><font color="#000080">;
+  </font>nsb <font color="#000080">= </font><font color="#800000">$20000 </font><font color="#FF0000"><b>div </b></font><font color="#800000">3</font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>t2<font color="#000080">, </font>t3 <font color="#000080">: </font>word<font color="#000080">;
+  </font>c1<font color="#000080">, </font>c2<font color="#000080">,
+  </font>c3<font color="#000080">, </font>c4 <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>t2 <font color="#000080">:= </font>fracMul<font color="#000080">(</font>t1<font color="#000080">, </font>t1<font color="#000080">);
+  </font>t3 <font color="#000080">:= </font>fracMul<font color="#000080">(</font>t2<font color="#000080">, </font>t1<font color="#000080">);
+  </font>c1 <font color="#000080">:= (</font>integer<font color="#000080">(</font>t2 <font color="#000080">- </font>t1<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">) + </font>nsa <font color="#000080">- </font>fracmul<font color="#000080">(</font>nsa<font color="#000080">, </font>t3<font color="#000080">);
+  </font>c2 <font color="#000080">:= (</font>t3 <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) + </font>nsb <font color="#000080">- </font>t2<font color="#000080">;
+  </font>c3 <font color="#000080">:= ((</font>t2 <font color="#000080">+ </font>t1 <font color="#000080">- </font>t3<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) + </font>nsa<font color="#000080">;
+  </font>c4 <font color="#000080">:= </font>fracmul<font color="#000080">(</font>nsa<font color="#000080">, </font>t3<font color="#000080">);
+  </font>mov<font color="#000080">.</font>x <font color="#000080">:= (</font>mul<font color="#000080">(</font>c1<font color="#000080">, </font>d1<font color="#000080">.</font>x<font color="#000080">) + </font>mul<font color="#000080">(</font>c2<font color="#000080">, </font>d2<font color="#000080">.</font>x<font color="#000080">) + </font>mul<font color="#000080">(</font>c3<font color="#000080">, </font>d3<font color="#000080">.</font>x<font color="#000080">) + </font>mul<font color="#000080">(</font>c4<font color="#000080">, </font>d4<font color="#000080">.</font>x<font color="#000080">)) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+  </font>mov<font color="#000080">.</font>y <font color="#000080">:= (</font>mul<font color="#000080">(</font>c1<font color="#000080">, </font>d1<font color="#000080">.</font>y<font color="#000080">) + </font>mul<font color="#000080">(</font>c2<font color="#000080">, </font>d2<font color="#000080">.</font>y<font color="#000080">) + </font>mul<font color="#000080">(</font>c3<font color="#000080">, </font>d3<font color="#000080">.</font>y<font color="#000080">) + </font>mul<font color="#000080">(</font>c4<font color="#000080">, </font>d4<font color="#000080">.</font>y<font color="#000080">)) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">mov ax, $13
+    int $10
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{init vga/mcga graphics}
+
+  {mouse.init;}
+  </i></font>mshow<font color="#000080">;
+
+  </font>src<font color="#000080">.</font>x <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+  </font>src<font color="#000080">.</font>y <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+  </font>spd<font color="#000080">.</font>x <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+  </font>spd<font color="#000080">.</font>y <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+  </font>dst<font color="#000080">.</font>x <font color="#000080">:= </font><font color="#800000">315</font><font color="#000080">;
+  </font>dst<font color="#000080">.</font>y <font color="#000080">:= </font><font color="#800000">190</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>repeat
+   </b></font><font color="#008000"><i>{for i:=0 to 23 do begin}
+   { color:=i+32;}
+   { inc(dst.x,i);}
+    </i></font>delay<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+    </font><font color="#008000"><i>{mouse.check;}  {this loads Mouse.X, Mouse.Y, Mouse.Button from driver}
+    </i></font>mhide<font color="#000080">;
+    </font>color <font color="#000080">:= </font><font color="#800000">15</font><font color="#000080">;
+    </font>plot<font color="#000080">(</font>src<font color="#000080">.</font>x<font color="#000080">, </font>src<font color="#000080">.</font>y<font color="#000080">);
+    </font>color <font color="#000080">:= </font><font color="#800000">14</font><font color="#000080">;
+    </font>plot<font color="#000080">(</font>spd<font color="#000080">.</font>x<font color="#000080">, </font>spd<font color="#000080">.</font>y<font color="#000080">);
+    </font>dst<font color="#000080">.</font>x <font color="#000080">:= </font>mousex <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+    </font>dst<font color="#000080">.</font>y <font color="#000080">:= </font>mousey<font color="#000080">;
+    </font>color <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>plot<font color="#000080">(</font>dst<font color="#000080">.</font>x<font color="#000080">, </font>dst<font color="#000080">.</font>y<font color="#000080">);
+    </font>mshow<font color="#000080">;
+
+    </font><font color="#008000"><i>{the parameters in these next two lines can be changed}
+    {I have played with almost all possible combinations and}
+    {most work, but not well, so don't be afraid to play around}
+    {But I think an entirely different approach is needed for the}
+    {second moveTowards..}
+
+    </i></font>moveTowards<font color="#000080">(</font>src<font color="#000080">, </font>src<font color="#000080">, </font>spd<font color="#000080">, </font>dst<font color="#000080">, </font><font color="#800000">$0010</font><font color="#000080">, </font>mov1<font color="#000080">);
+    </font>moveTowards<font color="#000080">(</font>src<font color="#000080">, </font>spd<font color="#000080">, </font>dst<font color="#000080">, </font>dst<font color="#000080">, </font><font color="#800000">$5000</font><font color="#000080">, </font>mov2<font color="#000080">);
+    </font>src <font color="#000080">:= </font>mov1<font color="#000080">;
+    </font>longint<font color="#000080">(</font>spd<font color="#000080">) := (</font>longint<font color="#000080">(</font>spd<font color="#000080">) * </font><font color="#800000">7 </font><font color="#000080">+ </font>longint<font color="#000080">(</font>mov2<font color="#000080">)) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">3 </font><font color="#FF0000"><b>and </b></font><font color="#800000">$1FFF1FFF</font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font><font color="#800000">1</font><font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+
+  </font>mhide<font color="#000080">;
+
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ax, 3
+    int $10
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{text mode again}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0027.PAS">Original</a><b>]</b></p></body>
+</html>

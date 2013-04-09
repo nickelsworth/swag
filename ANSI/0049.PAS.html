@@ -1,0 +1,969 @@
+<html>
+<head><title> "The Fastest CD-Audio Unit" by YUVAL MELAMED</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ANSI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0049.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+I'd like to CONTRIBUTE my own source code of a fully-functional, very
+loaded, very FAST (Turbo Pascal's built-in assembler with my unique
+techniques to speed up the code), yet very tiny!!! (8192bytes after
+compilation), Enhanced CD-ROM AUDIO CONTROL unit.
++The code DOES contain DOZENS of comments, and very good ones indeed!
++The code DOES apply to the common programming rules of formatting.
+-The code does NOT contain huge objects/arrays/pointers/heaps/etc...
+-The code does NOT contain certain MSCDEX commands known to be
+unfunctional, such as &quot;Get UPC/EAN Stamp&quot;, etc...
+=====
+(*
+	unit: Enhanced CD-ROM Audio control unit.
+  code: Variane (Yuval Melamed), Israel, 1996.
+	base: Ralf Brown's Interrupt List 48.
+	date: 5/3/1996, 00:05.
+*)
+
+{$A-,D-,G+,I-,L-,S-,R- TAB Spacing = 2}
+</i></font><font color="#FF0000"><b>unit </b></font>CDAudio<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+type
+</b></font>	<font color="#008000"><i>(* User interface basic type - time representor: *)
+</i></font>	TMSF <font color="#000080">= </font><font color="#FF0000"><b>record
+</b></font>  	<font color="#008000"><i>(* Order was reversed (FSMT) to match the Red book format: *)
+</i></font>  	Frm<font color="#000080">,        </font><font color="#008000"><i>{frame, 1/75 of a second}
+</i></font>		Sec<font color="#000080">, </font>Min<font color="#000080">,   </font><font color="#008000"><i>{seconds, minutes}
+</i></font>		Trk <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#008000"><i>{track, or 0 to represent disc time, or 0/1 as audio/data}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>(* the TrkArr is actually used only as a pointer in DiscRec record.
+		 the MSF part - location of track on disc.
+     the T (Trk field) is 1 for data track track, 0 for audio.        *)
+  </i></font>TrkArr <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">01</font><font color="#000080">..</font><font color="#800000">99</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>TMSF<font color="#000080">;
+  </font><font color="#008000"><i>(* Use this type to represent a whole disc, and compare between discs: *)
+</i></font>	DiscRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Length <font color="#000080">: </font>TMSF<font color="#000080">;   </font><font color="#008000"><i>{disc's length in [MSF], number of tracks in Trk field}
+    </i></font>Track <font color="#000080">: ^</font>TrkArr<font color="#000080">; </font><font color="#008000"><i>{TMSF(s), track length [MSF]/data-flags [T]}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+</b></font>	<font color="#008000"><i>(* System variables, initialized when unit starts: *)
+  </i></font>NumCDDrv <font color="#000080">: </font>Byte<font color="#000080">;               </font><font color="#008000"><i>{number of cd-rom drives}
+  </i></font>FstCDDrv <font color="#000080">: </font>Char<font color="#000080">;               </font><font color="#008000"><i>{first cd-rom drive letter}
+  </i></font>DrvList <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">; </font><font color="#008000"><i>{drive letters list}
+  </i></font>MSCDEXVer <font color="#000080">: </font>Real<font color="#000080">;              </font><font color="#008000"><i>{mscdex.exe version, 0 for none}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font><font color="#008000"><i>(* Current-drive parameters (change drive only by ChangeCDROMDrv): *)
+  </i></font>CurCDDrv <font color="#000080">: </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9 </font><font color="#000080">= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{current cd-rom drive to work with (user variable)}
+
+
+(* Drive status/capabilities functions: *)
+</i></font><font color="#FF0000"><b>function </b></font>DoorOpen <font color="#000080">: </font>Boolean<font color="#000080">;   </font><font color="#008000"><i>{is door open?}
+</i></font><font color="#FF0000"><b>function </b></font>Locked <font color="#000080">: </font>Boolean<font color="#000080">;     </font><font color="#008000"><i>{is door locked?}
+</i></font><font color="#FF0000"><b>function </b></font>NoDisc <font color="#000080">: </font>Boolean<font color="#000080">;     </font><font color="#008000"><i>{is drive empty?}
+</i></font><font color="#FF0000"><b>function </b></font>DrvBusy <font color="#000080">: </font>Boolean<font color="#000080">;    </font><font color="#008000"><i>{is drive busy? (mostly playing)}
+</i></font><font color="#FF0000"><b>function </b></font>InPause <font color="#000080">: </font>Boolean<font color="#000080">;    </font><font color="#008000"><i>{is audio in pause?}
+</i></font><font color="#FF0000"><b>function </b></font>AudVolume <font color="#000080">: </font>Byte<font color="#000080">;     </font><font color="#008000"><i>{what's the audio channels' volume?}
+</i></font><font color="#FF0000"><b>function </b></font>Writable <font color="#000080">: </font>Boolean<font color="#000080">;   </font><font color="#008000"><i>{does the drive writable?}
+</i></font><font color="#FF0000"><b>function </b></font>SuppAudVid <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#008000"><i>{does it supports audio/video tracks?}
+</i></font><font color="#FF0000"><b>function </b></font>SuppAudChn <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#008000"><i>{does it support audio channels? (volume)}
+
+(* Disc/audio current information: *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetDiscInfo<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Info <font color="#000080">: </font>DiscRec<font color="#000080">);          </font><font color="#008000"><i>{get all disc data}
+</i></font><font color="#FF0000"><b>procedure </b></font>GetDiscLen<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>DLen <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">);            </font><font color="#008000"><i>{get disc length/tracks}
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTrkLoc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TLoc <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>Trk <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#008000"><i>{get track's location}
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTrkLen<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TLen <font color="#000080">: </font>TMSF<font color="#000080">; </font>Trk <font color="#000080">: </font>Byte<font color="#000080">);   </font><font color="#008000"><i>{get length of track}
+</i></font><font color="#FF0000"><b>procedure </b></font>CurDiscPos<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>DPos <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">);            </font><font color="#008000"><i>{get disc position}
+</i></font><font color="#FF0000"><b>procedure </b></font>CurTrkPos<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TPos <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">);             </font><font color="#008000"><i>{get track position}
+</i></font><font color="#FF0000"><b>procedure </b></font>GetDiscRem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>DRem <font color="#000080">: </font>TMSF<font color="#000080">);              </font><font color="#008000"><i>{get disc remaining time}
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTrkRem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TRem <font color="#000080">: </font>TMSF<font color="#000080">);               </font><font color="#008000"><i>{get track remain. time}
+
+(* CD-ROM drive commands: *)
+</i></font><font color="#FF0000"><b>procedure </b></font>EjectDoor<font color="#000080">;             </font><font color="#008000"><i>{eject tray out, if not locked}
+</i></font><font color="#FF0000"><b>procedure </b></font>InsertDoor<font color="#000080">;            </font><font color="#008000"><i>{insert tray inside}
+</i></font><font color="#FF0000"><b>procedure </b></font>LockDoor<font color="#000080">;              </font><font color="#008000"><i>{lock tray (no eject till reset/unlock)}
+</i></font><font color="#FF0000"><b>procedure </b></font>UnlockDoor<font color="#000080">;            </font><font color="#008000"><i>{unlock the tray}
+</i></font><font color="#FF0000"><b>procedure </b></font>SetVolume<font color="#000080">(</font>Vol <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#008000"><i>{set all audio channel's volume}
+</i></font><font color="#FF0000"><b>procedure </b></font>SeekPos<font color="#000080">(</font>SPos <font color="#000080">: </font>TMSF<font color="#000080">);  </font><font color="#008000"><i>{move drive's heads to new location}
+
+(* Play/pause/resume procedures: *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayAudio<font color="#000080">;                       </font><font color="#008000"><i>{play/resume current position}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayFrom<font color="#000080">(</font>From <font color="#000080">: </font>TMSF<font color="#000080">);           </font><font color="#008000"><i>{play from specified till end}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayRange<font color="#000080">(</font>From<font color="#000080">, </font>Till <font color="#000080">: </font>TMSF<font color="#000080">);    </font><font color="#008000"><i>{play specified range}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayAmount<font color="#000080">(</font>From<font color="#000080">, </font>Amount <font color="#000080">: </font>TMSF<font color="#000080">); </font><font color="#008000"><i>{play from spec., amount spec.}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayTrack<font color="#000080">(</font>TrkNum <font color="#000080">: </font>Byte<font color="#000080">);        </font><font color="#008000"><i>{play spec. track, till disc end}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlaySingleTrk<font color="#000080">(</font>TrkNum <font color="#000080">: </font>Byte<font color="#000080">);    </font><font color="#008000"><i>{play spec. track, till track end}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayPrevTrk<font color="#000080">;                     </font><font color="#008000"><i>{play pervious track to current}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayNextTrk<font color="#000080">;                     </font><font color="#008000"><i>{play next track to current}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayReverse<font color="#000080">(</font>Skip <font color="#000080">: </font>TMSF<font color="#000080">);        </font><font color="#008000"><i>{play from current - specified}
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayForward<font color="#000080">(</font>Skip <font color="#000080">: </font>TMSF<font color="#000080">);        </font><font color="#008000"><i>{play from current + specified}
+</i></font><font color="#FF0000"><b>procedure </b></font>PauseAudio<font color="#000080">;                      </font><font color="#008000"><i>{pause current audio if playing}
+</i></font><font color="#FF0000"><b>procedure </b></font>ResumeAudio<font color="#000080">;                     </font><font color="#008000"><i>{resume audio, only if paused}
+
+(* Utility functions, for both user, and other procedures: *)
+</i></font><font color="#FF0000"><b>procedure </b></font>SetTMSF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>T<font color="#000080">, </font>M<font color="#000080">, </font>S<font color="#000080">, </font>F <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#008000"><i>{generate TMSF}
+</i></font><font color="#FF0000"><b>procedure </b></font>AddTMSF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>Src <font color="#000080">: </font>TMSF<font color="#000080">);        </font><font color="#008000"><i>{2 TMSF's sum}
+</i></font><font color="#FF0000"><b>procedure </b></font>SubTMSF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>Src <font color="#000080">: </font>TMSF<font color="#000080">);        </font><font color="#008000"><i>{2 TMSF's diff.}
+</i></font><font color="#FF0000"><b>procedure </b></font>DiscTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#000080">: </font>TMSF<font color="#000080">);                     </font><font color="#008000"><i>{track to disc time}
+</i></font><font color="#FF0000"><b>procedure </b></font>TrkTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#000080">: </font>TMSF<font color="#000080">);                      </font><font color="#008000"><i>{disc to track time}
+</i></font><font color="#FF0000"><b>procedure </b></font>ChangeCDROMDrv<font color="#000080">(</font>Drv <font color="#000080">: </font>Byte<font color="#000080">);                    </font><font color="#008000"><i>{change cur. drive}
+</i></font><font color="#FF0000"><b>function </b></font>CmpDiscs<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest<font color="#000080">, </font>Src <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">) : </font>Boolean<font color="#000080">;     </font><font color="#008000"><i>{compare DiscRec's}
+
+
+</i></font><font color="#FF0000"><b>implementation
+
+
+</b></font><font color="#008000"><i>(* --- Internal variables, procedures and functions (hidden to user): --- *)
+
+
+</i></font><font color="#FF0000"><b>var
+  </b></font><font color="#008000"><i>(* Device request header (at maximum used size):
+     (although the size is different every call, this variable wasn't
+      programmed to be local, in order to gain speed when using calls.
+     ofs / size  / description
+     ---   ----    -----------
+     00h   byte    length of block (unused for CD-ROM).
+     01h   byte    subunit within device driver (set automaticly).
+     02h   byte    command code (request specifier).
+     03h   word    status (filled by device driver).
+     05h   8byte   unused/reserved by DOS.
+    ---case command codes: 03h, 0Ch (IOCTL input/output)---
+     0Dh   byte    media descriptor (unused for CD-ROM).
+     0Eh   dword   transfer address (of IOCTL block).
+     12h   word    (call) number of bytes to read/write (unused).
+                   (ret.) actuall number read/written.
+    ---case command code: 83h (CD-ROM seek)---
+     0Dh   byte    addressing mode (0=HSG [default], 1=RedBook).
+                   (see HSG function for more info).
+     0Eh   dword   transfer address (ignored).
+     12h   word    number of sectors to read (ignored).
+     14h   dword   starting sector number (at selected address mode).
+    ---case command code: 84h (CD-ROM play)---
+     0Dh   byte    addressing mode (see above).
+     0Eh   dword   starting sector number.
+     12h   dword   number of sectors to play.
+    ---case command codes: 85h, 88h (CD-ROM pause/resume)---
+		 no further fields.                                               *)
+  </i></font>Request <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$00</font><font color="#000080">..</font><font color="#800000">$17</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;    </font><font color="#008000"><i>{multi-porpose block (see above)}
+  (* Play start-address and number of sectors to play. these are -
+     temporary variables to PFrom^ &amp; PCount^ (see const below), because
+		 the 'Request' fields may not be ready to use directly before the
+		 actuall play request.                                              *)
+  </i></font>PFrm<font color="#000080">, </font>PCnt <font color="#000080">: </font>TMSF<font color="#000080">;                    </font><font color="#008000"><i>{play from, play count}
+  (* Transfer buffer (holds information of IOCTL input/output):
+     first byte is always function, rest is data. see at the procedures
+     and functions for more details.                                    *)
+  </i></font>TBuff <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$00</font><font color="#000080">..</font><font color="#800000">$0A</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;      </font><font color="#008000"><i>{multi-porpose buffer}
+  (* This drive letter, is the actuall number of default CD-ROM drive,
+     in digit format (see below), to make interrupt calls faster.      *)
+  </i></font>CurDrive <font color="#000080">: </font>Word<font color="#000080">;                      </font><font color="#008000"><i>{drive's letter (0=A, 1=B, ...)}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font><font color="#008000"><i>(* Play start-address and number of sectors to play.
+     declared as pointers, to be addressed at Request's offsets -
+     0Eh and 10h when using command code 84h (see above).
+     this method saves some code, and makes code easily readable: *)
+</i></font>	PFrom <font color="#000080">: ^</font>Longint <font color="#000080">= @</font>Request<font color="#000080">[</font><font color="#800000">$0E</font><font color="#000080">];     </font><font color="#008000"><i>{play from}
+  </i></font>PCount <font color="#000080">: ^</font>Longint <font color="#000080">= @</font>Request<font color="#000080">[</font><font color="#800000">$12</font><font color="#000080">];    </font><font color="#008000"><i>{play count}
+
+
+(* Red book format: frame/second/minute/unused, and
+   TMSF format : frame/second/minute/track - convertor to:
+   HSG format: minute * 4500 + seconds * 75 + frame - 150.
+   the -150 was dropped in the procedure, because all the unit
+   automaticly handles the 150 frames difference (2sec). *)
+</i></font><font color="#FF0000"><b>function </b></font>HSG<font color="#000080">(</font>RedBook <font color="#000080">: </font>TMSF<font color="#000080">) : </font>Longint<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cl,byte ptr RedBook   </font><font color="#008000"><i>{get frames field}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">ch,ch                 </font><font color="#008000"><i>{clear high byte - CX=CL}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">ah,byte ptr RedBook+1 </font><font color="#008000"><i>{get seconds field}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">dl,byte ptr RedBook+2 </font><font color="#008000"><i>{get minutes field}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">dh,dh                 </font><font color="#008000"><i>{clear high byte - DX=DL}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,75                 </font><font color="#008000"><i>{multiply seconds by 75}
+      </i></font><font color="#FF00FF">mul</font>			<font color="#FF00FF">ah                    </font><font color="#008000"><i>{place result in AX}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">cx,ax                 </font><font color="#008000"><i>{add seconds*75 to frames}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,4500               </font><font color="#008000"><i>{multiply minutes by 4500}
+      </i></font><font color="#FF00FF">mul</font>			<font color="#FF00FF">dx                    </font><font color="#008000"><i>{place result at DX:AX}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">ax,cx                 </font><font color="#008000"><i>{add seconds*75+frames to result}
+      </i></font><font color="#FF00FF">adc</font>			<font color="#FF00FF">dx,0                  </font><font color="#008000"><i>{make sure result stays dword}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Device status (door state/drive capabilities/etc...). *)
+</i></font><font color="#FF0000"><b>function </b></font>DeviceStatus <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,06h                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,word ptr TBuff+1               </font><font color="#008000"><i>{result - low status word}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>(* ----- Interface-declared procedures and functions: ----- *)
+
+
+(* True - door is open, false - door is closed. *)
+</i></font><font color="#FF0000"><b>function </b></font>DoorOpen <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus </font><font color="#008000"><i>{get current device status}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 0   </font><font color="#008000"><i>{check bit 0 of status}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - door is locked, false - door is unlocked. *)
+</i></font><font color="#FF0000"><b>function </b></font>Locked <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus </font><font color="#008000"><i>{get current device status}
+      </i></font><font color="#FF00FF">not</font>			<font color="#FF00FF">al           </font><font color="#008000"><i>{reverse bits values - opposite of unlocked}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 1   </font><font color="#008000"><i>{check bit 1 of status}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - drive is empty, false - disc present. *)
+</i></font><font color="#FF0000"><b>function </b></font>NoDisc <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus </font><font color="#008000"><i>{get current device status}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ah,al        </font><font color="#008000"><i>{transfer high byte of status to function result}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 1   </font><font color="#008000"><i>{check bit 9 of status (bit 1 of high byte)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - drive is busy (mostly playing), false - drive's busy-led is off. *)
+</i></font><font color="#FF0000"><b>function </b></font>DrvBusy <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus          </font><font color="#008000"><i>{only to update status word of Request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,byte ptr Request+4 </font><font color="#008000"><i>{status word's high byte}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 1            </font><font color="#008000"><i>{check bit 9 of status (1 of high byte)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - audio is paused, false - unpaused (unneccessarily playing!). *)
+</i></font><font color="#FF0000"><b>function </b></font>InPause <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,0Fh                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,byte ptr TBuff+1               </font><font color="#008000"><i>{result - low status word}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Drive's volume (left audio channel's volume, presuming rest are same). *)
+</i></font><font color="#FF0000"><b>function </b></font>AudVolume <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,04h                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,byte ptr TBuff+2               </font><font color="#008000"><i>{result - left chn's volume}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - drive can write discs, false - read only (CDROM). *)
+</i></font><font color="#FF0000"><b>function </b></font>Writable <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus </font><font color="#008000"><i>{get current device status}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 3   </font><font color="#008000"><i>{check bit 3 of status}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - drive can play audio/video tracks, false - can't. *)
+</i></font><font color="#FF0000"><b>function </b></font>SuppAudVid <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus </font><font color="#008000"><i>{get current device status}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 4   </font><font color="#008000"><i>{check bit 4 of status}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* True - drive supports audio channels control, false - doesn't. *)
+</i></font><font color="#FF0000"><b>function </b></font>SuppAudChn <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">call</font>		<font color="#FF00FF">DeviceStatus </font><font color="#008000"><i>{get current device status}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,ah        </font><font color="#008000"><i>{transfer high byte of status to function result}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">al,1 shl 0   </font><font color="#008000"><i>{check bit 8 of status (0 of low byte)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Disposes old tracks data field, if any, get disc tracks count &amp; length,
+	 allocate new tracks field, and fill with tracks' parameters.            *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetDiscInfo<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Info <font color="#000080">: </font>DiscRec<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>Trk <font color="#000080">: </font>Byte<font color="#000080">;                                   </font><font color="#008000"><i>{track index}
+</i></font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>if </b></font>Info<font color="#000080">.</font>Track <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then                     </b></font><font color="#008000"><i>{if DiscRec defined -}
+</i></font>  	FreeMem<font color="#000080">(</font>Info<font color="#000080">.</font>Track<font color="#000080">, </font>Info<font color="#000080">.</font>Length<font color="#000080">.</font>Trk <font color="#FF0000"><b>shl </b></font><font color="#800000">2</font><font color="#000080">); </font><font color="#008000"><i>{- then free occupied memory}
+</i></font>	GetDiscLen<font color="#000080">(</font>Info<font color="#000080">.</font>Length<font color="#000080">);                      </font><font color="#008000"><i>{get disc length}
+  </i></font>GetMem<font color="#000080">(</font>Info<font color="#000080">.</font>Track<font color="#000080">, </font>Info<font color="#000080">.</font>Length<font color="#000080">.</font>Trk <font color="#FF0000"><b>shl </b></font><font color="#800000">2</font><font color="#000080">);    </font><font color="#008000"><i>{allocate memory}
+  </i></font><font color="#FF0000"><b>for </b></font>Trk <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Info<font color="#000080">.</font>Length<font color="#000080">.</font>Trk <font color="#FF0000"><b>do            </b></font><font color="#008000"><i>{cycle through all tracks}
+    </i></font>GetTrkLen<font color="#000080">(</font>Info<font color="#000080">.</font>Track<font color="#000080">^[</font>Trk<font color="#000080">], </font>Trk<font color="#000080">);           </font><font color="#008000"><i>{get track's length}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Disc length in global TMSF variable (actually: leadout-2sec),
+   number of tracks, in TMSF's Trk field.                        *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetDiscLen<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>DLen <font color="#008000"><i>{: TMSF} </i></font><font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,0Ah                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bh,byte ptr TBuff+2               </font><font color="#008000"><i>{get last track (=count)}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,word ptr TBuff+3               </font><font color="#008000"><i>{get farames &amp; seconds}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bl,byte ptr TBuff+5               </font><font color="#008000"><i>{get minutes}
+      </i></font><font color="#FF00FF">sub</font>			<font color="#FF00FF">ah,2                              </font><font color="#008000"><i>{subtract 2sec to get length}
+      </i></font><font color="#FF00FF">jns</font>			<font color="#FF00FF">@Return                           </font><font color="#008000"><i>{adjust if &lt; 0}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">ah,60                             </font><font color="#008000"><i>{make Sec field to 59, or 58}
+      </i></font><font color="#FF00FF">dec</font>			<font color="#FF00FF">bl                                </font><font color="#008000"><i>{decrease Min}
+</i></font><font color="#FF00FF">@Return:
+      les</font>			<font color="#FF00FF">di,DLen                           </font><font color="#008000"><i>{address of global variable}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],ax                        </font><font color="#008000"><i>{copy: Frm, Sec}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+2],bx                      </font><font color="#008000"><i>{copy: Min, Trk}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Get track's starting address on disc into global TMSF,
+	 and sets Trk field to 1 if data track, or to 0 if audio track. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTrkLoc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TLoc <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>Trk <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,0Bh                </font><font color="#008000"><i>{function}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,Trk                            </font><font color="#008000"><i>{get track}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff+1,al               </font><font color="#008000"><i>{requested track}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,word ptr TBuff+2               </font><font color="#008000"><i>{get farames &amp; seconds}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bl,byte ptr TBuff+4               </font><font color="#008000"><i>{get minutes}
+      </i></font><font color="#FF00FF">mov     bh,byte ptr TBuff+6               </font><font color="#008000"><i>{get control info}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">bh,1 shl 6                        </font><font color="#008000"><i>{check bit 6 - data track?}
+      </i></font><font color="#FF00FF">shr</font>			<font color="#FF00FF">bh,6                              </font><font color="#008000"><i>{make 0 or 1, acco. to bit}
+      </i></font><font color="#FF00FF">sub</font>			<font color="#FF00FF">ah,2                              </font><font color="#008000"><i>{subtract 2sec to adj. loc.}
+      </i></font><font color="#FF00FF">jns</font>			<font color="#FF00FF">@Return                           </font><font color="#008000"><i>{adjust if &lt; 0}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">ah,60                             </font><font color="#008000"><i>{make Sec field to 59, or 58}
+      </i></font><font color="#FF00FF">dec</font>			<font color="#FF00FF">bl                                </font><font color="#008000"><i>{decrease Min}
+</i></font><font color="#FF00FF">@Return:
+      les</font>			<font color="#FF00FF">di,TLoc                           </font><font color="#008000"><i>{address of global variable}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],ax                        </font><font color="#008000"><i>{copy: Frm, Sec}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+2],bx                      </font><font color="#008000"><i>{copy: Min, Trk}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Track's length in a global TMSF variable.
+	 Trk field, is set then to 1 if data track, 0 if audio. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTrkLen<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TLen <font color="#000080">: </font>TMSF<font color="#000080">; </font>Trk <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>TLoc <font color="#000080">: </font>TMSF<font color="#000080">;               </font><font color="#008000"><i>{track location}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>GetTrkLoc<font color="#000080">(</font>TLen<font color="#000080">, </font>Trk<font color="#000080">);      </font><font color="#008000"><i>{start address of track}
+  </i></font>GetDiscLen<font color="#000080">(</font>TLoc<font color="#000080">);          </font><font color="#008000"><i>{get disc length}
+  </i></font><font color="#FF0000"><b>if </b></font>Trk <font color="#000080">&lt; </font>TLoc<font color="#000080">.</font>Trk <font color="#FF0000"><b>then     </b></font><font color="#008000"><i>{if track is last, location=disc length}
+    </i></font>GetTrkLoc<font color="#000080">(</font>TLoc<font color="#000080">, </font>Trk<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{get successor's location}
+  </i></font>SubTMSF<font color="#000080">(</font>TLen<font color="#000080">, </font>TLoc<font color="#000080">);       </font><font color="#008000"><i>{place diff. (length) in result}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Get current disc time, and current track (at Trk field).
+   note: device returns track number at hexa-view, means that track -
+   10 for example, won't be 0Ah (10d), but 10h. that is why this proc. -
+   has a code to make it the correct track number.
+	 [ track := (track shr 4) * 10 + (track and 0Fh) ].                    *)
+</i></font><font color="#FF0000"><b>procedure </b></font>CurDiscPos<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>DPos <font color="#008000"><i>{: TMSF} </i></font><font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,0Ch                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bh,byte ptr TBuff+2               </font><font color="#008000"><i>{get track}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cl,bh                             </font><font color="#008000"><i>{save (temp)}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">bh,0Fh                            </font><font color="#008000"><i>{get units digit}
+      </i></font><font color="#FF00FF">shr</font>			<font color="#FF00FF">cl,4                              </font><font color="#008000"><i>{get decimals digit}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,10                             </font><font color="#008000"><i>{multiply decimals by 10}
+      </i></font><font color="#FF00FF">mul</font>			<font color="#FF00FF">cl                                </font><font color="#008000"><i>{get result}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">bh,al                             </font><font color="#008000"><i>{add units to decimals*10}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bl,byte ptr TBuff+8               </font><font color="#008000"><i>{get minutes}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ah,byte ptr TBuff+9               </font><font color="#008000"><i>{get seconds}
+      </i></font><font color="#FF00FF">mov</font> 		<font color="#FF00FF">al,byte ptr TBuff+0Ah             </font><font color="#008000"><i>{get frames}
+      </i></font><font color="#FF00FF">sub</font>			<font color="#FF00FF">ah,2                              </font><font color="#008000"><i>{subtract 2sec to adj. pos.}
+      </i></font><font color="#FF00FF">jns</font>			<font color="#FF00FF">@Return                           </font><font color="#008000"><i>{adjust if &lt; 0}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">ah,60                             </font><font color="#008000"><i>{make Sec field to 59, or 58}
+      </i></font><font color="#FF00FF">dec</font>			<font color="#FF00FF">bl                                </font><font color="#008000"><i>{decrease Min}
+</i></font><font color="#FF00FF">@Return:
+      les</font>			<font color="#FF00FF">di,DPos                           </font><font color="#008000"><i>{address of global variable}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],ax                        </font><font color="#008000"><i>{copy: Frm, Sec}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+2],bx                      </font><font color="#008000"><i>{copy: Min, Trk}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Get current track time, and current track (at Trk field).
+   (same manner as CurDiscTime).                             *)
+</i></font><font color="#FF0000"><b>procedure </b></font>CurTrkPos<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TPos <font color="#008000"><i>{: TMSF} </i></font><font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],03h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,0Ch                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bh,byte ptr TBuff+2               </font><font color="#008000"><i>{get track}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cl,bh                             </font><font color="#008000"><i>{save (temp)}
+      </i></font><font color="#FF00FF">and</font>			<font color="#FF00FF">bh,0Fh                            </font><font color="#008000"><i>{get units digit}
+      </i></font><font color="#FF00FF">shr</font>			<font color="#FF00FF">cl,4                              </font><font color="#008000"><i>{get decimals digit}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,10                             </font><font color="#008000"><i>{multiply decimals by 10}
+      </i></font><font color="#FF00FF">mul</font>			<font color="#FF00FF">cl                                </font><font color="#008000"><i>{get result}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">bh,al                             </font><font color="#008000"><i>{add units to decimals*10}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bl,byte ptr TBuff+4               </font><font color="#008000"><i>{get minutes}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ah,byte ptr TBuff+5               </font><font color="#008000"><i>{get seconds}
+      </i></font><font color="#FF00FF">mov</font> 		<font color="#FF00FF">al,byte ptr TBuff+6               </font><font color="#008000"><i>{get frames}
+      </i></font><font color="#FF00FF">les</font>			<font color="#FF00FF">di,TPos                           </font><font color="#008000"><i>{address of global variable}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],ax                        </font><font color="#008000"><i>{copy: Frm, Sec}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+2],bx                      </font><font color="#008000"><i>{copy: Min, Trk}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Get current disc remaining time, and current track (at Trk field). *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetDiscRem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>DRem <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>var
+</b></font>	DLen <font color="#000080">: </font>TMSF<font color="#000080">;          </font><font color="#008000"><i>{disc length}
+</i></font><font color="#FF0000"><b>begin
+</b></font>	GetDiscLen<font color="#000080">(</font>DLen<font color="#000080">);     </font><font color="#008000"><i>{get disc length}
+</i></font>	CurDiscPos<font color="#000080">(</font>DRem<font color="#000080">);     </font><font color="#008000"><i>{get current disc position}
+  </i></font>SubTMSF<font color="#000080">(</font>DRem<font color="#000080">, </font>DLen<font color="#000080">);  </font><font color="#008000"><i>{find difference (= remaining disc time)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Get current track remaining time, and current track (at Trk field). *)
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTrkRem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>TRem <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>var
+</b></font>	TLen <font color="#000080">: </font>TMSF<font color="#000080">;               </font><font color="#008000"><i>{track length}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>GetTrkLen<font color="#000080">(</font>TLen<font color="#000080">, </font>TRem<font color="#000080">.</font>Trk<font color="#000080">); </font><font color="#008000"><i>{get current track's length}
+</i></font>	CurTrkPos<font color="#000080">(</font>TRem<font color="#000080">);           </font><font color="#008000"><i>{get current track position}
+  </i></font>SubTMSF<font color="#000080">(</font>TRem<font color="#000080">, </font>TLen<font color="#000080">);       </font><font color="#008000"><i>{find difference (= remaining track time)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* If door is unlocked, pause audio if playing, and eject tray out. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>EjectDoor<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">call</font>		<font color="#FF00FF">PauseAudio                        </font><font color="#008000"><i>{pause audio}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],0Ch            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,00h                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Insert tray inside drive. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>InsertDoor<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],0Ch            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,05h                </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Locks the door inside the drive (no eject, even with external button).
+	 Door remains locked until cold boot/unlock function call/device reset. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>LockDoor<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],0Ch            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr TBuff,0101h              </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* This call unlocks locked door. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>UnlockDoor<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],0Ch            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr TBuff,0001h              </font><font color="#008000"><i>{function}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetVolume<font color="#000080">(</font>Vol <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],0Ch            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr TBuff,03h                </font><font color="#008000"><i>{function}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">al,al                             </font><font color="#008000"><i>{start at channel 0}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ah,Vol                            </font><font color="#008000"><i>{volume - user input}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr TBuff+1,ax               </font><font color="#008000"><i>{left}
+      </i></font><font color="#FF00FF">inc</font>			<font color="#FF00FF">al                                </font><font color="#008000"><i>{next channel}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr TBuff+3,ax               </font><font color="#008000"><i>{right}
+      </i></font><font color="#FF00FF">inc</font>			<font color="#FF00FF">al                                </font><font color="#008000"><i>{next channel}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr TBuff+5,ax               </font><font color="#008000"><i>{left prime}
+      </i></font><font color="#FF00FF">inc</font>			<font color="#FF00FF">al                                </font><font color="#008000"><i>{next channel}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr TBuff+7,ax               </font><font color="#008000"><i>{right prime}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+0Eh],offset TBuff </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+10h],seg TBuff    </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Move drive's heads into a new location, stops audio if playing.
+   User can send track time, when track number is in Trk field,
+	 or disc time, when Trk field is zero.                           *)
+</i></font><font color="#FF0000"><b>procedure </b></font>SeekPos<font color="#000080">(</font>SPos <font color="#000080">: </font>TMSF<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">call</font>		<font color="#FF00FF">PauseAudio                        </font><font color="#008000"><i>{pause audio if needed}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+</i></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+0Dh],00h          </font><font color="#008000"><i>{addressing mode (HSG)}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,word ptr SPos                  </font><font color="#008000"><i>{get frames &amp; seconds}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+14h],ax           </font><font color="#008000"><i>{copy Frm, Sec}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,word ptr SPos+2                </font><font color="#008000"><i>{get minutes &amp; (track)}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+16h],ax           </font><font color="#008000"><i>{copy Min, (Trk)}
+      </i></font><font color="#FF00FF">or</font> 			<font color="#FF00FF">ah,ah                             </font><font color="#008000"><i>{check Trk field}
+      </i></font><font color="#FF00FF">jz</font>			<font color="#FF00FF">@ConvertHSG                       </font><font color="#008000"><i>{jump if disc time (Trk=0)}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">bx,14h                            </font><font color="#008000"><i>{offset - starting address}
+      </i></font><font color="#FF00FF">push</font>		<font color="#FF00FF">es                                </font><font color="#008000"><i>{transfer segment}
+      </i></font><font color="#FF00FF">push</font>		<font color="#FF00FF">bx                                </font><font color="#008000"><i>{transfer offset}
+      </i></font><font color="#FF00FF">call</font>		<font color="#FF00FF">DiscTime                          </font><font color="#008000"><i>{convert to disc time}
+</i></font><font color="#FF00FF">@ConvertHSG:
+      mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+</i></font>			<font color="#FF00FF">push</font>		<font color="#FF00FF">word ptr es:[bx+16h]              </font><font color="#008000"><i>{transfer high word}
+      </i></font><font color="#FF00FF">push</font>		<font color="#FF00FF">word ptr es:[bx+14h]              </font><font color="#008000"><i>{transfer low word}
+      </i></font><font color="#FF00FF">call</font>		<font color="#FF00FF">HSG                               </font><font color="#008000"><i>{convert TMSF to HSG}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],83h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+14h],ax           </font><font color="#008000"><i>{copy low word}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">word ptr es:[bx+16h],dx           </font><font color="#008000"><i>{copy high word}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Plays audio from current position if not playing. it works like
+   an unconditional resume (paused/unpaused), and ignores if audio
+   is currently playing (by device).
+   This procedure is most usefull with SeekPos, when called afterwards. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayAudio<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CurDiscPos<font color="#000080">(</font>PFrm<font color="#000080">);                    </font><font color="#008000"><i>{get disc position}
+  </i></font>GetDiscLen<font color="#000080">(</font>PCnt<font color="#000080">);                    </font><font color="#008000"><i>{get disc length}
+  </i></font>PFrom<font color="#000080">^ := </font>HSG<font color="#000080">(</font>PFrm<font color="#000080">);                 </font><font color="#008000"><i>{make HSG addressing}
+  </i></font>PCount<font color="#000080">^ := </font>HSG<font color="#000080">(</font>PCnt<font color="#000080">) - </font>PFrom<font color="#000080">^;       </font><font color="#008000"><i>{find difference (=count)}
+  </i></font><font color="#FF0000"><b>asm
+</b></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h               </font><font color="#008000"><i>{mscdex service}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request         </font><font color="#008000"><i>{request segment}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                  </font><font color="#008000"><i>{segreg assignment}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request      </font><font color="#008000"><i>{request offset}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],84h </font><font color="#008000"><i>{command code}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[di+0Dh],0 </font><font color="#008000"><i>{HSG addressing mode}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive            </font><font color="#008000"><i>{drive letter}
+</i></font>	      <font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                    </font><font color="#008000"><i>{send device request}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Plays regardless of current audio status (playing or not), from
+   specified location until end of disc.
+	 user can input the start address by disc time, or by track time
+	 as he wishes, representing disc time by a zero Trk field.       *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayFrom<font color="#000080">(</font>From <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>PauseAudio<font color="#000080">;                           </font><font color="#008000"><i>{interrupt playing}
+  </i></font><font color="#FF0000"><b>if </b></font>From<font color="#000080">.</font>Trk <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>DiscTime<font color="#000080">(</font>From<font color="#000080">); </font><font color="#008000"><i>{make disc timing}
+</i></font>	GetDiscLen<font color="#000080">(</font>PCnt<font color="#000080">);                     </font><font color="#008000"><i>{disc length}
+</i></font>	PFrom<font color="#000080">^ := </font>HSG<font color="#000080">(</font>From<font color="#000080">);                  </font><font color="#008000"><i>{start address}
+  </i></font>PCount<font color="#000080">^ := </font>HSG<font color="#000080">(</font>PCnt<font color="#000080">) - </font>PFrom<font color="#000080">^;        </font><font color="#008000"><i>{count of sectors}
+  </i></font><font color="#FF0000"><b>asm
+</b></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                </font><font color="#008000"><i>{mscdex service}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request          </font><font color="#008000"><i>{request segment}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                   </font><font color="#008000"><i>{segreg assignment}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request       </font><font color="#008000"><i>{request offset}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],84h  </font><font color="#008000"><i>{command code}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[di+0Dh],0  </font><font color="#008000"><i>{HSG addressing mode}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive             </font><font color="#008000"><i>{drive letter}
+</i></font>	      <font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                     </font><font color="#008000"><i>{send device request}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Play specified range, interrupts current playing if needed.
+   same manner of input as previous procedure (see above).     *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayRange<font color="#000080">(</font>From<font color="#000080">, </font>Till <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>PauseAudio<font color="#000080">;                           </font><font color="#008000"><i>{interrupt playing}
+  </i></font><font color="#FF0000"><b>if </b></font>From<font color="#000080">.</font>Trk <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>DiscTime<font color="#000080">(</font>From<font color="#000080">); </font><font color="#008000"><i>{make disc timing}
+  </i></font><font color="#FF0000"><b>if </b></font>Till<font color="#000080">.</font>Trk <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>DiscTime<font color="#000080">(</font>Till<font color="#000080">); </font><font color="#008000"><i>{make disc timing}
+</i></font>	PFrom<font color="#000080">^ := </font>HSG<font color="#000080">(</font>From<font color="#000080">);                  </font><font color="#008000"><i>{start address}
+  </i></font>PCount<font color="#000080">^ := </font>HSG<font color="#000080">(</font>Till<font color="#000080">) - </font>PFrom<font color="#000080">^;        </font><font color="#008000"><i>{count of sectors}
+  </i></font><font color="#FF0000"><b>asm
+</b></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                </font><font color="#008000"><i>{mscdex service}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request          </font><font color="#008000"><i>{request segment}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                   </font><font color="#008000"><i>{segreg assignment}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request       </font><font color="#008000"><i>{request offset}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],84h  </font><font color="#008000"><i>{command code}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[di+0Dh],0  </font><font color="#008000"><i>{HSG addressing mode}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive             </font><font color="#008000"><i>{drive letter}
+</i></font>	      <font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                     </font><font color="#008000"><i>{send device request}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Plays specified amount of sectors from specified start address.
+   only start address can be either travk time or disc time, but amount
+   must be [MSF] value (Trk field ignored).                             *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayAmount<font color="#000080">(</font>From<font color="#000080">, </font>Amount <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>PauseAudio<font color="#000080">;                           </font><font color="#008000"><i>{interrupt playing}
+  </i></font><font color="#FF0000"><b>if </b></font>From<font color="#000080">.</font>Trk <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>DiscTime<font color="#000080">(</font>From<font color="#000080">); </font><font color="#008000"><i>{make disc timing}
+</i></font>	PFrom<font color="#000080">^ := </font>HSG<font color="#000080">(</font>From<font color="#000080">);                  </font><font color="#008000"><i>{start address}
+  </i></font>PCount<font color="#000080">^ := </font>HSG<font color="#000080">(</font>Amount<font color="#000080">);               </font><font color="#008000"><i>{count of sectors}
+  </i></font><font color="#FF0000"><b>asm
+</b></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                </font><font color="#008000"><i>{mscdex service}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request          </font><font color="#008000"><i>{request segment}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                   </font><font color="#008000"><i>{segreg assignment}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request       </font><font color="#008000"><i>{request offset}
+</i></font>  	    <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],84h  </font><font color="#008000"><i>{command code}
+</i></font>	      <font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[di+0Dh],0  </font><font color="#008000"><i>{HSG addressing mode}
+</i></font>    	  <font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive             </font><font color="#008000"><i>{drive letter}
+</i></font>	      <font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                     </font><font color="#008000"><i>{send device request}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Interrupt current playing and play specified track, until end of disc.
+   request will be ignored if track is data track, and if audio was -
+   playing, it won't be stopped.                                          *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayTrack<font color="#000080">(</font>TrkNum <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+</b></font>	GetTrkLoc<font color="#000080">(</font>PFrm<font color="#000080">, </font>TrkNum<font color="#000080">);             </font><font color="#008000"><i>{get track location}
+  </i></font><font color="#FF0000"><b>if </b></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PlayFrom<font color="#000080">(</font>PFrm<font color="#000080">); </font><font color="#008000"><i>{play if audio track}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Same as above procedure, but plays until end of track. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlaySingleTrk<font color="#000080">(</font>TrkNum <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+</b></font>	GetTrkLoc<font color="#000080">(</font>PFrm<font color="#000080">, </font>TrkNum<font color="#000080">);                     </font><font color="#008000"><i>{get track location}
+  </i></font>GetTrkLen<font color="#000080">(</font>PCnt<font color="#000080">, </font>TrkNum<font color="#000080">);                     </font><font color="#008000"><i>{get track length}
+  </i></font><font color="#FF0000"><b>if </b></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PlayAmount<font color="#000080">(</font>PFrm<font color="#000080">, </font>PCnt<font color="#000080">); </font><font color="#008000"><i>{play if audio track}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Plays the predecessor track to current, or last track if current
+   track is the first track.                                        *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayPrevTrk<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	CurTrkPos<font color="#000080">(</font>PFrm<font color="#000080">);                     </font><font color="#008000"><i>{get current track}
+  </i></font><font color="#FF0000"><b>if </b></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then                 </b></font><font color="#008000"><i>{check current}
+  </i></font><font color="#FF0000"><b>begin                                </b></font><font color="#008000"><i>{if first track -}
+</i></font>  	GetDiscLen<font color="#000080">(</font>PCnt<font color="#000080">);                  </font><font color="#008000"><i>{get disc length}
+    </i></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">:= </font>PCnt<font color="#000080">.</font>Trk<font color="#000080">;              </font><font color="#008000"><i>{play last}
+  </i></font><font color="#FF0000"><b>end
+  else                                 </b></font><font color="#008000"><i>{if not -}
+</i></font>  	Dec<font color="#000080">(</font>PFrm<font color="#000080">.</font>Trk<font color="#000080">);                     </font><font color="#008000"><i>{previous track}
+</i></font> 	GetTrkLoc<font color="#000080">(</font>PFrm<font color="#000080">, </font>PFrm<font color="#000080">.</font>Trk<font color="#000080">);           </font><font color="#008000"><i>{get new track loc.}
+  </i></font><font color="#FF0000"><b>if </b></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PlayFrom<font color="#000080">(</font>PFrm<font color="#000080">); </font><font color="#008000"><i>{play if audio track}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Plays the successor track to current, or first track if current
+   track is the last track.                                        *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayNextTrk<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font> 	GetDiscLen<font color="#000080">(</font>PCnt<font color="#000080">);                    </font><font color="#008000"><i>{get disc length}
+</i></font>	CurTrkPos<font color="#000080">(</font>PFrm<font color="#000080">);                     </font><font color="#008000"><i>{get current track}
+  </i></font><font color="#FF0000"><b>if </b></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">= </font>PCnt<font color="#000080">.</font>Trk <font color="#FF0000"><b>then          </b></font><font color="#008000"><i>{check current}
+    </i></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">:= </font><font color="#800000">1                      </font><font color="#008000"><i>{first if was last}
+  </i></font><font color="#FF0000"><b>else                                 </b></font><font color="#008000"><i>{if not -}
+</i></font>  	Inc<font color="#000080">(</font>PFrm<font color="#000080">.</font>Trk<font color="#000080">);                     </font><font color="#008000"><i>{next track}
+  </i></font>GetTrkLoc<font color="#000080">(</font>PFrm<font color="#000080">, </font>PFrm<font color="#000080">.</font>Trk<font color="#000080">);           </font><font color="#008000"><i>{get new track loc.}
+  </i></font><font color="#FF0000"><b>if </b></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PlayFrom<font color="#000080">(</font>PFrm<font color="#000080">); </font><font color="#008000"><i>{play if audio track}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Use [MSF] input to force playing from current location minus the
+   amount given, till end of disc.                                  *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayReverse<font color="#000080">(</font>Skip <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+</b></font>	CurDiscPos<font color="#000080">(</font>PFrm<font color="#000080">);    </font><font color="#008000"><i>{get current position}
+  </i></font>SubTMSF<font color="#000080">(</font>PFrm<font color="#000080">, </font>Skip<font color="#000080">); </font><font color="#008000"><i>{subtract requested amount}
+  </i></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;       </font><font color="#008000"><i>{make disc time}
+  </i></font>PlayFrom<font color="#000080">(</font>PFrm<font color="#000080">);      </font><font color="#008000"><i>{play from new location}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Use [MSF] input to force playing from current location plus the
+   amount given, till end of disc.                                 *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PlayForward<font color="#000080">(</font>Skip <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+</b></font>	CurDiscPos<font color="#000080">(</font>PFrm<font color="#000080">);    </font><font color="#008000"><i>{get current position}
+  </i></font>AddTMSF<font color="#000080">(</font>PFrm<font color="#000080">, </font>Skip<font color="#000080">); </font><font color="#008000"><i>{add requested amount}
+  </i></font>PFrm<font color="#000080">.</font>Trk <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;       </font><font color="#008000"><i>{make disc time}
+  </i></font>PlayFrom<font color="#000080">(</font>PFrm<font color="#000080">);      </font><font color="#008000"><i>{play from new location}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Pauses current audio if playing, if not playing - ignored. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>PauseAudio<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],85h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Resumes paused audio only (faster than PlayAudio). *)
+</i></font><font color="#FF0000"><b>procedure </b></font>ResumeAudio<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1510h                          </font><font color="#008000"><i>{mscdex service}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg Request                    </font><font color="#008000"><i>{request segment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es,bx                             </font><font color="#008000"><i>{segreg assignment}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset Request                 </font><font color="#008000"><i>{request offset}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">byte ptr es:[bx+2],88h            </font><font color="#008000"><i>{command code}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cx,CurDrive                       </font><font color="#008000"><i>{drive letter}
+      </i></font><font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                               </font><font color="#008000"><i>{send device driver request}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* This procedure makes easier when trying to assign a full time
+   into TMSF variable. that way, your code will consume one text line,
+   instead of four record-field assignment clauses.                    *)
+</i></font><font color="#FF0000"><b>procedure </b></font>SetTMSF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>T<font color="#000080">, </font>M<font color="#000080">, </font>S<font color="#000080">, </font>F <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">al,F         </font><font color="#008000"><i>{get frames}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">ah,S         </font><font color="#008000"><i>{get seconds}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bl,M         </font><font color="#008000"><i>{get minutes}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bh,T         </font><font color="#008000"><i>{get track}
+      </i></font><font color="#FF00FF">les</font>			<font color="#FF00FF">di,Dest      </font><font color="#008000"><i>{get global variable's address}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],ax   </font><font color="#008000"><i>{copy: Frm, Sec}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+2],bx </font><font color="#008000"><i>{copy: Min, Trk}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Adds source TMSF value to destination, ignoring Trk field. *)
+</i></font><font color="#FF0000"><b>procedure </b></font>AddTMSF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>Src <font color="#000080">: </font>TMSF<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">les</font>			<font color="#FF00FF">di,Dest            </font><font color="#008000"><i>{get global address}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,byte ptr Src    </font><font color="#008000"><i>{get source frames}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">al,es:[di]         </font><font color="#008000"><i>{add destination frames to source's}
+      </i></font><font color="#FF00FF">cmp</font>			<font color="#FF00FF">al,75              </font><font color="#008000"><i>{compare with maximum frames value}
+      </i></font><font color="#FF00FF">jb</font>			<font color="#FF00FF">@Frames            </font><font color="#008000"><i>{jump if below}
+      </i></font><font color="#FF00FF">sub</font>			<font color="#FF00FF">al,75              </font><font color="#008000"><i>{subtract 75 frames}
+      </i></font><font color="#FF00FF">inc</font>			<font color="#FF00FF">byte ptr es:[di+1] </font><font color="#008000"><i>{add 1 second to &quot;pay&quot; the 75 frames}
+</i></font><font color="#FF00FF">@Frames:
+</font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],al         </font><font color="#008000"><i>{copy: Frm}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,byte ptr Src+1  </font><font color="#008000"><i>{get source seconds}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">al,es:[di+1]       </font><font color="#008000"><i>{add destination seconds to source's}
+      </i></font><font color="#FF00FF">cmp</font>			<font color="#FF00FF">al,60              </font><font color="#008000"><i>{compare with maximum seconds value}
+      </i></font><font color="#FF00FF">jb</font>			<font color="#FF00FF">@Seconds           </font><font color="#008000"><i>{jump if below}
+      </i></font><font color="#FF00FF">sub</font>			<font color="#FF00FF">al,60              </font><font color="#008000"><i>{subtract 60 seconds}
+      </i></font><font color="#FF00FF">inc</font>			<font color="#FF00FF">byte ptr es:[di+2] </font><font color="#008000"><i>{add 1 minute to &quot;pay&quot; the 60 seconds}
+</i></font><font color="#FF00FF">@Seconds:
+</font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+1],al       </font><font color="#008000"><i>{copy: Sec}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,byte ptr Src+2  </font><font color="#008000"><i>{get source's minutes}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">es:[di+2],al       </font><font color="#008000"><i>{copy: Min (sum of destination+source)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Subtracts source TMSF value from destination, ignoring Trk field.
+   returned value is difference, no sign is assigned.                *)
+</i></font><font color="#FF0000"><b>procedure </b></font>SubTMSF<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">; </font>Src <font color="#000080">: </font>TMSF<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">les</font>			<font color="#FF00FF">di,Dest           </font><font color="#008000"><i>{get global destination address}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,es:[di]        </font><font color="#008000"><i>{get destination's frames}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,es:[di+1]      </font><font color="#008000"><i>{get destination's seconds &amp; minutes}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cl,byte ptr Src   </font><font color="#008000"><i>{get source's frames}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">dx,word ptr Src+1 </font><font color="#008000"><i>{get source's seconds &amp; minutes}
+      </i></font><font color="#FF00FF">cmp</font>			<font color="#FF00FF">bx,dx             </font><font color="#008000"><i>{compare dest's minutes to src's}
+      </i></font><font color="#FF00FF">ja</font>			<font color="#FF00FF">@SubMin           </font><font color="#008000"><i>{below/above/equal: jump if above}
+      </i></font><font color="#FF00FF">jb</font> 			<font color="#FF00FF">@XchgTMSF         </font><font color="#008000"><i>{below/equal: jump if below}
+      </i></font><font color="#FF00FF">cmp</font>			<font color="#FF00FF">al,cl             </font><font color="#008000"><i>{equal: compare dest's frames to src's}
+      </i></font><font color="#FF00FF">ja</font>			<font color="#FF00FF">@SubMin           </font><font color="#008000"><i>{below/above/equal: jump if above}
+      </i></font><font color="#FF00FF">jb      @XchgTMSF         </font><font color="#008000"><i>{below/equal: jump if below}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">al,al             </font><font color="#008000"><i>{equal: make frames zero}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">bx,bx             </font><font color="#008000"><i>{equal: make seconds &amp; minutes zero}
+</i></font>			<font color="#FF00FF">jmp</font>			<font color="#FF00FF">@Return           </font><font color="#008000"><i>{return result}
+</i></font><font color="#FF00FF">@XchgTMSF:
+      xchg</font>		<font color="#FF00FF">al,cl             </font><font color="#008000"><i>{exchange frames}
+      </i></font><font color="#FF00FF">xchg</font>		<font color="#FF00FF">bx,dx             </font><font color="#008000"><i>{exchange seconds &amp; minutes}
+</i></font><font color="#FF00FF">@SubMin:
+</font>			<font color="#FF00FF">sub</font>			<font color="#FF00FF">bh,dh             </font><font color="#008000"><i>{subtract src's minutes from dest's, &ograve; 0}
+      </i></font><font color="#FF00FF">cmp</font>			<font color="#FF00FF">bl,dl             </font><font color="#008000"><i>{compare dest's seconds to src's}
+      </i></font><font color="#FF00FF">jae</font>			<font color="#FF00FF">@SubSec           </font><font color="#008000"><i>{below/above/equal: jump if above or equal}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">bl,60             </font><font color="#008000"><i>{below: add 1 minute by 60 seconds}
+      </i></font><font color="#FF00FF">dec</font>			<font color="#FF00FF">bh                </font><font color="#008000"><i>{below: subtract 1 minute (minutes were &gt; 0)}
+</i></font><font color="#FF00FF">@SubSec:
+</font>			<font color="#FF00FF">sub</font>			<font color="#FF00FF">bl,dl             </font><font color="#008000"><i>{subtract src's seconds from dest's, &ograve; 0}
+      </i></font><font color="#FF00FF">cmp</font>			<font color="#FF00FF">al,cl             </font><font color="#008000"><i>{compare dest's minutes to src's}
+      </i></font><font color="#FF00FF">jae</font>			<font color="#FF00FF">@SubFrm           </font><font color="#008000"><i>{below/above/equal: jump if above or equal}
+      </i></font><font color="#FF00FF">add</font>			<font color="#FF00FF">al,75             </font><font color="#008000"><i>{below: add 1 second by 75 frames}
+      </i></font><font color="#FF00FF">dec</font>			<font color="#FF00FF">bl                </font><font color="#008000"><i>{below: subtract 1 sec., and check its sign}
+      </i></font><font color="#FF00FF">jns</font>			<font color="#FF00FF">@SubFrm           </font><font color="#008000"><i>{positive/negative/zero: jump if not neg.}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bl,59             </font><font color="#008000"><i>{negative (-1): make 59 seconds}
+      </i></font><font color="#FF00FF">dec</font>			<font color="#FF00FF">bh                </font><font color="#008000"><i>{negative (-1): subtract 1 minute (were &gt; 0)}
+</i></font><font color="#FF00FF">@SubFrm:
+</font>			<font color="#FF00FF">sub</font>			<font color="#FF00FF">al,cl             </font><font color="#008000"><i>{subtract src's frames from dest's, &ograve; 0}
+</i></font><font color="#FF00FF">@Return:
+</font>			<font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di],al        </font><font color="#008000"><i>{copy: Frm}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">es:[di+1],bx      </font><font color="#008000"><i>{copy: Sec, Min (never touch the Trk field)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Converts given track time (including the track number in Trk field),
+   to postion in global disc timing.                                    *)
+</i></font><font color="#FF0000"><b>procedure </b></font>DiscTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>var
+</b></font>	TLoc <font color="#000080">: </font>TMSF<font color="#000080">;               </font><font color="#008000"><i>{track location}
+</i></font><font color="#FF0000"><b>begin
+</b></font>	GetTrkLoc<font color="#000080">(</font>TLoc<font color="#000080">, </font>Dest<font color="#000080">.</font>Trk<font color="#000080">); </font><font color="#008000"><i>{get given track location}
+  </i></font>AddTMSF<font color="#000080">(</font>Dest<font color="#000080">, </font>TLoc<font color="#000080">);       </font><font color="#008000"><i>{add track location to time into track}
+  </i></font>Dest<font color="#000080">.</font>Trk <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;             </font><font color="#008000"><i>{indicate 'disc-time'}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Converts given disc time (ignoring Trk field), into track time, placing
+   the track number which falls in that given position, and the time into
+   the track, when being at this position on disc.                         *)
+</i></font><font color="#FF0000"><b>procedure </b></font>TrkTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest <font color="#000080">: </font>TMSF<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>Upper<font color="#000080">, </font>Lower<font color="#000080">, </font>Middle <font color="#000080">: </font>Byte<font color="#000080">;                           </font><font color="#008000"><i>{for binary search}
+  </i></font>Disc<font color="#000080">, </font>Trk <font color="#000080">: </font>TMSF<font color="#000080">;                                      </font><font color="#008000"><i>{disc &amp; track times}
+</i></font><font color="#FF0000"><b>begin
+</b></font>	Dest<font color="#000080">.</font>Trk <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                                         </font><font color="#008000"><i>{clear highest byte}
+  </i></font>GetDiscLen<font color="#000080">(</font>Disc<font color="#000080">);                                      </font><font color="#008000"><i>{get disc length}
+  </i></font>GetTrkLoc<font color="#000080">(</font>Trk<font color="#000080">, </font>Disc<font color="#000080">.</font>Trk<font color="#000080">);                              </font><font color="#008000"><i>{get last trk' loc.}
+  </i></font><font color="#FF0000"><b>if </b></font>Longint<font color="#000080">(</font>Dest<font color="#000080">) &gt;= (</font>Longint<font color="#000080">(</font>Trk<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FFFFFF</font><font color="#000080">) </font><font color="#FF0000"><b>then    </b></font><font color="#008000"><i>{lower than given?}
+</i></font>  	Dest<font color="#000080">.</font>Trk <font color="#000080">:= </font>Disc<font color="#000080">.</font>Trk<font color="#000080">;                                </font><font color="#008000"><i>{if so - last track}
+</i></font>	<font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Disc<font color="#000080">.</font>Trk <font color="#000080">&gt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Dest<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then              </b></font><font color="#008000"><i>{is there track 2?}
+</i></font>	<font color="#FF0000"><b>begin
+</b></font>   	GetTrkLoc<font color="#000080">(</font>Trk<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);                                   </font><font color="#008000"><i>{get track location}
+</i></font>		<font color="#FF0000"><b>if </b></font>Longint<font color="#000080">(</font>Dest<font color="#000080">) &lt; (</font>Longint<font color="#000080">(</font>Trk<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FFFFFF</font><font color="#000080">) </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{higher than given?}
+</i></font>  	<font color="#FF0000"><b>begin
+</b></font>     	Dest<font color="#000080">.</font>Trk <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                                     </font><font color="#008000"><i>{if so - 1st track}
+      </i></font>GetTrkLoc<font color="#000080">(</font>Trk<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);                                 </font><font color="#008000"><i>{get its location}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Dest<font color="#000080">.</font>Trk <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then                                   </b></font><font color="#008000"><i>{if still not found}
+  </i></font><font color="#FF0000"><b>begin
+</b></font>  	Lower <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;                                          </font><font color="#008000"><i>{lower search bound}
+    </i></font>Upper <font color="#000080">:= </font>Disc<font color="#000080">.</font>Trk <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;                               </font><font color="#008000"><i>{upper search bound}
+    </i></font><font color="#FF0000"><b>while </b></font>Dest<font color="#000080">.</font>Trk <font color="#000080">&lt;&gt; </font>Middle <font color="#FF0000"><b>do                          </b></font><font color="#008000"><i>{binary search loop}
+    </i></font><font color="#FF0000"><b>begin
+</b></font>    	Middle <font color="#000080">:= (</font>Lower <font color="#000080">+ </font>Upper<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;                   </font><font color="#008000"><i>{check the middle}
+      </i></font>GetTrkLoc<font color="#000080">(</font>Trk<font color="#000080">, </font>Middle <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">);                        </font><font color="#008000"><i>{get next location}
+      </i></font><font color="#FF0000"><b>if </b></font>Longint<font color="#000080">(</font>Dest<font color="#000080">) &gt; (</font>Longint<font color="#000080">(</font>Trk<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FFFFFF</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{lower than given?}
+      </i></font><font color="#FF0000"><b>begin
+</b></font>      	Lower <font color="#000080">:= </font>Middle <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;                             </font><font color="#008000"><i>{check the highers}
+        </i></font>Continue<font color="#000080">;                                        </font><font color="#008000"><i>{jump to 'while'}
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>			GetTrkLoc<font color="#000080">(</font>Trk<font color="#000080">, </font>Middle<font color="#000080">);                            </font><font color="#008000"><i>{get middle loc.}
+      </i></font><font color="#FF0000"><b>if </b></font>Longint<font color="#000080">(</font>Dest<font color="#000080">) &lt; (</font>Longint<font color="#000080">(</font>Trk<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FFFFFF</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{higher than given?}
+</i></font>      	Upper <font color="#000080">:= </font>Middle <font color="#000080">- </font><font color="#800000">1                              </font><font color="#008000"><i>{check the lowers}
+      </i></font><font color="#FF0000"><b>else                                               </b></font><font color="#008000"><i>{else -}
+</i></font>      	Dest<font color="#000080">.</font>Trk <font color="#000080">:= </font>Middle<font color="#000080">;                              </font><font color="#008000"><i>{given falls here}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>	SubTMSF<font color="#000080">(</font>Dest<font color="#000080">, </font>Trk<font color="#000080">);                                    </font><font color="#008000"><i>{time into track}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* This procedures changes the default drive we're working with. it can
+   handle a maximum of 10 CD-ROM drives, from 0 (first, unit default), to
+   9 (10th drive, last).
+   All procedures, also drive capabilities, refer to the new drive.       *)
+</i></font><font color="#FF0000"><b>procedure </b></font>ChangeCDROMDrv<font color="#000080">(</font>Drv <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+</b></font>	CurCDDrv <font color="#000080">:= </font>Drv<font color="#000080">;                     </font><font color="#008000"><i>{interface drive index}
+  </i></font>CurDrive <font color="#000080">:= </font>Byte<font color="#000080">(</font>DrvList<font color="#000080">[</font>Drv<font color="#000080">]) - </font><font color="#800000">65</font><font color="#000080">; </font><font color="#008000"><i>{unit's drive letter (char-ascii(A)}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Compare two DiscRec's, and return true if equal, false for unidentical.
+   the compare service, can provide a tool to examine two different discs,
+   and decide whether one disc if actually the same as another disc.
+   the compare consist of the disc length, and the track array, rather
+   than just the pointer address values (compare Track^, not Track).       *)
+</i></font><font color="#FF0000"><b>function </b></font>CmpDiscs<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Dest<font color="#000080">, </font>Src <font color="#008000"><i>{: TMSF}</i></font><font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">cld                </font><font color="#008000"><i>{move forward}
+      </i></font><font color="#FF00FF">les</font>			<font color="#FF00FF">di,Dest    </font><font color="#008000"><i>{load destination}
+</i></font>			<font color="#FF00FF">push</font>		<font color="#FF00FF">ds         </font><font color="#008000"><i>{save data segment}
+      </i></font><font color="#FF00FF">lds</font>			<font color="#FF00FF">si,Src     </font><font color="#008000"><i>{load source}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">al,al      </font><font color="#008000"><i>{CmpDiscs := False}
+      </i></font><font color="#FF00FF">cmpsw              </font><font color="#008000"><i>{compare frames &amp; seconds}
+      </i></font><font color="#FF00FF">jne</font>			<font color="#FF00FF">@Return    </font><font color="#008000"><i>{if not equal - return false}
+      </i></font><font color="#FF00FF">cmpsw              </font><font color="#008000"><i>{compare minutes &amp; track counts}
+      </i></font><font color="#FF00FF">jne</font>			<font color="#FF00FF">@Return    </font><font color="#008000"><i>{if not equal - return false}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">cl,[si-1]  </font><font color="#008000"><i>{get track count (same for both if reached here)}
+      </i></font><font color="#FF00FF">xor</font>			<font color="#FF00FF">ch,ch      </font><font color="#008000"><i>{make word}
+      </i></font><font color="#FF00FF">shl</font>			<font color="#FF00FF">cx,1       </font><font color="#008000"><i>{we check 4bytes by 2word chunk, loop=count*2}
+      </i></font><font color="#FF00FF">les</font>			<font color="#FF00FF">di,es:[di] </font><font color="#008000"><i>{load destination's tracks}
+      </i></font><font color="#FF00FF">lds</font>			<font color="#FF00FF">si,[si]    </font><font color="#008000"><i>{load source's tracks}
+</i></font><font color="#FF00FF">repe</font>	<font color="#FF00FF">cmpsw              </font><font color="#008000"><i>{compare all tracks, or until not equal}
+</i></font>			<font color="#FF00FF">jne</font>			<font color="#FF00FF">@Return    </font><font color="#008000"><i>{if not equal - return false}
+      </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">al,1       </font><font color="#008000"><i>{CmpDiscs := True}
+</i></font><font color="#FF00FF">@Return:
+</font>			<font color="#FF00FF">pop</font>			<font color="#FF00FF">ds         </font><font color="#008000"><i>{restore data segment}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(* Main, issued automaticly at unit's startup: *)
+</i></font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>asm
+</b></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1500h              </font><font color="#008000"><i>{CD-ROM information function}
+</i></font>				<font color="#FF00FF">xor</font>			<font color="#FF00FF">bx,bx                 </font><font color="#008000"><i>{bx must be zero}
+</i></font>				<font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                   </font><font color="#008000"><i>{execute interrupt}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">NumCDDrv,bl           </font><font color="#008000"><i>{number of cd-rom drives on system}
+</i></font>				<font color="#FF00FF">add</font>			<font color="#FF00FF">cl,'A'                </font><font color="#008000"><i>{number to ascii letter}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">FstCDDrv,cl           </font><font color="#008000"><i>{1st cd-rom drive letter}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,1100h              </font><font color="#008000"><i>{mscdex installation check}
+        </i></font><font color="#FF00FF">push</font>		<font color="#FF00FF">sp                    </font><font color="#008000"><i>{save stack}
+</i></font>				<font color="#FF00FF">push</font>		<font color="#FF00FF">0DADAh                </font><font color="#008000"><i>{subfunction of installation check}
+</i></font>				<font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                   </font><font color="#008000"><i>{execute interrupt}
+        </i></font><font color="#FF00FF">pop</font>			<font color="#FF00FF">sp                    </font><font color="#008000"><i>{restore interrupt}
+</i></font>				<font color="#FF00FF">cmp</font>			<font color="#FF00FF">al,0FFh               </font><font color="#008000"><i>{must be equal, to indicate installed}
+</i></font>				<font color="#FF00FF">jne</font>			<font color="#FF00FF">@AfterVer             </font><font color="#008000"><i>{jump to end if uninstalled}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,150Ch              </font><font color="#008000"><i>{version check function}
+</i></font>				<font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                   </font><font color="#008000"><i>{execute interrupt}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">CurDrive,bx           </font><font color="#008000"><i>{store version in memory}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">ax,150Dh              </font><font color="#008000"><i>{get drive letters func.}
+        </i></font><font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,seg DrvList        </font><font color="#008000"><i>{segment of drive letter list}
+        </i></font><font color="#FF00FF">mov     es,bx                 </font><font color="#008000"><i>{assign to extra segment}
+</i></font>				<font color="#FF00FF">mov</font>			<font color="#FF00FF">bx,offset DrvList     </font><font color="#008000"><i>{offset of array to hold letters}
+</i></font>				<font color="#FF00FF">int</font>			<font color="#FF00FF">2Fh                   </font><font color="#008000"><i>{execute interrupt}
+  </i></font><font color="#FF00FF">@AfterVer:
+</font>	<font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>(* Places resident's MSCDEX.EXE version.
+	   if none - then MSCDEXVer = 0.00.
+     the earliest version for this unit, must be 2.10+ : *)
+</i></font>	MSCDEXVer <font color="#000080">:= </font>Hi<font color="#000080">(</font>CurDrive<font color="#000080">) + </font>Lo<font color="#000080">(</font>CurDrive<font color="#000080">) / </font><font color="#800000">100</font><font color="#000080">; </font><font color="#008000"><i>{format n.nn}
+  </i></font>CurDrive <font color="#000080">:= </font>Byte<font color="#000080">(</font>FstCDDrv<font color="#000080">) - </font><font color="#800000">65</font><font color="#000080">;                </font><font color="#008000"><i>{unit's drive let. (-'A')}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ANSI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0049.PAS">Original</a><b>]</b></p></body>
+</html>

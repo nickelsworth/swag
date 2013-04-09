@@ -1,0 +1,1215 @@
+<html>
+<head><title> "ANSI Input/Output" by CHAD MOORE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ANSI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0048.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{ ANSI_IO  [ANSI Input / Output Unit]
+
+  Written: 01/15/97-01/31/97
+  Author: Chad Moore
+  Requirements:
+    - 80386+ CPU
+    - Color CGA+ video adaptor (for 80x25C Textmode)
+    - Borland Turbo Pascal 6.0+ to compile
+    Recommended System:
+    - Color VGA video adaptor (for extended textmodes such as 80x50
+      or 80x43 on EGA)
+  Notes:
+    - This unit currently does not support changing the current video
+      mode.  If you would like to enter a different mode such as 80x28,
+      80x30, 80x35, 80x43, 80x50, or 80x60 you must use a different
+      unit or your own code.
+    - When using the virtual screen set up for direct video output, all
+      cursor movements are still virtual.  The actual text cursor will
+      not be modified by this program.  (This does not hinder the unit
+      in any way.)
+    - To modify the screen size for direct video output, simply modify
+      the constant values below.
+  History:
+    v1.00: 01/15/97-01/20/97
+      - Features:
+        &thorn; Object oriented code
+        &thorn; Error handling
+        &thorn; Buffered output (for scrolling)
+        &thorn; Also supports direct video output
+    v1.01: 01/21/97
+      - FIXED: cursor positioning errors
+      - FIXED: error handling errors
+    v1.02: 01/23/97
+      - UPDATED: Changed 'ANSIHandlerObj.WriteCh' to support
+        CR/LF characters.
+      - FIXED: virtical wrap-around errors
+      - UPDATED: direct virtual screen routines _may_ support any
+        screen type (ex: 80x25, 80x43, 80x50), including non-standard
+        modes (ex: 80x28, 80x30)
+      - UPDATED: added &quot;scrolling&quot; to direct video output
+    v1.03: 01/26/97-01/28/97
+      - FIXED: 'ANSIHandlerObj.ClearFromCursorToEndOfLine' only worked
+        when 'VirtualScreen.Cursor.Y' was equal to 0.
+      - UPDATED: virtual screen routines were optomized-- some routines
+        were written in inline ASM, some lookup constants were added
+        to speed up some routines.
+      - UPDATED: 286 instructions for faster virtualscreen writing.
+      - UPDATED: removed a lot of &quot;if&quot; statements by adding a
+        single video screen size constant.
+    v1.04: 01/28/97-01/31/97
+      - Features:
+        &thorn; ANSI routines for both input and output.  These routines
+          can be used for converting an image -&gt; ANSI code or ANSI
+          codes -&gt; an image!
+        &thorn; Much faster routines for faster loading and displaying!
+      - UPDATED: Changed 'VirtualScreenObj.WriteCh' to support
+        CR/LF characters.
+      - FIXED: WriteCh (ansi) didn't support the 'H' or 'f' commands
+        w/o parameters.  (now defaults to 1,1)
+      - UPDATED: 386 instructions for faster virtualscreen writing.
+
+  Compiled with Borland International's Turbo Pascal 7.0 for DOS.
+  Tested on an Intel 486SX-20MHz system w/ a color VGA display.
+
+  Disclaimer:
+
+  There is no garentee that comes with this source code; the author of
+  this unit is NOT responsible for any direct or indirect damages
+  caused by this program.  Use it at your own risk.
+
+  Contacting the author:
+
+  NOTE: All comments/questions/suggestions are welcome!  Also, any
+        additions or modifications are welcome!
+
+  Chad Moore can be reached via Internet e-mail at: war@usaor.net
+
+  Or send a letter to: Chad Moore
+                       535 Mellon Ave.
+                       Rochester, PA
+                       15074-1237
+}
+
+{$G+} { Enable 286/287 instructions }
+</i></font><font color="#FF0000"><b>unit </b></font>ANSI_IO<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+const
+  </b></font><font color="#008000"><i>{ Release information }
+  </i></font>Version <font color="#000080">= </font><font color="#800000">$0104</font><font color="#000080">;
+  </font><font color="#008000"><i>{ Defaults }
+  </i></font>VideoSegment <font color="#000080">= </font><font color="#800000">$B800</font><font color="#000080">; </font><font color="#008000"><i>{ $B800 for color; DOES NOT SUPPORT MONO }
+  </i></font>TextModeLength <font color="#000080">= </font><font color="#800000">25</font><font color="#000080">; </font><font color="#008000"><i>{ # of lines in selected textmode }
+  </i></font>TextModeWidth <font color="#000080">= </font><font color="#800000">80</font><font color="#000080">;
+  </font><font color="#008000"><i>{ Virtual screen constants }
+  </i></font>VirtualScreenLength <font color="#000080">= </font><font color="#800000">400</font><font color="#000080">; </font><font color="#008000"><i>{ Set to 'TextModeRows' for __ONLY__ direct video output }
+  </i></font>VirtualScreenWidth <font color="#000080">= </font><font color="#800000">80</font><font color="#000080">;
+  </font>VirtualScreenSize <font color="#000080">= </font>VirtualScreenLength <font color="#000080">* </font>VirtualScreenWidth<font color="#000080">;
+  </font><font color="#008000"><i>{ ANSI parameter constants }
+  </i></font>ParameterBufferLength <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font>ParameterBufferSize <font color="#000080">= </font>ParameterBufferLength <font color="#000080">* </font><font color="#800000">3</font><font color="#000080">;
+  </font><font color="#008000"><i>{ ANSI Error values }
+  </i></font>ANSIErrorListLength <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;
+  </font>ANSIErrorList <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>ANSIErrorListLength <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">= (
+  </font><font color="#800000">'None'</font><font color="#000080">,
+  </font><font color="#800000">'ANSI routines not initialized'</font><font color="#000080">,
+  </font><font color="#800000">'Virtual screen not initialized'</font><font color="#000080">,
+  </font><font color="#800000">'Invalid format'</font><font color="#000080">,
+  </font><font color="#800000">'Too many parameters'</font><font color="#000080">,
+  </font><font color="#800000">'Parameter too long'</font><font color="#000080">,
+  </font><font color="#800000">'Cannot execute command'
+  </font><font color="#000080">);
+
+</font><font color="#FF0000"><b>type
+  </b></font>PosRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>X <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Y <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ScreenCharRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Character<font color="#000080">,
+    </font>Attribute <font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>PScreenType <font color="#000080">= ^</font>ScreenType<font color="#000080">;
+  </font>ScreenType <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>VirtualScreenSize <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>ScreenCharRec<font color="#000080">;
+  </font>VirtualScreenObj <font color="#000080">= </font><font color="#FF0000"><b>object
+    </b></font>ActiveAttribute <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>DirectVideo <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>Data <font color="#000080">: </font>PScreenType<font color="#000080">;
+    </font>MemForData <font color="#000080">: </font>Word<font color="#000080">;
+    </font>EndOfBuffer <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#008000"><i>{ Not used w/ direct video }
+    </i></font>Cursor <font color="#000080">: </font>PosRec<font color="#000080">;
+    </font>Initialized <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>Error <font color="#000080">( </font>Command <font color="#000080">: </font>Byte <font color="#000080">);
+    </font><font color="#FF0000"><b>function </b></font>Init <font color="#000080">: </font>Byte<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>InitDirectVideo <font color="#000080">: </font>Byte<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>DeInit<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>Clear<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>GotoXY <font color="#000080">( </font>X <font color="#000080">: </font>Byte<font color="#000080">; </font>Y <font color="#000080">: </font>Integer <font color="#000080">);
+    </font><font color="#FF0000"><b>procedure </b></font>ScrollScreenUp<font color="#000080">; </font><font color="#008000"><i>{ Direct video __ONLY__ }
+    </i></font><font color="#FF0000"><b>procedure </b></font>WriteCR<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>WriteCh <font color="#000080">( </font>Ch <font color="#000080">: </font>Char <font color="#000080">);
+    </font><font color="#FF0000"><b>procedure </b></font>WriteStr <font color="#000080">( </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+    </font><font color="#FF0000"><b>procedure </b></font>WriteStrLn <font color="#000080">( </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ANSIHandlerObj <font color="#000080">= </font><font color="#FF0000"><b>object
+    </b></font>ParameterBuffer <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>ParameterBufferLength <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>ParameterRow<font color="#000080">,
+    </font>ParameterColumn <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>LastCharacter <font color="#000080">: </font>Char<font color="#000080">;
+    </font>Escape<font color="#000080">, </font>EscapeSequence <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>SavedCursor <font color="#000080">: </font>PosRec<font color="#000080">;
+    </font>LastError <font color="#000080">: </font>Byte<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>Init<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>DeInit<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>ClearParameterBuffer<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>ReturnParameters <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>Attribute <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>ClearCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>EraseFromCursorToEndOfLine <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>PositionCursor <font color="#000080">( </font>Command <font color="#000080">: </font>Char <font color="#000080">) : </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorUp <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorDown <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorRight <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorLeft <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorUpCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorDownCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorRightCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>CursorLeftCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>SaveCursorLocation<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>RestoreCursorLocation<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>ProcessCommand <font color="#000080">( </font>Command <font color="#000080">: </font>Char <font color="#000080">) : </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>WriteCh <font color="#000080">( </font>Ch <font color="#000080">: </font>Char <font color="#000080">) : </font>Byte<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>WriteStr <font color="#000080">( </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+
+    </font><font color="#FF0000"><b>function </b></font>SetClearScreen <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetAttribute <font color="#000080">( </font>FromAttribute <font color="#000080">: </font>Integer<font color="#000080">; </font>ToAttribute <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetCursorPosition <font color="#000080">( </font>X<font color="#000080">, </font>Y <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetCursorUp <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetCursorDown <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetCursorLeft <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetCursorRight <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetSaveCursorPosition <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>SetRestoreCursorPosition <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>ScreenWidth<font color="#000080">, </font>ScreenLength<font color="#000080">, </font>ScreenSize <font color="#000080">: </font>Word<font color="#000080">;
+  </font>VirtualScreen <font color="#000080">: </font>VirtualScreenObj<font color="#000080">;
+  </font>ANSIHandler <font color="#000080">: </font>ANSIHandlerObj<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+procedure </b></font>VirtualScreenObj<font color="#000080">.</font>Error <font color="#000080">( </font>Command <font color="#000080">: </font>Byte <font color="#000080">);
+
+</font><font color="#FF0000"><b>type
+  </b></font>ErrRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Msg <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>Cmd <font color="#000080">: </font>Byte<font color="#000080">;
+      </font><font color="#008000"><i>{ Cmd:  $00 : None }
+      {       $01 : Halt }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>NumErrorTypes <font color="#000080">= </font><font color="#800000">$02</font><font color="#000080">;
+  </font>ErrorHandler <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>NumErrorTypes <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>ErrRec <font color="#000080">= (
+  (</font>Msg <font color="#000080">: </font><font color="#800000">''</font><font color="#000080">; </font>Cmd <font color="#000080">: </font><font color="#800000">$00</font><font color="#000080">),
+  (</font>Msg <font color="#000080">: </font><font color="#800000">'Out of Memory'</font><font color="#000080">; </font>Cmd <font color="#000080">: </font><font color="#800000">$01</font><font color="#000080">)
+  </font><font color="#008000"><i>{ This format of storing the errors &amp; commands is very configurable }
+  </i></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>ErrorHandler<font color="#000080">[</font>Command<font color="#000080">].</font>Msg <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>then begin
+    </b></font>WriteLn<font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'ERROR: '</font><font color="#000080">, </font>ErrorHandler<font color="#000080">[</font>Command<font color="#000080">].</font>Msg<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>ErrorHandler<font color="#000080">[</font>Command<font color="#000080">].</font>Cmd <font color="#FF0000"><b>of
+    </b></font><font color="#800000">$01 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      </b></font>Halt<font color="#000080">(</font><font color="#800000">$0000</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>VirtualScreenObj<font color="#000080">.</font>Init <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Init <font color="#000080">:= </font><font color="#800000">$00</font><font color="#000080">;
+  </font>MemForData <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>Data<font color="#000080">^);
+  </font><font color="#FF0000"><b>if </b></font>MaxAvail <font color="#000080">&gt; </font>MemForData <font color="#FF0000"><b>then begin
+    </b></font><font color="#008000"><i>{ Get memory }
+    </i></font>GetMem<font color="#000080">(</font>Data<font color="#000080">, </font>MemForData<font color="#000080">);
+    </font><font color="#008000"><i>{ Initialize values }
+    </i></font>Clear<font color="#000080">;
+    </font>EndOfBuffer <font color="#000080">:= </font>False<font color="#000080">;
+    </font>ActiveAttribute <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+    </font>ScreenLength <font color="#000080">:= </font>VirtualScreenLength<font color="#000080">;
+    </font>ScreenWidth <font color="#000080">:= </font>VirtualScreenWidth<font color="#000080">;
+    </font>ScreenSize <font color="#000080">:= </font>ScreenLength <font color="#000080">* </font>ScreenWidth<font color="#000080">;
+    </font>Initialized <font color="#000080">:= </font>True<font color="#000080">;
+    </font>DirectVideo <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>Init <font color="#000080">:= </font><font color="#800000">$01</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>VirtualScreenObj<font color="#000080">.</font>InitDirectVideo <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>InitDirectVideo <font color="#000080">:= </font><font color="#800000">$00</font><font color="#000080">;
+  </font><font color="#008000"><i>{ Set Data -&gt; VideoSegment:$0000 }
+  </i></font>Data <font color="#000080">:= </font>Ptr<font color="#000080">(</font>VideoSegment<font color="#000080">,</font><font color="#800000">$0000</font><font color="#000080">);
+  </font>ScreenLength <font color="#000080">:= </font>TextModeLength<font color="#000080">;
+  </font>ScreenWidth <font color="#000080">:= </font>TextModeWidth<font color="#000080">;
+  </font>ScreenSize <font color="#000080">:= </font>TextModeLength <font color="#000080">* </font>TextModeWidth<font color="#000080">;
+  </font>DirectVideo <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#008000"><i>{ Initialize values }
+  </i></font>Clear<font color="#000080">;
+  </font>EndOfBuffer <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Cursor<font color="#000080">.</font>Y <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>ActiveAttribute <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+  </font>Initialized <font color="#000080">:= </font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>DeInit<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FreeMem<font color="#000080">(</font>Data<font color="#000080">, </font>MemForData<font color="#000080">);
+  </font>ScreenWidth <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>ScreenLength <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>ScreenSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>Clear<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>AA <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>AA <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute<font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov cx,VideoSegment
+    mov es,cx
+    xor di,di
+    mov cx,ScreenSize        </font><font color="#008000"><i>{ CX = ScreenSize/2 }
+    </i></font><font color="#FF00FF">shr cx,1                 </font><font color="#008000"><i>{ CX = ScreenSize/4 }
+    </i></font><font color="#FF00FF">mov ah,AA
+    mov al,$20
+    db 66h; shl ax,16        </font><font color="#008000"><i>{ move AX to high word of EAX }
+    </i></font><font color="#FF00FF">mov ah,AA
+    mov al,$20               </font><font color="#008000"><i>{ set AX again }
+    </i></font><font color="#FF00FF">db 66h; rep stosw        </font><font color="#008000"><i>{ REP STOSD }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font>Cursor<font color="#000080">.</font>Y <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>EndOfBuffer <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>GotoXY <font color="#000080">( </font>X <font color="#000080">: </font>Byte<font color="#000080">; </font>Y <font color="#000080">: </font>Integer <font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&lt; </font>ScreenLength<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Cursor<font color="#000080">.</font>X <font color="#000080">&lt; </font>ScreenWidth<font color="#000080">) </font><font color="#FF0000"><b>then begin
+    </b></font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font>X<font color="#000080">;
+    </font>Cursor<font color="#000080">.</font>Y <font color="#000080">:= </font>Y<font color="#000080">;
+    </font>EndOfBuffer <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>ScrollScreenUp<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ adjust display }
+  </i></font>Move<font color="#000080">(</font>Mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">160</font><font color="#000080">],</font>Mem<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">],</font>ScreenSize <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>Dec<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>WriteCR<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Inc<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>DirectVideo <font color="#FF0000"><b>then begin
+    while </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>ScrollScreenUp<font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else begin
+    if </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>then begin
+      </b></font>EndOfBuffer <font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>WriteCh <font color="#000080">( </font>Ch <font color="#000080">: </font>Char <font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>Value <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Value <font color="#000080">:= </font>Cursor<font color="#000080">.</font>Y <font color="#000080">* </font>ScreenWidth <font color="#000080">+ </font>Cursor<font color="#000080">.</font>X<font color="#000080">;
+  </font><font color="#008000"><i>{ This speeds up the routine ever so SLIGHTLY... }
+  </i></font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#10 </font><font color="#FF0000"><b>then begin
+    </b></font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else if </b></font>Ch <font color="#000080">= </font><font color="#800000">#13 </font><font color="#FF0000"><b>then begin
+    </b></font>Inc<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>DirectVideo <font color="#FF0000"><b>then begin
+      while </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>ScrollScreenUp<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else begin
+      if </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>then begin
+        </b></font>EndOfBuffer <font color="#000080">:= </font>True<font color="#000080">;
+        </font><font color="#FF0000"><b>while </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else begin
+    </b></font>VirtualScreen<font color="#000080">.</font>Data<font color="#000080">^[</font>Value<font color="#000080">].</font>Character <font color="#000080">:= </font>Ord<font color="#000080">(</font>Ch<font color="#000080">);
+    </font>VirtualScreen<font color="#000080">.</font>Data<font color="#000080">^[</font>Value<font color="#000080">].</font>Attribute <font color="#000080">:= </font>ActiveAttribute<font color="#000080">;
+    </font>Inc<font color="#000080">(</font>Cursor<font color="#000080">.</font>X<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>Cursor<font color="#000080">.</font>X <font color="#000080">&gt;= </font>ScreenWidth <font color="#FF0000"><b>then begin
+      </b></font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>Inc<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>DirectVideo <font color="#FF0000"><b>then begin
+        while </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>ScrollScreenUp<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else begin
+        if </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>then begin
+          </b></font>EndOfBuffer <font color="#000080">:= </font>True<font color="#000080">;
+          </font><font color="#FF0000"><b>while </b></font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>WriteStr <font color="#000080">( </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>I <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>Str<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>WriteCh<font color="#000080">(</font>Str<font color="#000080">[</font>I<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>VirtualScreenObj<font color="#000080">.</font>WriteStrLn <font color="#000080">( </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>I <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>Str<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>WriteCh<font color="#000080">(</font>Str<font color="#000080">[</font>I<font color="#000080">]);
+  </font>WriteCR<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ANSIHandlerObj<font color="#000080">.</font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LastError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+  </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+  </font>ClearParameterBuffer<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ANSIHandlerObj<font color="#000080">.</font>DeInit<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>LastError <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ANSIHandlerObj<font color="#000080">.</font>ClearParameterBuffer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FillChar<font color="#000080">(</font>ParameterBuffer<font color="#000080">,</font>ParameterBufferSize<font color="#000080">,</font><font color="#800000">#255</font><font color="#000080">);
+  </font>ParameterRow <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>ParameterColumn <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>ReturnParameters <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>J <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>ParameterString <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>ParameterString <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>J <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>ParameterRow <font color="#FF0000"><b>do
+    if </b></font>J <font color="#000080">= </font>ParameterRow <font color="#FF0000"><b>then begin
+      for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>ParameterColumn <font color="#FF0000"><b>do begin
+        if </b></font><font color="#000080">(</font>I <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>J <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          if </b></font>ParameterBuffer<font color="#000080">[</font>J<font color="#000080">,</font>I<font color="#000080">] &lt;&gt; </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>ParameterString <font color="#000080">:= </font>ParameterString <font color="#000080">+ </font><font color="#800000">';'</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>ParameterBuffer<font color="#000080">[</font>J<font color="#000080">,</font>I<font color="#000080">] &lt;&gt; </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>ParameterString <font color="#000080">:= </font>ParameterString <font color="#000080">+ </font>ParameterBuffer<font color="#000080">[</font>J<font color="#000080">,</font>I<font color="#000080">];
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else begin
+      for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">2 </font><font color="#FF0000"><b>do begin
+        if </b></font><font color="#000080">(</font>I <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>J <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>ParameterString <font color="#000080">:= </font>ParameterString <font color="#000080">+ </font><font color="#800000">';'</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>ParameterBuffer<font color="#000080">[</font>J<font color="#000080">,</font>I<font color="#000080">] &lt;&gt; </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>ParameterString <font color="#000080">:= </font>ParameterString <font color="#000080">+ </font>ParameterBuffer<font color="#000080">[</font>J<font color="#000080">,</font>I<font color="#000080">];
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ReturnParameters <font color="#000080">:= </font>ParameterString<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>Attribute <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>Colors <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">= (</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">7</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>Foreground<font color="#000080">, </font>Background<font color="#000080">,
+  </font>Number<font color="#000080">, </font>OldAttribute <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>Intensity<font color="#000080">, </font>Blink <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Attribute <font color="#000080">:= </font>True<font color="#000080">;
+  </font>OldAttribute <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>OldAttribute <font color="#000080">&gt;= </font><font color="#800000">128 </font><font color="#FF0000"><b>then begin
+    </b></font>Blink <font color="#000080">:= </font>True<font color="#000080">;
+    </font>OldAttribute <font color="#000080">:= </font>OldAttribute <font color="#000080">- </font><font color="#800000">128</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>Blink <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Background <font color="#000080">:= (</font>OldAttribute <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>OldAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">) &gt; </font><font color="#800000">7 </font><font color="#FF0000"><b>then begin
+    </b></font>Intensity <font color="#000080">:= </font>True<font color="#000080">;
+    </font>Foreground <font color="#000080">:= (</font>OldAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">) - </font><font color="#800000">8</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else begin
+    </b></font>Intensity <font color="#000080">:= </font>False<font color="#000080">;
+    </font>Foreground <font color="#000080">:= (</font>OldAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>ParameterBufferLength <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] &lt;&gt; </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      if </b></font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+        </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else if </b></font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+        </b></font>Number <font color="#000080">:= (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">) * </font><font color="#800000">10</font><font color="#000080">;
+        </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else begin
+        </b></font>Number <font color="#000080">:= (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">) * </font><font color="#800000">100</font><font color="#000080">;
+        </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">) * </font><font color="#800000">10</font><font color="#000080">;
+        </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font>I<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>case </b></font>Number <font color="#FF0000"><b>of
+        </b></font><font color="#800000">0 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+          </b></font>Foreground <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+          </font>Background <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font>Intensity <font color="#000080">:= </font>False<font color="#000080">;
+          </font>Blink <font color="#000080">:= </font>False<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#800000">1 </font><font color="#000080">: </font>Intensity <font color="#000080">:= </font>True<font color="#000080">;
+        </font><font color="#800000">5 </font><font color="#000080">: </font>Blink <font color="#000080">:= </font>True<font color="#000080">;
+        </font><font color="#800000">7 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+          </b></font>OldAttribute <font color="#000080">:= </font>Foreground<font color="#000080">;
+          </font>Foreground <font color="#000080">:= </font>Background<font color="#000080">;
+          </font>Background <font color="#000080">:= </font>OldAttribute<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#800000">30</font><font color="#000080">..</font><font color="#800000">37 </font><font color="#000080">: </font>Foreground <font color="#000080">:= </font>Colors <font color="#000080">[</font>Number <font color="#000080">- </font><font color="#800000">30</font><font color="#000080">];
+        </font><font color="#800000">40</font><font color="#000080">..</font><font color="#800000">47 </font><font color="#000080">: </font>Background <font color="#000080">:= </font>Colors <font color="#000080">[</font>Number <font color="#000080">- </font><font color="#800000">40</font><font color="#000080">];
+        </font><font color="#FF0000"><b>else begin </b></font><font color="#008000"><i>{ Unknown command }
+          </i></font>Attribute <font color="#000080">:= </font>False<font color="#000080">;
+          </font><font color="#008000"><i>{ In this instance, the unknown command is ignoured and the
+            current block is not terminated.  If desired, uncomment
+            the next line. }
+          { Exit; }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">:= </font>Background <font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Intensity <font color="#FF0000"><b>then </b></font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">+ (</font>Foreground <font color="#000080">+ </font><font color="#800000">8</font><font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">+ </font>Foreground<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Blink <font color="#FF0000"><b>then </b></font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute <font color="#000080">+ </font><font color="#800000">128</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>ClearCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ClearCommand <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>ClearCommand <font color="#000080">:= </font>False
+    <font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      case </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>of
+</b></font><font color="#008000"><i>{        '0' : ; }{ Clear from cursor up? }
+{        '1' : ; }{ Clear from cursor down? }
+        </i></font><font color="#800000">'2' </font><font color="#000080">: </font>VirtualScreen<font color="#000080">.</font>Clear<font color="#000080">; </font><font color="#008000"><i>{ Clear screen }
+        </i></font><font color="#FF0000"><b>else </b></font>ClearCommand <font color="#000080">:= </font>False<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>ClearCommand <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>ClearCommand <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>EraseFromCursorToEndOfLine <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>ValueY <font color="#000080">: </font>Word<font color="#000080">;
+  </font>I<font color="#000080">, </font>X<font color="#000080">, </font>AA<font color="#000080">, </font>Count <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>EraseFromCursorToEndOfLine <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>Initialized <font color="#FF0000"><b>then begin
+    </b></font>X <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>DirectVideo <font color="#FF0000"><b>then begin
+      </b></font>ValueY <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">* </font>ScreenWidth<font color="#000080">;
+      </font>Count <font color="#000080">:= </font>ScreenWidth <font color="#000080">- </font>X<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>ValueY <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">* </font>ScreenWidth<font color="#000080">;
+      </font>Count <font color="#000080">:= </font>ScreenWidth <font color="#000080">- </font>X<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>AA <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>ActiveAttribute<font color="#000080">;
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov cx,VideoSegment
+      mov es,cx
+      mov di,ValueY
+      shl di,1
+      xor ah,ah
+      mov al,X
+      shl ax,1
+      add di,ax
+      shl di,1
+      xor ch,ch
+      mov cl,Count
+      shr cl,1
+      mov ah,AA              </font><font color="#008000"><i>{ Set AX }
+      </i></font><font color="#FF00FF">mov al,$20
+      db 66h; shl ax,16      </font><font color="#008000"><i>{ Shift AX -&gt; high end of EAX }
+      </i></font><font color="#FF00FF">mov ah,AA              </font><font color="#008000"><i>{ Set AX }
+      </i></font><font color="#FF00FF">mov al,$20
+      db 66h; rep stosw      </font><font color="#008000"><i>{ REP STOSD }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>VirtualScreen<font color="#000080">.</font>WriteCR<font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>EraseFromCursorToEndOfLine <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>PositionCursor <font color="#000080">( </font>Command <font color="#000080">: </font>Char <font color="#000080">) : </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>Number <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>PositionCursor <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">100 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">));
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Number <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Number <font color="#000080">&lt;= </font>ScreenLength<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">:= </font>Number <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">100 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">));
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Number <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Number <font color="#000080">&lt;= </font>ScreenWidth<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font>Number <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else begin
+    </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorUp <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorUp <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    </b></font>Dec<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorUp <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorDown <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorDown <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&lt; </font>ScreenLength <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    </b></font>Inc<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorDown <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorRight <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorRight <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">&lt; </font>ScreenWidth <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    </b></font>Inc<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else begin
+    if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&lt; </font>ScreenLength <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+      </b></font>Inc<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+      </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else </b></font>CursorRight <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorLeft <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorLeft <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    </b></font>Dec<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorLeft <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorUpCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>Number <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorUpCommand <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font><font color="#800000">1
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">100 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">));
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Number <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Number <font color="#FF0000"><b>do begin
+      if not </b></font>CursorUp <font color="#FF0000"><b>then </b></font>CursorUpCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorUpCommand <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorDownCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>Number <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorDownCommand <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font><font color="#800000">1
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">100 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">));
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Number <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Number <font color="#FF0000"><b>do begin
+      if not </b></font>CursorDown <font color="#FF0000"><b>then </b></font>CursorDownCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorDownCommand <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorRightCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>Number <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorRightCommand <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font><font color="#800000">1
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">100 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">));
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Number <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Number <font color="#FF0000"><b>do begin
+      if not </b></font>CursorRight <font color="#FF0000"><b>then </b></font>CursorRightCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorRightCommand <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>CursorLeftCommand <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>Number <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>CursorLeftCommand <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font><font color="#800000">1
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then </b></font>Number <font color="#000080">:= </font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48
+    </font><font color="#FF0000"><b>else if </b></font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] = </font><font color="#800000">#255 </font><font color="#FF0000"><b>then begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Number <font color="#000080">:= </font><font color="#800000">100 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font><font color="#800000">10 </font><font color="#000080">* (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">));
+      </font>Number <font color="#000080">:= </font>Number <font color="#000080">+ (</font>Ord <font color="#000080">(</font>ParameterBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]) - </font><font color="#800000">48</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Number <font color="#000080">= </font><font color="#800000">255 </font><font color="#FF0000"><b>then </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0 </font><font color="#008000"><i>{ Cursor at beginning of line }
+    </i></font><font color="#FF0000"><b>else if </b></font>Number <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Number <font color="#FF0000"><b>do begin
+      if not </b></font>CursorLeft <font color="#FF0000"><b>then </b></font>CursorLeftCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else </b></font>CursorLeftCommand <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ANSIHandlerObj<font color="#000080">.</font>SaveCursorLocation<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>SavedCursor<font color="#000080">.</font>X <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X<font color="#000080">;
+  </font>SavedCursor<font color="#000080">.</font>Y <font color="#000080">:= </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ANSIHandlerObj<font color="#000080">.</font>RestoreCursorLocation<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font>SavedCursor<font color="#000080">.</font>X<font color="#000080">;
+  </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">:= </font>SavedCursor<font color="#000080">.</font>Y<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>ProcessCommand <font color="#000080">( </font>Command <font color="#000080">: </font>Char <font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ProcessCommand <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>Command <font color="#FF0000"><b>of
+    </b></font><font color="#800000">'m' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>Attribute <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'H'</font><font color="#000080">,</font><font color="#800000">'f' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>PositionCursor<font color="#000080">(</font>Command<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'J' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>ClearCommand <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'K' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>EraseFromCursorToEndOfLine <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'A' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>CursorUpCommand <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'B' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>CursorDownCommand <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'C' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>CursorRightCommand <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'D' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if not </b></font>CursorLeftCommand <font color="#FF0000"><b>then
+        </b></font>ProcessCommand <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'s' </font><font color="#000080">: </font>SaveCursorLocation<font color="#000080">;
+    </font><font color="#800000">'u' </font><font color="#000080">: </font>RestoreCursorLocation<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+  </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>WriteCh <font color="#000080">( </font>Ch <font color="#000080">: </font>Char <font color="#000080">) : </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>WriteCh <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ No errors }
+  </i></font><font color="#FF0000"><b>if </b></font>LastError <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    </b></font>WriteCh <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">; </font><font color="#008000"><i>{ Error #1 }
+  </i></font><font color="#FF0000"><b>end
+  else if not </b></font>VirtualScreen<font color="#000080">.</font>Initialized <font color="#FF0000"><b>then begin
+    </b></font>WriteCh <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">; </font><font color="#008000"><i>{ Error #2 }
+  </i></font><font color="#FF0000"><b>end
+  else case </b></font>Ch <font color="#FF0000"><b>of
+    </b></font><font color="#800000">#10 </font><font color="#000080">: </font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ Line feed }
+      </i></font><font color="#FF0000"><b>if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters<font color="#000080">);
+          </font>Inc<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>DirectVideo <font color="#FF0000"><b>then begin
+            while </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>VirtualScreen<font color="#000080">.</font>ScrollScreenUp<font color="#000080">;
+          </font><font color="#FF0000"><b>end
+          else begin
+            if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>then begin
+              </b></font>VirtualScreen<font color="#000080">.</font>EndOfBuffer <font color="#000080">:= </font>True<font color="#000080">;
+              </font><font color="#FF0000"><b>while </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end
+        else begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font><font color="#800000">#27</font><font color="#000080">);
+          </font>Inc<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>DirectVideo <font color="#FF0000"><b>then begin
+            while </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>VirtualScreen<font color="#000080">.</font>ScrollScreenUp<font color="#000080">;
+          </font><font color="#FF0000"><b>end
+          else begin
+            if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>then begin
+              </b></font>VirtualScreen<font color="#000080">.</font>EndOfBuffer <font color="#000080">:= </font>True<font color="#000080">;
+              </font><font color="#FF0000"><b>while </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else begin
+        </b></font>Inc<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>VirtualScreen<font color="#000080">.</font>DirectVideo <font color="#FF0000"><b>then begin
+          while </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>VirtualScreen<font color="#000080">.</font>ScrollScreenUp<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+        else begin
+          if </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>then begin
+            </b></font>VirtualScreen<font color="#000080">.</font>EndOfBuffer <font color="#000080">:= </font>True<font color="#000080">;
+            </font><font color="#FF0000"><b>while </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y <font color="#000080">&gt;= </font>ScreenLength <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>Y<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">#13 </font><font color="#000080">: </font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ CR }
+      </i></font><font color="#FF0000"><b>if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters<font color="#000080">);
+          </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end
+        else begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font><font color="#800000">#27</font><font color="#000080">);
+          </font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>VirtualScreen<font color="#000080">.</font>Cursor<font color="#000080">.</font>X <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">#27 </font><font color="#000080">: </font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ Esc }
+      </i></font><font color="#FF0000"><b>if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          </b></font>Escape <font color="#000080">:= </font>True<font color="#000080">;
+          </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters<font color="#000080">);
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end
+        else </b></font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font><font color="#800000">#27</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else </b></font>Escape <font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">#91 </font><font color="#000080">: </font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ [ }
+      </i></font><font color="#FF0000"><b>if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font>Ch<font color="#000080">);
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end
+        else begin
+          </b></font>EscapeSequence <font color="#000080">:= </font>True<font color="#000080">;
+          </font>ClearParameterBuffer<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font>Ch<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          if </b></font>ParameterColumn <font color="#000080">&lt;= </font><font color="#800000">2 </font><font color="#FF0000"><b>then begin
+            </b></font>ParameterBuffer<font color="#000080">[</font>ParameterRow<font color="#000080">,</font>ParameterColumn<font color="#000080">] := </font>Ch<font color="#000080">;
+            </font>Inc <font color="#000080">(</font>ParameterColumn<font color="#000080">);
+          </font><font color="#FF0000"><b>end
+          else begin
+            </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+            </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+            </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font>Ch<font color="#000080">);
+            </font>WriteCh <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">; </font><font color="#008000"><i>{ Error #5 }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end
+        else begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27 </font><font color="#000080">+ </font>Ch<font color="#000080">);
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font>Ch<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">';' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          if </b></font>LastCharacter <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">] </font><font color="#FF0000"><b>then begin
+            </b></font>Inc<font color="#000080">(</font>ParameterRow<font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>ParameterRow <font color="#000080">&gt; </font>ParameterBufferLength <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+              </b></font>ParameterRow <font color="#000080">:= </font>ParameterBufferLength <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+              </font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+              </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+              </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font><font color="#800000">';'</font><font color="#000080">);
+              </font>WriteCh <font color="#000080">:= </font><font color="#800000">4</font><font color="#000080">; </font><font color="#008000"><i>{ Error #4 }
+            </i></font><font color="#FF0000"><b>end
+            else </b></font>ParameterColumn <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>end
+          else begin
+            </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+            </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+            </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font><font color="#800000">';'</font><font color="#000080">);
+            </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end
+        else begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27 </font><font color="#000080">+ </font><font color="#800000">';'</font><font color="#000080">);
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font><font color="#800000">';'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">'m'</font><font color="#000080">,</font><font color="#800000">'H'</font><font color="#000080">,</font><font color="#800000">'f'</font><font color="#000080">,</font><font color="#800000">'J'</font><font color="#000080">,</font><font color="#800000">'K'</font><font color="#000080">,</font><font color="#800000">'A'</font><font color="#000080">,</font><font color="#800000">'B'</font><font color="#000080">,</font><font color="#800000">'C'</font><font color="#000080">,</font><font color="#800000">'D'</font><font color="#000080">,</font><font color="#800000">'s'</font><font color="#000080">,</font><font color="#800000">'u' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+      if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          if </b></font>LastCharacter <font color="#000080">= </font><font color="#800000">';' </font><font color="#FF0000"><b>then begin
+            </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+            </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+            </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font><font color="#800000">';' </font><font color="#000080">+ </font>Ch<font color="#000080">);
+            </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+          </i></font><font color="#FF0000"><b>end
+          else begin
+            if not </b></font>ProcessCommand<font color="#000080">(</font>Ch<font color="#000080">) </font><font color="#FF0000"><b>then begin
+              </b></font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font>Ch<font color="#000080">);
+              </font>WriteCh <font color="#000080">:= </font><font color="#800000">6</font><font color="#000080">; </font><font color="#008000"><i>{ Error #6 }
+            </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end
+        else begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27 </font><font color="#000080">+ </font>Ch<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font>Ch<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>else begin
+      if </b></font>Escape <font color="#FF0000"><b>then begin
+        if </b></font>EscapeSequence <font color="#FF0000"><b>then begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>EscapeSequence <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27#91 </font><font color="#000080">+ </font>ReturnParameters <font color="#000080">+ </font>Ch<font color="#000080">);
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end
+        else begin
+          </b></font>Escape <font color="#000080">:= </font>False<font color="#000080">;
+          </font>VirtualScreen<font color="#000080">.</font>WriteStr<font color="#000080">(</font><font color="#800000">#27 </font><font color="#000080">+ </font>Ch<font color="#000080">);
+          </font>WriteCh <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ Error #3 }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else </b></font>VirtualScreen<font color="#000080">.</font>WriteCh<font color="#000080">(</font>Ch<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LastCharacter <font color="#000080">:= </font>Ch<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ANSIHandlerObj<font color="#000080">.</font>WriteStr <font color="#000080">( </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>I <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  for </b></font>I <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>Str<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>ANSIHandler<font color="#000080">.</font>WriteCh<font color="#000080">(</font>Str<font color="#000080">[</font>I<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetClearScreen <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for clearing the screen
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>SetClearScreen <font color="#000080">:= </font><font color="#800000">'[2J'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetAttribute <font color="#000080">( </font>FromAttribute <font color="#000080">: </font>Integer<font color="#000080">; </font>ToAttribute <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for setting the attribute
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>const
+  </b></font>Colors <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char <font color="#000080">= (</font><font color="#800000">'0'</font><font color="#000080">, </font><font color="#800000">'4'</font><font color="#000080">, </font><font color="#800000">'2'</font><font color="#000080">, </font><font color="#800000">'6'</font><font color="#000080">, </font><font color="#800000">'1'</font><font color="#000080">, </font><font color="#800000">'5'</font><font color="#000080">, </font><font color="#800000">'3'</font><font color="#000080">, </font><font color="#800000">'7'</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>Str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>WasBlink<font color="#000080">, </font>WasInten <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>WasBG<font color="#000080">, </font>WasFG <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>NowBlink<font color="#000080">, </font>NowInten <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>NowBG<font color="#000080">, </font>NowFG <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>Param <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Param <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Str <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>FromAttribute <font color="#000080">&lt;&gt; -</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+    if </b></font>FromAttribute <font color="#000080">&gt; </font><font color="#800000">127 </font><font color="#FF0000"><b>then </b></font>WasBlink <font color="#000080">:= </font>True
+    <font color="#FF0000"><b>else </b></font>WasBlink <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>FromAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16 </font><font color="#000080">&gt; </font><font color="#800000">7 </font><font color="#FF0000"><b>then begin
+      </b></font>WasInten <font color="#000080">:= </font>True<font color="#000080">;
+      </font>WasFG <font color="#000080">:= </font>FromAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16 </font><font color="#000080">- </font><font color="#800000">8</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>WasInten <font color="#000080">:= </font>False<font color="#000080">;
+      </font>WasFG <font color="#000080">:= </font>FromAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>WasBG <font color="#000080">:= </font>FromAttribute <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else begin
+    </b></font>Str <font color="#000080">:= </font><font color="#800000">#27#91#48</font><font color="#000080">; </font><font color="#008000"><i>{ '[0' }
+    </i></font>Param <font color="#000080">:= </font>True<font color="#000080">;
+    </font>WasBlink <font color="#000080">:= </font>False<font color="#000080">;
+    </font>WasInten <font color="#000080">:= </font>False<font color="#000080">;
+    </font>WasBG <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>WasFG <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ToAttribute <font color="#000080">&gt; </font><font color="#800000">127 </font><font color="#FF0000"><b>then </b></font>NowBlink <font color="#000080">:= </font>True
+  <font color="#FF0000"><b>else </b></font>NowBlink <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ToAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16 </font><font color="#000080">&gt; </font><font color="#800000">7 </font><font color="#FF0000"><b>then begin
+    </b></font>NowInten <font color="#000080">:= </font>True<font color="#000080">;
+    </font>NowFG <font color="#000080">:= </font>ToAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16 </font><font color="#000080">- </font><font color="#800000">8</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else begin
+    </b></font>NowInten <font color="#000080">:= </font>False<font color="#000080">;
+    </font>NowFG <font color="#000080">:= </font>ToAttribute <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>NowBG <font color="#000080">:= </font>ToAttribute <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>WasBlink<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>NowBlink<font color="#000080">)) </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font>WasInten<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>NowInten<font color="#000080">)) </font><font color="#FF0000"><b>then begin
+    </b></font>Str <font color="#000080">:= </font><font color="#800000">#27#91#48</font><font color="#000080">; </font><font color="#008000"><i>{ '[0' }
+    </i></font>Param <font color="#000080">:= </font>True<font color="#000080">;
+    </font>WasBlink <font color="#000080">:= </font>False<font color="#000080">;
+    </font>WasInten <font color="#000080">:= </font>False<font color="#000080">;
+    </font>WasBG <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>WasFG <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>NowBlink <font color="#FF0000"><b>then
+    if not </b></font>WasBlink <font color="#FF0000"><b>then begin
+      if </b></font>Param <font color="#FF0000"><b>then </b></font>Str <font color="#000080">:= </font>Str <font color="#000080">+ </font><font color="#800000">';5'
+      </font><font color="#FF0000"><b>else begin
+        </b></font>Str <font color="#000080">:= </font><font color="#800000">#27#91 </font><font color="#000080">+ </font><font color="#800000">'5'</font><font color="#000080">;
+        </font>Param <font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>NowInten <font color="#FF0000"><b>then
+    if not </b></font>WasInten <font color="#FF0000"><b>then begin
+      if </b></font>Param <font color="#FF0000"><b>then </b></font>Str <font color="#000080">:= </font>Str <font color="#000080">+ </font><font color="#800000">';1'
+      </font><font color="#FF0000"><b>else begin
+        </b></font>Str <font color="#000080">:= </font><font color="#800000">#27#91 </font><font color="#000080">+ </font><font color="#800000">'1'</font><font color="#000080">;
+        </font>Param <font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>NowBG <font color="#000080">&lt;&gt; </font>WasBG <font color="#FF0000"><b>then begin
+    if </b></font>Param <font color="#FF0000"><b>then </b></font>Str <font color="#000080">:= </font>Str <font color="#000080">+ </font><font color="#800000">';4' </font><font color="#000080">+ </font>Colors<font color="#000080">[</font>NowBG<font color="#000080">]
+    </font><font color="#FF0000"><b>else begin
+      </b></font>Str <font color="#000080">:= </font><font color="#800000">#27#91 </font><font color="#000080">+ </font><font color="#800000">'4' </font><font color="#000080">+ </font>Colors<font color="#000080">[</font>NowBG<font color="#000080">];
+      </font>Param <font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>NowFG <font color="#000080">&lt;&gt; </font>WasFG <font color="#FF0000"><b>then begin
+    if </b></font>Param <font color="#FF0000"><b>then </b></font>Str <font color="#000080">:= </font>Str <font color="#000080">+ </font><font color="#800000">';3' </font><font color="#000080">+ </font>Colors<font color="#000080">[</font>NowFG<font color="#000080">]
+    </font><font color="#FF0000"><b>else begin
+      </b></font>Str <font color="#000080">:= </font><font color="#800000">#27#91 </font><font color="#000080">+ </font><font color="#800000">'3' </font><font color="#000080">+ </font>Colors<font color="#000080">[</font>NowFG<font color="#000080">];
+      </font>Param <font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Param <font color="#FF0000"><b>then </b></font>Str <font color="#000080">:= </font>Str <font color="#000080">+ </font><font color="#800000">#109</font><font color="#000080">; </font><font color="#008000"><i>{ Str + 'm' }
+  </i></font>SetAttribute <font color="#000080">:= </font>Str<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>NumStr <font color="#000080">( </font>N <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Used for following routines ONLY }
+</i></font><font color="#FF0000"><b>const
+  </b></font>NM <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">= (</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">100</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">, </font>Num<font color="#000080">, </font>Digits <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>Str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Str <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>Digits <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Num <font color="#000080">:= </font>N<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>I <font color="#000080">:= </font><font color="#800000">2 </font><font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do
+    if </b></font><font color="#000080">(</font>Num <font color="#FF0000"><b>div </b></font>NM<font color="#000080">[</font>I<font color="#000080">] &gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>Digits <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>Str <font color="#000080">:= </font>Str <font color="#000080">+ </font>Chr<font color="#000080">(</font>Num <font color="#FF0000"><b>div </b></font>NM<font color="#000080">[</font>I<font color="#000080">] + </font><font color="#800000">48</font><font color="#000080">);
+      </font>Num <font color="#000080">:= </font>Num <font color="#FF0000"><b>mod </b></font>NM<font color="#000080">[</font>I<font color="#000080">];
+      </font>Inc<font color="#000080">(</font>Digits<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>NumStr <font color="#000080">:= </font>Str<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetCursorPosition <font color="#000080">( </font>X<font color="#000080">, </font>Y <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for setting the cursor position
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>X <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Y <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Str <font color="#000080">:= </font><font color="#800000">'[H'
+  </font><font color="#FF0000"><b>else </b></font>Str <font color="#000080">:= </font><font color="#800000">'[' </font><font color="#000080">+ </font>NumStr<font color="#000080">(</font>Y <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">) + </font><font color="#800000">';' </font><font color="#000080">+ </font>NumStr<font color="#000080">(</font>X <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">) + </font><font color="#800000">'H'</font><font color="#000080">;
+  </font>SetCursorPosition <font color="#000080">:= </font>Str<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetCursorUp <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for moving the cursor up
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Ch <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Ch <font color="#000080">:= </font>NumStr<font color="#000080">(</font>Num<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#48 </font><font color="#FF0000"><b>then </b></font>Ch <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>SetCursorUp <font color="#000080">:= </font><font color="#800000">'[' </font><font color="#000080">+ </font>Ch <font color="#000080">+ </font><font color="#800000">'A'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetCursorDown <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for moving the cursor down
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Ch <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Ch <font color="#000080">:= </font>NumStr<font color="#000080">(</font>Num<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#48 </font><font color="#FF0000"><b>then </b></font>Ch <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>SetCursorDown <font color="#000080">:= </font><font color="#800000">'[' </font><font color="#000080">+ </font>Ch <font color="#000080">+ </font><font color="#800000">'B'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetCursorLeft <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for moving the cursor left
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Ch <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Ch <font color="#000080">:= </font>NumStr<font color="#000080">(</font>Num<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#48 </font><font color="#FF0000"><b>then </b></font>Ch <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>SetCursorLeft <font color="#000080">:= </font><font color="#800000">'[' </font><font color="#000080">+ </font>Ch <font color="#000080">+ </font><font color="#800000">'D'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetCursorRight <font color="#000080">( </font>Num <font color="#000080">: </font>Byte <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for moving the cursor right
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Ch <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Ch <font color="#000080">:= </font>NumStr<font color="#000080">(</font>Num<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#48 </font><font color="#FF0000"><b>then </b></font>Ch <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>SetCursorRight <font color="#000080">:= </font><font color="#800000">'[' </font><font color="#000080">+ </font>Ch <font color="#000080">+ </font><font color="#800000">'C'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetSaveCursorPosition <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for saving the cursor position
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>SetSaveCursorPosition <font color="#000080">:= </font><font color="#800000">'[s'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ANSIHandlerObj<font color="#000080">.</font>SetRestoreCursorPosition <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function returns the ANSI string for restoring the cursor position
+  (written for saving an image in ANSI characters) }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>SetRestoreCursorPosition <font color="#000080">:= </font><font color="#800000">'[u'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>VirtualScreen<font color="#000080">.</font>Initialized <font color="#000080">:= </font>False<font color="#000080">;
+  </font>ANSIHandler<font color="#000080">.</font>LastError <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>ScreenWidth <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>ScreenLength <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>ScreenSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ANSI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0048.PAS">Original</a><b>]</b></p></body>
+</html>

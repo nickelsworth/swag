@@ -1,0 +1,337 @@
+<html>
+<head><title> "Routines for DOS/DPMI communication" by PETER LOUWEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0089.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+ XDR&gt; I'm currently developing an application that I would gladly spread in
+ XDR&gt; protected mode... But could someone explain to me what can I NOT do in
+ XDR&gt; DPMI pascal
+
+This is actually explained quite clearly in Ch. 17 of the BP7 Language Guide.
+
+The main difference is that memory is no longer yours to do with as you
+please; you can only &quot;touch&quot; memory that has been allocated to your program.
+This is where the &quot;protected&quot; in &quot;protected mode&quot; stems from.
+
+The following is a rather simplified view of things, but it does illustrate
+the general priciple:
+
+In pmode a pointer such as ptr($B800, 0) does NOT point to memory location
+$B800:0000. The segment part (called the &quot;selector&quot; in pmode), $B800,
+is treated as an index into a system maintained table, which *does* contain
+the actual physical memory location (called the &quot;base&quot;), and the number of
+bytes allocated to that base (called the &quot;limit&quot;). This table is unavailable
+to your program.
+At the start of your program, all entries in this table are marked &quot;not in
+use&quot; and therefore illegal.
+During program execution, whenever you attempt to read or write Mem[S:O],
+the CPU checks (in that table) to see if S is a legal index (i.e., if S is
+a valid base), and if so, whether O is within the limit of that base.
+If at least one of these checks fail, the memory access is invalid, and you
+will be presented with run time error 216 a.k.a. the dreaded General
+Protection Failure (GPF) a.k.a. Exception $0D.
+
+ XDR&gt; Ag: I can no more acces the screen at an Obsolute $b800:000 but at
+ XDR&gt; absolute Segb800:000, why?
+
+Btw: ABSOLUTE SegB800:0 won't compile.
+Use &quot;mem[SegB800:0]&quot; instead, or use a pointer, like so:
+
+VAR VidMemStart: pointer;
+BEGIN VidMemStart:=ptr(SegB800, 0) END;
+
+and manipulate video memory using VidMemStart^.
+
+The reason should now be clear: $B800 is almost certainly *not* a valid
+selector. Since no one has asked the DPMI server to associate selector $B800
+with a physical memory location, it is illegal.
+You *can* use SegB800, as your program startup code asks the DPMI server to
+associate SegB800 with video memory.
+
+You should not pass pmode pointers to real mode routines nor the other way
+around (they are invalid in the &quot;receiving&quot; mode).
+It can be done, but you'll need the cooperation of the DPMI server.
+Find a DPMI unit (I can't post mine, as it is commercial). Below you'll
+find such a unit - I've never used it, so no guarantees.
+
+Notes: - if you attempt to write to code segments, or read from invalid
+         pointers, a GPF will result.
+       - if you attempt to read an invalid stack element, you will receive
+         an Exception $0C (Stack Fault), which BP will convert to run time
+         error 202.
+       - Exception 6 (Invalid Opcode) is not related to memory accesses.
+         It means the CPU has received a couple of bytes which it cannot
+         interpret as a valid instruction.
+       - prior to distribution, be sure to read file DPMIUSER.DOC.
+         You can find that file in archive DOC.ZIP on your BP7 distribution
+         disks.
+
+The above three exceptions are likely the only ones you'll see.
+
+Happy programming,
+
+Peter. }
+
+</i></font><font color="#000080">===== </font>Start <font color="#FF0000"><b>of </b></font>includefile FDEFINE<font color="#000080">.</font>DEF <font color="#000080">=====
+
+</font><font color="#008000"><i>{ Include file FDEFINE.DEF - general include file for the unit systems
+                             conditional defines }
+
+ (***************************************************************************
+
+            RELEASE 1.04 - as contained in the file PRUS100.LZH
+                by Orazio Czerwenka, 2:2450/540.55, GERMANY
+
+               --------------------------------------------
+                organized for Fido's PASCAL related echoes
+               --------------------------------------------
+
+     06/21/1994 to --/--/---- by Orazio Czerwenka, 2:2450/540.55, GERMANY
+
+ ***************************************************************************)
+
+{ ==========================================================================
+  WHICH VERSION OF TURBO PASCAL DO YOU COMPILE WITH ?
+  THE DEFAULT IS TURBO PASCAL 6.0x !
+  ========================================================================== }
+
+  { The following conditional defines do not yet have any effect, ... }
+
+  {.$define ver30}       { Turbo Pascal 3.0x }
+  {.$define ver40}       { Turbo Pascal 4.0x }
+  {.$define ver50}       { Turbo Pascal 5.0x }
+  {.$define ver55}       { Turbo Pascal 5.5x }
+  {$define ver60}       { Turbo Pascal 6.0x }
+  {.$define ver70}       { Turbo/Borland Pascal 7.0x }
+
+  { ... these commenting lines will be deleted once that should be changed. }
+
+
+{ ==========================================================================
+  WHAT LANGUAGE DO YOU WANT YOUR PROGRAMS TO DISPLAY MESSAGES IN BY DEFAULT?
+  ========================================================================== }
+
+  {$define English}
+  {.$define German}
+
+
+{ ==========================================================================
+  ACTIVATE THE FOLLOWING DISABLED COMPILER DIRECTIVE IF YOU WANT TO BE ABLE
+  TO USE THE UNIT SYSTEM FROM WITHIN OVERLAYS !
+  ========================================================================== }
+
+  {.$O+}   { This tells your compiler - if activated - to produce a unit
+             that will be allowed to be used from within overlays. }
+
+  {$IFOPT O+}
+    {$DEFINE Overlays}                                    { easier to read }
+  {$ENDIF}
+
+{ ==========================================================================
+  WHAT KIND OF PROCESSOR ARE YOU COMPILING FOR ? SOME CPU DEPENDEND DEFINES.
+  ========================================================================== }
+
+  (* Some of the units use inline assembler designed to work on machines
+     with at least 80286 processor, so generally you can tell your compiler
+     to produce 80286 code anyway.
+  *)
+
+  {$G+}   { This tells - if activated - your compiler to produce 80286
+            code. }
+
+  (* In addition you might want to specify one of the following higher
+     processors, if you want your programmes ONLY to run on THESE and
+     higher machines.
+  *)
+
+  { The following conditional defines do not yet have any effect, ... }
+
+  {.$define cpu386}           { Use specific code for 80386 machines }
+  {.$define cpu486}           { Use specific code for 80486 machines }
+
+  { ... these commenting lines will be deleted once that should be changed. }
+
+{ -------------------------------------------------------------------------- }
+
+  (* Define one of the following CRT replacements (or CRT) for use by the
+     units FTMODE and FSPEAKER, depending on what you've got.
+     If you don't have a replacement, take the CRT, it is a bit slower but
+     it should work as well.
+     -----------------------------------------------------------------------
+     NOTICE THAT THE UNIT FCRT SHOULD ALSO BE INCLUDED IN THIS FILE PACKAGE!
+     -----------------------------------------------------------------------
+     Note that at least one of those units shoul be defined to be used !
+     By default this should be the unit FCRT.
+
+     In case you should also want to use TP CRT's screen handling related
+     functions in addition to the routines provided by FCONDRV and FCRT
+     you probably will have to define the usage of TP's CRT here.
+     By default the usage of TP's CRT is *NOT* defined in order to avoid
+     smaller drawbacks in speed and unnecessarilly 'blown up' code.
+  *)
+
+  {$define FCRT}
+  {.$define CRT}
+  {.$define CRT2}
+
+
+
+{ -------------------------------------------------------------------------- }
+
+  (* The following conditional define will specify wether the unit(s) FTMODE
+     will use the BIOS for the 80x25 mode or try programming it by hand. You
+     should leave it inactivated, since who would want to force the user to
+     use 80x25 ? I (MM) implemented it, since on my system, mode 3 corresponds
+     to 90x28 through a TSR, and a small program would have helped here :-)
+     Note that forcing will only take place if FTMODE's SetVideoMode(3) does
+     not result in an 80 column mode.
+  *)
+
+{.$define UseBIOS}
+
+
+
+{ -------------------------------------------------------------------------- }
+
+</i></font><font color="#000080">===== </font><font color="#FF0000"><b>End   of </b></font>includefile FDEFINE<font color="#000080">.</font>DEF <font color="#000080">=====
+
+===== </font>Start <font color="#FF0000"><b>of unit </b></font>FDPMI <font color="#000080">=====
+
+</font><font color="#FF0000"><b>Unit </b></font>FDPMI<font color="#000080">; </font><font color="#008000"><i>{ routines for DOS/DPMI communication }
+ (***************************************************************************
+
+           RELEASE 1.00 - as contained in the file PRUS100.LZH
+                 by Max Maischein, 2:244/1106.17, GERMANY
+
+               --------------------------------------------
+                organized for Fido's PASCAL related echoes
+               --------------------------------------------
+
+     06/15/1994 to --/--/---- by Max Maischein, 2:244/1106.17, GERMANY
+
+           As far as third party copyrights are not violated this
+           source code is hereby placed to the public domain. Use
+           it whatever way you want, but use AT YOUR OWN RISK.
+
+           In case you should modify the source rather send your
+           modifications to the unit's current organizer (see above for
+           NM address) than to spread it on your own. This will help to
+           keep the unit updated and grant a certain standard to all
+           other users as well.
+
+           The unit is currently still under work. So it might greatly
+           benefit of your participation.
+
+           Those who contributed to the following piece of source,
+           listed in alphabethical order:
+        ================================================================
+           Jochen Magnus (SEGDEMO.PAS), Max Maischein (collecting,
+           documenting, testing etc.), Raphael Vanney (program CHARSET
+           .PAS)
+        ================================================================
+           YOUR NAME WILL APPEAR HERE IF YOU CONTRIBUTE USEFUL SOURCE.
+
+ ***************************************************************************)
+
+{$I FDEFINE.DEF}
+
+</i></font><font color="#FF0000"><b>Interface
+
+Type </b></font>TRealModeRegs  <font color="#000080">=
+     </font><font color="#FF0000"><b>Record
+          Case </b></font>Integer <font color="#FF0000"><b>Of
+          </b></font><font color="#800000">0</font><font color="#000080">: ( </font>EDI<font color="#000080">, </font>ESI<font color="#000080">, </font>EBP<font color="#000080">, </font>EXX<font color="#000080">, </font>EBX<font color="#000080">, </font>EDX<font color="#000080">, </font>ECX<font color="#000080">, </font>EAX<font color="#000080">: </font>Longint<font color="#000080">;
+               </font>Flags<font color="#000080">, </font>ES<font color="#000080">, </font>DS<font color="#000080">, </font>FS<font color="#000080">, </font>GS<font color="#000080">, </font>IP<font color="#000080">, </font>CS<font color="#000080">, </font>SP<font color="#000080">, </font>SS<font color="#000080">: </font>Word<font color="#000080">) ;
+          </font><font color="#800000">1</font><font color="#000080">: ( </font>DI<font color="#000080">,</font>DIH<font color="#000080">, </font>SI<font color="#000080">, </font>SIH<font color="#000080">, </font>BP<font color="#000080">, </font>BPH<font color="#000080">, </font>XX<font color="#000080">, </font>XXH<font color="#000080">: </font>Word<font color="#000080">;
+               </font><font color="#FF0000"><b>Case </b></font>Integer <font color="#FF0000"><b>of
+                 </b></font><font color="#800000">0</font><font color="#000080">: (</font>BX<font color="#000080">, </font>BXH<font color="#000080">, </font>DX<font color="#000080">, </font>DXH<font color="#000080">, </font>CX<font color="#000080">, </font>CXH<font color="#000080">, </font>AX<font color="#000080">, </font>AXH<font color="#000080">: </font>Word<font color="#000080">);
+                 </font><font color="#800000">1</font><font color="#000080">: (</font>BL<font color="#000080">, </font>BH<font color="#000080">, </font>BLH<font color="#000080">, </font>BHH<font color="#000080">, </font>DL<font color="#000080">, </font>DH<font color="#000080">, </font>DLH<font color="#000080">, </font>DHH<font color="#000080">,
+                     </font>CL<font color="#000080">, </font>CH<font color="#000080">, </font>CLH<font color="#000080">, </font>CHH<font color="#000080">, </font>AL<font color="#000080">, </font>AH<font color="#000080">, </font>ALH<font color="#000080">, </font>AHH<font color="#000080">: </font>Byte<font color="#000080">));
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#008000"><i>(* Use these and RealModeInt() instead of Registers and Intr() under DPMI *)
+
+</i></font><font color="#FF0000"><b>Type </b></font>TLongRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+       Case </b></font>Byte <font color="#FF0000"><b>of
+         </b></font><font color="#800000">0 </font><font color="#000080">: ( </font>L <font color="#000080">: </font>LongInt <font color="#000080">);
+         </font><font color="#800000">1 </font><font color="#000080">: ( </font>wLo <font color="#000080">: </font>Word<font color="#000080">;
+               </font>wHi <font color="#000080">: </font>Word<font color="#000080">; );
+         </font><font color="#800000">2 </font><font color="#000080">: ( </font>iLo <font color="#000080">: </font>Integer<font color="#000080">;
+               </font>iHi <font color="#000080">: </font>Integer <font color="#000080">);
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>RealModeInt<font color="#000080">( </font>IntNo <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>RealRegs <font color="#000080">: </font>TRealModeRegs<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>(* Replacement for Intr(), returns False on error *)
+
+</i></font><font color="#FF0000"><b>Function </b></font>NewSelector<font color="#000080">( </font>Base<font color="#000080">, </font>Limit <font color="#000080">: </font>Longint<font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#008000"><i>(* Returns a new selector for the range [Base - (Base+Limit)]        *)
+(* Base is the linear address of the memory location you want to use *)
+(* You must free this selector after use with FreeSelector()         *)
+
+</i></font><font color="#FF0000"><b>Function </b></font>AllocateLowMem<font color="#000080">( </font>Size <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>PMPointer <font color="#000080">: </font>Pointer <font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#008000"><i>(* Allocates some memory in the first MB *)
+(* Returns a pointer to it and a segment to pass to the real mode routine *)
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>FreeLowMem<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>PMPointer <font color="#000080">: </font>Pointer <font color="#000080">);
+</font><font color="#008000"><i>(* Frees memory allocated with AllocateLowMem() *)
+
+</i></font><font color="#FF0000"><b>Implementation
+Uses </b></font>WinAPI<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>RealModeInt<font color="#000080">( </font>IntNo <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>RealRegs <font color="#000080">: </font>TRealModeRegs<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This function switches to real mode and issues the specified interrupt,
+  after filling the registers with values stored in RealRegs.
+  If SS/SP as specified in RealRegs are Nil, the DPMI server provides a
+  small stack. For more discution of this, see Ralf Brown's INTERxx.ZIP }
+</i></font><font color="#FF0000"><b>Asm
+                        </b></font><font color="#FF00FF">mov     ax, 0300h       </font><font color="#008000"><i>{ DPMI function &quot;simulate real
+mode int&quot; }
+                        </i></font><font color="#FF00FF">mov     bl, [IntNo]
+                        xor     bh, bh          </font><font color="#008000"><i>{ 0 as requested by DPMI v1.0
+}                        </i></font><font color="#FF00FF">xor     cx, cx          </font><font color="#008000"><i>{ bytes to copy onto &quot;remote&quot;
+stack }
+                        </i></font><font color="#FF00FF">les     di, [RealRegs]
+                        int     31h             </font><font color="#008000"><i>{ Returns CF set on error }
+                        </i></font><font color="#FF00FF">mov     ax, 1           </font><font color="#008000"><i>{ assume everything went OK }
+                        </i></font><font color="#FF00FF">sbb     ax, 0           </font><font color="#008000"><i>{ if carry set, decrement ax }
+                                                { to signal an error }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>NewSelector<font color="#000080">(</font>Base<font color="#000080">,</font>Limit<font color="#000080">:</font>longint<font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>Sel <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Sel <font color="#000080">:= </font>AllocSelector<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>sel<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>setSelectorBase<font color="#000080">(</font>sel<font color="#000080">,</font>base<font color="#000080">)=</font>sel<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>setSelectorLimit<font color="#000080">(</font>sel<font color="#000080">,
+</font>limit<font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>then </b></font>newSelector<font color="#000080">:=</font>sel
+    <font color="#FF0000"><b>else </b></font>newSelector<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>AllocateLowMem<font color="#000080">( </font>Size <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>PMPointer <font color="#000080">: </font>Pointer <font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#008000"><i>{ This procedure allocates memory in the first megabyte, and returns two
+  ways of accessing it : a pointer valid in protected mode, and the
+  segment part of a pointer valid in real mode ; offset part is always 0 }
+
+</i></font><font color="#FF0000"><b>Var  </b></font>Adr  <font color="#000080">: </font>LongInt <font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Adr<font color="#000080">:=</font>GlobalDOSAlloc<font color="#000080">(</font>Size<font color="#000080">) ;
+  </font><font color="#FF0000"><b>If </b></font>Adr<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>RunError<font color="#000080">( </font><font color="#800000">0 </font><font color="#000080">);
+  </font>PMPointer <font color="#000080">:= </font>Ptr<font color="#000080">( </font>TLongRec<font color="#000080">(</font>Adr<font color="#000080">).</font>wLo<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+  </font>AllocateLowMem <font color="#000080">:= </font>TLongRec<font color="#000080">(</font>Adr<font color="#000080">).</font>wHi<font color="#000080">;
+</font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>FreeLowMem<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>PMPointer <font color="#000080">: </font>Pointer <font color="#000080">) ;
+</font><font color="#008000"><i>{ Frees memory allocated with AllocateLowMem }
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>GlobalDOSFree<font color="#000080">(</font>Seg<font color="#000080">( </font>PMPointer<font color="#000080">^ ));
+  </font>PMPointer <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+</font><font color="#008000"><i>{$IFnDEF DPMI}
+{$IFnDEF Windows}
+  </i></font>You are compiling WHAT <font color="#000080">??
+</font><font color="#008000"><i>{$ENDIF}
+{$ENDIF}
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+===== </font><font color="#FF0000"><b>End   of unit </b></font>FDPMI <font color="#000080">=====
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0089.PAS">Original</a><b>]</b></p></body>
+</html>

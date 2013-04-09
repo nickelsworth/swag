@@ -1,0 +1,200 @@
+<html>
+<head><title> "Dos Environment Unit" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0021.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Subject: Enviro.pas Unit to change Dos Vars permanently
+
+
+Had this floating round, hope it helps someone.
+It works under Dos 5, NDos 6.01, and should work For any other Dos as well,
+no guarantees tho' .
+
+}
+</i></font><font color="#FF0000"><b>Unit </b></font>Enviro<font color="#000080">;
+
+</font><font color="#FF0000"><b>Interface
+
+Var </b></font>EnvSeg<font color="#000080">,
+    </font>EnvOfs<font color="#000080">,
+    </font>EnvSize  <font color="#000080">:  </font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function  </b></font>FindEnv<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function  </b></font>IsEnvVar<font color="#000080">(</font>Variable <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>Value <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">):</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>ChangeEnvVar<font color="#000080">(</font>Variable<font color="#000080">,</font>NewVal <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>Implementation
+
+Uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type </b></font>MemoryControlBlock <font color="#000080">=     </font><font color="#008000"><i>{MCB -- only needed fields are shown}
+      </i></font><font color="#FF0000"><b>Record
+        </b></font>Blocktag   <font color="#000080">:  </font>Byte<font color="#000080">;
+        </font>BlockOwner <font color="#000080">:  </font>Word<font color="#000080">;
+        </font>BlockSize  <font color="#000080">:  </font>Word<font color="#000080">;
+        </font>misc       <font color="#000080">:  </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+        </font>ProgramName<font color="#000080">:  </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>ProgramSegmentPrefix <font color="#000080">=   </font><font color="#008000"><i>{PSP -- only needed fields are shown}
+      </i></font><font color="#FF0000"><b>Record                                           </b></font><font color="#008000"><i>{ offset }
+        </i></font>PSPtag     <font color="#000080">:  </font>Word<font color="#000080">;  </font><font color="#008000"><i>{ $20CD or $27CD if PSP}  { 00 $00 }
+        </i></font>misc       <font color="#000080">:  </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">21</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word<font color="#000080">;            </font><font color="#008000"><i>{ 02 $02 }
+        </i></font>Environment<font color="#000080">:  </font>Word                             <font color="#008000"><i>{ 44 $2C }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>MCB      <font color="#000080">: ^</font>MemoryControlBlock<font color="#000080">;
+  </font>r        <font color="#000080">: </font>Registers<font color="#000080">;
+  </font>Found    <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>SegMent  <font color="#000080">: </font>Word<font color="#000080">;
+  </font>EnvPtr   <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Startofs <font color="#000080">: </font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>FindEnvMCB<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>b        <font color="#000080">:  </font>Char<font color="#000080">;
+  </font>BlockType<font color="#000080">:  </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+  </font>Bytes    <font color="#000080">:  </font>LongInt<font color="#000080">;
+  </font>i        <font color="#000080">:  </font>Word<font color="#000080">;
+  </font>last     <font color="#000080">:  </font>Char<font color="#000080">;
+  </font>MCBenv   <font color="#000080">:  ^</font>MemoryControlBlock<font color="#000080">;
+  </font>MCBowner <font color="#000080">:  ^</font>MemoryControlBlock<font color="#000080">;
+  </font>psp      <font color="#000080">:  ^</font>ProgramSegmentPrefix<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font>FindEnvMCB <font color="#000080">:= </font>False<font color="#000080">;
+
+</font>Bytes <font color="#000080">:= </font>LongInt<font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockSize<font color="#000080">) </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">4</font><font color="#000080">;    </font><font color="#008000"><i>{size of MCB in Bytes}
+</i></font><font color="#FF0000"><b>if </b></font>mcb<font color="#000080">^.</font>blockowner <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then                </b></font><font color="#008000"><i>{ free space }
+</i></font><font color="#FF0000"><b>else begin
+  </b></font>psp <font color="#000080">:= </font>Ptr<font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockOwner<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);            </font><font color="#008000"><i>{possible PSP}
+  </i></font><font color="#FF0000"><b>if   </b></font><font color="#000080">(</font>psp<font color="#000080">^.</font>PSPtag <font color="#000080">= </font><font color="#800000">$20CD</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>psp<font color="#000080">^.</font>PSPtag <font color="#000080">= </font><font color="#800000">$27CD</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+  </b></font>MCBenv <font color="#000080">:= </font>Ptr<font color="#000080">(</font>psp<font color="#000080">^.</font>Environment<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if   </b></font>MCB<font color="#000080">^.</font>Blockowner <font color="#000080">&lt;&gt; (</font>segment <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    if </b></font>psp<font color="#000080">^.</font>Environment <font color="#000080">= (</font>segment <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      if  </b></font>MCB<font color="#000080">^.</font>BlockOwner <font color="#000080">= </font>MCBenv<font color="#000080">^.</font>BlockOwner <font color="#FF0000"><b>then begin
+         </b></font>EnvSize <font color="#000080">:= </font>MCBenv<font color="#000080">^.</font>BlockSize <font color="#FF0000"><b>SHL </b></font><font color="#800000">4</font><font color="#000080">;      </font><font color="#008000"><i>{multiply by 16}
+         </i></font>EnvSeg <font color="#000080">:= </font>PSP<font color="#000080">^.</font>Environment<font color="#000080">;
+         </font>EnvOfs <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font>FindEnvMCB <font color="#000080">:= </font>True<font color="#000080">;
+         </font><font color="#FF0000"><b>end
+    end
+  end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>FindEnv<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>r<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$52</font><font color="#000080">;            </font><font color="#008000"><i>{undocumented Dos Function that returns a Pointer}
+</i></font>Intr <font color="#000080">(</font><font color="#800000">$21</font><font color="#000080">,</font>r<font color="#000080">);           </font><font color="#008000"><i>{to the Dos 'list of lists'                      }
+</i></font>segment <font color="#000080">:= </font>MemW<font color="#000080">[</font>r<font color="#000080">.</font>ES<font color="#000080">:</font>r<font color="#000080">.</font>BX<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">];  </font><font color="#008000"><i>{segment address of first MCB found at}
+                               {offset -2 from List of List Pointer  }
+</i></font><font color="#FF0000"><b>Repeat
+</b></font>MCB <font color="#000080">:= </font>Ptr<font color="#000080">(</font>segment<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);    </font><font color="#008000"><i>{MCB^ points to first MCB}
+  </i></font>Found <font color="#000080">:= </font>FindEnvMcb<font color="#000080">;    </font><font color="#008000"><i>{Look at each MCB}
+  </i></font>segment <font color="#000080">:= </font>segment <font color="#000080">+ </font>MCB<font color="#000080">^.</font>BlockSize <font color="#000080">+ </font><font color="#800000">1
+</font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>Found<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>MCB<font color="#000080">^.</font>Blocktag <font color="#000080">= </font><font color="#800000">$5A</font><font color="#000080">);
+</font>FindEnv <font color="#000080">:= </font>Found<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>IsEnvVar<font color="#000080">(</font>Variable <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>Value <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">):</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>Temp <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>ch   <font color="#000080">: </font>Char<font color="#000080">;
+    </font>i    <font color="#000080">: </font>Word<font color="#000080">;
+    </font>FoundIt <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>Variable <font color="#000080">:= </font>Variable <font color="#000080">+ </font><font color="#800000">'='</font><font color="#000080">;
+</font>FoundIt <font color="#000080">:= </font>False<font color="#000080">;
+</font>i <font color="#000080">:= </font>EnvOfs<font color="#000080">;
+</font><font color="#FF0000"><b>Repeat
+  </b></font>Temp <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>StartOfs <font color="#000080">:= </font>I<font color="#000080">;
+  </font><font color="#FF0000"><b>Repeat
+    </b></font>ch <font color="#000080">:= </font>Char<font color="#000080">(</font>Mem<font color="#000080">[</font>EnvSeg<font color="#000080">:</font>i<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">&lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>then </b></font>Temp <font color="#000080">:= </font>Temp <font color="#000080">+ </font>Ch<font color="#000080">;
+    </font>inc<font color="#000080">(</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>Ch <font color="#000080">= </font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>I <font color="#000080">&gt; </font>EnvSize<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#0 </font><font color="#FF0000"><b>then begin
+    </b></font>FoundIt <font color="#000080">:= (</font>Pos<font color="#000080">(</font>Variable<font color="#000080">,</font>Temp<font color="#000080">) = </font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>FoundIt <font color="#FF0000"><b>then </b></font>Value <font color="#000080">:= </font>Copy<font color="#000080">(</font>Temp<font color="#000080">,</font>Length<font color="#000080">(</font>Variable<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">255</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>FoundIt<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>I <font color="#000080">&gt; </font>EnvSize<font color="#000080">);
+</font>IsEnvVar <font color="#000080">:= </font>FoundIt<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ChangeEnvVar<font color="#000080">(</font>Variable<font color="#000080">,</font>NewVal <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>OldVal <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>p1<font color="#000080">,</font>p2  <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>i<font color="#000080">,</font>j    <font color="#000080">: </font>Word<font color="#000080">;
+    </font>ch<font color="#000080">,
+    </font>LastCh <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+if </b></font>IsEnvVar<font color="#000080">(</font>Variable<font color="#000080">,</font>OldVal<font color="#000080">) </font><font color="#FF0000"><b>then begin
+  </b></font>p1 <font color="#000080">:= </font>Ptr<font color="#000080">(</font>EnvSeg<font color="#000080">,</font>StartOfs <font color="#000080">+ </font>Length<font color="#000080">(</font>Variable<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Length<font color="#000080">(</font>OldVal<font color="#000080">) = </font>Length<font color="#000080">(</font>NewVal<font color="#000080">) </font><font color="#FF0000"><b>then
+     </b></font>Move<font color="#000080">(</font>NewVal<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>p1<font color="#000080">^,</font>Length<font color="#000080">(</font>NewVal<font color="#000080">))
+  </font><font color="#FF0000"><b>else if </b></font>Length<font color="#000080">(</font>OldVal<font color="#000080">) &gt; </font>Length<font color="#000080">(</font>NewVal<font color="#000080">) </font><font color="#FF0000"><b>then begin
+     </b></font>Move<font color="#000080">(</font>NewVal<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>p1<font color="#000080">^,</font>Length<font color="#000080">(</font>NewVal<font color="#000080">));
+     </font>p1 <font color="#000080">:= </font>ptr<font color="#000080">(</font>EnvSeg<font color="#000080">,</font>StartOfs <font color="#000080">+ </font>Length<font color="#000080">(</font>Variable<font color="#000080">)+</font>Length<font color="#000080">(</font>OldVal<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+     </font>p2 <font color="#000080">:= </font>ptr<font color="#000080">(</font>EnvSeg<font color="#000080">,</font>StartOfs <font color="#000080">+ </font>Length<font color="#000080">(</font>Variable<font color="#000080">)+</font>Length<font color="#000080">(</font>NewVal<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+     </font>Move<font color="#000080">(</font>p1<font color="#000080">^,</font>p2<font color="#000080">^,</font>EnvSize <font color="#000080">- </font>ofs<font color="#000080">(</font>p1<font color="#000080">^));
+     </font><font color="#FF0000"><b>end
+  else begin   </b></font><font color="#008000"><i>{ newVar is longer than oldVar }
+     </i></font>p2 <font color="#000080">:= </font>ptr<font color="#000080">(</font>EnvSeg<font color="#000080">,</font>StartOfs <font color="#000080">+ </font>Length<font color="#000080">(</font>Variable<font color="#000080">)+</font>Length<font color="#000080">(</font>NewVal<font color="#000080">)-</font>length<font color="#000080">(</font>OldVal<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+     </font>Move<font color="#000080">(</font>p1<font color="#000080">^,</font>p2<font color="#000080">^,</font>EnvSize <font color="#000080">- </font>ofs<font color="#000080">(</font>p2<font color="#000080">^));
+     </font>Move<font color="#000080">(</font>NewVal<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>p1<font color="#000080">^,</font>Length<font color="#000080">(</font>NewVal<font color="#000080">));
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+else      </b></font><font color="#008000"><i>{ creating a new Var }
+  </i></font><font color="#FF0000"><b>begin
+  </b></font>i <font color="#000080">:= </font>EnvOfs<font color="#000080">;
+  </font>ch <font color="#000080">:= </font>Char<font color="#000080">(</font>Mem<font color="#000080">[</font>EnvSeg<font color="#000080">:</font>i<font color="#000080">]);
+  </font><font color="#FF0000"><b>Repeat
+    </b></font>LastCh <font color="#000080">:= </font>Ch<font color="#000080">;
+    </font>inc<font color="#000080">(</font>i<font color="#000080">);
+    </font>ch <font color="#000080">:= </font>Char<font color="#000080">(</font>Mem<font color="#000080">[</font>EnvSeg<font color="#000080">:</font>i<font color="#000080">]);
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>i <font color="#000080">&gt; </font>EnvSize<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font>LastCh <font color="#000080">= </font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Ch <font color="#000080">= </font><font color="#800000">#0</font><font color="#000080">));
+  </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&lt; </font>EnvSize <font color="#FF0000"><b>then begin
+    </b></font>j <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>Variable <font color="#000080">:= </font>Variable <font color="#000080">+ </font><font color="#800000">'=' </font><font color="#000080">+ </font>NewVal <font color="#000080">+ </font><font color="#800000">#0 </font><font color="#000080">+ </font><font color="#800000">#0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>J <font color="#000080">&lt; </font>Length<font color="#000080">(</font>Variable<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>I <font color="#000080">&lt;= </font>EnvSize<font color="#000080">) </font><font color="#FF0000"><b>do begin
+      </b></font>Mem<font color="#000080">[</font>EnvSeg<font color="#000080">:</font>i<font color="#000080">] := </font>ord<font color="#000080">(</font>Variable<font color="#000080">[</font>j<font color="#000080">]);
+      </font>inc<font color="#000080">(</font>i<font color="#000080">); </font>Inc<font color="#000080">(</font>j<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ TEST Program }
+</i></font><font color="#FF0000"><b>Uses </b></font>Enviro<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var </b></font>EnvVar <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+if </b></font>FindEnv <font color="#FF0000"><b>then begin
+  </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Found the Enviroment !!'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Env is at address '</font><font color="#000080">,</font>EnvSeg<font color="#000080">,</font><font color="#800000">':'</font><font color="#000080">,</font>EnvOfs<font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'And is '</font><font color="#000080">,</font>EnvSize<font color="#000080">,</font><font color="#800000">' Bytes long'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>IsEnvVar<font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">,</font>EnvVar<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">(</font><font color="#800000">'COMSPEC = '</font><font color="#000080">,</font>EnvVar<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'COMSPEC is not set'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>IsEnvVar<font color="#000080">(</font><font color="#800000">'NewVar'</font><font color="#000080">,</font>EnvVar<font color="#000080">) </font><font color="#FF0000"><b>then  </b></font>Writeln<font color="#000080">(</font><font color="#800000">'NewVar = '</font><font color="#000080">,</font>EnvVar<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'NewVar is not set'</font><font color="#000080">);
+
+  </font>ChangeEnvVar<font color="#000080">(</font><font color="#800000">'NewVar'</font><font color="#000080">,</font><font color="#800000">'This is a new Var'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>IsEnvVar<font color="#000080">(</font><font color="#800000">'NewVar'</font><font color="#000080">,</font>EnvVar<font color="#000080">) </font><font color="#FF0000"><b>then  </b></font>Writeln<font color="#000080">(</font><font color="#800000">'NewVar = '</font><font color="#000080">,</font>EnvVar<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'NewVar is not set'</font><font color="#000080">);
+
+  </font>ChangeEnvVar<font color="#000080">(</font><font color="#800000">'NewVar'</font><font color="#000080">,</font><font color="#800000">'NewVar is now this'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>IsEnvVar<font color="#000080">(</font><font color="#800000">'NewVar'</font><font color="#000080">,</font>EnvVar<font color="#000080">) </font><font color="#FF0000"><b>then  </b></font>Writeln<font color="#000080">(</font><font color="#800000">'NewVar = '</font><font color="#000080">,</font>EnvVar<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>Writeln<font color="#000080">(</font><font color="#800000">'NewVar is not set'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0021.PAS">Original</a><b>]</b></p></body>
+</html>

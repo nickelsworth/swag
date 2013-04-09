@@ -1,0 +1,279 @@
+<html>
+<head><title> "FAST Windowing Routines" by JENS LARSSON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTWNDW SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0015.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Ok, here comes my window routines. They should be quite fast, and hopefully
+not too hard to understand. No range-checking on the screen coordinates is
+done (I don't think it's necessary).
+
+The ColorAttr variable is the color-attribute :-). It's used as in the
+videomemory. If you want to call the procedure with a separate foreground
+and background color (why?), drop me a note and I'll fix it if you can't
+do it yourself.
+
+It'll run on a 8086, and I don't want copies optimized with 286 code!
+
+(if this message gets chopped for you -- too bad. Get it from a friend or
+tell someone to upload it to a BBS in the US if you want it. Use good
+mailing software!)
+
+---------------------------------------------------&gt;8-------------------------
+
+{ Window routines by Jens Larsson (Fido address, 2:201/2120.3), Sweden, PD. }
+{ Feel free to use it in your own programs. But do credit me, will you? :-) }
+{ Put it in SWAG if you like... }
+
+{$M 1024,0,0}
+</i></font><font color="#FF0000"><b>Uses </b></font>Crt<font color="#000080">;
+
+</font><font color="#008000"><i>{ The following variable should be assigned at startup to the correct segment }
+{ address (b800h or b000h). I've posted a source for doing this before, thus  }
+{ it's not included here. }
+
+ </i></font><font color="#FF0000"><b>Const </b></font>TextVidSeg <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">$b800</font><font color="#000080">;
+
+   </font><font color="#FF0000"><b>Var </b></font>ScrBuf<font color="#000080">, </font>Pdwns <font color="#000080">: </font>Word<font color="#000080">;
+
+      </font><font color="#FF0000"><b>Function </b></font>AllocMemory<font color="#000080">(</font>Paragraphs <font color="#000080">: </font>Word<font color="#000080">) : </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>Asm
+           </b></font><font color="#FF00FF">mov   ax,4800h
+           mov   bx,Paragraphs  </font><font color="#008000"><i>{ Number of 16-byte chunks }
+           </i></font><font color="#FF00FF">int   21h
+           jnc   @Done          </font><font color="#008000"><i>{ Ok? }
+           </i></font><font color="#FF00FF">mov   ax,4c00h
+           int   21h            </font><font color="#008000"><i>{ If not, halt program! }
+</i></font><font color="#FF00FF">@Done:
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>Procedure </b></font>PullDown<font color="#000080">(</font>x1<font color="#000080">, </font>y1<font color="#000080">, </font>x2<font color="#000080">, </font>y2 <font color="#000080">: </font>Word<font color="#000080">;
+                         </font>FrameType<font color="#000080">,
+                         </font>ColorAttr      <font color="#000080">: </font>Byte<font color="#000080">;
+                         </font>PDName         <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>Var </b></font>DeltaX<font color="#000080">, </font>DeltaY<font color="#000080">, </font>AddDI <font color="#000080">: </font>Word<font color="#000080">;
+
+         </font><font color="#FF0000"><b>Asm
+           </b></font><font color="#FF00FF">jmp   @CodeBegin    </font><font color="#008000"><i>{ Jump to the actual code }
+
+{ Ok Pascal-lovers... I'm sorry, but I declared the data like below...  }
+{ Somehow it seemed easier to me (I guess I've used assembler too much) }
+
+</i></font><font color="#FF00FF">@Frame:
+
+</font><font color="#008000"><i>{ This is all the ASCII codes for all the possible types of frames }
+
+           </i></font><font color="#FF00FF">db    020h,020h,020h,020h,020h,020h  </font><font color="#008000"><i>{ '      ' }
+           </i></font><font color="#FF00FF">db    0dah,0c4h,0bfh,0b3h,0c0h,0d9h  </font><font color="#008000"><i>{ '&Uacute;&Auml;&iquest;&sup3;&Agrave;&Ugrave;' }
+           </i></font><font color="#FF00FF">db    0c9h,0cdh,0bbh,0bah,0c8h,0bch  </font><font color="#008000"><i>{ '&Eacute;&Iacute;&raquo;&ordm;&Egrave;&frac14;' }
+           </i></font><font color="#FF00FF">db    0d6h,0c4h,0b7h,0bah,0d3h,0bdh  </font><font color="#008000"><i>{ '&Ouml;&Auml;&middot;&ordm;&Oacute;&frac12;' }
+           </i></font><font color="#FF00FF">db    0d5h,0cdh,0b8h,0b3h,0d4h,0beh  </font><font color="#008000"><i>{ '&Otilde;&Iacute;&cedil;&sup3;&Ocirc;&frac34;' }
+
+</i></font><font color="#FF00FF">@FrameOfs:
+
+</font><font color="#008000"><i>{ And this is the offsets to the above structures }
+
+           </i></font><font color="#FF00FF">db    000h,006h,00ch,012h,018h
+
+@CodeBegin:
+           cmp   Pdwns,16      </font><font color="#008000"><i>{ Max pulldowns = 16 (16 * 4096 = 65536) }
+           </i></font><font color="#FF00FF">jz    @Done
+
+           cld
+
+</font><font color="#008000"><i>{ Calculate start offset }
+
+           </i></font><font color="#FF00FF">mov   di,y1
+           dec   di
+           mov   ax,di
+           mov   cl,5
+           shl   di,cl
+           mov   cl,7
+           shl   ax,cl
+           add   di,ax
+           mov   ax,x1
+           dec   ax
+           add   ax,ax
+           add   di,ax
+
+           mov   dx,di
+           add   dx,4    </font><font color="#008000"><i>{ This is the offset for the PutName part later }
+
+           </i></font><font color="#FF00FF">mov   ax,x2
+           sub   ax,x1
+           dec   ax
+           mov   DeltaX,ax
+           add   ax,2
+           mov   bx,80
+           sub   bx,ax
+           sub   bx,2
+           add   bx,bx
+           mov   AddDI,bx
+           mov   ax,y2
+           sub   ax,y1
+           dec   ax
+           mov   DeltaY,ax
+
+           push  ds
+           push  di
+
+           mov   si,di
+           mov   di,Pdwns
+           mov   cl,12
+           shl   di,cl         </font><font color="#008000"><i>{ Calculate offset in save segment }
+           </i></font><font color="#FF00FF">mov   es,ScrBuf     </font><font color="#008000"><i>{ Save segment -&gt; ES }
+           </i></font><font color="#FF00FF">mov   ds,TextVidSeg
+           mov   es:[di],si    </font><font color="#008000"><i>{ Store offset to screen }
+           </i></font><font color="#FF00FF">mov   bx,DeltaX
+           add   bx,4
+           mov   es:[di+2],bx  </font><font color="#008000"><i>{ Store DeltaX }
+           </i></font><font color="#FF00FF">mov   cx,DeltaY
+           add   cx,3
+           mov   es:[di+4],cx  </font><font color="#008000"><i>{ Store DeltaY }
+           </i></font><font color="#FF00FF">mov   ax,AddDI
+           mov   es:[di+6],ax  </font><font color="#008000"><i>{ Store AddDI }
+           </i></font><font color="#FF00FF">add   di,8
+@SaveScreen:
+           push  cx
+           mov   cx,bx
+           rep   movsw         </font><font color="#008000"><i>{ Save line }
+           </i></font><font color="#FF00FF">add   si,ax
+           pop   cx
+           dec   cx
+           jnz   @SaveScreen
+
+           pop   di
+           pop   ds
+
+           mov   es,TextVidSeg
+
+           xor   bh,bh
+           mov   bl,FrameType
+           lea   si,@FrameOfs
+           add   si,bx
+           mov   bl,cs:[si]    </font><font color="#008000"><i>{ Get offset within frame data }
+           </i></font><font color="#FF00FF">lea   si,@Frame
+           add   si,bx         </font><font color="#008000"><i>{ SI points to frame }
+
+           </i></font><font color="#FF00FF">mov   ah,ColorAttr
+           mov   al,cs:[si]
+           stosw               </font><font color="#008000"><i>{ Print upper-left corner }
+           </i></font><font color="#FF00FF">mov   al,cs:[si+1]
+           mov   cx,DeltaX
+           rep   stosw         </font><font color="#008000"><i>{ Print horisontal line }
+           </i></font><font color="#FF00FF">mov   al,cs:[si+2]
+           stosw               </font><font color="#008000"><i>{ Print upper-right corner }
+           </i></font><font color="#FF00FF">add   di,AddDI
+           add   di,4
+
+           push  ds
+
+           xchg  dx,di         </font><font color="#008000"><i>{ Save DI }
+           </i></font><font color="#FF00FF">mov   bx,si         </font><font color="#008000"><i>{ Save SI }
+           </i></font><font color="#FF00FF">lds   si,PDName
+           mov   cl,[si]       </font><font color="#008000"><i>{ Get length of string }
+           </i></font><font color="#FF00FF">xor   ch,ch
+           mov   ah,ColorAttr
+           inc   si
+@PutName:
+           lodsb               </font><font color="#008000"><i>{ Get next char }
+           </i></font><font color="#FF00FF">stosw               </font><font color="#008000"><i>{ Print next name-char }
+           </i></font><font color="#FF00FF">dec   cx
+           jnz   @PutName
+           mov   di,dx
+           mov   si,bx
+
+           pop   ds
+
+           mov   cx,DeltaY
+@PutWindow:
+           push  cx
+           mov   al,cs:[si+3]  </font><font color="#008000"><i>{ Get horisontal-line char }
+           </i></font><font color="#FF00FF">stosw               </font><font color="#008000"><i>{ Print... }
+           </i></font><font color="#FF00FF">mov   al,20h
+           mov   cx,DeltaX
+           rep   stosw         </font><font color="#008000"><i>{ Print some spaces }
+           </i></font><font color="#FF00FF">mov   al,cs:[si+3]
+           stosw
+           mov   al,08h        </font><font color="#008000"><i>{ Shadow attribute (Bkgr = 0 Frgr = 8) }
+           </i></font><font color="#FF00FF">inc   di
+           stosb               </font><font color="#008000"><i>{ Print first shaded char... }
+           </i></font><font color="#FF00FF">inc   di
+           stosb               </font><font color="#008000"><i>{ ... and second }
+           </i></font><font color="#FF00FF">add   di,AddDI
+           pop   cx
+           dec   cx
+           jnz   @PutWindow
+
+           mov   al,cs:[si+4]
+           stosw               </font><font color="#008000"><i>{ Print lower-left corner }
+           </i></font><font color="#FF00FF">mov   al,cs:[si+1]
+           mov   cx,DeltaX
+           rep   stosw
+           mov   al,cs:[si+5]
+           stosw               </font><font color="#008000"><i>{ Print lower-right corner }
+           </i></font><font color="#FF00FF">mov   al,08h
+           inc   di
+           stosb
+           inc   di
+           stosb
+           add   di,AddDI
+           add   di,5
+
+           mov   cx,DeltaX
+           add   cx,2
+@PutLastShadowLine:
+           stosb
+           inc   di
+           dec   cx
+           jnz   @PutLastShadowLine
+
+           inc   Pdwns
+@Done:
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>Procedure </b></font>RestoreScreen<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>Asm
+           </b></font><font color="#FF00FF">cmp   Pdwns,0       </font><font color="#008000"><i>{ If no pulldowns then exit }
+           </i></font><font color="#FF00FF">jz    @Done
+           cld
+           dec   Pdwns
+           mov   si,Pdwns
+           mov   es,TextVidSeg
+           push  ds
+           mov   ds,ScrBuf
+           mov   cl,12
+           shl   si,cl
+           mov   di,[si]       </font><font color="#008000"><i>{ Load offset to screen }
+           </i></font><font color="#FF00FF">mov   bx,[si+2]     </font><font color="#008000"><i>{ Load DeltaX }
+           </i></font><font color="#FF00FF">mov   cx,[si+4]     </font><font color="#008000"><i>{ ... DeltaY }
+           </i></font><font color="#FF00FF">mov   dx,[si+6]     </font><font color="#008000"><i>{ ... AddDI }
+           </i></font><font color="#FF00FF">add   si,8
+@PutText:
+           push  cx
+           mov   cx,bx
+           rep   movsw         </font><font color="#008000"><i>{ Restore line }
+           </i></font><font color="#FF00FF">add   di,dx
+           pop   cx
+           dec   cx
+           jnz   @PutText
+           pop   ds
+@Done:
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Short example program }
+
+           </i></font><font color="#FF0000"><b>Begin
+             </b></font>ScrBuf <font color="#000080">:= </font>AllocMemory<font color="#000080">(</font><font color="#800000">4096</font><font color="#000080">);
+             </font>TextBackground<font color="#000080">(</font><font color="#800000">4</font><font color="#000080">);
+             </font>ClrScr<font color="#000080">;
+             </font>PullDown<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">70</font><font color="#000080">,</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">$1f</font><font color="#000080">,</font><font color="#800000">' Window #1 '</font><font color="#000080">);
+             </font>ReadKey<font color="#000080">;
+             </font>PullDown<font color="#000080">(</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">60</font><font color="#000080">,</font><font color="#800000">22</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$4e</font><font color="#000080">,</font><font color="#800000">' Window #2 '</font><font color="#000080">);
+             </font>ReadKey<font color="#000080">;
+             </font>RestoreScreen<font color="#000080">;
+             </font>ReadKey<font color="#000080">;
+             </font>RestoreScreen<font color="#000080">;
+           </font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTWNDW SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0015.PAS">Original</a><b>]</b></p></body>
+</html>

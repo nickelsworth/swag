@@ -1,0 +1,164 @@
+<html>
+<head><title> "STREAMS1.PAS" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to STREAMS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0001.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+I have a question about registration of Objects to allow them
+to be Put on the TDosStream. I want to Write my own Get Function,
+but I don't know the name of Variable or even address which points
+to the Array of Records of just registered Objects. I would like
+to search For appriopriate Record on my own. Is it possible in TV6.0
+
+Here si an article that was posted some time ago about locating
+the tStreamRec suite in memory: I think it is what you want:
+
+&gt; BJ&gt; I am looking For the location of the RegisterTypes
+&gt; BJ&gt; Variables. if you make an Register of your Object- where it
+&gt; BJ&gt; is stored ? Can I access it through a standard Variable ?
+&gt;if you look up the definition of TStreamRec on page 380 of the TVision
+&gt;manual a lot may become clearer to your.
+
+  As any Typed Constants (another name could be initialized Variables)
+  the tStreamRecs are stored in the DATA segment. The actual content is :
+    PStreamRec = ^TStreamRec;
+    TStreamRec = Record
+      ObjType: Word;
+      VmtLink: Word;
+      Load: Pointer;
+      Store: Pointer;
+      Next: Word;      &lt;====== this is the link to a next tStreamRec
+    end;
+  When registering a View , the Procedure RegisterType simply adds
+  the new tStreamRec at the top of a stack by filling in the field
+  Next (a Word only) since the segment is always DSEG.
+  This Field now points to the offset in DSEG of the
+  previously registered view...
+  The top of the stack is located in a Word Variable
+  which is private to the Objects Unit... No way to get it ???
+
+  The trick is to register an extra dummy view after all your Real
+  registrations.
+  The private topofStack(???) Variable will now point to the offset of
+  the Dummy View, and THE NEXT field of the dummy view will point
+  to THE LAST REGISTERED VIEW. This is the beginning of the thread
+  were are looking For....
+  Just follow back the NEXT Fields Until a value of 0 that indicates
+  the end of the stack (i.e; the first registered view )
+  The following Program prints out the Stack of all the tSreamRec
+  starting from the dummy view back to the tView streamRec which
+  is normally the first registered item.
+  We are using the technique to avoid the infamous Runtime error 212
+    ( registration of an already registered Type ) , quite common
+    if you include the registration process in the initialization part
+     of Units . Simply Write a Function IsRegistered that take as
+     a parameter a tStreamRec and return True if member of the Stack .
+     ( code is Really similar to the exemple below )
+   Replace any call to RegisterType(MyStreamRec) by
+      if not IsRegistered  (MyStreamRec) then RegisterType(MyStreamRec)
+---------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Program </b></font>ShowStreamRecs<font color="#000080">;
+</font><font color="#008000"><i>{ (C) P.Pollet National Institute For Applied Sciences (inSA)
+  Lyon France 1992  ppollet@cismibm.univ-lyon1.fr }
+</i></font><font color="#FF0000"><b>Uses </b></font>Drivers<font color="#000080">,</font>Objects<font color="#000080">,</font>views<font color="#000080">,</font>Dialogs<font color="#000080">,</font>Menus<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>RDummyView<font color="#000080">: </font>TStreamRec <font color="#000080">= (
+    </font>ObjType<font color="#000080">: </font><font color="#800000">$FFFF</font><font color="#000080">;
+    </font>VmtLink<font color="#000080">: </font><font color="#800000">0</font><font color="#000080">;
+    </font>Load<font color="#000080">:    </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+    </font>Store<font color="#000080">:   </font><font color="#FF0000"><b>NIL
+  </b></font><font color="#000080">);
+</font><font color="#FF0000"><b>Function </b></font>PtrtoStr<font color="#000080">(</font>P<font color="#000080">:</font>Pointer<font color="#000080">):</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ convert a Ptr to Hex representation }
+</i></font><font color="#FF0000"><b>Var </b></font>S<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>Param<font color="#000080">:</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Param<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font>Seg<font color="#000080">(</font>P<font color="#000080">^);
+  </font>Param<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font>ofs<font color="#000080">(</font>P<font color="#000080">^);
+  </font>FormatStr<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">'%x:%x'</font><font color="#000080">,</font>Param<font color="#000080">);
+  </font>PtrtoStr<font color="#000080">:=</font>S
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>WordtoHex<font color="#000080">(</font>W<font color="#000080">:</font>Word<font color="#000080">):</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ convert a Word to Hex representation }
+</i></font><font color="#FF0000"><b>Var </b></font>S<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>Param<font color="#000080">: </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Param<font color="#000080">:=</font>W<font color="#000080">;
+  </font>FormatStr<font color="#000080">(</font>S<font color="#000080">,</font><font color="#800000">'%x'</font><font color="#000080">,</font>Param<font color="#000080">);
+  </font>WordtoHex<font color="#000080">:=</font>S
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>ShowThem<font color="#000080">;
+</font><font color="#008000"><i>{ show the stack or the tStreamrec in DSeg }
+</i></font><font color="#FF0000"><b>Var </b></font>Base<font color="#000080">:</font>Word<font color="#000080">;
+    </font>Pt<font color="#000080">:</font>PstreamRec<font color="#000080">;
+      </font><font color="#FF0000"><b>Procedure </b></font>ShowArec <font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>R<font color="#000080">:</font>tstreamRec<font color="#000080">);
+      </font><font color="#008000"><i>{ display Info on the tstreamrec R}
+      { the Var is only to Pass the Real Address of R
+        and not the address of its copy on the stack !!! }
+      </i></font><font color="#FF0000"><b>begin
+        With </b></font>R <font color="#FF0000"><b>do
+          begin
+            </b></font>Writeln <font color="#000080">(</font><font color="#800000">'AT      ='</font><font color="#000080">,</font>PtrtoStr<font color="#000080">(@</font>R<font color="#000080">)); </font><font color="#008000"><i>{ gives the address of the StreamRec}
+            </i></font>Writeln <font color="#000080">(</font><font color="#800000">'ObjType ='</font><font color="#000080">,</font>ObjType<font color="#000080">);      </font><font color="#008000"><i>{ what Object is it see TV6 doc}
+            </i></font>Writeln <font color="#000080">(</font><font color="#800000">'VTMLink ='</font><font color="#000080">,</font>VmTlink<font color="#000080">);      </font><font color="#008000"><i>{ offset of VMT table also in DSEG }
+            </i></font>Writeln <font color="#000080">(</font><font color="#800000">'LOAD    ='</font><font color="#000080">,</font>PtrtoStr<font color="#000080">(</font>Load<font color="#000080">)); </font><font color="#008000"><i>{ address of Load Constructor }
+            </i></font>Writeln <font color="#000080">(</font><font color="#800000">'StoRE   ='</font><font color="#000080">,</font>PtrtoStr<font color="#000080">(</font>Store<font color="#000080">)); </font><font color="#008000"><i>{ address of store method }
+            </i></font>Writeln <font color="#000080">(</font><font color="#800000">'Next    ='</font><font color="#000080">,</font>WordtoHex<font color="#000080">(</font>Next<font color="#000080">)); </font><font color="#008000"><i>{ offset in DSEG of next item }
+            </i></font>Writeln<font color="#000080">;
+          </font><font color="#FF0000"><b>end
+      end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Base<font color="#000080">:=</font>ofs<font color="#000080">(</font>RDummyView<font color="#000080">);    </font><font color="#008000"><i>{ start at Dummy view }
+  </i></font><font color="#FF0000"><b>Repeat
+     </b></font>Pt<font color="#000080">:=</font>Ptr<font color="#000080">(</font>DSeg<font color="#000080">,</font>Base<font color="#000080">);    </font><font color="#008000"><i>{Real address is DSG:base}
+     </i></font>ShowARec<font color="#000080">(</font>Pt<font color="#000080">^);         </font><font color="#008000"><i>{Display this tStreamRec }
+     </i></font>Base<font color="#000080">:=</font>Pt<font color="#000080">^.</font>Next<font color="#000080">;        </font><font color="#008000"><i>{ move to previous item }
+   </i></font><font color="#FF0000"><b>Until </b></font>Base<font color="#000080">=</font><font color="#800000">0             </font><font color="#008000"><i>{ Until first reached }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{Assign(Output,'RegType.log');}
+  </i></font>ReWrite<font color="#000080">(</font>Output<font color="#000080">);
+  </font>RegisterViews<font color="#000080">;            </font><font color="#008000"><i>{ register some from TV }
+  </i></font>RegisterDialogs<font color="#000080">;
+  </font>RegisterMenus<font color="#000080">;
+  </font>RegisterType<font color="#000080">(</font>RDummyView<font color="#000080">); </font><font color="#008000"><i>{ doN'T ForGET the DummyView at Last ! }
+  </i></font>ShowThem<font color="#000080">;
+  </font>Close<font color="#000080">(</font>Output<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font><font color="#008000"><i>(*
+This is a partial print out of the output ...
+AT      =86DC:2       { my Dumy View }
+ObjType =65535
+VTMLink =0
+LOAD    =0:0
+StoRE   =0:0
+Next    =128      &lt;----  { Real offset of the first VIEW }
+                      |
+AT      =86DC:128 &lt;----  { the last register View }
+ObjType =42              { it is tStatusLine  Type =42 }
+VTMLink =184
+LOAD    =79AB:1A84
+StoRE   =79AB:22E9
+Next    =11A       &lt;----
+                       |
+AT      =86DC:11A  &lt;----    { this is  tMenuBox }
+ObjType =41
+VTMLink =100
+LOAD    =79AB:247
+StoRE   =79AB:1171
+Next    =10C
+...................................
+  cut to save space
+...................................
+AT      =86DC:91A     { this is the first registered }
+ObjType =1            { tView Type =1 }
+VTMLink =1726
+LOAD    =7F1C:2C1
+StoRE   =7F1C:18FE
+Next    =0            {&lt;-----  Next =0 so Last One of the Stack }
+Hope it helps you ... Let me know ...
+
+of course With TP7, since you have the sources code, you may
+modify the OBjECTS Unit( ?) to move the Typed Constant that points at
+the top of the list from the Implementation part of the Unit to the
+Interface part....
+
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to STREAMS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0001.PAS">Original</a><b>]</b></p></body>
+</html>

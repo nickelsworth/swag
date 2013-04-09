@@ -1,0 +1,402 @@
+<html>
+<head><title> "FLI Player" by JOHN O'HARROW</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0157.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Where can I get TP7 or TP6 source code for playing back FLI animations? If
+&gt; there aren't any, is there an efficient, quick, and unnoticeable way to do
+&gt; a shell to DOS and run a FLI player program? Any and all help is greatly
+&gt; appreciated. Please, if possible, email to the address in my .sig below.
+
+Here is my the unit I use to play FLI files.  Hope it Helps.
+From: JOHARROW@homeloan.demon.co.uk (John O'Harrow)
+}
+
+{----------Written by John O'Harrow 1994----------}
+
+{$G+}
+</i></font><font color="#FF0000"><b>UNIT </b></font>FliPlay<font color="#000080">;
+
+</font><font color="#FF0000"><b>INTERFACE
+
+  PROCEDURE </b></font>AAPlay<font color="#000080">(</font>Filename <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">); </font><font color="#008000"><i>{Play FLI at default speed}
+
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>PFliPlayer <font color="#000080">= ^</font>TFliPlayer<font color="#000080">;
+  </font>TFliPlayer <font color="#000080">= </font><font color="#FF0000"><b>OBJECT
+    CONSTRUCTOR </b></font>Init<font color="#000080">;
+    </font><font color="#FF0000"><b>DESTRUCTOR  </b></font>Done<font color="#000080">;                      </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>PROCEDURE   </b></font>SetSpeed<font color="#000080">(</font>Speed <font color="#000080">: </font>Integer<font color="#000080">); </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">; </font><font color="#008000"><i>{0=Fastest}
+    </i></font><font color="#FF0000"><b>PROCEDURE   </b></font>ClearSpeed<font color="#000080">;                </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>PROCEDURE   </b></font>Play<font color="#000080">(</font>Filename <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);   </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>PRIVATE
+    </b></font>Buffer   <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>Interval <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>FliFile  <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{TFliPlayer}
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+USES
+  </b></font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>Clock_Hz     <font color="#000080">= </font><font color="#800000">4608</font><font color="#000080">;                   </font><font color="#008000"><i>{Frequency of clock}
+  </i></font>Monitor_Hz   <font color="#000080">= </font><font color="#800000">70</font><font color="#000080">;                     </font><font color="#008000"><i>{Frequency of monitor}
+  </i></font>Clock_Scale  <font color="#000080">= </font>Clock_Hz <font color="#FF0000"><b>DIV </b></font>Monitor_Hz<font color="#000080">;
+  </font>CData        <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;                    </font><font color="#008000"><i>{Port number of timer 0}
+  </i></font>CMode        <font color="#000080">= </font><font color="#800000">$43</font><font color="#000080">;                    </font><font color="#008000"><i>{Port number of timer control word}
+  </i></font>BufSize      <font color="#000080">= </font><font color="#800000">65528</font><font color="#000080">;                  </font><font color="#008000"><i>{Frame buffer size - Must be even}
+  </i></font>MCGA         <font color="#000080">= </font><font color="#800000">$13</font><font color="#000080">;                    </font><font color="#008000"><i>{Number for MCGA mode}
+
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>MainHeaderRec <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+    </b></font>Padding1 <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>ID       <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Frames   <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Padding2 <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>Padding3 <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>Speed    <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Padding4 <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">110</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Char<font color="#000080">; </font><font color="#008000"><i>{Pad to 128 Bytes}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{MainHeaderRec}
+
+  </i></font>FrameHeaderRec <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+    </b></font>Size     <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>Padding1 <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Chunks   <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Padding2 <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Char<font color="#000080">; </font><font color="#008000"><i>{Pad to 16 Bytes}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{FrameHeaderRec}
+
+{---------------------------------------------------------------------------}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>VideoMode<font color="#000080">(</font>Mode <font color="#000080">: </font>Word<font color="#000080">);
+    </font><font color="#FF0000"><b>INLINE </b></font><font color="#000080">(</font><font color="#800000">$58</font><font color="#000080">/</font><font color="#800000">$CD</font><font color="#000080">/</font><font color="#800000">$10</font><font color="#000080">); </font><font color="#008000"><i>{POP AX/INT 10}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>InitClock<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">; </font><font color="#008000"><i>{Taken from the FLILIB source}
+  </i></font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">mov  al,00110100b
+    out  CMode,al
+    xor  al,al
+    out  CData,al
+    out  CData,al
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{InitClock}
+
+  </i></font><font color="#FF0000"><b>FUNCTION </b></font>GetClock <font color="#000080">: </font>LongInt<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">; </font><font color="#008000"><i>{Taken from the FLILIB source}
+  {this routine returns a clock with occassional spikes where time
+    will look like its running backwards 1/18th of a second.  The resolution
+    of the clock is 1/(18*256) = 1/4608 second.  66 ticks of this clock
+    are supposed to be equal to a monitor 1/70 second tick.}
+  </i></font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">mov  ah,0                  </font><font color="#008000"><i>{get tick count from Dos and use For hi 3 Bytes}
+    </i></font><font color="#FF00FF">int  01ah                  </font><font color="#008000"><i>{lo order count in DX, hi order in CX}
+    </i></font><font color="#FF00FF">mov  ah,dl
+    mov  dl,dh
+    mov  dh,cl
+    mov  al,0                  </font><font color="#008000"><i>{read lo Byte straight from timer chip}
+    </i></font><font color="#FF00FF">out  CMode,al              </font><font color="#008000"><i>{latch count}
+    </i></font><font color="#FF00FF">mov  al,1
+    out  CMode,al              </font><font color="#008000"><i>{set up to read count}
+    </i></font><font color="#FF00FF">in   al,CData              </font><font color="#008000"><i>{read in lo Byte (and discard)}
+    </i></font><font color="#FF00FF">in   al,CData              </font><font color="#008000"><i>{hi Byte into al}
+    </i></font><font color="#FF00FF">neg  al                    </font><font color="#008000"><i>{make it so counting up instead of down}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{GetClock}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>DrawFrame<font color="#000080">(</font>Buffer <font color="#000080">: </font>Pointer<font color="#000080">; </font>Chunks <font color="#000080">: </font>Word<font color="#000080">); </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{this is the routine that takes a frame and put it on the screen}
+  </i></font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">cli                        </font><font color="#008000"><i>{disable interrupts}
+    </i></font><font color="#FF00FF">push ds
+    push es
+    lds  si,Buffer             </font><font color="#008000"><i>{let DS:SI point at the frame to be drawn}
+  </i></font><font color="#FF00FF">@Fli_Loop:                   </font><font color="#008000"><i>{main loop that goes through all the chunks in a
+frame}
+    </i></font><font color="#FF00FF">cmp  Chunks,0              </font><font color="#008000"><i>{are there any more chunks to draw?}
+    </i></font><font color="#FF00FF">je   @Exit
+    dec  Chunks                </font><font color="#008000"><i>{decrement Chunks For the chunk to process now}
+    </i></font><font color="#FF00FF">mov  ax,[Word ptr ds:si+4] </font><font color="#008000"><i>{let AX have the ChunkType}
+    </i></font><font color="#FF00FF">add  si,6                  </font><font color="#008000"><i>{skip the ChunkHeader}
+    </i></font><font color="#FF00FF">cmp  ax,0Bh                </font><font color="#008000"><i>{is it a FLI_COLor chunk?}
+    </i></font><font color="#FF00FF">je   @Fli_Color
+    cmp  ax,0Ch                </font><font color="#008000"><i>{is it a FLI_LC chunk?}
+    </i></font><font color="#FF00FF">je   @Fli_Lc
+    cmp  ax,0Dh                </font><font color="#008000"><i>{is it a FLI_BLACK chunk?}
+    </i></font><font color="#FF00FF">je   @Fli_Black
+    cmp  ax,0Fh                </font><font color="#008000"><i>{is it a FLI_BRUN chunk?}
+    </i></font><font color="#FF00FF">je   @Fli_Brun
+    cmp  ax,10h                </font><font color="#008000"><i>{is it a FLI_COPY chunk?}
+    </i></font><font color="#FF00FF">je   @Fli_Copy
+    jmp  @Fli_Loop             </font><font color="#008000"><i>{This command should not be necessary }
+  </i></font><font color="#FF00FF">@Fli_Color:
+    mov  bx,[Word ptr ds:si]   </font><font color="#008000"><i>{number of packets in this chunk (always 1?)}
+    </i></font><font color="#FF00FF">add  si,2                  </font><font color="#008000"><i>{skip the NumberofPackets}
+    </i></font><font color="#FF00FF">mov  al,0                  </font><font color="#008000"><i>{start at color 0}
+    </i></font><font color="#FF00FF">xor  cx,cx                 </font><font color="#008000"><i>{reset CX}
+  </i></font><font color="#FF00FF">@Color_Loop:
+    or   bx,bx                 </font><font color="#008000"><i>{set flags}
+    </i></font><font color="#FF00FF">jz   @Fli_Loop             </font><font color="#008000"><i>{Exit if no more packages}
+    </i></font><font color="#FF00FF">dec  bx                    </font><font color="#008000"><i>{decrement NumberofPackages For the package to
+process now}
+    </i></font><font color="#FF00FF">mov  cl,[Byte ptr ds:si+0] </font><font color="#008000"><i>{first Byte in packet tells how many colors to
+skip}
+    </i></font><font color="#FF00FF">add  al,cl                 </font><font color="#008000"><i>{add the skiped colors to the start to get the
+new start}
+    </i></font><font color="#FF00FF">mov  dx,$3C8               </font><font color="#008000"><i>{PEL Address Write Mode Register}
+    </i></font><font color="#FF00FF">out  dx,al                 </font><font color="#008000"><i>{tell the VGA card what color we start changing}
+    </i></font><font color="#FF00FF">inc  dx                    </font><font color="#008000"><i>{at the port abow the PEL_A_W_M_R is the PEL
+Data Register}
+    </i></font><font color="#FF00FF">mov  cl,[Byte ptr ds:si+1] </font><font color="#008000"><i>{next Byte in packet tells how many colors to
+change}
+    </i></font><font color="#FF00FF">or   cl,cl                 </font><font color="#008000"><i>{set the flags}
+    </i></font><font color="#FF00FF">jnz  @Jump_Over            </font><font color="#008000"><i>{if NumberstoChange=0 then NumberstoChange=256}
+    </i></font><font color="#FF00FF">inc  ch                    </font><font color="#008000"><i>{CH=1 and CL=0 =&gt; CX=256}
+  </i></font><font color="#FF00FF">@Jump_Over:
+    add  al,cl                 </font><font color="#008000"><i>{update the color to start at}
+    </i></font><font color="#FF00FF">mov  di,cx                 </font><font color="#008000"><i>{since each color is made of 3 Bytes (Red, Green
+&amp; Blue) we have to -}
+    </i></font><font color="#FF00FF">shl  cx,1                  </font><font color="#008000"><i>{- multiply CX (the data counter) With 3}
+    </i></font><font color="#FF00FF">add  cx,di                 </font><font color="#008000"><i>{- CX = old_CX shl 1 + old_CX   (the fastest way
+to multiply With 3)}
+    </i></font><font color="#FF00FF">add  si,2                  </font><font color="#008000"><i>{skip the NumberstoSkip and NumberstoChange
+Bytes}
+    </i></font><font color="#FF00FF">rep  outsb                 </font><font color="#008000"><i>{put the color data to the VGA card FAST!}
+    </i></font><font color="#FF00FF">jmp  @Color_Loop           </font><font color="#008000"><i>{finish With this packet - jump back}
+  </i></font><font color="#FF00FF">@Fli_Lc:
+    mov  ax,0A000h
+    mov  es,ax                 </font><font color="#008000"><i>{let ES point at the screen segment}
+    </i></font><font color="#FF00FF">mov  di,[Word ptr ds:si+0] </font><font color="#008000"><i>{put LinestoSkip into DI -}
+    </i></font><font color="#FF00FF">mov  ax,di                 </font><font color="#008000"><i>{- to get the offset address to this line we
+have to multiply With 320 -}
+    </i></font><font color="#FF00FF">shl  ax,8                  </font><font color="#008000"><i>{- DI = old_DI shl 8 + old_DI shl 6 -}
+    </i></font><font color="#FF00FF">shl  di,6                  </font><font color="#008000"><i>{- it is the same as DI = old_DI*256 + old_DI*64
+= old_DI*320 -}
+    </i></font><font color="#FF00FF">add  di,ax                 </font><font color="#008000"><i>{- but this way is faster than a plain mul}
+    </i></font><font color="#FF00FF">mov  bx,[Word ptr ds:si+2] </font><font color="#008000"><i>{put LinestoChange into BX}
+    </i></font><font color="#FF00FF">add  si,4                  </font><font color="#008000"><i>{skip the LinestoSkip and LinestoChange Words}
+    </i></font><font color="#FF00FF">xor  cx,cx                 </font><font color="#008000"><i>{reset cx}
+  </i></font><font color="#FF00FF">@Line_Loop:
+    or   bx,bx                 </font><font color="#008000"><i>{set flags}
+    </i></font><font color="#FF00FF">jz   @Fli_Loop             </font><font color="#008000"><i>{Exit if no more lines to change}
+    </i></font><font color="#FF00FF">dec  bx
+    mov  dl,[Byte ptr ds:si]   </font><font color="#008000"><i>{put PacketsInLine into DL}
+    </i></font><font color="#FF00FF">inc  si                    </font><font color="#008000"><i>{skip the PacketsInLine Byte}
+    </i></font><font color="#FF00FF">push di                    </font><font color="#008000"><i>{save the offset address of this line}
+  </i></font><font color="#FF00FF">@Pack_Loop:
+    or   dl,dl                 </font><font color="#008000"><i>{set flags}
+    </i></font><font color="#FF00FF">jz   @Next_Line            </font><font color="#008000"><i>{Exit if no more packets in this line}
+    </i></font><font color="#FF00FF">dec  dl
+    mov  cl,[Byte ptr ds:si+0] </font><font color="#008000"><i>{put BytestoSkip into CL}
+    </i></font><font color="#FF00FF">add  di,cx                 </font><font color="#008000"><i>{update the offset address}
+    </i></font><font color="#FF00FF">mov  cl,[Byte ptr ds:si+1] </font><font color="#008000"><i>{put BytesofDatatoCome into CL}
+    </i></font><font color="#FF00FF">or   cl,cl                 </font><font color="#008000"><i>{set flags}
+    </i></font><font color="#FF00FF">jns  @Copy_Bytes           </font><font color="#008000"><i>{no SIGN means that CL number of data is to come
+-}
+                               {- else the next data should be put -CL number
+of times}
+    </i></font><font color="#FF00FF">mov  al,[Byte ptr ds:si+2] </font><font color="#008000"><i>{put the Byte to be Repeated into AL}
+    </i></font><font color="#FF00FF">add  si,3                  </font><font color="#008000"><i>{skip the packet}
+    </i></font><font color="#FF00FF">neg  cl                    </font><font color="#008000"><i>{Repeat -CL times}
+    </i></font><font color="#FF00FF">rep  stosb
+    jmp  @Pack_Loop            </font><font color="#008000"><i>{finish With this packet}
+  </i></font><font color="#FF00FF">@Copy_Bytes:
+    add  si,2                  </font><font color="#008000"><i>{skip the two count Bytes at the start of the
+packet}
+    </i></font><font color="#FF00FF">rep  movsb
+    jmp  @Pack_Loop            </font><font color="#008000"><i>{finish With this packet}
+  </i></font><font color="#FF00FF">@Next_Line:
+    pop  di                    </font><font color="#008000"><i>{restore the old offset address of the current
+line}
+    </i></font><font color="#FF00FF">add  di,320                </font><font color="#008000"><i>{offset address to the next line}
+    </i></font><font color="#FF00FF">jmp  @Line_Loop
+  @Fli_Black:
+    mov  ax,0A000h
+    mov  es,ax                 </font><font color="#008000"><i>{let ES:DI point to the start of the screen}
+    </i></font><font color="#FF00FF">xor  di,di
+    mov  cx,32000              </font><font color="#008000"><i>{number of Words in a screen}
+    </i></font><font color="#FF00FF">xor  ax,ax                 </font><font color="#008000"><i>{color 0 is to be put on the screen}
+    </i></font><font color="#FF00FF">rep  stosw
+    jmp  @Fli_Loop             </font><font color="#008000"><i>{jump back to main loop}
+  </i></font><font color="#FF00FF">@Fli_Brun:
+    mov  ax,0A000h
+    mov  es,ax                 </font><font color="#008000"><i>{let ES:DI point at the start of the screen}
+    </i></font><font color="#FF00FF">xor  di,di
+    mov  bx,200                </font><font color="#008000"><i>{numbers of lines in a screen}
+    </i></font><font color="#FF00FF">xor  cx,cx
+  @Line_Loop2:
+    mov  dl,[Byte ptr ds:si]   </font><font color="#008000"><i>{put PacketsInLine into DL}
+    </i></font><font color="#FF00FF">inc  si                    </font><font color="#008000"><i>{skip the PacketsInLine Byte}
+    </i></font><font color="#FF00FF">push di                    </font><font color="#008000"><i>{save the offset address of this line}
+  </i></font><font color="#FF00FF">@Pack_Loop2:
+    or   dl,dl                 </font><font color="#008000"><i>{set flags}
+    </i></font><font color="#FF00FF">jz   @Next_Line2           </font><font color="#008000"><i>{Exit if no more packets in this line}
+    </i></font><font color="#FF00FF">dec  dl
+    mov  cl,[Byte ptr ds:si]   </font><font color="#008000"><i>{put BytesofDatatoCome into CL}
+    </i></font><font color="#FF00FF">or   cl,cl                 </font><font color="#008000"><i>{set flags}
+    </i></font><font color="#FF00FF">js   @Copy_Bytes2          </font><font color="#008000"><i>{SIGN meens that CL number of data is to come -}
+                               {- else the next data should be put -CL number
+of times}
+    </i></font><font color="#FF00FF">mov  al,[Byte ptr ds:si+1] </font><font color="#008000"><i>{put the Byte to be Repeated into AL}
+    </i></font><font color="#FF00FF">add  si,2                  </font><font color="#008000"><i>{skip the packet}
+    </i></font><font color="#FF00FF">rep  stosb
+    jmp  @Pack_Loop2           </font><font color="#008000"><i>{finish With this packet}
+  </i></font><font color="#FF00FF">@Copy_Bytes2:
+    inc  si                    </font><font color="#008000"><i>{skip the count Byte at the start of the packet}
+    </i></font><font color="#FF00FF">neg  cl                    </font><font color="#008000"><i>{Repeat -CL times}
+    </i></font><font color="#FF00FF">rep  movsb
+    jmp  @Pack_Loop2           </font><font color="#008000"><i>{finish With this packet}
+  </i></font><font color="#FF00FF">@Next_Line2:
+    pop  di                    </font><font color="#008000"><i>{restore the old offset address of the current
+line}
+    </i></font><font color="#FF00FF">add  di,320                </font><font color="#008000"><i>{offset address to the next line}
+    </i></font><font color="#FF00FF">dec  bx                    </font><font color="#008000"><i>{any more lines to draw?}
+    </i></font><font color="#FF00FF">jnz  @Line_Loop2
+    jmp  @Fli_Loop             </font><font color="#008000"><i>{jump back to main loop}
+  </i></font><font color="#FF00FF">@Fli_Copy:
+    mov  ax,0A000h
+    mov  es,ax                 </font><font color="#008000"><i>{let ES:DI point to the start of the screen}
+    </i></font><font color="#FF00FF">xor  di,di
+    mov  cx,32000              </font><font color="#008000"><i>{number of Words in a screen}
+    </i></font><font color="#FF00FF">rep  movsw
+    jmp  @Fli_Loop             </font><font color="#008000"><i>{jump back to main loop}
+  </i></font><font color="#FF00FF">@Exit:
+    sti                        </font><font color="#008000"><i>{enable interrupts}
+    </i></font><font color="#FF00FF">pop  es
+    pop  ds
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{DrawFrame}
+
+  </i></font><font color="#FF0000"><b>CONSTRUCTOR </b></font>TFliPlayer<font color="#000080">.</font>Init<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    IF </b></font>MemAvail <font color="#000080">&lt; </font>BufSize <font color="#FF0000"><b>THEN </b></font>Fail<font color="#000080">;
+    </font>GetMem<font color="#000080">(</font>Buffer<font color="#000080">,</font>BufSize<font color="#000080">);
+    </font>ClearSpeed<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{Init}
+
+  </i></font><font color="#FF0000"><b>DESTRUCTOR </b></font>TFliPlayer<font color="#000080">.</font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>FreeMem<font color="#000080">(</font>Buffer<font color="#000080">,</font>BufSize<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{Done}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>TFliPlayer<font color="#000080">.</font>SetSpeed<font color="#000080">(</font>Speed <font color="#000080">: </font>Integer<font color="#000080">);
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>Interval <font color="#000080">:= </font>Speed <font color="#000080">* </font>Clock_Scale<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{SetSpeed}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>TFliPlayer<font color="#000080">.</font>ClearSpeed<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>Interval <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ClearSpeed}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>TFliPlayer<font color="#000080">.</font>Play<font color="#000080">(</font>Filename <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>VAR
+    </b></font>MainHeader  <font color="#000080">: </font>MainHeaderRec<font color="#000080">;
+    </font>FrameHeader <font color="#000080">: </font>FrameHeaderRec<font color="#000080">;
+    </font>FrameSize   <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>RestartPos  <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>Frame       <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Timeout     <font color="#000080">: </font>LongInt<font color="#000080">;
+
+    </font><font color="#FF0000"><b>FUNCTION </b></font>ReadHeader <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+      </b></font>BlockRead<font color="#000080">(</font>FliFile<font color="#000080">,</font>MainHeader<font color="#000080">,</font>SizeOf<font color="#000080">(</font>MainHeader<font color="#000080">)); </font><font color="#008000"><i>{Read header record}
+      </i></font><font color="#FF0000"><b>WITH </b></font>MainHeader <font color="#FF0000"><b>DO
+        IF </b></font>ID <font color="#000080">&lt;&gt; </font><font color="#800000">$AF11 </font><font color="#FF0000"><b>THEN
+          </b></font>ReadHeader <font color="#000080">:= </font>FALSE <font color="#008000"><i>{Not a .FLI File}
+        </i></font><font color="#FF0000"><b>ELSE
+          BEGIN
+            IF </b></font>Interval <font color="#000080">= -</font><font color="#800000">1 </font><font color="#FF0000"><b>THEN </b></font><font color="#008000"><i>{Read speed from header}
+              </i></font>Interval <font color="#000080">:= </font>Speed <font color="#000080">* </font>Clock_Scale<font color="#000080">;
+            </font>ReadHeader <font color="#000080">:= </font>TRUE<font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ReadHeader}
+
+    </i></font><font color="#FF0000"><b>PROCEDURE </b></font>ReadFrame<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+      </b></font>BlockRead<font color="#000080">(</font>FliFile<font color="#000080">,</font>FrameHeader<font color="#000080">,</font>SizeOf<font color="#000080">(</font>FrameHeader<font color="#000080">));
+      </font>FrameSize <font color="#000080">:= </font>FrameHeader<font color="#000080">.</font>Size <font color="#000080">- </font>SizeOf<font color="#000080">(</font>FrameHeader<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ReadFrame}
+
+    </i></font><font color="#FF0000"><b>PROCEDURE </b></font>ProcessFrame<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+      </b></font>BlockRead<font color="#000080">(</font>FliFile<font color="#000080">,</font>Buffer<font color="#000080">^,</font>FrameSize<font color="#000080">);
+      </font>DrawFrame<font color="#000080">(</font>Buffer<font color="#000080">,</font>FrameHeader<font color="#000080">.</font>Chunks<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ProcessFrame}
+
+  </i></font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{Play}
+    {$I-}
+    </i></font>Assign<font color="#000080">(</font>FLiFile<font color="#000080">,</font>Filename<font color="#000080">);
+    </font>Reset<font color="#000080">(</font>FliFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>IOResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+        IF </b></font>ReadHeader <font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>VideoMode<font color="#000080">(</font>MCGA<font color="#000080">);
+            </font>InitClock<font color="#000080">;
+            </font>ReadFrame<font color="#000080">;
+            </font>RestartPos <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>MainHeader<font color="#000080">) + </font>SizeOf<font color="#000080">(</font>FrameHeader<font color="#000080">) + </font>FrameSize<font color="#000080">;
+            </font>ProcessFrame<font color="#000080">;
+            </font><font color="#FF0000"><b>REPEAT
+              </b></font>Frame <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+              </font><font color="#FF0000"><b>REPEAT
+                </b></font>Timeout <font color="#000080">:= </font>GetClock <font color="#000080">+ </font>Interval<font color="#000080">;
+                </font>ReadFrame<font color="#000080">;
+                </font><font color="#FF0000"><b>IF </b></font>FrameSize <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+                  </b></font>ProcessFrame<font color="#000080">;
+                </font><font color="#FF0000"><b>REPEAT UNTIL </b></font>GetClock <font color="#000080">&gt; </font>Timeout<font color="#000080">;
+                </font>Inc<font color="#000080">(</font>Frame<font color="#000080">);
+              </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>Frame <font color="#000080">&gt; </font>MainHeader<font color="#000080">.</font>Frames<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font>Keypressed<font color="#000080">;
+              </font>Seek<font color="#000080">(</font>FliFile<font color="#000080">,</font>RestartPos<font color="#000080">);
+            </font><font color="#FF0000"><b>UNTIL </b></font>Keypressed<font color="#000080">;
+            </font>VideoMode<font color="#000080">(</font>CO80<font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font>Close<font color="#000080">(</font>FliFile<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{Play}
+
+{---------------------------------------------------------------------------}
+
+  </i></font><font color="#FF0000"><b>FUNCTION </b></font>Is286Able<font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">PUSHF
+    POP     BX
+    AND     BX,0FFFH
+    PUSH    BX
+    POPF
+    PUSHF
+    POP     BX
+    AND     BX,0F000H
+    CMP     BX,0F000H
+    MOV     AX,0
+    JZ      @@1
+    MOV     AX,1
+  @@1:
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{Is286Able}
+
+  </i></font><font color="#FF0000"><b>FUNCTION </b></font>IsVGA <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">MOV  AX,1A00h
+    MOV  BL,10h
+    INT  10h
+    CMP  BL,8
+    MOV  AX,1
+    JZ   @@1
+    MOV  AX,0
+  @@1:
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{IsVGA}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>AAPlay<font color="#000080">(</font>Filename <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>VAR
+    </b></font>Player <font color="#000080">: </font>TFliPlayer<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    IF </b></font>Is286Able <font color="#FF0000"><b>AND </b></font>IsVga <font color="#FF0000"><b>THEN
+      WITH </b></font>Player <font color="#FF0000"><b>DO
+        IF </b></font>Init <font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>Play<font color="#000080">(</font>Filename<font color="#000080">);
+            </font>Done<font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{AAPlay}
+
+{===========================================================================}
+
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0157.PAS">Original</a><b>]</b></p></body>
+</html>

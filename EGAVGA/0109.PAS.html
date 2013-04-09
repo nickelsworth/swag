@@ -1,0 +1,196 @@
+<html>
+<head><title> "Rotate 256x256 bitmap" by PAUL KAHLER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0109.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A+,B-,D+,E+,F-,G+,I+,L+,N-,O-,P-,Q-,R-,S+,T-,V-,X+,Y+}
+{$M 16384,0,32786}
+</i></font><font color="#FF0000"><b>Program </b></font>BitMap<font color="#000080">;       </font><font color="#008000"><i>{ rotates/pans/scales a 256x256 bitmap }
+</i></font><font color="#FF0000"><b>USES </b></font>CRT<font color="#000080">;                 </font><font color="#008000"><i>{ by Paul H. Kahler   Jan 1994 }
+
+</i></font><font color="#FF0000"><b>Var   </b></font>SinTable<font color="#000080">,</font>CosTable<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;
+      </font>Sin2Table<font color="#000080">,</font>Cos2Table<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;
+      </font>Map<font color="#000080">:</font>word<font color="#000080">; </font><font color="#008000"><i>{used as a pointer to the bitmap}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>MakeTables<font color="#000080">;                   </font><font color="#008000"><i>{Creates sin/cos tables}
+</i></font><font color="#FF0000"><b>Var </b></font>direction<font color="#000080">:</font>integer<font color="#000080">;
+    </font>angle<font color="#000080">:</font>real<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+     For </b></font>Direction<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do begin   </b></font><font color="#008000"><i>{use 256 degrees in circle}
+         </i></font>angle<font color="#000080">:=</font>Direction<font color="#000080">;
+         </font>angle<font color="#000080">:=</font>angle<font color="#000080">*</font><font color="#800000">3.14159265</font><font color="#000080">/</font><font color="#800000">128</font><font color="#000080">;
+         </font>SinTable<font color="#000080">[</font>Direction<font color="#000080">]:=</font>round<font color="#000080">(</font>Sin<font color="#000080">(</font>angle<font color="#000080">)*</font><font color="#800000">256</font><font color="#000080">);
+         </font>CosTable<font color="#000080">[</font>Direction<font color="#000080">]:=</font>round<font color="#000080">(</font>Cos<font color="#000080">(</font>angle<font color="#000080">)*</font><font color="#800000">256</font><font color="#000080">);
+         </font>Sin2Table<font color="#000080">[</font>Direction<font color="#000080">]:=</font>round<font color="#000080">(</font>Sin<font color="#000080">(</font>angle<font color="#000080">+</font><font color="#800000">3.14159265</font><font color="#000080">/</font><font color="#800000">2</font><font color="#000080">)*</font><font color="#800000">256</font><font color="#000080">*</font><font color="#800000">1.2</font><font color="#000080">);
+         </font>Cos2Table<font color="#000080">[</font>Direction<font color="#000080">]:=</font>round<font color="#000080">(</font>Cos<font color="#000080">(</font>angle<font color="#000080">+</font><font color="#800000">3.14159265</font><font color="#000080">/</font><font color="#800000">2</font><font color="#000080">)*</font><font color="#800000">256</font><font color="#000080">*</font><font color="#800000">1.2</font><font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;                 </font><font color="#008000"><i>{ the 1.2 accounts for pixel aspect ratio }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>DrawScreen<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">,</font>scale<font color="#000080">:</font>word<font color="#000080">; </font>rot<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>Temp<font color="#000080">:</font>Longint<font color="#000080">;            </font><font color="#008000"><i>{used for intermediate large values}
+    </i></font>ddx<font color="#000080">,</font>ddy<font color="#000080">,</font>d2x<font color="#000080">,</font>d2y<font color="#000080">:</font>integer<font color="#000080">;
+    </font>i<font color="#000080">,</font>j<font color="#000080">:</font>word<font color="#000080">;
+    </font><font color="#FF0000"><b>label </b></font>hloop<font color="#000080">,</font>vloop<font color="#000080">,</font>nodraw<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{ the following 8 lines of code calculate a 'right' and 'down' vector used
+  for scanning the source bitmap. I use quotes because these directions
+  depend on the rotation. For example, with a rotation, 'right' could mean
+  up and to the left while 'down' means up and to the right. Since the
+  destination image (screen) is scanned left-right/top-bottom, the bitmap
+  needs to be scanned in arbitrary directions to get a rotation. }
+
+     </i></font>Temp<font color="#000080">:=(</font>CosTable<font color="#000080">[</font>rot<font color="#000080">]);</font>Temp<font color="#000080">:=(</font>Temp<font color="#000080">*</font>Scale<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">256</font><font color="#000080">;
+     </font>ddx<font color="#000080">:=</font>Temp<font color="#000080">;
+     </font>Temp<font color="#000080">:=(</font>SinTable<font color="#000080">[</font>rot<font color="#000080">]);</font>Temp<font color="#000080">:=(</font>Temp<font color="#000080">*</font>Scale<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">256</font><font color="#000080">;
+     </font>ddy<font color="#000080">:=</font>Temp<font color="#000080">;
+
+</font><font color="#008000"><i>{ Different tables are used for the 'down' vector to account for the non-
+  square pixels in mode 13h (320x200). The 90 degree difference is built
+  into the tables. If you don't like that, then use (rot+64)and255 here
+  and take the pi/2 out of CreateTables. To each his own I guess. }
+
+     </i></font>Temp<font color="#000080">:=(</font>Cos2Table<font color="#000080">[</font>rot<font color="#000080">]);</font>Temp<font color="#000080">:=(</font>Temp<font color="#000080">*</font>SCALE<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">256</font><font color="#000080">;
+     </font>d2x<font color="#000080">:=</font>Temp<font color="#000080">;
+     </font>Temp<font color="#000080">:=(</font>Sin2Table<font color="#000080">[</font>rot<font color="#000080">]);</font>Temp<font color="#000080">:=(</font>Temp<font color="#000080">*</font>SCALE<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">256</font><font color="#000080">;
+     </font>d2y<font color="#000080">:=</font>Temp<font color="#000080">;
+
+</font><font color="#008000"><i>{ Since we want to rotate around the CENTER of the screen and not the upper
+  left corner, we need to move 160 pixels 'left' and 100 'up' in the bitmap.}
+
+     </i></font>i<font color="#000080">:=</font>x<font color="#000080">-</font>ddx<font color="#000080">*</font><font color="#800000">160</font><font color="#000080">-</font>d2x<font color="#000080">*</font><font color="#800000">100</font><font color="#000080">; </font>j<font color="#000080">:=</font>y<font color="#000080">-</font>ddy<font color="#000080">*</font><font color="#800000">160</font><font color="#000080">-</font>d2y<font color="#000080">*</font><font color="#800000">100</font><font color="#000080">;
+
+</font><font color="#008000"><i>{ The following chunk of assembly does the good stuff. It redraws the entire
+  screen by scanning left-right/top-bottom on screen while also scanning the
+  bitmap in the arbitrary directions determined above. }
+
+         </i></font><font color="#FF0000"><b>ASM
+                 </b></font><font color="#FF00FF">push ds
+                 mov  ax,[Map]      </font><font color="#008000"><i>{get segment of bitmap}
+                 </i></font><font color="#FF00FF">mov  ds,ax
+                 mov  ax,$a000      </font><font color="#008000"><i>{set es: to video memory}
+                 </i></font><font color="#FF00FF">mov  es,ax
+                 mov  ax,0          </font><font color="#008000"><i>{set ds: to upper left corner of}
+                 </i></font><font color="#FF00FF">mov  di,ax         </font><font color="#008000"><i>{the video memory}
+                 </i></font><font color="#FF00FF">mov  ax,[ddx]      </font><font color="#008000"><i>{this is just to speed things up later}
+                 </i></font><font color="#FF00FF">mov  si,ax         </font><font color="#008000"><i>{add ax,si  faster than  add ax,[ddx] }
+                 </i></font><font color="#FF00FF">mov  cx,200        </font><font color="#008000"><i>{Number of rows on Screen}
+         </i></font><font color="#FF00FF">vloop:
+                 push cx
+                 mov  ax,[i]        </font><font color="#008000"><i>{start scanning the source bitmap}
+                 </i></font><font color="#FF00FF">mov  dx,[j]        </font><font color="#008000"><i>{at i,j which were calculated above.}
+                 </i></font><font color="#FF00FF">mov  cx,320        </font><font color="#008000"><i>{Number of coulumns on screen}
+         </i></font><font color="#FF00FF">hloop:
+                 add  ax,si        </font><font color="#008000"><i>{add the 'right' vector to the current}
+                 </i></font><font color="#FF00FF">add  dx,[ddy]     </font><font color="#008000"><i>{bitmap coordinates.  8.8 fixed point}
+                 </i></font><font color="#FF00FF">mov  bl,ah        </font><font color="#008000"><i>{  bx = 256*int(y)+int(x)  }
+                 </i></font><font color="#FF00FF">mov  bh,dh
+                 mov  bl,[ds:bx]   </font><font color="#008000"><i>{ load a pixel from source }
+                 </i></font><font color="#FF00FF">mov  [es:di],bl   </font><font color="#008000"><i>{ copy it to destination }
+                 </i></font><font color="#FF00FF">inc  di           </font><font color="#008000"><i>{ advance to next destination pixel }
+
+         {*** by repeating the above 7 instructions 5 times, and reducing
+              the loop count to 64, I have hit 37fps on a 486-33 with a
+              fast video card. ***}
+
+                 </i></font><font color="#FF00FF">loop hloop         </font><font color="#008000"><i>{End of horizontal loop}
+
+                 </i></font><font color="#FF00FF">mov  ax,d2x        </font><font color="#008000"><i>{ get the 'down' vector }
+                 </i></font><font color="#FF00FF">mov  dx,d2y
+
+              </font><font color="#008000"><i>{ add  si,2 }    {** uncomment this instr. for extra fun **}
+
+                 </i></font><font color="#FF00FF">add  i,ax          </font><font color="#008000"><i>{ i,j is the starting coords for a line }
+                 </i></font><font color="#FF00FF">add  j,dx          </font><font color="#008000"><i>{ so this moves down one line }
+                 </i></font><font color="#FF00FF">pop  cx            </font><font color="#008000"><i>{ get the row count back and loop }
+                 </i></font><font color="#FF00FF">loop vloop         </font><font color="#008000"><i>{ End of verticle loop }
+                 </i></font><font color="#FF00FF">pop  ds            </font><font color="#008000"><i>{ Restore the ds }
+         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>GraphMode<font color="#000080">;      </font><font color="#008000"><i>{start 320x200x256 mode}
+</i></font><font color="#FF0000"><b>begin
+     Asm
+        </b></font><font color="#FF00FF">Mov     AH,00
+        Mov     AL,13h
+        Int     10h
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>AllocateMem<font color="#000080">;  </font><font color="#008000"><i>{returns a segment pointer for a 64K bitmap}
+</i></font><font color="#FF0000"><b>label </b></font>noerror<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+     asm
+              </b></font><font color="#FF00FF">mov   ah,$48
+              mov   bx,$1000     </font><font color="#008000"><i>{ request 64K }
+              </i></font><font color="#FF00FF">int   $21
+              jnc   noerror
+              mov   ax,0000
+     noerror: mov   Map,ax       </font><font color="#008000"><i>{ The segment pointer goes in Map }
+              </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>If </b></font>Map<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Could not allocate enough memory'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Program ending...'</font><font color="#000080">);
+        </font>Halt<font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>GiveBackMem<font color="#000080">; </font><font color="#008000"><i>{returns the memory used for the map to the system}
+</i></font><font color="#FF0000"><b>begin
+     asm
+        </b></font><font color="#FF00FF">mov  ah,$49
+        mov  dx,Map
+        mov  es,dx
+        int  $21
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>DrawImage<font color="#000080">;  </font><font color="#008000"><i>{draws a test image which shows some limitations.}
+
+{ If anyone stuffs in code to load a picture in a standard format
+  (ie .gif .bmp etc..) I'd like if you send me a copy. Preferably
+  something simple. This will have to do for now. }
+
+</i></font><font color="#FF0000"><b>Var </b></font>x<font color="#000080">,</font>y<font color="#000080">:</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     for </b></font>x<font color="#000080">:=-</font><font color="#800000">32768 </font><font color="#FF0000"><b>to </b></font><font color="#800000">32767 </font><font color="#FF0000"><b>do </b></font>mem<font color="#000080">[</font>Map<font color="#000080">:</font>x<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>y<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">15 </font><font color="#FF0000"><b>do          </b></font><font color="#008000"><i>{this just frames the area}
+        </i></font><font color="#FF0000"><b>for </b></font>x<font color="#000080">:=</font>y <font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do begin
+           </b></font>mem<font color="#000080">[</font>Map<font color="#000080">:</font>Y<font color="#000080">*</font><font color="#800000">256</font><font color="#000080">+</font>x<font color="#000080">]:=</font><font color="#800000">1</font><font color="#000080">;
+           </font>mem<font color="#000080">[</font>Map<font color="#000080">:</font>X<font color="#000080">*</font><font color="#800000">256</font><font color="#000080">+</font>y<font color="#000080">]:=</font><font color="#800000">2</font><font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>y<font color="#000080">:=</font><font color="#800000">16 </font><font color="#FF0000"><b>to </b></font><font color="#800000">47 </font><font color="#FF0000"><b>do         </b></font><font color="#008000"><i>{ this part show Aliasing effects }
+        </i></font><font color="#FF0000"><b>for </b></font>x<font color="#000080">:=</font><font color="#800000">16 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do </b></font>mem<font color="#000080">[</font>Map<font color="#000080">:</font>Y<font color="#000080">*</font><font color="#800000">256</font><font color="#000080">+</font>x<font color="#000080">]:=</font><font color="#800000">2</font><font color="#000080">+(</font>x <font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">)+(</font>y <font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">);
+
+     </font><font color="#FF0000"><b>for </b></font>y<font color="#000080">:= -</font><font color="#800000">50 </font><font color="#FF0000"><b>to </b></font><font color="#800000">50 </font><font color="#FF0000"><b>do       </b></font><font color="#008000"><i>{ this draw the circles }
+        </i></font><font color="#FF0000"><b>for </b></font>x<font color="#000080">:= </font>round<font color="#000080">(-</font>sqrt<font color="#000080">(</font><font color="#800000">2500 </font><font color="#000080">- </font>y<font color="#000080">*</font>y<font color="#000080">)) </font><font color="#FF0000"><b>to </b></font>round<font color="#000080">(</font>sqrt<font color="#000080">(</font><font color="#800000">2500 </font><font color="#000080">- </font>y<font color="#000080">*</font>y<font color="#000080">)) </font><font color="#FF0000"><b>do
+          </b></font>mem<font color="#000080">[</font>Map<font color="#000080">:(</font>y<font color="#000080">+</font><font color="#800000">100</font><font color="#000080">)*</font><font color="#800000">256</font><font color="#000080">+</font>x<font color="#000080">+</font><font color="#800000">100</font><font color="#000080">]:=</font><font color="#800000">5</font><font color="#000080">+(</font>X<font color="#000080">*</font>X<font color="#000080">+</font>Y<font color="#000080">*</font>Y<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">100</font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>for </b></font>x<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">100 </font><font color="#FF0000"><b>do         </b></font><font color="#008000"><i>{ These lines also show sampling effects }
+        </i></font><font color="#FF0000"><b>for </b></font>y<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">8 </font><font color="#FF0000"><b>do
+           </b></font>mem<font color="#000080">[</font>Map<font color="#000080">:(</font>Y<font color="#000080">*</font><font color="#800000">2560</font><font color="#000080">)+</font>x<font color="#000080">+</font><font color="#800000">41100</font><font color="#000080">]:=</font><font color="#800000">5</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var    </b></font>rot<font color="#000080">,</font>dr<font color="#000080">:</font>word<font color="#000080">;
+       </font>x<font color="#000080">,</font>y<font color="#000080">,</font>dist<font color="#000080">,</font>dd<font color="#000080">:</font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+     </b></font>AllocateMem<font color="#000080">;
+     </font>DrawImage<font color="#000080">;
+     </font>MakeTables<font color="#000080">;
+     </font>GraphMode<font color="#000080">;
+     </font>x<font color="#000080">:=</font><font color="#800000">32768</font><font color="#000080">; </font>y<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;         </font><font color="#008000"><i>{this corresponds to (128,0) in fixed point}
+     </i></font>rot<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>dr<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;          </font><font color="#008000"><i>{rotation angle and it's delta}
+     </i></font>dist<font color="#000080">:=</font><font color="#800000">1200</font><font color="#000080">; </font>dd<font color="#000080">:=</font><font color="#800000">65534</font><font color="#000080">;  </font><font color="#008000"><i>{distance to bitmap (sort of) and its delta}
+     </i></font><font color="#FF0000"><b>repeat
+        </b></font>DrawScreen<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">,</font>dist<font color="#000080">,</font>lo<font color="#000080">(</font>rot<font color="#000080">));
+        </font>rot<font color="#000080">:=</font>rot<font color="#000080">+</font>dr<font color="#000080">;
+        </font>y<font color="#000080">:=</font>y<font color="#000080">+</font><font color="#800000">128</font><font color="#000080">;      </font><font color="#008000"><i>{slow panning. 1/2 pixel per frame}
+        </i></font>dist<font color="#000080">:=</font>dist<font color="#000080">+</font>dd<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>dist<font color="#000080">=</font><font color="#800000">2000</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>dist<font color="#000080">=</font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>dd<font color="#000080">:=-</font>dd<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>random<font color="#000080">(</font><font color="#800000">150</font><font color="#000080">)=</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>dr<font color="#000080">:=</font>random<font color="#000080">(</font><font color="#800000">7</font><font color="#000080">)-</font><font color="#800000">3</font><font color="#000080">;
+     </font><font color="#FF0000"><b>until </b></font>keypressed<font color="#000080">;
+     </font>GiveBackMem<font color="#000080">;
+     </font><font color="#FF0000"><b>ASM </b></font><font color="#008000"><i>{back to 80x25}
+      </i></font><font color="#FF00FF">MOV AX,3
+      INT 10h
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0109.PAS">Original</a><b>]</b></p></body>
+</html>

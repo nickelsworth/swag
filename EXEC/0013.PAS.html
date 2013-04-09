@@ -1,0 +1,172 @@
+<html>
+<head><title> "Appending to EXE Files" by LARRY HADLEY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt;Hmmm.... how about this.... I want to put a 75k MOD file into the EXE...
+&gt;I've heard that you use pointers and appending the MOD to end of your
+&gt;compiled program and stuff like that... I'm not too sure how to go about
+&gt;it.
+
+In short, the easiest way is to append to to your .EXE file. The
+following code will search the current .exe for data appended to
+the end of the .exe file.
+}
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE              </b></font><font color="#008000"><i>{ .exe file header }
+  </i></font>EXEH <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+    </b></font>id<font color="#000080">,            </font><font color="#008000"><i>{ .exe signature }
+    </i></font>Lpage<font color="#000080">,         </font><font color="#008000"><i>{ .exe file size mod 512 bytes; &lt; 512 bytes }
+    </i></font>Fpages<font color="#000080">,        </font><font color="#008000"><i>{ .exe file size div 512 bytes; + 1 if Lpage &gt; 0 }
+    </i></font>relocitems<font color="#000080">,    </font><font color="#008000"><i>{ number of relocation table items }
+    </i></font>size<font color="#000080">,          </font><font color="#008000"><i>{ .exe header size in 16-byte paragraphs }
+    </i></font>minalloc<font color="#000080">,      </font><font color="#008000"><i>{ min heap required in additional to .exe image }
+    </i></font>maxalloc<font color="#000080">,      </font><font color="#008000"><i>{ extra heap desired beyond that required
+                     to hold .exe's image }
+    </i></font>ss<font color="#000080">,            </font><font color="#008000"><i>{ displacement of stack segment }
+    </i></font>sp<font color="#000080">,            </font><font color="#008000"><i>{ initial SP register value }
+    </i></font>chk_sum<font color="#000080">,       </font><font color="#008000"><i>{ complemented checksum }
+    </i></font>ip<font color="#000080">,            </font><font color="#008000"><i>{ initial IP register value }
+    </i></font>cs<font color="#000080">,            </font><font color="#008000"><i>{ displacement of code segment }
+    </i></font>ofs_rtbl<font color="#000080">,      </font><font color="#008000"><i>{ offset to first relocation item }
+    </i></font>ovr_num <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{ overlay numbers }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>MAX_BLOCK_SIZE <font color="#000080">= </font><font color="#800000">65528</font><font color="#000080">; </font><font color="#008000"><i>{maximum allowable size of data block in
+                            TP}
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>pdata <font color="#000080">= ^</font>data_array<font color="#000080">;
+  </font>data_array <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MAX_BLOCK_SIZE<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+  </font>pMODblock <font color="#000080">= ^</font>MODblock<font color="#000080">;
+  </font>MODblock <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+    </b></font>data     <font color="#000080">:</font>pdata<font color="#000080">;
+    </font>datasize <font color="#000080">:</font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>exefile <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>exehdr  <font color="#000080">: </font>exeh<font color="#000080">;
+  </font>blocks  <font color="#000080">: </font>word<font color="#000080">;
+
+  </font>exesize<font color="#000080">,
+  </font>imgsize <font color="#000080">: </font>longint<font color="#000080">;
+
+  </font>path    <font color="#000080">: </font>dirstr<font color="#000080">;
+  </font>name    <font color="#000080">: </font>namestr<font color="#000080">;
+  </font>ext     <font color="#000080">: </font>extstr<font color="#000080">;
+  </font>EXEName <font color="#000080">: </font>pathstr<font color="#000080">;
+  </font>n       <font color="#000080">: </font>byte<font color="#000080">;
+
+  </font>dirfile <font color="#000080">: </font>searchrec<font color="#000080">;
+
+  </font>M       <font color="#000080">: </font>pMODblock<font color="#000080">;
+
+</font><font color="#008000"><i>{Determines the exe filename, opens the file for read-only, and
+ determines the actual .exe code image size by reading the
+ standard .exe header that is in front of every .exe file. The .MOD
+ data will be in the file *after* the end of the code image.}
+</i></font><font color="#FF0000"><b>Procedure </b></font>ReadHdr<font color="#000080">;
+
+  </font><font color="#008000"><i>{this &quot;finds&quot; your exe filename}
+  </i></font><font color="#FF0000"><b>Function </b></font>CalcEXEName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>Dir  <font color="#000080">: </font>DirStr<font color="#000080">;
+    </font>Name <font color="#000080">: </font>NameStr<font color="#000080">;
+    </font>Ext  <font color="#000080">: </font>ExtStr<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>Lo<font color="#000080">(</font>DosVersion<font color="#000080">) &gt;= </font><font color="#800000">3 </font><font color="#FF0000"><b>then
+      </b></font>EXEName <font color="#000080">:= </font>ParamStr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>EXEName <font color="#000080">:= </font>FSearch<font color="#000080">(</font><font color="#800000">'progname.EXE'</font><font color="#000080">, </font>GetEnv<font color="#000080">(</font><font color="#800000">'PATH'</font><font color="#000080">));
+                         </font><font color="#008000"><i>{  ^^^^^^^^ } { change this to intended EXE name }
+    </i></font>FSplit<font color="#000080">(</font>EXEName<font color="#000080">, </font>Dir<font color="#000080">, </font>Name<font color="#000080">, </font>Ext<font color="#000080">);
+    </font>CalcEXEName <font color="#000080">:= </font>Name<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Name <font color="#000080">:= </font>CalcEXEName<font color="#000080">;
+
+  </font>findfirst<font color="#000080">(</font>EXEName<font color="#000080">, </font>anyfile<font color="#000080">, </font>dirfile<font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>doserror<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+  BEGIN
+    </b></font>Assign<font color="#000080">(</font>exefile<font color="#000080">, </font>EXEName<font color="#000080">);
+    </font>Reset<font color="#000080">(</font>exefile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);         </font><font color="#008000"><i>{ reset for 1 byte records }
+    </i></font>BlockRead<font color="#000080">(</font>exefile<font color="#000080">, </font>exehdr<font color="#000080">, </font>SizeOf<font color="#000080">(</font>exehdr<font color="#000080">), </font>blocks<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>blocks<font color="#000080">&lt;</font>SizeOf<font color="#000080">(</font>exehdr<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'File read error!'</font><font color="#000080">);
+      </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>exesize <font color="#000080">:= </font>dirfile<font color="#000080">.</font>size<font color="#000080">;     </font><font color="#008000"><i>{ the total file size of exe+data }
+    </i></font><font color="#FF0000"><b>with </b></font>exehdr <font color="#FF0000"><b>do
+    begin
+      </b></font>imgsize <font color="#000080">:= </font>FPages<font color="#000080">; </font><font color="#008000"><i>{exe img size div 512 bytes, +1 if Lpage&gt;0}
+      </i></font><font color="#FF0000"><b>if </b></font>LPage <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        </b></font>dec<font color="#000080">(</font>imgsize<font color="#000080">);
+      </font>imgsize <font color="#000080">:= (</font>imgsize<font color="#000080">*</font><font color="#800000">512</font><font color="#000080">) + </font>LPage<font color="#000080">; </font><font color="#008000"><i>{final image size}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ this function reads the 64k-8 byte sized block, numbered
+  &quot;blocknum&quot; from the end of the file exefile (already opened in
+  ReadHdr proc above), allocates a new pMODblock structure and
+  passes it back to the caller. &quot;blocknum&quot; is 0-based - ie, data
+  offset starts at 0. If the remaining data is less than 64k, the
+  data record will be sized to the remaining data.}
+</i></font><font color="#FF0000"><b>Function </b></font>ReadBlockFromMOD<font color="#000080">(</font>blocknum<font color="#000080">):</font>pMODblock<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>filepos <font color="#000080">: </font>longint<font color="#000080">;
+  </font><font color="#FF0000"><b>mod     </b></font><font color="#000080">: </font>pMODblock<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>filepos <font color="#000080">:= </font>imgsize <font color="#000080">+ (</font>blocknum<font color="#000080">*</font>MAX_BLOCK_SIZE<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>filepos <font color="#000080">&gt; </font>exesize <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{block position asked for exceeds filesize}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ReadBlockFromMOD <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">; </font><font color="#008000"><i>{ return error signal }
+    </i></font>EXIT<font color="#000080">;                    </font><font color="#008000"><i>{...and return}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>New<font color="#000080">(</font><font color="#FF0000"><b>mod</b></font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>filepos<font color="#000080">+</font>MAX_BLOCK_SIZE<font color="#000080">&gt;</font>exesize<font color="#000080">) </font><font color="#FF0000"><b>then
+    mod</b></font><font color="#000080">^.</font>datasize <font color="#000080">:= </font>exesize<font color="#000080">-</font>filepos
+        <font color="#008000"><i>{ data left in this block is less than 64k }
+  </i></font><font color="#FF0000"><b>else
+    mod</b></font><font color="#000080">^.</font>datasize <font color="#000080">:= </font>MAX_BLOCK_SIZE<font color="#000080">;
+        </font><font color="#008000"><i>{ data block is a full 64k }
+  </i></font>GetMem<font color="#000080">(</font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>data<font color="#000080">, </font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>datasize<font color="#000080">); </font><font color="#008000"><i>{get the memory for the data buffer}
+
+  </i></font>Seek<font color="#000080">(</font>exefile<font color="#000080">, </font>filepos<font color="#000080">); </font><font color="#008000"><i>{ position dos's filepointer to beginning of block}
+  </i></font>BlockRead<font color="#000080">(</font>exefile<font color="#000080">, </font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>data<font color="#000080">^, </font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>datasize<font color="#000080">, </font>blocks<font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>blocks<font color="#000080">&lt;</font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>datasize <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ make sure we got all the data }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>Writeln<font color="#000080">(</font><font color="#800000">'File read error!'</font><font color="#000080">);
+    </font>FreeMem<font color="#000080">(</font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>data<font color="#000080">, </font><font color="#FF0000"><b>mod</b></font><font color="#000080">^.</font>datasize<font color="#000080">);
+    </font>Dispose<font color="#000080">(</font><font color="#FF0000"><b>mod</b></font><font color="#000080">);
+    </font>ReadBlockFromMOD <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+    </font>EXIT<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>ReadBlockFromMOD <font color="#000080">:= </font><font color="#FF0000"><b>mod</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{
+   This will read in the .MOD from the &quot;back&quot; of the .exe 64k-8
+   bytes at a time. As written, you manually have to pass a block
+   number to the &quot;read&quot; function.
+
+   A couple of caveats - doing it as written is error-prone. Using
+   this code &quot;barebones&quot; in a finished application is not advisable,
+   but it does demonstrate the concept and gives you a starting
+   point. THIS CODE HAS NOT BEEN TESTED! If you have problems with
+   it, let me know and I'll help you out.
+
+   After you have digest the code, ask some more questions and we
+   can discuss streams and OOP techniques to do this in a less
+   dangerous manner.
+}</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,419 @@
+<html>
+<head><title> "Calculate 32 bit CRC" by F. MARTIN RICHARDSON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to CRC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>UNIT </b></font>CRC_Calc<font color="#000080">;
+
+</font><font color="#008000"><i>{
+ ****************************************************************************
+ * Name .......... CRC_Calc
+ * Version ....... 1.01
+ * Description ... To calculate a file's 32 bit CRC and compare it at each
+ *                 runtime to prevent virus infection or hacking.
+ * Programmer .... F. Martin Richardson, Jr.
+ * Date Created .. October 3, 1992
+ ****************************************************************************
+ * Credits:
+ *
+ * CRC_Calc v1.01 - October 7, 1992
+ *     Martin Richardson
+ *
+ * CRC_Calc v1.00 - October 3, 1992
+ *     Martin Richardson
+ *     415 Duvall Lane
+ *     Annapolis, MD  21403
+ *     (410) 626-0893
+ *
+ * Routines for calculations derived with the help of Doctor Dobb's Journal
+ * #188, MAY 1992.
+ ****************************************************************************
+ * How to use it:
+ *
+ * This unit is real simple to use.  Simply include it in your USES clause
+ * (eg: USES DOS, CRT, CRC_Calc) and compile the program.  Then run the
+ * program for the first time.  This will generate the original CRC and
+ * burn it into the program.  Then, each time the program is run after that,
+ * the CRC is calculated again and compared to this value.  If they differ,
+ * then the program was probably altered.  An appropriate message will be
+ * printed, and the program will halt.
+ *
+ * A pointer CRC_Calc_Value is initialized with the current CRC value
+ * at the onset and is global to your program.  A hacker might try to get
+ * around your CRC check by patching your program to bypass the check
+ * alltogether.  In this case, you may wish to scatter checks all through
+ * your code to make sure the CRC was generated.  Compare CRC32_Value to the
+ * pointer CRC_Calc_Value and, if they don't match, then something funny
+ * is going on!
+ *
+ * ex: IF ( CRC32_Value &lt;&gt; LONGINT(CRC_Calc_Value^) ) THEN HALT( 1 );
+ *
+ * Be aware that, once CRC_Calc is used in your program, the .EXE file
+ * cannot be changed!  Self-modifying .EXE's will bomb the first time they
+ * are modified.  Compression programs (such as PKLITE) which shrink the .EXE
+ * will also cause it to bomb (make sure you indicate this in your
+ * documentation!).
+ *
+ * This program uses the public domain file WRITEXEC.PAS by David Doty to
+ * write it's information to the .EXE.  This source says that WRITEXEC was
+ * developed in TP v4.0 but I have found it to work all the way up to 6.0.
+ ****************************************************************************
+ * Notes:
+ *
+ * This file is hereby commited to the public domain.  Feel free to use it in
+ * your development.  All I ask is a little recognition if you use it in your
+ * software.  Also, if this file is modified in any way and re-distributed,
+ * please retain the credits to the people who wrote the routines.
+ *
+ * Comments, suggestions, and gifts of LOTS of money may be addressed to:
+ *
+ *      Martin Richardson
+ *      415 Duvall Lane
+ *      Annapolis, MD  21403
+ *      (410) 626-0893 (voice)
+ ****************************************************************************
+ * Update History:
+ *
+ * v1.01 - October 7, 1992 - Ooops! release.
+ *
+ *       : Fixed so it would compile under TP 5.0.  In TP 6.0 you can 
+ *         increment a pointer directly (as INC( p )), but TP 5.0 will not 
+ *         allow you this luxury!  As I originally coded this in 6.0, that 
+ *         didn't even occur to me until I tried to compile it in 5.5.
+ *
+ *       : Included correct version of WRITEXEC.PAS.  Version in v1.00 
+ *         contained an extraneous include to include the file HEX.PAS that 
+ *         wasn't needed.  I just had it there for debugging and forgot to
+ *         take it out!
+ *
+ *       : Included credits to DDJ for help with the CRC calculation 
+ *          routines.
+ *
+ * v1.00 - October 3, 1992 
+ *
+ *       : Initial Release
+ ****************************************************************************
+}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+USES </b></font>DOS<font color="#000080">, </font>CRT<font color="#000080">, </font>WritExec<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+     </b></font>CRC_Polynomial <font color="#000080">= </font><font color="#800000">$EDB88320</font><font color="#000080">;
+
+     </font>CRC32_Offs   <font color="#000080">: </font>LONGINT <font color="#000080">= </font><font color="#800000">$FFFFFFFF</font><font color="#000080">;   </font><font color="#008000"><i>{ Pointer to CRC32_Value }
+     </i></font>CRC32_Value  <font color="#000080">: </font>LONGINT <font color="#000080">= </font><font color="#800000">$FFFFFFFF</font><font color="#000080">;   </font><font color="#008000"><i>{ Original CRC32 Value }
+
+</i></font><font color="#FF0000"><b>VAR
+   </b></font>CRC_Calc_Value<font color="#000080">: ^</font>LONGINT<font color="#000080">;
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+TYPE
+    </b></font>CRC_Buffer_Type <font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">512</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+   </b></font>CRC_Table<font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>LONGINT<font color="#000080">;
+
+</font><font color="#008000"><i>{*****************************************************************************
+ * Function ...... GetFName()
+ * Purpose ....... To extract a file name (minus .EXE) from a path string
+ * Parameters .... Path       Path string to extract name from
+ * Returns ....... A 1-8 character file name
+ * Notes ......... None
+ * Author ........ Martin Richardson
+ * Date .......... October 3, 1992
+ *****************************************************************************}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>GetFName<font color="#000080">( </font>Path <font color="#000080">: </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">): </font>NameStr<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>dir  <font color="#000080">: </font>DirStr<font color="#000080">;
+    </font>name <font color="#000080">: </font>NameStr<font color="#000080">;
+    </font>ext  <font color="#000080">: </font>ExtStr<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>FSPLIT<font color="#000080">( </font>path<font color="#000080">, </font>dir<font color="#000080">, </font>name<font color="#000080">, </font>ext <font color="#000080">);
+     </font>GetFName <font color="#000080">:= </font>name<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{*****************************************************************************
+ * Function ...... ErrorMsg()
+ * Purpose ....... To return the message associated with a passed error code
+ * Parameters .... e        Error code for the message to print
+ * Returns ....... The message associated with the passed error code
+ * Notes ......... None
+ * Author ........ Martin Richardson
+ * Date .......... October 3, 1992
+ *****************************************************************************}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>ErrorMsg<font color="#000080">( </font>e<font color="#000080">: </font>INTEGER <font color="#000080">): </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>s<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     CASE </b></font>e <font color="#FF0000"><b>OF
+          </b></font><font color="#800000">0</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'No Error'</font><font color="#000080">;
+          </font><font color="#800000">2</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File Not Found'</font><font color="#000080">;
+          </font><font color="#800000">3</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Path Not Found'</font><font color="#000080">;
+          </font><font color="#800000">4</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Too Many Open Files'</font><font color="#000080">;
+          </font><font color="#800000">5</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File Access Denied'</font><font color="#000080">;
+          </font><font color="#800000">6</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Invalid File Handle'</font><font color="#000080">;
+         </font><font color="#800000">12</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Invalid File Access Code'</font><font color="#000080">;
+         </font><font color="#800000">15</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Invalid Drive Number'</font><font color="#000080">;
+         </font><font color="#800000">16</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Cannot Remove Current Directory'</font><font color="#000080">;
+         </font><font color="#800000">17</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Cannot Rename Across Drives'</font><font color="#000080">;
+         </font><font color="#800000">18</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File access error'</font><font color="#000080">;
+        </font><font color="#800000">100</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Disk Read Error'</font><font color="#000080">;
+        </font><font color="#800000">101</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Disk Write Error'</font><font color="#000080">;
+        </font><font color="#800000">102</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File Not Assigned'</font><font color="#000080">;
+        </font><font color="#800000">103</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File Not Open'</font><font color="#000080">;
+        </font><font color="#800000">104</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File Not Open For Input'</font><font color="#000080">;
+        </font><font color="#800000">105</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'File Not Open For Output'</font><font color="#000080">;
+        </font><font color="#800000">106</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Invalid Numeric Format'</font><font color="#000080">;
+        </font><font color="#800000">150</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Disk Is Write-Protected'</font><font color="#000080">;
+        </font><font color="#800000">151</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Unknown Unit'</font><font color="#000080">;
+        </font><font color="#800000">152</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Drive Not Ready'</font><font color="#000080">;
+        </font><font color="#800000">153</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Unknown Command'</font><font color="#000080">;
+        </font><font color="#800000">154</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'CRC Error In Data'</font><font color="#000080">;
+        </font><font color="#800000">155</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Bad Drive Request Structure Length'</font><font color="#000080">;
+        </font><font color="#800000">156</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Disk Seek Error'</font><font color="#000080">;
+        </font><font color="#800000">157</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Unknown Media Type'</font><font color="#000080">;
+        </font><font color="#800000">158</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Sector Not Found'</font><font color="#000080">;
+        </font><font color="#800000">159</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Printer Out Of Paper'</font><font color="#000080">;
+        </font><font color="#800000">160</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Device Write Fault'</font><font color="#000080">;
+        </font><font color="#800000">161</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Device Read Fault'</font><font color="#000080">;
+        </font><font color="#800000">162</font><font color="#000080">: </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Hardware Failure'</font><font color="#000080">;
+        </font><font color="#FF0000"><b>ELSE BEGIN
+                  </b></font>STR<font color="#000080">( </font>e<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">, </font>s <font color="#000080">);
+                  </font>ErrorMsg <font color="#000080">:= </font><font color="#800000">'Unknown Error Number: ' </font><font color="#000080">+ </font>s<font color="#000080">;
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ CASE }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{*****************************************************************************
+ * Procedure ..... Store_CRC_Offset
+ * Purpose ....... To calculate where the CRC32_Value is in the .EXE file and
+ *                 store the offset to CRC32_Offs.
+ * Parameters .... None
+ * Returns ....... Nothing
+ * Notes ......... This will write the position of CRC32_Value into the .EXE
+ *                 file.  This routine was partly taken from WRITEXEC.PAS.
+ * Authors ....... David Doty and Martin Richardson
+ * Date .......... October 3, 1992
+ ****************************************************************************}
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Store_CRC_Offset<font color="#000080">;
+</font><font color="#FF0000"><b>CONST
+   </b></font>PrefixSize <font color="#000080">= </font><font color="#800000">256</font><font color="#000080">; </font><font color="#008000"><i>{ number of bytes in the Program Segment Prefix }
+</i></font><font color="#FF0000"><b>VAR
+   </b></font>f <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+   </font>HeaderSize <font color="#000080">: </font>WORD<font color="#000080">;
+   </font>nErrorCode <font color="#000080">: </font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font><font color="#008000"><i>{$I-}
+     </i></font>ASSIGN<font color="#000080">( </font>f<font color="#000080">, </font>PARAMSTR<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">) );
+     </font>RESET<font color="#000080">( </font>f<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+     </font>nErrorCode <font color="#000080">:= </font>IOResult<font color="#000080">;
+
+     </font><font color="#FF0000"><b>IF </b></font>nErrorCode <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>Seek<font color="#000080">( </font>f<font color="#000080">, </font><font color="#800000">8 </font><font color="#000080">);
+        </font>nErrorCode <font color="#000080">:= </font>IOResult
+     <font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>IF </b></font>nErrorCode <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>BlockRead<font color="#000080">( </font>f<font color="#000080">, </font>HeaderSize<font color="#000080">, </font>SizeOf<font color="#000080">( </font>HeaderSize <font color="#000080">) );
+        </font>nErrorCode <font color="#000080">:= </font>IOResult
+     <font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+</font><font color="#008000"><i>{** This is here just to make sure the offset is correct by generating an
+    error if it is not **}
+   </i></font><font color="#FF0000"><b>IF </b></font>nErrorCode <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Seek<font color="#000080">( </font>f<font color="#000080">, </font>LONGINT<font color="#000080">(</font><font color="#800000">16</font><font color="#000080">) * ( </font>HeaderSize <font color="#000080">+ </font>Seg<font color="#000080">(</font>CRC32_Value<font color="#000080">) - </font>PrefixSeg <font color="#000080">) +
+            </font>Ofs<font color="#000080">( </font>CRC32_Value <font color="#000080">) - </font>PrefixSize <font color="#000080">);
+      </font>nErrorCode <font color="#000080">:= </font>IOResult
+   <font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+   </font><font color="#FF0000"><b>IF </b></font>nErrorCode <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Writeln<font color="#000080">( </font><font color="#800000">'Error calculating CRC offset: '</font><font color="#000080">, </font>ErrorMsg<font color="#000080">( </font>nErrorCode <font color="#000080">) );
+      </font>HALT<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">);
+   </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+   </font>CRC32_Offs <font color="#000080">:= </font>FilePos<font color="#000080">( </font>f <font color="#000080">);
+   </font>CLOSE<font color="#000080">( </font>f <font color="#000080">);
+
+   </font><font color="#FF0000"><b>IF </b></font>WriteToExecutable<font color="#000080">( </font>CRC32_Offs<font color="#000080">, </font>SIZEOF<font color="#000080">( </font>CRC32_Offs <font color="#000080">) ) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>WRITELN<font color="#000080">( </font><font color="#800000">'Error storing CRC offset...' </font><font color="#000080">);
+      </font>HALT<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">);
+   </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+   </font><font color="#008000"><i>{$I+}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{*****************************************************************************
+ * Procedure ..... Build_CRC_Table
+ * Purpose ....... To build the 32 bit CRC table
+ * Parameters .... None
+ * Returns ....... Nothing
+ * Notes ......... Fills an array called CRC_Table with the appropriate
+ *                 values.
+ * Author ........ Martin Richardson
+ * Date .......... October 3, 1992
+ ****************************************************************************}
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Build_CRC_Table<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>x<font color="#000080">, </font>y<font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font>CRC_Value<font color="#000080">: </font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     FOR </b></font>x <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">255 </font><font color="#FF0000"><b>DO BEGIN
+         </b></font>CRC_Value <font color="#000080">:= </font>x<font color="#000080">;
+         </font><font color="#FF0000"><b>FOR </b></font>y <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">8 </font><font color="#FF0000"><b>DO
+             IF </b></font><font color="#000080">(</font>CRC_Value <font color="#FF0000"><b>AND </b></font><font color="#800000">1 </font><font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+                </b></font>CRC_Value <font color="#000080">:= (</font>CRC_Value <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>XOR </b></font>CRC_Polynomial
+             <font color="#FF0000"><b>ELSE
+                </b></font>CRC_Value <font color="#000080">:= </font>CRC_Value <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;
+        </font>CRC_Table<font color="#000080">[ </font>x <font color="#000080">] := </font>CRC_Value<font color="#000080">;
+     </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ NEXT x }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{*****************************************************************************
+ * Function ...... Calculate_CRC_Buffer
+ * Purpose ....... Calculates a CRC for the current buffer
+ * Parameters .... nCount       Number of bytes in the buffer
+ *                 CRC_Value    The current CRC value to this point
+ *                 cBuffer      The buffer to calculate the CRC against
+ * Returns ....... New CRC value which includes the passed buffer
+ * Notes ......... None
+ * Author ........ Martin Richardson
+ * Date .......... October 3, 1992
+ * Updates ....... October 7, 1992 - Fixed problem with incrementing the
+ *                    pointer so it would not compile versions of TP before
+ *                    version 6.0.
+ ****************************************************************************}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Calculate_CRC_Buffer<font color="#000080">( </font>nCount<font color="#000080">: </font>INTEGER<font color="#000080">; </font>CRC_Value<font color="#000080">: </font>LONGINT<font color="#000080">;
+                               </font>cBuffer<font color="#000080">: </font>CRC_Buffer_Type <font color="#000080">): </font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+   </b></font>p<font color="#000080">: ^</font>BYTE<font color="#000080">;
+   </font>nTemp1<font color="#000080">, </font>nTemp2<font color="#000080">: </font>LONGINT<font color="#000080">;
+   </font>i<font color="#000080">: </font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>p <font color="#000080">:= @</font>cBuffer<font color="#000080">;
+     </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>nCount <font color="#FF0000"><b>DO BEGIN
+           </b></font>nTemp1 <font color="#000080">:= (</font>CRC_Value <font color="#FF0000"><b>SHR </b></font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$00FFFFFF</font><font color="#000080">;
+           </font>nTemp2 <font color="#000080">:= </font>CRC_Table<font color="#000080">[ (</font>CRC_Value <font color="#FF0000"><b>XOR </b></font>p<font color="#000080">^) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$FF </font><font color="#000080">];
+           </font>CRC_Value <font color="#000080">:= </font>nTemp1 <font color="#FF0000"><b>XOR </b></font>nTemp2<font color="#000080">;
+
+</font><font color="#008000"><i>{** This line will work under TP v6.0, but not 5.5 and below...
+           INC( p );
+ **}
+
+{** This line works under both 5.0 and 6.0 ** }
+           </i></font>p <font color="#000080">:= </font>PTR<font color="#000080">( </font>Seg<font color="#000080">(</font>p<font color="#000080">^), </font>Ofs<font color="#000080">(</font>p<font color="#000080">^)+</font><font color="#800000">1 </font><font color="#000080">);
+
+     </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ NEXT i }</i></font><font color="#000080">;
+     </font>Calculate_CRC_Buffer <font color="#000080">:= </font>CRC_Value<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{*****************************************************************************
+ * Function ...... Calculate_CRC32
+ * Purpose ....... Calculates a 32 bit CRC for the current .EXE file
+ * Parameters .... None
+ * Returns ....... CRC32 value for the current file
+ * Notes ......... Since the original CRC32 value must be stored in the
+ *                 file, we will always generate a different CRC32.  We
+ *                 must therefore convert the CRC32_Value variable back to
+ *                 what it was ($FFFFFFFF) when the originial CRC32 was
+ *                 calculated.
+ *               . Using the file size as the initial value for the CRC
+ *                 helps guard against the program size changing, but
+ *                 the CRC remaining the same. 
+ * Author ........ Martin Richardson
+ * Date .......... October 3, 1992
+ ****************************************************************************}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Calculate_CRC32<font color="#000080">: </font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+   </b></font>ThisFile      <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+   </font>CRC_Value     <font color="#000080">: </font>LONGINT<font color="#000080">;
+   </font>nCount        <font color="#000080">: </font>INTEGER<font color="#000080">;
+   </font>cBuffer       <font color="#000080">: </font>CRC_Buffer_Type<font color="#000080">;
+   </font>nBytes<font color="#000080">, </font>nOffs <font color="#000080">: </font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>nBytes <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font>ASSIGN<font color="#000080">( </font>ThisFile<font color="#000080">, </font>PARAMSTR<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">) );
+     </font>RESET<font color="#000080">( </font>ThisFile<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+     </font>CRC_Value <font color="#000080">:= </font>FileSize<font color="#000080">( </font>ThisFile <font color="#000080">);
+     </font><font color="#FF0000"><b>REPEAT
+           </b></font>BLOCKREAD<font color="#000080">( </font>ThisFile<font color="#000080">, </font>cBuffer<font color="#000080">, </font><font color="#800000">512</font><font color="#000080">, </font>nCount <font color="#000080">);
+           </font><font color="#FF0000"><b>IF </b></font>CRC32_Value <font color="#000080">&lt;&gt; </font><font color="#800000">$FFFFFFFF </font><font color="#FF0000"><b>THEN BEGIN
+
+</b></font><font color="#008000"><i>{** convert CRC32_Value back to what it was when it was calculated **}
+              </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">((</font>CRC32_Offs <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>CRC32_Offs<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">)) &gt;= </font>nBytes<font color="#000080">) </font><font color="#FF0000"><b>AND
+                 </b></font><font color="#000080">((</font>CRC32_Offs <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>CRC32_Offs<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">)) &lt;= </font>nBytes<font color="#000080">+</font>nCount<font color="#000080">) </font><font color="#FF0000"><b>THEN
+                 BEGIN
+                 FOR </b></font>nOffs <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>nCount <font color="#FF0000"><b>DO
+                  IF </b></font><font color="#000080">((</font>CRC32_Offs<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) &lt;= (</font>nBytes <font color="#000080">+ </font>nOffs<font color="#000080">)) </font><font color="#FF0000"><b>AND
+                     </b></font><font color="#000080">((</font>CRC32_Offs<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">) &gt;= (</font>nBytes <font color="#000080">+ </font>nOffs<font color="#000080">)) </font><font color="#FF0000"><b>THEN
+                         </b></font>cBuffer<font color="#000080">[</font>nOffs<font color="#000080">] := </font><font color="#800000">$FF</font><font color="#000080">;
+              </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+              </font>nBytes <font color="#000080">:= </font>nBytes <font color="#000080">+ </font>nCount<font color="#000080">;
+           </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+           </font><font color="#FF0000"><b>IF </b></font>nCount <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+              </b></font>CRC_Value <font color="#000080">:= </font>Calculate_CRC_Buffer<font color="#000080">(</font>nCount<font color="#000080">, </font>CRC_Value<font color="#000080">, </font>cBuffer<font color="#000080">);
+     </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>nCount <font color="#000080">&lt;= </font><font color="#800000">0</font><font color="#000080">);
+     </font>Calculate_CRC32 <font color="#000080">:= </font>CRC_Value <font color="#FF0000"><b>XOR </b></font>FileSize<font color="#000080">( </font>ThisFile <font color="#000080">);
+     </font>CLOSE<font color="#000080">( </font>ThisFile <font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{*************************************************************************}
+{* Main Routine
+{*************************************************************************}
+</i></font><font color="#FF0000"><b>BEGIN
+     </b></font>NEW<font color="#000080">( </font>CRC_Calc_Value <font color="#000080">);
+
+</font><font color="#008000"><i>{}
+{** This is to prevent you from modifying your copy of TP by accident. **}
+{** If your application is named TURBO, then you will have to remove   **}
+{** these lines and be VERY careful not to run the program in the TP   **}
+{** environment.                                                       **}
+{}
+     </i></font><font color="#FF0000"><b>IF </b></font>GetFName<font color="#000080">( </font>PARAMSTR<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">) ) = </font><font color="#800000">'TURBO' </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>CRC_Calc_Value<font color="#000080">^ := </font><font color="#800000">0</font><font color="#000080">;
+        </font>CRC32_Value <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>EXIT<font color="#000080">;
+     </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+</font><font color="#008000"><i>(**
+  This next step is for development purposes only.  While you are
+  developing, you may not want to do the CRC check each time.  At the very
+  top of this unit place the line {$DEFINE NOCRC} and the CRC routine will
+  be bypassed.  CRC_Calc_Value WILL EQUAL CRC32_Value so your random checks
+  in your code will be a-ok!
+**)
+{$IFDEF NOCRC}
+        </i></font>CRC_Calc_Value<font color="#000080">^ := </font><font color="#800000">0</font><font color="#000080">;
+        </font>CRC32_Value <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>EXIT<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+     </i></font>Build_CRC_Table<font color="#000080">;
+
+     </font><font color="#FF0000"><b>IF </b></font>CRC32_Value <font color="#000080">= </font><font color="#800000">$FFFFFFFF </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>WRITE<font color="#000080">( </font><font color="#800000">'Calculating CRC Value... ' </font><font color="#000080">);
+
+        </font>Store_CRC_Offset<font color="#000080">;
+        </font>WRITE<font color="#000080">( </font><font color="#800000">'CRC Offset Stored... ' </font><font color="#000080">);
+
+        </font>CRC32_Value <font color="#000080">:= </font>Calculate_CRC32<font color="#000080">;
+
+        </font><font color="#FF0000"><b>IF </b></font>WriteToExecutable<font color="#000080">(</font>CRC32_Value<font color="#000080">, </font>SIZEOF<font color="#000080">(</font>CRC32_Value<font color="#000080">)) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+        BEGIN
+           </b></font>WriteLn<font color="#000080">( </font><font color="#800000">'Error writing to ' </font><font color="#000080">+ </font>PARAMSTR<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">) );
+           </font>HALT<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">);
+        </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+
+        </font>WriteLn<font color="#000080">( </font><font color="#800000">'CRC32 Value Initialized.' </font><font color="#000080">);
+        </font>HALT<font color="#000080">( </font><font color="#800000">0 </font><font color="#000080">);
+     </font><font color="#FF0000"><b>END ELSE BEGIN
+         </b></font>CRC_Calc_Value<font color="#000080">^ := </font>Calculate_CRC32<font color="#000080">;
+
+         </font><font color="#FF0000"><b>IF </b></font><font color="#000080">( </font>CRC32_Value <font color="#000080">&lt;&gt; </font>LONGINT<font color="#000080">(</font>CRC_Calc_Value<font color="#000080">^) ) </font><font color="#FF0000"><b>THEN BEGIN
+            </b></font>WRITELN<font color="#000080">( </font><font color="#800000">'ERROR!  Program has been altered!' </font><font color="#000080">);
+            </font>HALT<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">);
+         </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+     </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ IF }</i></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{* END OF FILE *}
+
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to CRC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p></body>
+</html>

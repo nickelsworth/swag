@@ -1,0 +1,469 @@
+<html>
+<head><title> "List all open files" by D.J. MURDOCH</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to FILES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0066.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>unit </b></font>openfiles<font color="#000080">;
+</font><font color="#008000"><i>(*
+
+OPENFILES - Print list of all open files
+
+Written by D.J. Murdoch for the public domain.
+
+This unit interfaces three routines, which look in the (undocumented) DOS list
+of open files for the filenames.  One routine prints a list of open files,
+another returns the list in a collection of strings, and the third calls a
+user routine once for each open file.  If compiled for DOS, it automatically
+installs an exit handler to call the print routine, so if your program bombs
+because it runs out of file handles, you'll see the list of what's open.
+
+I've tested this unit in MSDOS 3.2, 4.01, 5 and 6; it should work in the
+other versions from 2 to 6, but I'd like to hear from you if it doesn't.
+
+Fidonet:   DJ Murdoch at 1:249/99.5
+Internet:  dmurdoch@mast.queensu.ca
+CIS:       71631,122
+
+History:
+  1. 21 Oct 91  - First release to PDN echo.
+  2. 26 Oct 91  - Added check of PSP segment, and DOS 3.0 record format.
+                  Set Allfiles to true to get previous behaviour.
+  3. 24 Jun 93  - Added DOS 6 and DPMI support
+  4. 24 Aug 94  - Added BP 7 Windows support, a bit more flexibility
+                  in ways to call
+
+Thanks are due to Berend de Boer for a series of articles explaining how to
+make real mode interrupt calls from protected mode.  His hints let me add the
+DPMI and Windows support.
+*)
+{#Z+  Don't add these comments to the help file }
+
+</i></font><font color="#FF0000"><b>interface
+
+uses
+</b></font><font color="#008000"><i>{$ifdef windows}
+  {$ifdef ver15}
+  </i></font>wobjects<font color="#000080">,</font>winprocs<font color="#000080">,</font>win31<font color="#000080">,</font>windos<font color="#000080">;  </font><font color="#008000"><i>{ For TPW 1.5 }
+  {$else}
+  </i></font>objects<font color="#000080">,</font>winapi<font color="#000080">,</font>windos<font color="#000080">;    </font><font color="#008000"><i>{ For BP 7 Windows. }
+  {$endif}
+{$else}
+{$ifdef dpmi}
+  </i></font>winapi<font color="#000080">,           </font><font color="#008000"><i>{ For BP 7 pmode }
+{$endif}
+  </i></font>objects<font color="#000080">,</font>dos<font color="#000080">;              </font><font color="#008000"><i>{ For BP 7 DOS }
+{$endif}
+
+{#Z-}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>version <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+
+  </font>Allfiles <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;               </font><font color="#008000"><i>{ Whether to print files belonging
+                                              to other processes }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>print_open_files<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">);
+</font><font color="#008000"><i>{ Print open file list to given file }
+
+</i></font><font color="#FF0000"><b>function </b></font>get_open_files<font color="#000080">:</font>PCollection<font color="#000080">;
+</font><font color="#008000"><i>{ Returns a new collection containing pointers to strings holding the
+  filenames.  Note that you'll need to use DisposeStr on each element
+  to release them. }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>For_each_open_file<font color="#000080">(</font>Action<font color="#000080">:</font>pointer<font color="#000080">);
+</font><font color="#008000"><i>{ Calls the far local procedure Action once per open file.  Action should be
+  declared as
+
+    procedure Action(filename:string;openmode:word); far;
+
+  if it's a local procedure, or
+
+    procedure Action(filename:string; openmode,dummy:word); far;
+
+  if not.  (Local procedures are procedures defined within other procedures.)
+  The filename will be the name of the file (no path), the openmode will be the
+  mode used to open the file.
+}
+
+</i></font><font color="#FF0000"><b>implementation
+
+</b></font><font color="#008000"><i>{$ifdef windows}
+{$define dpmi}      { Everything else about Windows is
+                      the same as DPMI }
+{$endif}
+</i></font><font color="#FF0000"><b>type
+  </b></font>ptrrec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>ofs<font color="#000080">, </font>seg <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>MyPrefixSeg <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#008000"><i>{$ifdef dpmi}
+     { This type was given by Berend de Boer, who credited the
+       DPMI unit from Borland's Open Architecture book }
+     </i></font><font color="#FF0000"><b>type
+       </b></font>TRealModeRegs <font color="#000080">= </font><font color="#FF0000"><b>record
+         case </b></font>Integer <font color="#FF0000"><b>of
+           </b></font><font color="#800000">0</font><font color="#000080">: (
+               </font>EDI<font color="#000080">, </font>ESI<font color="#000080">, </font>EBP<font color="#000080">, </font>EXX<font color="#000080">, </font>EBX<font color="#000080">, </font>EDX<font color="#000080">, </font>ECX<font color="#000080">, </font>EAX<font color="#000080">: </font>Longint<font color="#000080">;
+               </font>Flags<font color="#000080">, </font>ES<font color="#000080">, </font>DS<font color="#000080">, </font>FS<font color="#000080">, </font>GS<font color="#000080">, </font>IP<font color="#000080">, </font>CS<font color="#000080">, </font>SP<font color="#000080">, </font>SS<font color="#000080">: </font>Word<font color="#000080">);
+           </font><font color="#800000">1</font><font color="#000080">: (
+               </font>DI<font color="#000080">,</font>DIH<font color="#000080">, </font>SI<font color="#000080">, </font>SIH<font color="#000080">, </font>BP<font color="#000080">, </font>BPH<font color="#000080">, </font>XX<font color="#000080">, </font>XXH<font color="#000080">: </font>Word<font color="#000080">;
+               </font><font color="#FF0000"><b>case </b></font>Integer <font color="#FF0000"><b>of
+                 </b></font><font color="#800000">0</font><font color="#000080">: (
+                     </font>BX<font color="#000080">, </font>BXH<font color="#000080">, </font>DX<font color="#000080">, </font>DXH<font color="#000080">, </font>CX<font color="#000080">, </font>CXH<font color="#000080">, </font>AX<font color="#000080">, </font>AXH<font color="#000080">: </font>Word<font color="#000080">);
+                 </font><font color="#800000">1</font><font color="#000080">: (
+                     </font>BL<font color="#000080">, </font>BH<font color="#000080">, </font>BLH<font color="#000080">, </font>BHH<font color="#000080">, </font>DL<font color="#000080">, </font>DH<font color="#000080">, </font>DLH<font color="#000080">, </font>DHH<font color="#000080">,
+                     </font>CL<font color="#000080">, </font>CH<font color="#000080">, </font>CLH<font color="#000080">, </font>CHH<font color="#000080">, </font>AL<font color="#000080">, </font>AH<font color="#000080">, </font>ALH<font color="#000080">, </font>AHH<font color="#000080">: </font>Byte<font color="#000080">));
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>MakePointer<font color="#000080">(</font>seg<font color="#000080">,</font>ofs<font color="#000080">:</font>word<font color="#000080">):</font>pointer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>sel<font color="#000080">,</font>junk <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>sel <font color="#000080">:= </font>AllocSelector<font color="#000080">(</font>Dseg<font color="#000080">);  </font><font color="#008000"><i>{ !!4  Copy Dseg attributes }
+  </i></font>sel <font color="#000080">:= </font>SetSelectorBase<font color="#000080">(</font>sel<font color="#000080">, </font>longint<font color="#000080">(</font><font color="#800000">16</font><font color="#000080">)*</font>seg<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>sel <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>junk <font color="#000080">:= </font>SetSelectorLimit<font color="#000080">(</font>sel<font color="#000080">, </font><font color="#800000">$ffff</font><font color="#000080">);
+    </font>MakePointer <font color="#000080">:= </font>Ptr<font color="#000080">(</font>sel<font color="#000080">,</font>ofs<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+    </b></font>MakePointer <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ReleasePointer<font color="#000080">(</font>p<font color="#000080">:</font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>junk <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>junk <font color="#000080">:= </font>FreeSelector<font color="#000080">(</font>ptrrec<font color="#000080">(</font>p<font color="#000080">).</font>seg<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>RealModeInterrupt<font color="#000080">(</font>int<font color="#000080">:</font>byte<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>regs<font color="#000080">:</font>TRealModeRegs<font color="#000080">);
+</font><font color="#FF0000"><b>label
+  </b></font>okay<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">mov ax,$0300
+    mov bl,int
+    mov bh,0
+    mov cx,0
+    les di,regs
+    int $31
+    jnc  okay
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Real mode call failed!'</font><font color="#000080">);
+</font>okay<font color="#000080">:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>GetListOfLists<font color="#000080">:</font>pointer<font color="#000080">;
+</font><font color="#008000"><i>{ Calls DOS service $52 to get pointer to list of lists, and
+  translates pointer to a pmode pointer }
+</i></font><font color="#FF0000"><b>var
+  </b></font>regs <font color="#000080">: </font>TRealModeRegs<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>fillchar<font color="#000080">(</font>regs<font color="#000080">,</font>sizeof<font color="#000080">(</font>regs<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>regs<font color="#000080">.</font>ah <font color="#000080">:= </font><font color="#800000">$52</font><font color="#000080">;
+  </font>RealModeInterrupt<font color="#000080">(</font><font color="#800000">$21</font><font color="#000080">,</font>regs<font color="#000080">);
+  </font>GetListOfLists <font color="#000080">:= </font>MakePointer<font color="#000080">(</font>regs<font color="#000080">.</font>es<font color="#000080">,</font>regs<font color="#000080">.</font>bx<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>GetPrefixSeg<font color="#000080">;
+</font><font color="#008000"><i>{ Stores real mode segment of the PSP in MyPrefixSeg}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>MyPrefixSeg <font color="#000080">:= </font>GetSelectorBase<font color="#000080">(</font>system<font color="#000080">.</font>prefixseg<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$else}
+
+</i></font><font color="#FF0000"><b>function </b></font>MakePointer<font color="#000080">(</font>seg<font color="#000080">,</font>ofs<font color="#000080">:</font>word<font color="#000080">):</font>pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MakePointer <font color="#000080">:= </font>Ptr<font color="#000080">(</font>seg<font color="#000080">,</font>ofs<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ReleasePointer<font color="#000080">(</font>p<font color="#000080">:</font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>GetListOfLists<font color="#000080">:</font>pointer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>regs <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>fillchar<font color="#000080">(</font>regs<font color="#000080">,</font>sizeof<font color="#000080">(</font>regs<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>regs<font color="#000080">.</font>ah <font color="#000080">:= </font><font color="#800000">$52</font><font color="#000080">;
+  </font>msdos<font color="#000080">(</font>regs<font color="#000080">);
+  </font>GetListOfLists <font color="#000080">:= </font>MakePointer<font color="#000080">(</font>regs<font color="#000080">.</font>es<font color="#000080">,</font>regs<font color="#000080">.</font>bx<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>GetPrefixSeg<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MyPrefixSeg <font color="#000080">:= </font>PrefixSeg<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>dos2openfilerec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>numhandles<font color="#000080">,
+    </font>openmode <font color="#000080">: </font>byte<font color="#000080">;
+    </font>junk1 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>filename <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">$e</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+    </font>junk2 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$f</font><font color="#000080">..</font><font color="#800000">$27</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>dos30openfilerec <font color="#000080">= </font><font color="#FF0000"><b>record                   </b></font><font color="#008000"><i>{!!2}
+    </i></font>numhandles<font color="#000080">,
+    </font>openmode <font color="#000080">: </font>word<font color="#000080">;
+    </font>junk1 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">$20</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;            </font><font color="#008000"><i>{!!2}
+    </i></font>filename <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">..</font><font color="#800000">$2b</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;       </font><font color="#008000"><i>{!!2}
+    </i></font>junk2 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$2c</font><font color="#000080">..</font><font color="#800000">$31</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;          </font><font color="#008000"><i>{!!2}
+    </i></font>pspseg <font color="#000080">: </font>word<font color="#000080">;                            </font><font color="#008000"><i>{!!2}
+    </i></font>junk3 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$34</font><font color="#000080">..</font><font color="#800000">$37</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;          </font><font color="#008000"><i>{!!2}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>dos3openfilerec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>numhandles<font color="#000080">,
+    </font>openmode <font color="#000080">: </font>word<font color="#000080">;
+    </font>junk1 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">$1f</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>filename <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">..</font><font color="#800000">$2a</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+    </font>junk2 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$2b</font><font color="#000080">..</font><font color="#800000">$30</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;          </font><font color="#008000"><i>{!!2}
+    </i></font>pspseg <font color="#000080">: </font>word<font color="#000080">;                            </font><font color="#008000"><i>{!!2}
+    </i></font>junk3 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$33</font><font color="#000080">..</font><font color="#800000">$34</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;          </font><font color="#008000"><i>{!!2}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>dos4openfilerec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>numhandles<font color="#000080">,
+    </font>openmode <font color="#000080">: </font>word<font color="#000080">;
+    </font>junk1 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">$1f</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>filename <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">..</font><font color="#800000">$2a</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+    </font>junk2 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$2b</font><font color="#000080">..</font><font color="#800000">$30</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;         </font><font color="#008000"><i>{!!2}
+    </i></font>pspseg <font color="#000080">: </font>word<font color="#000080">;                           </font><font color="#008000"><i>{!!2}
+    </i></font>junk3 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">$33</font><font color="#000080">..</font><font color="#800000">$3a</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;         </font><font color="#008000"><i>{!!2}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>filelistptr <font color="#000080">= ^</font>filelistrec<font color="#000080">;
+  </font>filelistrec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>next <font color="#000080">: </font>filelistptr<font color="#000080">;
+    </font>numfiles <font color="#000080">: </font>word<font color="#000080">;
+    </font><font color="#FF0000"><b>case </b></font>byte <font color="#FF0000"><b>of
+    </b></font><font color="#800000">2 </font><font color="#000080">: (</font>dos2files <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>dos2openfilerec<font color="#000080">);
+   </font><font color="#800000">30 </font><font color="#000080">: (</font>dos30files<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>dos30openfilerec<font color="#000080">);  </font><font color="#008000"><i>{!!2}
+    </i></font><font color="#800000">3 </font><font color="#000080">: (</font>dos3files <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>dos3openfilerec<font color="#000080">);
+    </font><font color="#800000">4 </font><font color="#000080">: (</font>dos4files <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>dos4openfilerec<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Tfilename <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>function </b></font>NiceName<font color="#000080">(</font>filename<font color="#000080">:</font>TFilename<font color="#000080">):</font>TFilename<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>result <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>blankpos <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>result <font color="#000080">:= </font>filename<font color="#000080">;
+  </font>insert<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">,</font>result<font color="#000080">,</font><font color="#800000">9</font><font color="#000080">);
+  </font><font color="#FF0000"><b>repeat
+    </b></font>blankpos <font color="#000080">:= </font>pos<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>result<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>blankpos <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>delete<font color="#000080">(</font>result<font color="#000080">,</font>blankpos<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font>blankpos <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>NiceName <font color="#000080">:= </font>result<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>WalkList<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">;</font>C<font color="#000080">:</font>PCollection<font color="#000080">;</font>Action<font color="#000080">:</font>pointer<font color="#000080">;</font>frame<font color="#000080">:</font>word<font color="#000080">);
+  </font><font color="#FF0000"><b>procedure </b></font>Doit<font color="#000080">(</font>filename<font color="#000080">:</font>TFilename<font color="#000080">;</font>openmode<font color="#000080">:</font>word<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>DoAction <font color="#000080">: </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">(</font>f<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;</font>openmode<font color="#000080">:</font>word<font color="#000080">;</font>dummy<font color="#000080">:</font>word<font color="#000080">) </font><font color="#FF0000"><b>absolute </b></font>Action<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>filename <font color="#000080">:= </font>NiceName<font color="#000080">(</font>filename<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>C <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>Nil then
+      </b></font>C<font color="#000080">^.</font>Insert<font color="#000080">(</font>NewStr<font color="#000080">(</font>filename<font color="#000080">))
+    </font><font color="#FF0000"><b>else if </b></font>Action <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>Nil then
+      </b></font>DoAction<font color="#000080">(</font>filename<font color="#000080">,</font>openmode<font color="#000080">,</font>frame<font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>writeln<font color="#000080">(</font>where<font color="#000080">,</font>filename<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>p <font color="#000080">: </font>pointer<font color="#000080">;
+  </font>list <font color="#000080">: </font>filelistptr<font color="#000080">;
+  </font>i <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetPrefixSeg<font color="#000080">;                                                  </font><font color="#008000"><i>{!!3}
+  </i></font>p <font color="#000080">:= </font>GetListOfLists<font color="#000080">;                                           </font><font color="#008000"><i>{!!3}
+  </i></font>inc<font color="#000080">(</font>longint<font color="#000080">(</font>p<font color="#000080">),</font><font color="#800000">4</font><font color="#000080">);                                             </font><font color="#008000"><i>{!!3}
+  </i></font><font color="#FF0000"><b>if </b></font>ptrrec<font color="#000080">(</font>p<font color="#000080">^).</font>ofs <font color="#000080">&lt;&gt; </font><font color="#800000">$ffff </font><font color="#FF0000"><b>then
+    </b></font>list <font color="#000080">:= </font>MakePointer<font color="#000080">(</font>ptrrec<font color="#000080">(</font>p<font color="#000080">^).</font>seg<font color="#000080">,</font>ptrrec<font color="#000080">(</font>p<font color="#000080">^).</font>ofs<font color="#000080">)           </font><font color="#008000"><i>{!!3}
+  </i></font><font color="#FF0000"><b>else
+    </b></font>list <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>releasePointer<font color="#000080">(</font>p<font color="#000080">);                                             </font><font color="#008000"><i>{!!3}
+
+  </i></font><font color="#FF0000"><b>while </b></font>list <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil do
+  begin
+    with </b></font>list<font color="#000080">^ </font><font color="#FF0000"><b>do
+      for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>numfiles <font color="#FF0000"><b>do
+        case </b></font>lo<font color="#000080">(</font>dosversion<font color="#000080">) </font><font color="#FF0000"><b>of
+        </b></font><font color="#800000">2 </font><font color="#000080">: </font><font color="#FF0000"><b>with </b></font>dos2files<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>do
+             if </b></font>numhandles <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+               </b></font>doit<font color="#000080">(</font>filename<font color="#000080">,</font>openmode<font color="#000080">);                           </font><font color="#008000"><i>{!!4}
+        </i></font><font color="#800000">3 </font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font>hi<font color="#000080">(</font>dosversion<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then                            </b></font><font color="#008000"><i>{!!2}
+            </i></font><font color="#FF0000"><b>begin                                                 </b></font><font color="#008000"><i>{!!2}
+              </i></font><font color="#FF0000"><b>with </b></font>dos30files<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>do                               </b></font><font color="#008000"><i>{!!2}
+               </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>numhandles <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>allfiles <font color="#FF0000"><b>or               </b></font><font color="#008000"><i>{!!2}
+                                        </i></font><font color="#000080">(</font>pspseg <font color="#000080">= </font>myprefixseg<font color="#000080">)) </font><font color="#FF0000"><b>then</b></font><font color="#008000"><i>{!!3}
+                 </i></font>doit<font color="#000080">(</font>filename<font color="#000080">,</font>openmode<font color="#000080">)                           </font><font color="#008000"><i>{!!4}
+            </i></font><font color="#FF0000"><b>end                                                   </b></font><font color="#008000"><i>{!!2}
+            </i></font><font color="#FF0000"><b>else                                                  </b></font><font color="#008000"><i>{!!2}
+              </i></font><font color="#FF0000"><b>with </b></font>dos3files<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>do
+               if </b></font><font color="#000080">(</font>numhandles <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>allfiles <font color="#FF0000"><b>or
+                                        </b></font><font color="#000080">(</font>pspseg <font color="#000080">= </font>myprefixseg<font color="#000080">)) </font><font color="#FF0000"><b>then</b></font><font color="#008000"><i>{!!3}
+                 </i></font>doit<font color="#000080">(</font>filename<font color="#000080">,</font>openmode<font color="#000080">);                           </font><font color="#008000"><i>{!!4}
+     </i></font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">6 </font><font color="#000080">: </font><font color="#FF0000"><b>with </b></font>dos4files<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>do
+             if </b></font><font color="#000080">(</font>numhandles <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>allfiles <font color="#FF0000"><b>or                 </b></font><font color="#008000"><i>{!!2}
+                                      </i></font><font color="#000080">(</font>pspseg <font color="#000080">= </font>myprefixseg<font color="#000080">)) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{!!3}
+               </i></font>doit<font color="#000080">(</font>filename<font color="#000080">,</font>openmode<font color="#000080">);                             </font><font color="#008000"><i>{!!4}
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>p <font color="#000080">:= </font>list<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ptrrec<font color="#000080">(</font>list<font color="#000080">^.</font>next<font color="#000080">).</font>ofs <font color="#000080">&lt;&gt; </font><font color="#800000">$ffff </font><font color="#FF0000"><b>then
+      </b></font>list <font color="#000080">:= </font>MakePointer<font color="#000080">(</font>ptrrec<font color="#000080">(</font>list<font color="#000080">^.</font>next<font color="#000080">).</font>seg<font color="#000080">,</font>ptrrec<font color="#000080">(</font>list<font color="#000080">^.</font>next<font color="#000080">).</font>ofs<font color="#000080">) </font><font color="#008000"><i>{!!3}
+    </i></font><font color="#FF0000"><b>else
+      </b></font>list <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font>ReleasePointer<font color="#000080">(</font>p<font color="#000080">);                                            </font><font color="#008000"><i>{!!3}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ReleasePointer<font color="#000080">(</font>list<font color="#000080">);                                           </font><font color="#008000"><i>{!!3}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>print_open_files<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">);
+</font><font color="#008000"><i>{ Print open file list to given file }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>WalkList<font color="#000080">(</font>where<font color="#000080">,</font><font color="#FF0000"><b>nil</b></font><font color="#000080">,</font><font color="#FF0000"><b>nil</b></font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>get_open_files<font color="#000080">:</font>PCollection<font color="#000080">;
+</font><font color="#008000"><i>{ Returns a new collection containing pointers to strings holding the
+  filenames }
+</i></font><font color="#FF0000"><b>var
+  </b></font>result <font color="#000080">: </font>PCollection<font color="#000080">;
+  </font>junk <font color="#000080">: </font>text<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>result <font color="#000080">:= </font>New<font color="#000080">(</font>PCollection<font color="#000080">,</font>init<font color="#000080">(</font><font color="#800000">16</font><font color="#000080">,</font><font color="#800000">16</font><font color="#000080">));
+  </font><font color="#FF0000"><b>if </b></font>result <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then
+    </b></font>WalkList<font color="#000080">(</font>junk<font color="#000080">,</font>result<font color="#000080">,</font><font color="#FF0000"><b>nil</b></font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font>get_open_files <font color="#000080">:= </font>result<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>CallerFrame<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>Inline</b></font><font color="#000080">(
+  </font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$46</font><font color="#000080">/</font><font color="#800000">$00</font><font color="#000080">/           </font><font color="#008000"><i>{   MOV     AX,[BP]}
+  </i></font><font color="#800000">$24</font><font color="#000080">/</font><font color="#800000">$FE</font><font color="#000080">);              </font><font color="#008000"><i>{   AND     AL,$0FE}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>For_each_open_file<font color="#000080">(</font>Action<font color="#000080">:</font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>junk <font color="#000080">: </font>text<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>WalkList<font color="#000080">(</font>junk<font color="#000080">,</font><font color="#FF0000"><b>nil</b></font><font color="#000080">,</font>Action<font color="#000080">,</font>CallerFrame<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$ifndef windows}  { We don't use an exitproc in Windows}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>exit_save <font color="#000080">: </font>pointer<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>my_exit_proc<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>junk <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ExitProc <font color="#000080">:= </font>Exit_save<font color="#000080">;
+  </font>junk <font color="#000080">:= </font>ioresult<font color="#000080">;
+  </font>assign<font color="#000080">(</font>output<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+  </font>rewrite<font color="#000080">(</font>output<font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Files open as program terminates:'</font><font color="#000080">);
+  </font>print_open_files<font color="#000080">(</font>output<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>begin
+  if not </b></font><font color="#000080">(</font>lo<font color="#000080">(</font>dosversion<font color="#000080">) </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">..</font><font color="#800000">6</font><font color="#000080">]) </font><font color="#FF0000"><b>then
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'OPENFILES only works with DOS 2 to 6'</font><font color="#000080">)
+</font><font color="#008000"><i>{$ifndef Windows}
+  </i></font><font color="#FF0000"><b>else
+  begin
+    </b></font>exit_save <font color="#000080">:= </font>ExitProc<font color="#000080">;
+    </font>ExitProc <font color="#000080">:= @</font>my_exit_proc<font color="#000080">;
+  </font><font color="#FF0000"><b>end
+</b></font><font color="#008000"><i>{$endif}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{ ------------------    DEMO PROGRAM ----------------------- }
+
+</i></font><font color="#FF0000"><b>program </b></font>test<font color="#000080">;
+
+</font><font color="#008000"><i>{ Test program for Openfiles unit.  Should be compilable in TP/BP 6+, TPW 1.5+ }
+
+</i></font><font color="#FF0000"><b>uses
+</b></font><font color="#008000"><i>{$ifdef windows}
+  {$ifdef ver15}
+  </i></font>wincrt<font color="#000080">,</font>wobjects<font color="#000080">,</font>openfiles<font color="#000080">;
+  </font><font color="#008000"><i>{$else}
+  </i></font>wincrt<font color="#000080">,</font>objects<font color="#000080">,</font>openfiles<font color="#000080">;
+  </font><font color="#008000"><i>{$endif}
+{$else}
+  </i></font>objects<font color="#000080">,</font>openfiles<font color="#000080">;
+</font><font color="#008000"><i>{$endif}
+
+{ This routine uses the callback function &quot;for_each_open_file&quot;.  It's the
+  only way to get the file open mode. }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>doit<font color="#000080">(</font>prefix<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>procedure </b></font>printone<font color="#000080">(</font>f<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;</font>openmode<font color="#000080">:</font>word<font color="#000080">); </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>writeln<font color="#000080">(</font>prefix<font color="#000080">,</font>f<font color="#000080">:</font><font color="#800000">12</font><font color="#000080">,</font><font color="#800000">' mode '</font><font color="#000080">,</font>openmode<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>for_each_open_file<font color="#000080">(@</font>printone<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ This routine builds the collection of strings and prints it }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>doit2<font color="#000080">(</font>prefix<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>c<font color="#000080">:</font>Pcollection<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Print each filename }
+  </i></font><font color="#FF0000"><b>procedure </b></font>printone<font color="#000080">(</font>f<font color="#000080">:</font>PString<font color="#000080">); </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>writeln<font color="#000080">(</font>prefix<font color="#000080">,</font>f<font color="#000080">^);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Release each string }
+  </i></font><font color="#FF0000"><b>procedure </b></font>disposeone<font color="#000080">(</font>f<font color="#000080">:</font>PString<font color="#000080">); </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>DisposeStr<font color="#000080">(</font>f<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>c<font color="#000080">:=</font>get_open_files<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>c <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then
+  begin
+    </b></font>c<font color="#000080">^.</font>foreach<font color="#000080">(@</font>printone<font color="#000080">);
+
+    </font><font color="#008000"><i>{ This shows the proper way to dispose of the collection }
+
+    </i></font>c<font color="#000080">^.</font>foreach<font color="#000080">(@</font>disposeone<font color="#000080">);
+    </font>c<font color="#000080">^.</font>deleteall<font color="#000080">;
+    </font>dispose<font color="#000080">(</font>c<font color="#000080">,</font>done<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>i <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>f<font color="#000080">,</font><font color="#800000">'test.pas'</font><font color="#000080">);
+  </font>reset<font color="#000080">(</font>f<font color="#000080">);
+  </font>allfiles <font color="#000080">:= </font>true<font color="#000080">;
+  </font>doit<font color="#000080">(</font><font color="#800000">'Open by some process:  '</font><font color="#000080">);
+  </font>allfiles <font color="#000080">:= </font>false<font color="#000080">;
+  </font>doit2<font color="#000080">(</font><font color="#800000">'Open by us:  '</font><font color="#000080">);
+
+  </font><font color="#008000"><i>{ At the end, the exitproc will print one more list (in DOS). }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to FILES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0066.PAS">Original</a><b>]</b></p></body>
+</html>

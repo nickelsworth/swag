@@ -1,0 +1,158 @@
+<html>
+<head><title> "EXTEMD.PAS" by MICHAEL PHILLIPS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0045.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+ RL&gt; I would like to open 20-50 silumtaneous files (in TP 6.0 or 7.0).
+
+ RL&gt; Does anyone know how to accomplish this?
+
+I use the unit below for BP7 (protected mode or real mode).
+}
+
+</i></font><font color="#FF0000"><b>Unit        </b></font>Extend<font color="#000080">;
+
+</font><font color="#008000"><i>{-----------------------------------------------------------------------}
+{  Author  : Michael John Phillips                                      }
+{  Address : 5/5 Waddell Place                                          }
+{            Curtin ACT 2605                                            }
+{  Tel     : (06) 2811980h                                              }
+{  FidoNet : 3:620/243.70                                               }
+{-----------------------------------------------------------------------}
+{
+$lgb$
+v1.0   22 Apr 93 -   Initial version works in REAL-MODE or DPMI mode BP7
+$lge$
+$nokeywords$
+}
+{-----------------------------------------------------------------------}
+{    This unit contains routines to extend the number of files that     }
+{  can simultaneously be open by a program under DOS.                   }
+{                                                                       }
+{    The NON-DPMI routine was downloaded from the Borland BBS and then  }
+{  modified to work with TP7 and BP7.                                   }
+{                                                                       }
+{    The DPMI routine was captured in the Z3_PASCAL FidoNet echo.       }
+{                                                                       }
+{    To use these routines, make sure that your CONFIG.SYS files        }
+{  contains the lines FILES=255.  If you use the DOS SHARE command      }
+{  then make sure that you have enough memory allocated for SHARE       }
+{  (eg SHARE /F:7168), having SHARE too low can result in a &quot;hardware   }
+{  failure&quot; (IOResult=162) when trying to open a file.                  }
+{-----------------------------------------------------------------------}
+{    These routines extend the max. number of files that can be OPEN    }
+{  simultaneously from 20 to 255.  Files in DOS 2.0 or later are        }
+{  controlled by FILE handles.  The number of FILE handles available    }
+{  to application programs is controlled by the FILES environment       }
+{  variable stored in a CONFIG.SYS FILE.  If no FILES variable is       }
+{  established in a CONFIG.SYS FILE, then only 8 FILE handles are       }
+{  available.  However, DOS requires 5 FILE handles for its own use     }
+{  (controlling  devices  such  as  CON, AUX, PRN, etc).  This leaves   }
+{  only 3 handles for use by application programs.                      }
+{                                                                       }
+{    By specifying a value for the FILES environment variable, you can  }
+{  increase the number of possible FILE handles from 8 up to 20.        }
+{  Since DOS still requires 5, 15 are left for application programs.    }
+{  But you cannot normally increase the number of handles beyond 20.    }
+{                                                                       }
+{    With DOS version 3.0, a new DOS function was added to increase     }
+{  the number of FILE handles available.  However, the function must    }
+{  be called from application programs that have previously reserved    }
+{  space for the new FILE handles.                                      }
+{-----------------------------------------------------------------------}
+{$IFNDEF VER70 }
+  </i></font>Should be compiled using Turbo <font color="#FF0000"><b>Pascal </b></font>v7<font color="#000080">.</font><font color="#800000">0 </font><font color="#FF0000"><b>or </b></font>Borland <font color="#FF0000"><b>Pascal </b></font>v7<font color="#000080">.</font><font color="#800000">0
+</font><font color="#008000"><i>{$ENDIF }
+
+</i></font><font color="#FF0000"><b>Interface
+
+Const
+  </b></font>MAX_FILE_HANDLES <font color="#000080">= </font><font color="#800000">255</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Function </b></font>ExtendHandles<font color="#000080">(</font>Handles <font color="#000080">: </font>Byte<font color="#000080">) : </font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+</b></font><font color="#008000"><i>{$IFDEF MSDOS }
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>Dos<font color="#000080">;                                         </font><font color="#008000"><i>{ Dos routines - BORLAND }
+{$ENDIF }
+
+{$IFDEF DPMI }
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>Dos<font color="#000080">,                                         </font><font color="#008000"><i>{ Dos routines - BORLAND }
+  </i></font>WinAPI<font color="#000080">;                              </font><font color="#008000"><i>{ Windows API routines - BORLAND }
+{$ENDIF }
+
+</i></font><font color="#FF0000"><b>Const
+  </b></font>NO_ERROR                <font color="#000080">= </font><font color="#800000">$00</font><font color="#000080">;
+  </font>ERROR_NOT_ENOUGH_MEMORY <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;
+  </font>ERROR_HARDWARE_FAILURE  <font color="#000080">= </font><font color="#800000">$A2</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>Result <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF MSDOS }
+  </i></font><font color="#FF0000"><b>Function    </b></font>ExtendHandles<font color="#000080">(</font>Handles <font color="#000080">: </font>Byte<font color="#000080">) : </font>Word<font color="#000080">;
+  </font><font color="#008000"><i>{---------------------------------------------------------------------}
+  {    This routine resizes the amount of allocated memory for a Turbo  }
+  {  Pascal program to allow space for new FILE handles.  In doing so,  }
+  {  it also resizes the heap by  adjusting the value of FreePtr, the   }
+  {  pointer used in FreeList management.  Since the FreeList is being  }
+  {  manipulated, the heap must be empty when the extend unit is        }
+  {  initialized.  This can be guaranteed by including extend as one    }
+  {  of the first units in your program's USES statement.  If any heap  }
+  {  has been allocated when extend initializes, the program will halt  }
+  {  with an error message.                                             }
+  {---------------------------------------------------------------------}
+  </i></font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ of ExtendHandles }
+    </i></font>ExtendHandles <font color="#000080">:= </font>NO_ERROR<font color="#000080">;
+
+    </font><font color="#008000"><i>{-------------------------------------------------------------------}
+    {    Check that the number of file handles to extend to is greater  }
+    {  than the default number of file handles (20).                    }
+    {-------------------------------------------------------------------}
+    </i></font><font color="#FF0000"><b>if </b></font>Handles <font color="#000080">&lt;= </font><font color="#800000">20 </font><font color="#FF0000"><b>then
+      </b></font>Exit<font color="#000080">;
+
+    </font><font color="#008000"><i>{-------------------------------------------------------------------}
+    {    Check that the heap used by Turbo Pascal is currently empty.   }
+    {-------------------------------------------------------------------}
+    </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>HeapOrg <font color="#000080">&lt;&gt; </font>HeapPtr<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Heap must be empty before Extend unit initializes'</font><font color="#000080">);
+        </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#008000"><i>{-------------------------------------------------------------------}
+    {    Reduce the heap space used by Turbo Pascal.                    }
+    {-------------------------------------------------------------------}
+    </i></font>HeapEnd<font color="#000080">:=</font>ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>HeapEnd<font color="#000080">^)-(</font>Handles <font color="#FF0000"><b>div </b></font><font color="#800000">8 </font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">), </font>Ofs<font color="#000080">(</font>HeapEnd<font color="#000080">^));
+
+    </font><font color="#008000"><i>{-------------------------------------------------------------------}
+    {    Determine how much memory is allocated to the program.  BX     }
+    {  returns the number of paragraphs (16 bytes) used.                }
+    {-------------------------------------------------------------------}
+    </i></font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do
+      begin
+        </b></font>AH <font color="#000080">:= </font><font color="#800000">$4A</font><font color="#000080">;
+        </font>ES <font color="#000080">:= </font>PrefixSeg<font color="#000080">;
+        </font>BX <font color="#000080">:= </font><font color="#800000">$FFFF</font><font color="#000080">;
+        </font>MsDos<font color="#000080">(</font>Regs<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ of with Regs }
+
+    {-------------------------------------------------------------------}
+    {    Set the program size to the allow for new handles.             }
+    {-------------------------------------------------------------------}
+    </i></font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do
+      begin
+        </b></font>AH <font color="#000080">:= </font><font color="#800000">$4A</font><font color="#000080">;
+        </font>ES <font color="#000080">:= </font>PrefixSeg<font color="#000080">;
+        </font>BX <font color="#000080">:= </font>BX <font color="#000080">- (</font>Handles <font color="#FF0000"><b>div </b></font><font color="#800000">8 </font><font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">);
+        </font>MsDos<font color="#000080">(</font>Regs<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ of with Regs }
+
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0045.PAS">Original</a><b>]</b></p></body>
+</html>

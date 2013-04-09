@@ -1,0 +1,619 @@
+<html>
+<head><title> "Load in a 256 colour PCX and save" by SCOTT TUNSTALL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0239.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(*
+====================================================================
+
+FILENAME : GRABIMG2.PAS
+
+AUTHOR   : SCOTT TUNSTALL (aka LIEUTENANT KOJAK)
+
+CREATION : 20TH JULY 1996
+DATE
+
+
+DISTRIBUTE FREELY AS LONG AS MY NAME, CODE AND COMMENTS REMAIN
+INTACT.
+
+ALL WORK (C) 1996 SCOTT TUNSTALL
+
+--------------------------------------------------------------------
+
+
+REQUIREMENTS:
+
+NEEDS KOJAKVGA, WHICH SHOULD BE IN THE GRAPHICS.SWG POST.
+
+
+WHAT THIS PROGRAM DOES
+----------------------
+
+This program allows you to load in a 256 colour PCX and save
+areas of it as a .IMG file. Specify the PCX filespec on the command
+line.
+
+Use the cursor keys to move the cross hairs. (Using CTRL + direction
+makes the crosshairs move faster).
+
+Press space when you are at the top left of the area you wish to cut,
+then when the second pair of cross hairs appear, move them to the
+bottom right of the image to cut. You will see the size of the
+image in horizontal width &amp; vertical height at the bottom left
+of the screen. When you have a sprite of the desired size defined
+within the crosshairs, press space again.
+
+If the Shape (it must be &lt;= width/height 255 * 200) can be
+grabbed then you will be presented with a menu which allows
+you to manipulate the sprite. (If you can't see the menu text, use
+the + and - keys to change the menu text colour. Also, pressing
+T moves menu to (t)op of screen whereas B moves menu to (b)ottom )
+
+
+
+IMPROVEMENTS OVER 1ST GRABIMG
+-----------------------------
+
+All known bugs have been fixed, more options allowed...
+validation, what more can I say? Except GRABIMG2 is the
+BUSINESS! I should be charging you lot for writing
+this !!! :)
+
+
+
+
+===============
+
+For the coders:
+
+---------------
+
+Shape grabbed is from the non planar, unchained VGA mode $13.
+
+
+
+
+=====================
+
+File format of image:
+
+---------------------
+
+Byte 0 : Width
+Byte 1 : Height
+Byte 2.. Actual Shape data itself, uncompressed. The data is
+         saved line by line.
+
+To read it use the LoadShape command present in NEWGRAPH
+
+ex:
+        var p: pointer;
+        LoadShape('SPRITE.IMG',p);
+        ...
+
+To display it use the Blit/Block/ClipBlit/ClipBlock commands.
+
+*)
+
+
+{
+Requires KOJAKVGA, which should be in the SWAG post you got this
+GRABIMG2 from. I wrote it, so it has my name.
+
+If you can't find KOJAKVGA then you will have to convert this
+to work with NEWGRAPH. Sorry!
+
+
+NWKBDINT is in June 96's KEYBOARD.SWG - author: Me!
+}
+
+</i></font><font color="#FF0000"><b>Uses </b></font>KOJAKVGA<font color="#000080">, </font>NWKBDINT<font color="#000080">, </font>CRT<font color="#000080">, </font>DOS<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Var </b></font>BarColour <font color="#000080">: </font>byte<font color="#000080">;
+    </font>MenuColour<font color="#000080">: </font>byte<font color="#000080">;
+    </font>MenuY     <font color="#000080">: </font>byte<font color="#000080">;
+
+    </font>FirstBarX<font color="#000080">,
+    </font>FirstBarY<font color="#000080">,
+    </font>SecondBarX<font color="#000080">,
+    </font>SecondBarY<font color="#000080">: </font>integer<font color="#000080">;
+    </font>LastWidth <font color="#000080">: </font>word<font color="#000080">;
+    </font>LastHeight<font color="#000080">: </font>word<font color="#000080">;
+
+    </font>Grabbing  <font color="#000080">: </font>boolean<font color="#000080">;
+    </font>BufferPtr <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>ThePalette<font color="#000080">: </font>PaletteType<font color="#000080">;
+
+
+
+
+
+</font><font color="#008000"><i>{
+Find the brightest colour available. (Smarm removed :) )
+
+Each Colour has it's own Red, Green and Blue value attached to it.
+Each Colour can have Red, Green and Blue component values of 64
+thus giving 262,144 colours (64 * 64 * 64)
+
+To find the brightest colour you just read the palette entries,
+add up the Red, Green and Blue values and check if they are the
+brightest so far. If they are, take a note of what Colour has
+those values and do until all Colours are scanned. Easy eh? :-)
+}
+
+
+
+
+</i></font><font color="#FF0000"><b>Function </b></font>GetBrightestColour<font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>Total<font color="#000080">: </font>byte<font color="#000080">;
+    </font>Count<font color="#000080">: </font>byte<font color="#000080">;
+    </font>RedTotal<font color="#000080">,
+    </font>GreenTotal<font color="#000080">,
+    </font>BlueTotal<font color="#000080">, </font>ColourWithBestHue <font color="#000080">: </font>byte<font color="#000080">;
+
+    </font>BestHueFound<font color="#000080">,
+    </font>HueValue<font color="#000080">: </font>longint<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+     </b></font>Count<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+
+     </font>BestHueFound<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+     </font>ColourWithBestHue<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+
+     </font>HueValue<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>Repeat
+           </b></font>GetRGB<font color="#000080">(</font>Count<font color="#000080">,</font>RedTotal<font color="#000080">,</font>GreenTotal<font color="#000080">,</font>BlueTotal<font color="#000080">);
+           </font>HueValue<font color="#000080">:=</font>BlueTotal<font color="#000080">+(</font>GreenTotal<font color="#000080">*</font><font color="#800000">16</font><font color="#000080">)+(</font>RedTotal <font color="#000080">* </font><font color="#800000">256</font><font color="#000080">);
+           </font><font color="#FF0000"><b>If </b></font>HueValue <font color="#000080">&gt; </font>BestHueFound <font color="#FF0000"><b>Then
+              Begin
+              </b></font>BestHueFound<font color="#000080">:=</font>HueValue<font color="#000080">;
+              </font>ColourWithBestHue<font color="#000080">:=</font>Count<font color="#000080">;
+           </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+           </font>Inc<font color="#000080">(</font>Count<font color="#000080">);
+     </font><font color="#FF0000"><b>Until </b></font>Count<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+
+     </font>GetBrightestColour<font color="#000080">:=</font>ColourWithBestHue<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+</font><font color="#008000"><i>{
+Thought I'd re-write this in asm, just to be nerdy.
+}
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Sort<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>N1<font color="#000080">, </font>N2<font color="#000080">: </font>integer<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+   </b></font><font color="#FF00FF">PUSH DS
+   LDS SI,N1
+   LES DI,N2
+
+   MOV AX,[SI]
+   MOV BX,[ES:DI]
+
+   CMP AX,BX
+   JL @NoSwap
+   MOV [SI],BX
+   MOV [ES:DI],AX
+
+@NoSwap:
+   POP DS
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ShowImage<font color="#000080">(</font>boxcolour<font color="#000080">: </font>byte<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>Theimage<font color="#000080">:</font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+     </b></font>Cls<font color="#000080">;
+
+     </font>UseColour<font color="#000080">(</font>boxcolour<font color="#000080">);
+     </font>Rectangle<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">+</font>ShapeWidth<font color="#000080">(</font>TheImage<font color="#000080">^),
+                          </font><font color="#800000">1</font><font color="#000080">+</font>ShapeHeight<font color="#000080">(</font>TheImage<font color="#000080">^));
+     </font>Block<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>TheImage<font color="#000080">^);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+</font><font color="#008000"><i>{
+Oh my God! The original code here was so err.. unoptimised!
+}
+
+
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetTheShape<font color="#000080">(</font>bmapptr<font color="#000080">:</font>pointer<font color="#000080">; </font>x1<font color="#000080">,</font>y1<font color="#000080">,</font>x2<font color="#000080">,</font>y2<font color="#000080">:</font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>ShapeFile<font color="#000080">, </font>PaletteFile<font color="#000080">: </font>PathStr<font color="#000080">;
+    </font>TheShapePointer<font color="#000080">: </font>pointer<font color="#000080">;
+
+    </font>MemRequired<font color="#000080">: </font>word<font color="#000080">;
+
+    </font>Key<font color="#000080">: </font>char<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+
+     </b></font>Sort<font color="#000080">(</font>x1<font color="#000080">,</font>x2<font color="#000080">);
+     </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>x2<font color="#000080">-</font>x1<font color="#000080">)&gt;</font><font color="#800000">254 </font><font color="#FF0000"><b>then </b></font>x2<font color="#000080">:=</font>x1<font color="#000080">+</font><font color="#800000">254</font><font color="#000080">;
+
+     </font>Sort<font color="#000080">(</font>y1<font color="#000080">,</font>y2<font color="#000080">);
+     </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>y2<font color="#000080">-</font>y1<font color="#000080">)&gt;</font><font color="#800000">199 </font><font color="#FF0000"><b>then </b></font>y2<font color="#000080">:=</font>y1<font color="#000080">+</font><font color="#800000">199</font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{
+Ahem. A small bug was here in the last version :(
+}
+
+     </i></font>MemRequired<font color="#000080">:= </font>ShapeSize<font color="#000080">(</font>x1<font color="#000080">,</font>y1<font color="#000080">,</font>x2<font color="#000080">,</font>y2<font color="#000080">);
+
+     </font>UseBitmap<font color="#000080">(</font>Bmapptr<font color="#000080">);
+
+     </font>GetMem<font color="#000080">(</font>TheShapePointer<font color="#000080">,</font>MemRequired<font color="#000080">);
+     </font>GetAShape<font color="#000080">(</font>X1<font color="#000080">,</font>Y1<font color="#000080">,</font>X2<font color="#000080">,</font>Y2<font color="#000080">,</font>TheShapePointer<font color="#000080">^);
+
+
+     </font>UseBitmap<font color="#000080">(</font>ptr<font color="#000080">(</font><font color="#800000">$a000</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">));
+     </font>UnHookKeyboardInt<font color="#000080">;
+
+
+
+
+     </font><font color="#FF0000"><b>repeat
+           </b></font>ShowImage<font color="#000080">(</font>MenuColour<font color="#000080">,</font>TheShapePointer<font color="#000080">);
+
+           </font>UseFont<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+           </font>FillArea<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>MenuY<font color="#000080">,</font><font color="#800000">319</font><font color="#000080">,</font>MenuY<font color="#000080">+</font><font color="#800000">24</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+           </font>PrintAt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>MenuY<font color="#000080">,    </font><font color="#800000">'T/B = MENU TOP/BOTTOM  +/- = COLOUR'</font><font color="#000080">);
+           </font>PrintAt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>MenuY<font color="#000080">+</font><font color="#800000">8</font><font color="#000080">,  </font><font color="#800000">'S/P = SAVE IMAGE/PALETTE TO DISK'</font><font color="#000080">);
+           </font>PrintAt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>MenuY<font color="#000080">+</font><font color="#800000">16</font><font color="#000080">, </font><font color="#800000">'X/Y = FLIP IN X/Y DIRECTION  C = CANCEL'</font><font color="#000080">);
+
+
+           </font><font color="#FF0000"><b>Repeat
+                 </b></font>key<font color="#000080">:=</font>upcase<font color="#000080">(</font>readkey<font color="#000080">);
+           </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>key <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'T'</font><font color="#000080">, </font><font color="#800000">'B'</font><font color="#000080">, </font><font color="#800000">'-'</font><font color="#000080">, </font><font color="#800000">'+'</font><font color="#000080">, </font><font color="#800000">'S'</font><font color="#000080">,</font><font color="#800000">'P'</font><font color="#000080">,</font><font color="#800000">'X'</font><font color="#000080">,</font><font color="#800000">'Y'</font><font color="#000080">,</font><font color="#800000">'C'</font><font color="#000080">]);
+
+</font>	   <font color="#FF0000"><b>Case </b></font>key <font color="#FF0000"><b>of
+           </b></font><font color="#800000">'T' </font><font color="#000080">: </font>MenuY<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+
+           </font><font color="#800000">'B' </font><font color="#000080">: </font>MenuY<font color="#000080">:=</font><font color="#800000">191</font><font color="#000080">-</font><font color="#800000">24</font><font color="#000080">;
+
+           </font><font color="#800000">'-' </font><font color="#000080">: </font>Dec<font color="#000080">(</font>MenuColour<font color="#000080">);
+
+           </font><font color="#800000">'+' </font><font color="#000080">: </font>Inc<font color="#000080">(</font>MenuColour<font color="#000080">);
+
+</font>	   <font color="#800000">'S' </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+                 </b></font>ShowImage<font color="#000080">(</font>MenuColour<font color="#000080">, </font>TheShapePointer<font color="#000080">);
+                 </font>Gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">+(</font>MenuY <font color="#FF0000"><b>SHR </b></font><font color="#800000">3</font><font color="#000080">));
+                 </font>TextColor<font color="#000080">(</font>MenuColour<font color="#000080">);
+                 </font>TextBackground<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+                 </font>Write<font color="#000080">(</font><font color="#800000">'SAVE IMAGE AS :'</font><font color="#000080">);
+                 </font>ReadLn<font color="#000080">(</font>ShapeFile<font color="#000080">);
+                 </font>SaveShape<font color="#000080">(</font>ShapeFile<font color="#000080">,</font>TheShapePointer<font color="#000080">);
+                 </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+           </font><font color="#800000">'P' </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+                 </b></font>ShowImage<font color="#000080">(</font>MenuColour<font color="#000080">, </font>TheShapePointer<font color="#000080">);
+                 </font>Gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">+(</font>MenuY <font color="#FF0000"><b>SHR </b></font><font color="#800000">3</font><font color="#000080">));
+                 </font>TextColor<font color="#000080">(</font>GetBrightestColour<font color="#000080">);
+                 </font>TextBackground<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+                 </font>Write<font color="#000080">(</font><font color="#800000">'SAVE PALETTE AS :'</font><font color="#000080">);
+                 </font>Readln<font color="#000080">(</font>PaletteFile<font color="#000080">);
+                 </font>SavePalette<font color="#000080">(</font>PaletteFile<font color="#000080">, </font>ThePalette<font color="#000080">);
+                 </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+           </font><font color="#800000">'X' </font><font color="#000080">: </font>XFlipShape<font color="#000080">(</font>TheShapePointer<font color="#000080">^);
+           </font><font color="#800000">'Y' </font><font color="#000080">: </font>YFlipShape<font color="#000080">(</font>TheShapePointer<font color="#000080">^);
+           </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>until </b></font>key <font color="#000080">= </font><font color="#800000">'C'</font><font color="#000080">;
+
+
+     </font>FreeShape<font color="#000080">(</font>TheShapePointer<font color="#000080">);
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+
+
+
+
+
+</font><font color="#008000"><i>{
+Small optimisations!
+}
+
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>UpdateBars<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>HorizontalBar<font color="#000080">, </font>VerticalBar<font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+     If </b></font>Keydown<font color="#000080">[</font><font color="#800000">72</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+        Begin
+        If </b></font>KeyDown<font color="#000080">[</font><font color="#800000">29</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+           </b></font>Dec<font color="#000080">(</font>VerticalBar<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)
+        </font><font color="#FF0000"><b>Else
+            </b></font>Dec<font color="#000080">(</font>VerticalBar<font color="#000080">);
+
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>VerticalBar <font color="#000080">&lt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>Then </b></font>VerticalBar<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>If </b></font>Keydown<font color="#000080">[</font><font color="#800000">80</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+        Begin
+        If </b></font>KeyDown<font color="#000080">[</font><font color="#800000">29</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+           </b></font>Inc<font color="#000080">(</font>VerticalBar<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)
+        </font><font color="#FF0000"><b>Else
+            </b></font>Inc<font color="#000080">(</font>VerticalBar<font color="#000080">);
+
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>VerticalBar <font color="#000080">&gt;</font><font color="#800000">199</font><font color="#000080">) </font><font color="#FF0000"><b>Then </b></font>VerticalBar<font color="#000080">:=</font><font color="#800000">199</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+     </font><font color="#FF0000"><b>If </b></font>Keydown<font color="#000080">[</font><font color="#800000">75</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+        Begin
+        If </b></font>KeyDown<font color="#000080">[</font><font color="#800000">29</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+           </b></font>Dec<font color="#000080">(</font>HorizontalBar<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)
+        </font><font color="#FF0000"><b>Else
+            </b></font>Dec<font color="#000080">(</font>HorizontalBar<font color="#000080">);
+
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>HorizontalBar <font color="#000080">&lt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>Then </b></font>HorizontalBar<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>If </b></font>Keydown<font color="#000080">[</font><font color="#800000">77</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+</b></font>	<font color="#FF0000"><b>Begin
+        If </b></font>KeyDown<font color="#000080">[</font><font color="#800000">29</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+           </b></font>Inc<font color="#000080">(</font>HorizontalBar<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">)
+        </font><font color="#FF0000"><b>Else
+            </b></font>Inc<font color="#000080">(</font>HorizontalBar<font color="#000080">);
+
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>HorizontalBar <font color="#000080">&gt;</font><font color="#800000">319</font><font color="#000080">) </font><font color="#FF0000"><b>Then </b></font>HorizontalBar<font color="#000080">:=</font><font color="#800000">319</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>GrabShape<font color="#000080">(</font>BMapPtr<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+    </b></font>Dist<font color="#000080">: </font>integer<font color="#000080">;
+    </font>TempString<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>Begin
+     </b></font>BarColour<font color="#000080">:=</font>MenuColour<font color="#000080">;
+     </font>HookKeyboardInt<font color="#000080">;
+     </font>UseBitmap<font color="#000080">(</font>ptr<font color="#000080">(</font><font color="#800000">$a000</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">));
+
+
+     </font><font color="#FF0000"><b>Repeat
+           </b></font>ShowAllBitmap<font color="#000080">(</font>BMapPtr<font color="#000080">);
+
+           </font>UseColour<font color="#000080">(</font>BarColour<font color="#000080">);
+
+           </font>Line<font color="#000080">(</font>FirstBarX<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font>FirstBarX<font color="#000080">,</font><font color="#800000">199</font><font color="#000080">);
+           </font>Line<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>FirstBarY<font color="#000080">,</font><font color="#800000">319</font><font color="#000080">,</font>FirstBarY<font color="#000080">);
+
+           </font><font color="#FF0000"><b>If </b></font>Grabbing <font color="#FF0000"><b>Then
+              Begin
+              </b></font>Line<font color="#000080">(</font>SecondBarX<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font>SecondBarX<font color="#000080">,</font><font color="#800000">199</font><font color="#000080">);
+              </font>Line<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>SecondBarY<font color="#000080">,</font><font color="#800000">319</font><font color="#000080">,</font>SecondBarY<font color="#000080">);
+
+</font>	      <font color="#FF0000"><b>If </b></font>SecondBarX <font color="#000080">&gt; </font>FirstBarX <font color="#FF0000"><b>Then
+                 </b></font>Dist<font color="#000080">:=(</font>SecondBarX <font color="#000080">- </font>FirstBarX<font color="#000080">)+</font><font color="#800000">1
+              </font><font color="#FF0000"><b>Else
+                  </b></font>Dist<font color="#000080">:=(</font>FirstBarX <font color="#000080">- </font>SecondBarX<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">;
+
+              </font>LastWidth<font color="#000080">:=</font>Dist<font color="#000080">;
+
+              </font>Str<font color="#000080">(</font>Dist<font color="#000080">,</font>TempString<font color="#000080">);
+              </font>PrintAt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">190</font><font color="#000080">,</font><font color="#800000">'WIDTH: '</font><font color="#000080">+</font>TempString<font color="#000080">);
+
+
+              </font><font color="#FF0000"><b>If </b></font>SecondBarY <font color="#000080">&gt; </font>FirstBarY <font color="#FF0000"><b>Then
+                 </b></font>Dist<font color="#000080">:=(</font>SecondBarY <font color="#000080">- </font>FirstBarY<font color="#000080">)+</font><font color="#800000">1
+              </font><font color="#FF0000"><b>Else
+                  </b></font>Dist<font color="#000080">:=(</font>FirstBarY <font color="#000080">- </font>SecondBarY<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">;
+
+              </font>Dist<font color="#000080">:=(</font>SecondBarY<font color="#000080">-</font>FirstBarY<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">;
+
+              </font>LastHeight<font color="#000080">:=</font>Dist<font color="#000080">;
+
+</font>	      Str<font color="#000080">(</font>Dist<font color="#000080">,</font>TempString<font color="#000080">);
+              </font>PrintAt<font color="#000080">(</font><font color="#800000">160</font><font color="#000080">,</font><font color="#800000">190</font><font color="#000080">,</font><font color="#800000">'HEIGHT:'</font><font color="#000080">+</font>TempString<font color="#000080">);
+
+
+              </font>UpdateBars<font color="#000080">(</font>SecondBarX<font color="#000080">, </font>SecondBarY<font color="#000080">);
+
+              </font><font color="#FF0000"><b>If </b></font>Keydown<font color="#000080">[</font><font color="#800000">57</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+                 Begin
+                 </b></font>GetTheShape<font color="#000080">( </font>BMapPtr<font color="#000080">, </font>FirstBarX<font color="#000080">,</font>FirstBarY<font color="#000080">, </font>SecondBarX<font color="#000080">,
+                              </font>SecondBarY<font color="#000080">);
+
+                 </font>UseBitmap<font color="#000080">(</font>ptr<font color="#000080">(</font><font color="#800000">$a000</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">));
+
+                 </font>HookKeyBoardInt<font color="#000080">;
+
+                 </font>Grabbing<font color="#000080">:=</font>False<font color="#000080">;
+                 </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>End
+           Else
+              Begin
+              </b></font>UpdateBars<font color="#000080">(</font>FirstBarX<font color="#000080">, </font>FirstBarY<font color="#000080">);
+              </font><font color="#FF0000"><b>If </b></font>Keydown<font color="#000080">[</font><font color="#800000">57</font><font color="#000080">] </font><font color="#FF0000"><b>Then
+              Begin
+                  </b></font>Sound<font color="#000080">(</font><font color="#800000">50</font><font color="#000080">);
+                  </font>Delay<font color="#000080">(</font><font color="#800000">100</font><font color="#000080">);
+</font>		  NoSound<font color="#000080">;
+                  </font>Grabbing<font color="#000080">:=</font>True<font color="#000080">;
+                  </font>SecondBarX<font color="#000080">:=</font>FirstBarX<font color="#000080">+</font>LastWidth<font color="#000080">;
+                  </font>SecondBarY<font color="#000080">:=</font>FirstBarY<font color="#000080">+</font>LastHeight<font color="#000080">;
+              </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+           </font><font color="#FF0000"><b>Until </b></font>KeyDown<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+     </font>UnHookKeyboardInt<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</font><font color="#008000"><i>{
+What this does is allocate memory for the PCX (Assuming 64000
+bytes are free for it) then loads the PCX into RAM, where it
+can be read (but not altered) by this program.
+}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>LoadPCXIntoBuffer<font color="#000080">(</font>ThePCXFileName<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>BMapPtr<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+     If </b></font>MaxAvail <font color="#000080">&gt; </font><font color="#800000">64000 </font><font color="#FF0000"><b>Then
+        Begin
+        </b></font>BMapPtr<font color="#000080">:=</font>New64KBitmap<font color="#000080">;
+        </font>UseBitmap<font color="#000080">(</font>BMapPtr<font color="#000080">);
+</font>	Cls<font color="#000080">;
+</font>	LoadPCX<font color="#000080">(</font>ThePCXFileName<font color="#000080">,</font>ThePalette<font color="#000080">);
+
+        </font>InitVGAMode<font color="#000080">;
+        </font>UsePalette<font color="#000080">(</font>ThePalette<font color="#000080">);
+        </font><font color="#FF0000"><b>End
+     Else
+</b></font>	 <font color="#FF0000"><b>Begin
+         </b></font>Writeln<font color="#000080">;
+         </font>Writeln<font color="#000080">(</font><font color="#800000">'Out of memory error. The program needed 64K for the'</font><font color="#000080">);
+         </font>Writeln<font color="#000080">(</font><font color="#800000">'PCX buffer but only '</font><font color="#000080">,</font>maxavail <font color="#FF0000"><b>div </b></font><font color="#800000">1024</font><font color="#000080">,</font><font color="#800000">'K was'</font><font color="#000080">);
+         </font>Writeln<font color="#000080">(</font><font color="#800000">'available.'</font><font color="#000080">);
+         </font>Writeln<font color="#000080">;
+         </font>Halt<font color="#000080">;
+         </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+
+
+
+
+
+</font><font color="#008000"><i>{
+Ask for the name of PCX to load.
+}
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>LoadPCXFile<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>BMapPtr<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>PCXName<font color="#000080">: </font>PathStr<font color="#000080">;
+    </font>DummyFileVar<font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>TextColor<font color="#000080">(</font>LIGHTGRAY<font color="#000080">);
+     </font>Writeln<font color="#000080">;
+     </font>Writeln<font color="#000080">;
+     </font>Writeln<font color="#000080">;
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'PCX Shape grabber version 2 (C) 1996 Scott Tunstall.'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'All rights reserved. This item is FREEWARE.'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;&Iacute;'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">;
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'Written especially for :'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'   SourceWare Archival Group'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'   Geoff Bassett'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'   Scott &quot;B &amp; Q&quot; Ramsay'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">(</font><font color="#800000">'   Paul Langa'</font><font color="#000080">);
+     </font>Writeln<font color="#000080">;
+
+
+     </font><font color="#FF0000"><b>If </b></font>ParamCount <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+        Begin
+        </b></font>Writeln<font color="#000080">;
+        </font>Write<font color="#000080">(</font><font color="#800000">'Enter name of 256 colour PCX file to load :'</font><font color="#000080">);
+
+        </font>PCXName<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+</font>	Readln<font color="#000080">(</font>PCXName<font color="#000080">);
+        </font>Assign<font color="#000080">(</font>DummyFileVar<font color="#000080">,</font>PCXName<font color="#000080">);
+        </font><font color="#008000"><i>{$i-}
+        </i></font>Reset<font color="#000080">(</font>DummyFileVar<font color="#000080">);
+        </font><font color="#008000"><i>{$i+}
+
+        </i></font><font color="#FF0000"><b>If </b></font>IoResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+           </b></font>LoadPCXIntoBuffer<font color="#000080">(</font>PCXName<font color="#000080">,</font>BMapPtr<font color="#000080">)
+        </font><font color="#FF0000"><b>Else
+            Begin
+            </b></font>TextColor<font color="#000080">(</font>LIGHTRED<font color="#000080">);
+            </font>Writeln<font color="#000080">;
+</font>	    Writeln<font color="#000080">(</font><font color="#800000">'Error in loading your .PCX file! The file with the name'</font><font color="#000080">);
+            </font>Writeln<font color="#000080">(</font><font color="#800000">'that you specified does not exist...'</font><font color="#000080">);
+            </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>End
+     Else
+         </b></font>LoadPCXIntoBuffer<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">),</font>BMapPtr<font color="#000080">);
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+
+
+
+
+
+
+
+</font><font color="#008000"><i>{
+Main()
+}
+
+</i></font><font color="#FF0000"><b>Begin
+
+     </b></font>Grabbing<font color="#000080">:=</font>False<font color="#000080">;
+     </font>FirstBarX<font color="#000080">:=</font><font color="#800000">160</font><font color="#000080">;
+     </font>FirstBarY<font color="#000080">:=</font><font color="#800000">100</font><font color="#000080">;
+     </font>SecondBarX<font color="#000080">:=</font><font color="#800000">160</font><font color="#000080">;
+     </font>SecondBarY<font color="#000080">:=</font><font color="#800000">100</font><font color="#000080">;
+     </font>LastWidth<font color="#000080">:=</font><font color="#800000">16</font><font color="#000080">;
+     </font>LastHeight<font color="#000080">:=</font><font color="#800000">16</font><font color="#000080">;
+
+
+     </font>Directvideo<font color="#000080">:=</font>False<font color="#000080">;
+
+     </font>LoadPCXFile<font color="#000080">(</font>BufferPtr<font color="#000080">);
+     </font>MenuColour<font color="#000080">:=</font>GetBrightestColour<font color="#000080">;
+     </font>MenuY<font color="#000080">:=</font><font color="#800000">191</font><font color="#000080">-</font><font color="#800000">24</font><font color="#000080">;
+
+     </font>GrabShape<font color="#000080">(</font>BufferPtr<font color="#000080">);
+     </font>FreeBitmap<font color="#000080">(</font>BufferPtr<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0239.PAS">Original</a><b>]</b></p></body>
+</html>

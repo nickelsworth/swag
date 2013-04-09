@@ -1,0 +1,119 @@
+<html>
+<head><title> "XALLOC Unit" by SWAG TEAM SUPPORT</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0103.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>Unit </b></font>Xalloc<font color="#000080">; </font><font color="#008000"><i>{ EXPanded Memory Unit }
+
+</i></font><font color="#FF0000"><b>Interface
+
+Const </b></font>nilpage<font color="#000080">=</font><font color="#800000">$ff</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type </b></font>xaddress <font color="#000080">= </font><font color="#FF0000"><b>record
+      </b></font>page<font color="#000080">:</font>byte<font color="#000080">;
+      </font>pos <font color="#000080">:</font>word<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function  </b></font>xalloc_init<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>xgetmem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>x<font color="#000080">:</font>xaddress<font color="#000080">;</font>size<font color="#000080">:</font>word<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>xfreemem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>x<font color="#000080">:</font>xaddress<font color="#000080">;</font>size<font color="#000080">:</font>word<font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>xpage_in<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>x<font color="#000080">:</font>xaddress<font color="#000080">):</font>pointer<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>xmaxavail<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>function  </b></font>xmemavail<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>xalloc_done<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+uses </b></font>dos<font color="#000080">,</font>crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>emm_int <font color="#000080">= </font><font color="#800000">$67</font><font color="#000080">;
+  </font>dos_int <font color="#000080">= </font><font color="#800000">$21</font><font color="#000080">;
+  </font>maxfreeblock <font color="#000080">= </font><font color="#800000">4000</font><font color="#000080">;
+  </font>xblocksize <font color="#000080">= </font><font color="#800000">$4000</font><font color="#000080">;
+  </font>_get_frame <font color="#000080">= </font><font color="#800000">$41</font><font color="#000080">;
+  </font>_unalloc_cound <font color="#000080">= </font><font color="#800000">$42</font><font color="#000080">;
+  </font>_alloc_pages <font color="#000080">= </font><font color="#800000">$43</font><font color="#000080">;
+  </font>_map_page <font color="#000080">= </font><font color="#800000">$44</font><font color="#000080">;
+  </font>_dealloc_pages <font color="#000080">= </font><font color="#800000">$45</font><font color="#000080">;
+  </font>_change_alloc <font color="#000080">= </font><font color="#800000">$51</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+    </b></font>xheap <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1000</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;
+    </font>fblock <font color="#000080">= </font><font color="#FF0000"><b>record
+     </b></font>page<font color="#000080">:</font>byte<font color="#000080">;
+     </font>start<font color="#000080">,</font>stop<font color="#000080">:</font>word<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>fblockarray <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>maxfreeblock<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>fblock<font color="#000080">;
+</font><font color="#FF0000"><b>var
+   </b></font>regs<font color="#000080">:</font>registers<font color="#000080">;
+   </font>handle<font color="#000080">,</font>tot_pages<font color="#000080">:</font>word<font color="#000080">;
+   </font>xheapptr<font color="#000080">:^</font>xheap<font color="#000080">;
+   </font>xfreeptr<font color="#000080">:^</font>fblockarray<font color="#000080">;
+   </font>last_page<font color="#000080">,</font>lastptr<font color="#000080">:</font>integer<font color="#000080">;
+   </font>map<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;
+   </font>frame<font color="#000080">:</font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ems_isntalled<font color="#000080">: </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>const </b></font>device_name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">8</font><font color="#000080">]=</font><font color="#800000">'EMMXXXX0'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>var </b></font>i<font color="#000080">:</font>integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+  </b></font>ems_installed<font color="#000080">:=</font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>regs <font color="#FF0000"><b>do
+     begin
+     </b></font>ah<font color="#000080">:=</font><font color="#800000">$35</font><font color="#000080">;
+     </font>al <font color="#000080">:= </font>emm_int<font color="#000080">;
+     </font>intr<font color="#000080">(</font>dos_int<font color="#000080">,</font>regs<font color="#000080">);
+     </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">8 </font><font color="#FF0000"><b>do if </b></font>device_name<font color="#000080">[</font>i<font color="#000080">]&lt;&gt;</font>chr<font color="#000080">(</font>mem<font color="#000080">[</font>es<font color="#000080">:</font>i<font color="#000080">+</font><font color="#800000">9</font><font color="#000080">]) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ems_installed<font color="#000080">:=</font>true<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>unalloc_count<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>available<font color="#000080">: </font>word<font color="#000080">):</font>boolean<font color="#000080">;
+ </font><font color="#FF0000"><b>begin
+ with </b></font>regs <font color="#FF0000"><b>do
+  begin
+  </b></font>ah <font color="#000080">:= </font>_unalloc_count<font color="#000080">;
+  </font>intr<font color="#000080">(</font>emm_int<font color="#000080">,</font>regs<font color="#000080">);
+  </font>available <font color="#000080">:= </font>bx<font color="#000080">;
+  </font>unalloc_count <font color="#000080">:= </font>ah <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">; 
+  
+</font><font color="#FF0000"><b>Function </b></font>alloc_pages<font color="#000080">(</font>needed<font color="#000080">:</font>integer<font color="#000080">):</font>boolean<font color="#000080">;
+ </font><font color="#FF0000"><b>begin
+ with </b></font>regs <font color="#FF0000"><b>do
+   begin
+   </b></font>ah <font color="#000080">:= </font>_alloc_pages<font color="#000080">;
+   </font>bx <font color="#000080">:= </font>needed<font color="#000080">;
+   </font>intr<font color="#000080">(</font>emm_int<font color="#000080">,</font>regs<font color="#000080">);
+   </font>handle <font color="#000080">:= </font>dx<font color="#000080">;
+   </font>alloc_pages <font color="#000080">:= </font>ah <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  
+
+</font><font color="#FF0000"><b>function </b></font>xdealloc_pages<font color="#000080">: </font>boolean<font color="#000080">;
+ </font><font color="#FF0000"><b>begin
+ with </b></font>regs <font color="#FF0000"><b>do begin
+   </b></font>ah <font color="#000080">:= </font>_dealloc_pages<font color="#000080">;
+   </font>dx <font color="#000080">:= </font>handle<font color="#000080">;
+   </font>intr<font color="#000080">(</font>emm_int<font color="#000080">,</font>regs<font color="#000080">);
+   </font>xdealloc_pages <font color="#000080">:= </font>ah <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ 
+</font><font color="#FF0000"><b>function </b></font>change_alloc<font color="#000080">(</font>needed<font color="#000080">: </font>integer<font color="#000080">): </font>boolean<font color="#000080">;
+ </font><font color="#FF0000"><b>begin
+ with </b></font>regs <font color="#FF0000"><b>do begin
+   </b></font>ah <font color="#000080">:= </font>_change_alloc<font color="#000080">;
+   </font>bx <font color="#000080">:= </font>needed<font color="#000080">;
+   </font>dx <font color="#000080">:= </font>handle<font color="#000080">;
+   </font>intr<font color="#000080">(</font>emm_int<font color="#000080">,</font>regs<font color="#000080">);
+   </font>change_alloc <font color="#000080">:= </font>ah<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ 
+
+
+ 
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0103.PAS">Original</a><b>]</b></p></body>
+</html>

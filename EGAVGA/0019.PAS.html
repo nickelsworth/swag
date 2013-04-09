@@ -1,0 +1,181 @@
+<html>
+<head><title> "More MODEXY for VGA" by KAI ROHRBACHER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Kai Rohrbacher
+
+&gt;&gt; Basically,  Mode  Y  works  like  this:  use  the BIOS to switch
+&gt;&gt; into normal 320x200x256  mode,  then reprogram the sequencer to
+&gt;&gt; unchain the 4 bitplanes. This  results  in  a bitplaned VRAM layout
+&gt;&gt; very similiar to the EGA/VGA's 16 color modes:
+&gt;
+&gt; By saying 4 bitplanes, are you referering to the pages? I know that
+&gt; you can specify 4 pages in mode X/Y.
+
+No, it just means that with each VRAM address, 4 physically different RAM cells
+can be addressed: you may think of a &quot;3-dimensional&quot; architecture of your VGA's
+VRAM (ASCII sucks, I know...)
+             ____________
+            |*  plane3   |
+         ___|_________   |
+        |*   plane2   |__|
+     ___|__________   |
+    |*   plane1    |__|
+ ___|___________   |
+|*   plane0     |__|
+|               |
+|_______________|
+
+The upper left corner of each bitplane (marked by a &quot;*&quot;) is referenced with the
+address $A000:0, but refers to 4 pixels! It is quite simple: instead of
+counting &quot;$A000:0 is the first pixel, $A000:1 is the 2nd, $A000:2 is the 3rd,
+$A000:3 is the 4th, $A000:4 is the 5th&quot; (as you would do in the normal BIOS
+mode 320x200x256), the pixels now are distributed this way: &quot;$A000:0/plane 0 is
+the 1st, $A000:0/plane 1 is the 2nd, $A000:0/plane 2 is the 3rd, $A000:0/plane
+3 is the 4th, $A000:1/plane 0 is the 5th&quot; and so on.
+So obviously, w/o doing some &quot;bitplane switching&quot;, you are always restricted to
+work on one bitplane at a time --the one actually being activated. If this is
+plane0, you may only change pixels which (x mod 4) remainder is 0, the other
+ones with (x mod 4)=1|2|3 aren't accessible, you have to &quot;switch to the plane&quot;
+first. Thus the name &quot;bitplane&quot;!
+
+DT&gt; And what exactly does &quot;unchain&quot; mean, as opposed to &quot;chained&quot;. I have the
+DT&gt; feeling that they refer to each page(bitplane) being on its own.
+Huhh, that would go pretty much into details; a bit simplified, &quot;chained&quot; means
+that the bitplanes mentioned above are &quot;glued&quot; together for the simple BIOS
+mode, so that bitplane switching isn't necessary anymore (that is equivalent in
+saying that one VRAM address refers to one RAM cell). As there are only 65536
+addresses in the $A000 segment and we need 320x200=64000 for a full page, you
+only have 65536/64000=1.024 pages therefore. &quot;Unchaining&quot; means to make each
+bitplane accessible explicitely.
+
+&gt; Now here is another problem I don't understand. I am familiar with VGA's
+&gt; mode 13h which has one byte specifying each pixel on the screen,
+&gt; therefore 1 byte = 1 pixel. But this takes up 64k.
+
+Small note on this: not 64K, but only 64000 bytes!
+
+&gt; But how do you have one address represent 4 pixels, which only occupies
+&gt; 16000 address bytes, and still be able to specify 256 colours. Won't 4
+&gt; bitplanes at 320x200 each take up 64000x4 bytes of space?
+
+We have 320x200=64000 pixels=64000 bytes. As each 4 pixels share one address,
+16000 address bytes per page suffice. The $A000 segment has 64K address bytes,
+thus 4*64K=256K VRAM can be addressed. 64K address bytes = 65536 address bytes;
+65536/16000 = 4.096 pages.
+
+&gt; How would you go about adjusting the vertical retraces, and memory
+&gt; location you mentioned.
+
+Assuming that the DX-register has been set to 3DAh or 3BAh for color/monochrome
+display, respectively, you can trace the status of the electronic beam like
+this:
+
+  @WaitNotVSyncLoop:
+    in   al, dx
+    and  al, 8
+    jnz  @WaitNotVSyncLoop
+  @WaitVSyncLoop:
+    in   al, dx
+    and  al, 8
+    jz   @WaitVSyncLoop
+  {now change the starting address}
+{
+(If you use &quot;1&quot; instead of &quot;8&quot; and exchange &quot;jz&quot; &lt;-&gt; &quot;jnz&quot; and vice vs., then
+you sync on the shorter horizontal retrace (better: horizontal _enable_)
+signal).
+The alteration of the starting address is done by the code I already posted in
+my first mail! (Its done by addressing the registers $C and $D of the
+CRT-controller).
+Note that reprogramming the starting address isn't restricted to mode X/Y, you
+can have it in normal mode 13h, too: there are 65536 addresses available, but
+only 64000 needed, thus giving a scroll range of 4.8 lines! And to complicate
+things even further, for start addressing purposes, even the BIOS mode is
+planed (that is, a row consists of 320/4 bytes only). Just for the case you
+don't believe...
+}
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>Scroll<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>CRTAddress<font color="#000080">,
+  </font>StatusReg   <font color="#000080">: </font>WORD<font color="#000080">;
+  </font>a           <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">199</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">319</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE <font color="#FF0000"><b>ABSOLUTE </b></font><font color="#800000">$A000 </font><font color="#000080">: </font><font color="#800000">0000</font><font color="#000080">;
+  </font>i<font color="#000080">, </font>j        <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SetAddress<font color="#000080">(</font>ad <font color="#000080">: </font>WORD<font color="#000080">); </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">MOV BX, ad
+
+  MOV DX, StatusReg
+  @WaitNotVSyncLoop:
+    in   al, dx
+    and  al, 8
+    jnz  @WaitNotVSyncLoop
+  @WaitVSyncLoop:
+    in   al, dx
+    and  al, 8
+    jz   @WaitVSyncLoop
+
+  MOV DX, CRTAddress
+  MOV AL, $0D
+  CLI
+  OUT DX, AL
+  INC DX
+  MOV AL, BL
+  OUT DX, AL
+  DEC DX
+  MOV AL, $0C
+  OUT DX, AL
+  INC DX
+  MOV AL, BH
+  OUT DX, AL
+  STI
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>ODD<font color="#000080">(</font>port<font color="#000080">[</font><font color="#800000">$3CC</font><font color="#000080">]) </font><font color="#FF0000"><b>THEN
+    </b></font>CRTAddress <font color="#000080">:= </font><font color="#800000">$3D4
+  </font><font color="#FF0000"><b>ELSE
+    </b></font>CRTAddress <font color="#000080">:= </font><font color="#800000">$3B4</font><font color="#000080">;
+
+  </font>StatusReg <font color="#000080">:= </font>CRTAddress <font color="#000080">+ </font><font color="#800000">6</font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">MOV AX,13h
+    INT 10h
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">1000 </font><font color="#FF0000"><b>DO
+   </b></font>a<font color="#000080">[</font>Random<font color="#000080">(</font><font color="#800000">200</font><font color="#000080">), </font>Random<font color="#000080">(</font><font color="#800000">320</font><font color="#000080">)] := </font>Random<font color="#000080">(</font><font color="#800000">256</font><font color="#000080">);
+
+  </font><font color="#008000"><i>{scroll horizontally by 4 pixels}
+  </i></font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">383 </font><font color="#FF0000"><b>DO
+    </b></font>SetAddress<font color="#000080">(</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">382 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+    </b></font>SetAddress<font color="#000080">(</font>i<font color="#000080">);
+
+  </font><font color="#008000"><i>{scroll vertically by 1 row}
+  </i></font><font color="#FF0000"><b>FOR </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">20 </font><font color="#FF0000"><b>DO
+  BEGIN
+    FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">4 </font><font color="#FF0000"><b>DO
+      </b></font>SetAddress<font color="#000080">(</font>i <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">);
+    </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">3 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+      </b></font>SetAddress<font color="#000080">(</font>i <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">)
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>ASM </b></font><font color="#008000"><i>{back to 80x25}
+    </i></font><font color="#FF00FF">MOV AX,3
+    INT 10h
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font><font color="#008000"><i>{
+&gt; Your said you could specify how the memory can be layed out by the user,
+&gt; but I am in need of what each PORT does. I know you have to send
+&gt; different values to the port to program it, but I have no idea what each
+&gt; port reads.
+
+There are incredibly much registers to program! For a good overview of most of
+them, try to get your hands on a copy of VGADOC*.* by Finn Thoegersen
+(jesperf@daimi.aau.dk) which covers programming a lot of SVGA's chipsets, too.
+
+
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p></body>
+</html>

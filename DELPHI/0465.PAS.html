@@ -1,0 +1,462 @@
+<html>
+<head><title> "Regular expression searching for Delphi" by NEIL BUTTERWORTH</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0465.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>//------------------------------------------------------------------------------
+// RegExpUnit.Pas			Copyright (C) 1997  Object Dynamics Ltd.
+//
+// An implementation of regular expression searching for Delphi 2 and later. The
+// code is based on that presented by Kernighan &amp; Plauger in their book
+// &quot;Software Tools in Pascal&quot; (ISBN 0-201-10342-7). You should consult this book
+// for a detailed explanation of how this implementation works, as the code is
+// not particularly heavily commented!
+//
+// 								*** IMPORTANT ***
+//
+// By using this code, you accept the following conditions:
+//
+//  	You may use and adapt this code freely, but it remains the
+// 	copyright of Object Dynamics Ltd. Any adaptations must retain the
+// 	copyright message at the head of this file.
+//
+//		You use this code at your own risk. Object Dynamics is not responsible
+//    for any loss or damage caused by programs using this code.
+//
+//
+// History:
+//
+//		Version 1.0 Created by Neil Butterworth, September 1997
+//       - Fixed problem with .* not matching entire line
+//
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>unit </b></font>ODRegExpUnit<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+</b></font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Find
+//
+// Searches the string &quot;str&quot; from position &quot;start&quot; for the pattern &quot;pat&quot;. The
+// pattern must have been constructed using one of the two MakePattern functions
+// described below.
+//
+// The function returns the position of the pattern in the string, or zero if
+// no match is found. If there is a match, the length of matched characters
+// is returned in the &quot;len&quot; parameter.
+//
+// If the &quot;csense&quot; parameter is false, the case of characters is ignored.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>Find<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start <font color="#000080">: </font>integer<font color="#000080">;
+</font>					<font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>len <font color="#000080">: </font>integer<font color="#000080">;
+               </font>csense <font color="#000080">: </font>boolean <font color="#000080">) : </font>integer<font color="#000080">;
+
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// MakePattern
+//
+// Constructs an encoded version of a regular expression, required for input
+// as the &quot;pat&quot; parameter of Find, described above.
+//
+// MakePattern begins construction of the pattern at the position indicated
+// by &quot;start&quot; - this should almost always be 1. This extraneous parameter is
+// maintained for future Software Tools compatibility.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>MakePattern<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start <font color="#000080">: </font>integer <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// MakePatternNoRegexp
+//
+// As above, but treats all regular expression characters as non-special. For
+// example:
+//
+//		MakePattern( '[a-z]') wo
+//
+// would create apattern that would match the string '[a-z]', rather than
+// one that would match a single lower-case character.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>MakePatternNoRegEx<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start <font color="#000080">: </font>integer <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+
+
+</i></font><font color="#FF0000"><b>implementation
+
+uses
+</b></font>	SysUtils<font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// The following constants define the symbols used by regular expressions. The
+// set used is identical to that used by UNIX programs such as vi and ed, but
+// does not include extended regular expressions as used by (for example )nawk.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>const
+</b></font>	CLOSURE <font color="#000080">= </font><font color="#800000">'*'</font><font color="#000080">;</font>					<font color="#008000"><i>// match zero or more of preceding character
+   </i></font>BOL <font color="#000080">= </font><font color="#800000">'^'</font><font color="#000080">;                 </font><font color="#008000"><i>// beginning of line
+</i></font>	EOL <font color="#000080">= </font><font color="#800000">'$'</font><font color="#000080">;                 </font><font color="#008000"><i>// end of line
+</i></font>	ESCAPE <font color="#000080">= </font><font color="#800000">'\'</font><font color="#000080">;              </font><font color="#008000"><i>// escape next character
+   </i></font>DASH <font color="#000080">= </font><font color="#800000">'-'</font><font color="#000080">;                </font><font color="#008000"><i>// used in [a-z] type expressions
+   </i></font>NEGATE <font color="#000080">= </font><font color="#800000">'^'</font><font color="#000080">;              </font><font color="#008000"><i>// negate next character/range in [a-z] expression
+   </i></font>CCL <font color="#000080">=</font><font color="#800000">'['</font><font color="#000080">;                  </font><font color="#008000"><i>// intro for [a-z] expressions
+   </i></font>CCLEND <font color="#000080">= </font><font color="#800000">']'</font><font color="#000080">;</font>             	<font color="#008000"><i>// outro for [a-z] expressions
+   </i></font>ANY <font color="#000080">= </font><font color="#800000">'.'</font><font color="#000080">;</font>                	<font color="#008000"><i>// match any single character
+
+
+//------------------------------------------------------------------------------
+// These are used for internally encoding expressions
+//------------------------------------------------------------------------------
+
+   </i></font>NCCL <font color="#000080">= </font><font color="#800000">'!'</font><font color="#000080">;</font>    				<font color="#008000"><i>// negate [a-z] must not be same as NEGATE!!!
+   </i></font>LITCHAR <font color="#000080">= </font><font color="#800000">'@'</font><font color="#000080">;</font>           	<font color="#008000"><i>// quote single literal character
+   </i></font>TAB <font color="#000080">= </font>char<font color="#000080">( </font><font color="#800000">9 </font><font color="#000080">);           </font><font color="#008000"><i>// tab
+
+//------------------------------------------------------------------------------
+// Convert a single character to uppercase (if possible)
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>ToUpper<font color="#000080">( </font>c <font color="#000080">: </font>char <font color="#000080">) : </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>if </b></font><font color="#000080">(( </font>c <font color="#000080">&gt;= </font><font color="#800000">'a' </font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>c <font color="#000080">&lt;=</font><font color="#800000">'z'</font><font color="#000080">)) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font>char<font color="#000080">(</font>integer<font color="#000080">(</font>c<font color="#000080">) - </font><font color="#800000">32</font><font color="#000080">)
+   </font><font color="#FF0000"><b>else
+</b></font>   	result <font color="#000080">:= </font>c<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Compare two characters for equality. If csense is false, the comparison
+// ignores case.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>CmpChar<font color="#000080">( </font>c1<font color="#000080">, </font>c2 <font color="#000080">: </font>char<font color="#000080">; </font>csense <font color="#000080">: </font>boolean <font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>csense <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font>c1 <font color="#000080">= </font>c2
+   <font color="#FF0000"><b>else
+</b></font>   	result <font color="#000080">:= </font>ToUpper<font color="#000080">(</font>c1<font color="#000080">) = </font>ToUpper<font color="#000080">(</font>c2<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Check if single character is alphanumeric.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>IsAlphaNum<font color="#000080">( </font>c <font color="#000080">: </font>char <font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	result <font color="#000080">:= ((</font>c<font color="#000080">&gt;= </font><font color="#800000">'A'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>c<font color="#000080">&lt;=</font><font color="#800000">'Z'</font><font color="#000080">))
+</font>   				<font color="#FF0000"><b>or </b></font><font color="#000080">((</font>c <font color="#000080">&gt;=</font><font color="#800000">'a'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>c<font color="#000080">&lt;=</font><font color="#800000">'z'</font><font color="#000080">))
+               </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font>c<font color="#000080">&gt;=</font><font color="#800000">'0'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>c<font color="#000080">&lt;=</font><font color="#800000">'9'</font><font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Check if index is beyond the last character position in a string.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>AtEnd<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>index <font color="#000080">: </font>integer <font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	result <font color="#000080">:= </font>index <font color="#000080">&gt; </font>Length<font color="#000080">( </font>str <font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Expand an escaped character.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>Esc<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>integer <font color="#000080">) : </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>s<font color="#000080">[</font>i<font color="#000080">] &lt;&gt; </font>ESCAPE <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font>s<font color="#000080">[</font>i<font color="#000080">]
+   </font><font color="#FF0000"><b>else if </b></font><font color="#000080">( </font>AtEnd<font color="#000080">( </font>s<font color="#000080">, </font>i<font color="#000080">+</font><font color="#800000">1 </font><font color="#000080">)) </font><font color="#FF0000"><b>then
+      </b></font>result <font color="#000080">:= </font>ESCAPE
+   <font color="#FF0000"><b>else begin
+</b></font>   	inc<font color="#000080">( </font>i <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">( </font>s<font color="#000080">[</font>i<font color="#000080">] = </font><font color="#800000">'t' </font><font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>      	result <font color="#000080">:= </font>TAB
+      <font color="#FF0000"><b>else
+</b></font>      	result <font color="#000080">:= </font>s<font color="#000080">[</font>i<font color="#000080">];
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Expand a character class in the form c1-c2. For example a-d expands to &quot;abcd&quot;.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>ExpandDash<font color="#000080">( </font>delim <font color="#000080">: </font>char<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>integer <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	k <font color="#000080">: </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+</font>	<font color="#FF0000"><b>while</b></font><font color="#000080">( (</font>pat<font color="#000080">[</font>i<font color="#000080">] &lt;&gt; </font>delim<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>pat<font color="#000080">, </font>i <font color="#000080">))) </font><font color="#FF0000"><b>do begin
+</b></font>   	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">] = </font>ESCAPE <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>Esc<font color="#000080">( </font>pat<font color="#000080">, </font>i <font color="#000080">)
+      </font><font color="#FF0000"><b>else if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">] &lt;&gt; </font>DASH <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>pat<font color="#000080">[</font>i<font color="#000080">]
+      </font><font color="#FF0000"><b>else if </b></font><font color="#000080">( </font>AtEnd<font color="#000080">( </font>pat<font color="#000080">, </font>i <font color="#000080">)) </font><font color="#FF0000"><b>then
+</b></font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>DASH
+      <font color="#FF0000"><b>else if </b></font><font color="#000080">( </font>IsAlphaNum<font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] )
+</font>      		<font color="#FF0000"><b>and </b></font>IsAlphaNum<font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">])
+            </font><font color="#FF0000"><b>and </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] &lt;= </font>pat<font color="#000080">[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">])) </font><font color="#FF0000"><b>then  begin
+</b></font>      	<font color="#FF0000"><b>for </b></font>k <font color="#000080">:= </font>char<font color="#000080">(</font>integer<font color="#000080">(</font>pat<font color="#000080">[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]) + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>to </b></font>pat<font color="#000080">[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>do
+</b></font>         	result <font color="#000080">:= </font>result <font color="#000080">+  </font>k<font color="#000080">;
+         </font>inc<font color="#000080">( </font>i <font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else
+</b></font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>DASH<font color="#000080">;
+      </font>inc<font color="#000080">( </font>i <font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Expand character class in form [a-z]
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>ExpandCharClass<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>c <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>integer <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	countpos <font color="#000080">: </font>integer<font color="#000080">;
+   </font>tmp <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+</font>	inc<font color="#000080">( </font>i <font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">( </font>c<font color="#000080">[</font>i<font color="#000080">] = </font>NEGATE <font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font>   	result <font color="#000080">:= </font>result <font color="#000080">+ </font>NCCL<font color="#000080">;
+      </font>inc <font color="#000080">( </font>i <font color="#000080">);
+   </font><font color="#FF0000"><b>end
+   else
+</b></font>   	result <font color="#000080">:= </font>result <font color="#000080">+ </font>CCL<font color="#000080">;
+</font>	result <font color="#000080">:= </font>result <font color="#000080">+ </font><font color="#800000">' '</font><font color="#000080">;
+   </font>countpos <font color="#000080">:= </font>Length<font color="#000080">( </font>result <font color="#000080">);
+   </font>tmp <font color="#000080">:= </font>ExpandDash<font color="#000080">( </font>CCLEND<font color="#000080">, </font>c<font color="#000080">, </font>i <font color="#000080">);
+   </font>result<font color="#000080">[</font>countpos<font color="#000080">] := </font>char<font color="#000080">(</font>length<font color="#000080">(</font>tmp<font color="#000080">));
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">( </font>c<font color="#000080">[</font>i<font color="#000080">] = </font>CCLEND <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font>result <font color="#000080">+ </font>tmp
+   <font color="#FF0000"><b>else
+</b></font>   	result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Insert a closure symbol at position cpos.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>procedure </b></font>InsertClosure<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>cpos <font color="#000080">: </font>integer <font color="#000080">);
+</font><font color="#FF0000"><b>begin
+</b></font>	Insert<font color="#000080">( </font>CLOSURE<font color="#000080">, </font>pat<font color="#000080">, </font>cpos <font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Construct a pattern from an expression. A pattern is an expanded encoding
+// of an expression, which the search functions need. This version ignores
+// ALL regular expression characters.
+//
+// The &quot;start&quot; parameter indicates the starting point in the expression. This
+// will almost always be 1.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>MakePatternNoRegEx<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start <font color="#000080">: </font>integer <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	i <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+   </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font>start <font color="#FF0000"><b>to </b></font>length<font color="#000080">( </font>pat <font color="#000080">) </font><font color="#FF0000"><b>do
+</b></font>   	result <font color="#000080">:= </font>result <font color="#000080">+ </font>LITCHAR <font color="#000080">+ </font>pat<font color="#000080">[</font>i<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// As above, but handles regualr expression characters.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>MakePattern<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start <font color="#000080">: </font>integer <font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	p<font color="#000080">, </font>pstart<font color="#000080">, </font>i <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	i <font color="#000080">:= </font>start<font color="#000080">;
+   </font>result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+</font>	pstart <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font>  	<font color="#FF0000"><b>while</b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>pat<font color="#000080">, </font>i <font color="#000080">) ) </font><font color="#FF0000"><b>do begin
+</b></font>		<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">] = </font>ANY <font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font>			pstart <font color="#000080">:= </font>Length<font color="#000080">( </font>result <font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+</font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>ANY<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else if </b></font><font color="#000080">( (</font>pat<font color="#000080">[</font>i<font color="#000080">] = </font>BOL<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>i <font color="#000080">= </font>start <font color="#000080">)) </font><font color="#FF0000"><b>then begin
+</b></font>      	pstart <font color="#000080">:= </font>Length<font color="#000080">( </font>result <font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+</font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>BOL<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else if </b></font><font color="#000080">( (</font>pat<font color="#000080">[</font>i<font color="#000080">] =</font>EOL<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>AtEnd<font color="#000080">(</font>pat<font color="#000080">, </font>i<font color="#000080">+</font><font color="#800000">1 </font><font color="#000080">)) </font><font color="#FF0000"><b>then begin
+</b></font>      	pstart <font color="#000080">:= </font>length<font color="#000080">( </font>result <font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+</font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>EOL<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>i<font color="#000080">] = </font>CCL <font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font>      	pstart <font color="#000080">:= </font>length<font color="#000080">( </font>result <font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+</font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>ExpandCharClass<font color="#000080">( </font>pat<font color="#000080">, </font>i <font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else if </b></font><font color="#000080">( ( </font>pat<font color="#000080">[</font>i<font color="#000080">] = </font>CLOSURE <font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">( </font>i <font color="#000080">&gt; </font>start <font color="#000080">)) </font><font color="#FF0000"><b>then begin
+</b></font>      	p <font color="#000080">:= </font>pstart<font color="#000080">;
+         </font>pstart <font color="#000080">:= </font>length<font color="#000080">( </font>result <font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+</font>			<font color="#FF0000"><b>if </b></font><font color="#000080">( ( </font>p <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>result<font color="#000080">[</font>p<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font>BOL<font color="#000080">, </font>EOL<font color="#000080">, </font>CLOSURE<font color="#000080">]) ) </font><font color="#FF0000"><b>then begin
+</b></font>         	result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+            </font>exit<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font>InsertClosure<font color="#000080">( </font>result<font color="#000080">, </font>p <font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else begin
+</b></font>			pstart <font color="#000080">:= </font>length<font color="#000080">( </font>result <font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+</font>      	result <font color="#000080">:= </font>result <font color="#000080">+ </font>LITCHAR <font color="#000080">+ </font>Esc<font color="#000080">( </font>pat<font color="#000080">, </font>i <font color="#000080">);
+</font>		<font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>inc<font color="#000080">( </font>i <font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Get length of piece of a pattern. For example, the encoded length of the
+// expression 'a' is 2, as it is encodeds a LITCHAR followed by an 'a'
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>PatSize<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>n <font color="#000080">: </font>integer <font color="#000080">) : </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>n<font color="#000080">] = </font>LITCHAR <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font><font color="#800000">2
+   </font><font color="#FF0000"><b>else if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>n<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font>BOL<font color="#000080">, </font>EOL<font color="#000080">, </font>ANY<font color="#000080">, </font>CLOSURE<font color="#000080">] ) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font><font color="#800000">1
+   </font><font color="#FF0000"><b>else if </b></font><font color="#000080">( (</font>pat<font color="#000080">[</font>n<font color="#000080">] = </font>CCL<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>pat<font color="#000080">[</font>n<font color="#000080">] = </font>NCCL<font color="#000080">)) </font><font color="#FF0000"><b>then
+</b></font>   	result <font color="#000080">:= </font>integer<font color="#000080">( </font>pat<font color="#000080">[</font>n<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">] ) + </font><font color="#800000">2</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Find single character in character class.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>LocateChar<font color="#000080">( </font>c <font color="#000080">: </font>char<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>offset <font color="#000080">: </font>integer<font color="#000080">;
+</font>									csense <font color="#000080">: </font>boolean <font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	i <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	result <font color="#000080">:= </font>false<font color="#000080">;
+   </font>i <font color="#000080">:= </font>offset <font color="#000080">+ </font>integer<font color="#000080">( </font>pat<font color="#000080">[</font>offset<font color="#000080">] );
+   </font><font color="#FF0000"><b>while</b></font><font color="#000080">( </font>i <font color="#000080">&gt; </font>offset <font color="#000080">) </font><font color="#FF0000"><b>do begin
+</b></font>   	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>CmpChar<font color="#000080">(</font>c<font color="#000080">, </font>pat<font color="#000080">[</font>i<font color="#000080">], </font>csense <font color="#000080">) ) </font><font color="#FF0000"><b>then begin
+</b></font>      	result <font color="#000080">:= </font>true<font color="#000080">;
+         </font>exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>dec<font color="#000080">(</font>i <font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Match a single pattern element against a string.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>MatchOne<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+</font>							<font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>j <font color="#000080">: </font>integer<font color="#000080">;
+                     </font>csense <font color="#000080">: </font>boolean <font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	advance <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	advance <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">( </font>AtEnd<font color="#000080">( </font>str<font color="#000080">, </font>i <font color="#000080">) ) </font><font color="#FF0000"><b>then begin
+</b></font>   	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>j<font color="#000080">] = </font>EOL <font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>      	advance <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>end
+   else if </b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font><font color="#000080">(</font>pat<font color="#000080">[</font>j<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font>LITCHAR<font color="#000080">, </font>BOl<font color="#000080">, </font>EOL<font color="#000080">, </font>ANY<font color="#000080">, </font>CCL<font color="#000080">, </font>NCCL<font color="#000080">, </font>CLOSURE<font color="#000080">])) </font><font color="#FF0000"><b>then
+</b></font>   	<font color="#FF0000"><b>raise </b></font>Exception<font color="#000080">.</font>Create<font color="#000080">( </font><font color="#800000">'should never happen!' </font><font color="#000080">)
+   </font><font color="#FF0000"><b>else begin
+</b></font>   	<font color="#FF0000"><b>case </b></font>pat<font color="#000080">[</font>j<font color="#000080">] </font><font color="#FF0000"><b>of
+</b></font>      	LITCHAR<font color="#000080">:
+</font>         	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>CmpChar<font color="#000080">( </font>str<font color="#000080">[</font>i<font color="#000080">], </font>pat<font color="#000080">[</font>j<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">], </font>csense <font color="#000080">) ) </font><font color="#FF0000"><b>then
+</b></font>            	advance <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+         </font>BOL<font color="#000080">:
+</font>         	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>i <font color="#000080">= </font><font color="#800000">1 </font><font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>            	advance <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font>ANY<font color="#000080">:
+</font>         	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>str<font color="#000080">, </font>i <font color="#000080">) ) </font><font color="#FF0000"><b>then       </b></font><font color="#008000"><i>//i+1
+</i></font>            	advance <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+         </font>EOL<font color="#000080">:
+</font>         	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>AtEnd<font color="#000080">( </font>str<font color="#000080">, </font>i <font color="#000080">+ </font><font color="#800000">1 </font><font color="#000080">) ) </font><font color="#FF0000"><b>then
+</b></font>            	advance <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font>CCL<font color="#000080">:
+</font>         	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>LocateChar<font color="#000080">( </font>str<font color="#000080">[</font>i<font color="#000080">], </font>pat<font color="#000080">, </font>j<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>csense <font color="#000080">)) </font><font color="#FF0000"><b>then
+</b></font>            	advance <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+         </font>NCCL<font color="#000080">:
+</font>				<font color="#FF0000"><b>if </b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>str<font color="#000080">, </font>i <font color="#000080">+ </font><font color="#800000">1 </font><font color="#000080">)
+</font>            			<font color="#FF0000"><b>and</b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>LocateChar<font color="#000080">( </font>str<font color="#000080">[</font>i<font color="#000080">], </font>pat<font color="#000080">, </font>j<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>csense<font color="#000080">) )) </font><font color="#FF0000"><b>then
+</b></font>            	advance <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">( </font>advance <font color="#000080">&gt;= </font><font color="#800000">0 </font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font>   	i <font color="#000080">:= </font>i <font color="#000080">+ </font>advance<font color="#000080">;
+      </font>result <font color="#000080">:= </font>true<font color="#000080">;
+   </font><font color="#FF0000"><b>end
+   else
+</b></font>   	result <font color="#000080">:= </font>false<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Look for a  match of patttern element pat[j] in a string, starting at offset.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>MatchPat<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>offset <font color="#000080">: </font>integer<font color="#000080">;
+</font>						<font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>j <font color="#000080">: </font>integer<font color="#000080">;
+                  </font>csense <font color="#000080">: </font>boolean <font color="#000080">) : </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	i<font color="#000080">, </font>k <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	<font color="#FF0000"><b>while</b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>pat<font color="#000080">, </font>j <font color="#000080">) ) </font><font color="#FF0000"><b>do begin
+</b></font>   	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>pat<font color="#000080">[</font>j<font color="#000080">] = </font>CLOSURE <font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font>      	j <font color="#000080">:= </font>j <font color="#000080">+ </font>PatSize<font color="#000080">( </font>pat<font color="#000080">, </font>j <font color="#000080">);
+         </font>i <font color="#000080">:= </font>offset<font color="#000080">;
+         </font><font color="#FF0000"><b>while</b></font><font color="#000080">( (</font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>str<font color="#000080">, </font>i <font color="#000080">))
+</font>         	<font color="#FF0000"><b>and </b></font><font color="#000080">( </font>MatchOne<font color="#000080">( </font>str<font color="#000080">, </font>i<font color="#000080">, </font>pat<font color="#000080">, </font>j<font color="#000080">, </font>csense <font color="#000080">))) </font><font color="#FF0000"><b>do begin
+</b></font>         	<font color="#008000"><i>// nothing
+         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>while</b></font><font color="#000080">( </font>i <font color="#000080">&gt;= </font>offset <font color="#000080">) </font><font color="#FF0000"><b>do begin
+</b></font>         	k <font color="#000080">:= </font>MatchPat<font color="#000080">( </font>str<font color="#000080">, </font>i<font color="#000080">, </font>pat<font color="#000080">, </font>j <font color="#000080">+ </font>PatSize<font color="#000080">( </font>pat<font color="#000080">, </font>j <font color="#000080">), </font>csense<font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">( </font>k <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>            	break<font color="#000080">;
+            </font>dec<font color="#000080">( </font>i <font color="#000080">);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+         </font>offset <font color="#000080">:= </font>k<font color="#000080">;
+         </font>break<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else if </b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>MatchOne<font color="#000080">( </font>str<font color="#000080">, </font>offset<font color="#000080">, </font>pat<font color="#000080">, </font>j<font color="#000080">, </font>csense <font color="#000080">) ) </font><font color="#FF0000"><b>then begin
+</b></font>      	offset <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font>break<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+      else
+</b></font>      	j <font color="#000080">:= </font>j <font color="#000080">+ </font>PatSize<font color="#000080">( </font>pat<font color="#000080">, </font>j <font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>	result <font color="#000080">:= </font>offset<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//------------------------------------------------------------------------------
+// Look for a pattern in a string, returning the position of the pattern
+// (or zero if not found, and the length.
+//------------------------------------------------------------------------------
+
+</i></font><font color="#FF0000"><b>function </b></font>Find<font color="#000080">( </font><font color="#FF0000"><b>const </b></font>str <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start <font color="#000080">: </font>integer<font color="#000080">;
+</font>							<font color="#FF0000"><b>const </b></font>pat <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font>							<font color="#FF0000"><b>var </b></font>len <font color="#000080">: </font>integer<font color="#000080">;
+</font>								csense <font color="#000080">: </font>boolean <font color="#000080">) : </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+</b></font>	i<font color="#000080">, </font>pos <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>	i <font color="#000080">:= </font>start<font color="#000080">;
+   </font>pos <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font>result <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+   </font><font color="#FF0000"><b>while </b></font><font color="#000080">( </font><font color="#FF0000"><b>not </b></font>AtEnd<font color="#000080">( </font>str<font color="#000080">, </font>i <font color="#000080">)) </font><font color="#FF0000"><b>do begin
+      </b></font>len <font color="#000080">:= </font>MatchPat<font color="#000080">( </font>str<font color="#000080">, </font>i<font color="#000080">, </font>pat<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>csense  <font color="#000080">);
+</font>   	<font color="#FF0000"><b>if </b></font><font color="#000080">( </font>len <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font>      	len <font color="#000080">:= </font>len <font color="#000080">- </font>i<font color="#000080">;
+</font>      	result <font color="#000080">:= </font>i<font color="#000080">;
+         </font>exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>inc<font color="#000080">( </font>i <font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>//----------------------------------- eof --------------------------------------
+
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0465.PAS">Original</a><b>]</b></p></body>
+</html>

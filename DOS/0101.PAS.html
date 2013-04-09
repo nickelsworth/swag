@@ -1,0 +1,153 @@
+<html>
+<head><title> "Creating a SYS file in PASCAL" by ARNE DE BRUIJN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0101.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+ EH&gt; I was wondering if there was some way that I could convert a Pascal
+ EH&gt; exe to some sys file that the computer loads/runs when booting.
+
+You can use this, the only problem is that the units are not initialized (the
+optional code before the last end. in a unit is not executed), and so system
+(WriteLn/ReadLn) and crt (WriteLn/ReadLn) don't work.
+
+===
+{ DEVCLINE.PAS: Example of a device driver in TP, Arne de Bruijn, 19960302. }
+{ Released to the Public Domain. }
+{ This example shows the 'commandline' of the device driver }
+{ (everything after DEVICE=), and removes itself from memory. }
+</i></font><font color="#FF0000"><b>type
+ </b></font>TReqHead<font color="#000080">=</font><font color="#FF0000"><b>record                   </b></font><font color="#008000"><i>{ Structure passed to us by DOS }
+  </i></font>ReqLen<font color="#000080">:</font>byte<font color="#000080">;
+  </font>SubUnit<font color="#000080">:</font>byte<font color="#000080">;
+  </font>Cmd<font color="#000080">:</font>byte<font color="#000080">;
+  </font>Status<font color="#000080">:</font>word<font color="#000080">;
+  </font>Reserved<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font>MediaDesc<font color="#000080">:</font>byte<font color="#000080">;
+  </font>Address<font color="#000080">:</font>pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>byte <font color="#FF0000"><b>of
+   </b></font><font color="#800000">0</font><font color="#000080">:(</font>DevLine<font color="#000080">:</font>pointer<font color="#000080">; </font>DriveName<font color="#000080">:</font>byte<font color="#000080">);
+  </font><font color="#800000">255</font><font color="#000080">:
+   (</font>Count<font color="#000080">:</font>word<font color="#000080">; </font>Sector<font color="#000080">:</font>word<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+ </b></font>DevStack<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4094</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;  </font><font color="#008000"><i>{ Own stack, DOS's isn't that big }
+ </i></font>EndOfStack<font color="#000080">:</font>byte<font color="#000080">;
+ </font>ReqHead<font color="#000080">:^</font>TReqHead<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DevStrat<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">; </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>DevIntr<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">; </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Header<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ The trick: put the device header as the very first procedure your source, }
+{ so TP places it at the start of the .exe }
+</i></font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">dd -1                 </font><font color="#008000"><i>{ Next device in chain (updated by MS-DOS) }
+ </i></font><font color="#FF00FF">dw 0                  </font><font color="#008000"><i>{ Device attribute, now block device }
+ </i></font><font color="#FF00FF">dw offset DevStrat    </font><font color="#008000"><i>{ Offset of strategy routine }
+ </i></font><font color="#FF00FF">dw offset DevIntr     </font><font color="#008000"><i>{ Offset of interrupt routine }
+ </i></font><font color="#FF00FF">db 0,0,0,0,0,0,0,0    </font><font color="#008000"><i>{ For block: 1 byte no of subunits, 7 bytes reserved }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DevStrat<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Strategy routine, save ES:BX for later use }
+</i></font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">push ax
+ push ds
+ mov ax,seg @Data
+ mov ds,ax
+ mov word ptr [ReqHead],bx
+ mov word ptr [ReqHead+2],es
+ pop ds
+ pop ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>WriteStr<font color="#000080">(</font>S<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Units not initalized, can't use some System procs (WriteLn, etc.) }
+</i></font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">cld
+ mov bx,ds
+ lds si,S
+ lodsb
+ mov cl,al
+ xor ch,ch
+ jcxz @NoStr
+@PrtStr:
+ lodsb
+ mov ah,2
+ mov dl,al
+ int 21h
+ loop @PrtStr
+@NoStr:
+ mov ds,bx
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>TPIntr<font color="#000080">;
+</font><font color="#008000"><i>{ Called by asm proc, ReqHead contains pointer to request header, }
+{ Local stack in datasegment used (now 4k) }
+</i></font><font color="#FF0000"><b>type
+ </b></font>AByte<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65534</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>var
+ </b></font>S<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">50</font><font color="#000080">];
+ </font>I<font color="#000080">,</font>IntNo<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ if </b></font>ReqHead<font color="#000080">^.</font>Cmd<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then            </b></font><font color="#008000"><i>{ Initialization? }
+  </i></font><font color="#FF0000"><b>begin
+   </b></font>S<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font><font color="#800000">#50</font><font color="#000080">;                      </font><font color="#008000"><i>{ Max len of string }
+   </i></font>Move<font color="#000080">(</font>ReqHead<font color="#000080">^.</font>DevLine<font color="#000080">^,</font>S<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font><font color="#800000">50</font><font color="#000080">);</font><font color="#008000"><i>{ Copy from DOS buffer }
+   </i></font>I<font color="#000080">:=</font>pos<font color="#000080">(</font><font color="#800000">#10</font><font color="#000080">,</font>S<font color="#000080">);                  </font><font color="#008000"><i>{ Search for #10 }
+   </i></font><font color="#FF0000"><b>if </b></font>I<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then                     </b></font><font color="#008000"><i>{ Found? }
+    </i></font><font color="#FF0000"><b>begin
+     </b></font>byte<font color="#000080">(</font>S<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]):=</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;              </font><font color="#008000"><i>{ That's the len for now }
+     </i></font>I<font color="#000080">:=</font>pos<font color="#000080">(</font><font color="#800000">#13</font><font color="#000080">,</font>S<font color="#000080">);                </font><font color="#008000"><i>{ Also a #13? }
+     </i></font><font color="#FF0000"><b>if </b></font>I<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>byte<font color="#000080">(</font>S<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]):=</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ That must be the length }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>WriteStr<font color="#000080">(</font><font color="#800000">'Cmdline:&quot;'</font><font color="#000080">+</font>S<font color="#000080">+</font><font color="#800000">'&quot;'#13#10</font><font color="#000080">);  </font><font color="#008000"><i>{ Display 'command line' }
+   { Remove device driver from memory }
+   </i></font>ReqHead<font color="#000080">^.</font>MediaDesc<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;          </font><font color="#008000"><i>{ Number of components }
+   </i></font>ReqHead<font color="#000080">^.</font>Address<font color="#000080">:=</font>ptr<font color="#000080">(</font>cseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);  </font><font color="#008000"><i>{ First free address }
+   </i></font>ReqHead<font color="#000080">^.</font>Status<font color="#000080">:=</font><font color="#800000">$100</font><font color="#000080">;          </font><font color="#008000"><i>{ Status OK }
+  </i></font><font color="#FF0000"><b>end
+ else
+  </b></font>ReqHead<font color="#000080">^.</font>Status<font color="#000080">:=</font><font color="#800000">$9003</font><font color="#000080">;          </font><font color="#008000"><i>{ Status unknown cmd }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DevIntr<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">push ax
+ push bx
+ push cx
+ push dx
+ push si
+ push di
+ push ds
+ push es
+ mov ax,seg @Data
+ mov ds,ax
+ mov bx,ss
+ mov cx,sp
+ mov ss,ax                  </font><font color="#008000"><i>{ Set up local stack }
+ </i></font><font color="#FF00FF">mov sp,offset EndOfStack+1
+ push bx
+ push cx
+ call TPIntr
+ pop cx                     </font><font color="#008000"><i>{ Restore old stack pointer }
+ </i></font><font color="#FF00FF">pop bx
+ mov ss,bx
+ mov sp,cx
+ pop es
+ pop ds
+ pop di
+ pop si
+ pop dx
+ pop cx
+ pop bx
+ pop ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>ReqHead<font color="#000080">:=@</font>Header<font color="#000080">; </font><font color="#008000"><i>{To include it in linking (smartlinker skips it otherwise)}
+ { This is executed when run from the commandline }
+ </i></font>WriteStr<font color="#000080">(</font><font color="#800000">'Must be loaded from CONFIG.SYS with DEVICE=DEVCLINE.EXE'#13#10</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0101.PAS">Original</a><b>]</b></p></body>
+</html>

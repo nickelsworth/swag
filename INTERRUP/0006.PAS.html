@@ -1,0 +1,113 @@
+<html>
+<head><title> "Critical Error Trap" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to INTERRUP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0006.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#000080">==============================================================================
+ </font>BBS<font color="#000080">: -=- </font>Edge <font color="#FF0000"><b>of </b></font>the Century <font color="#000080">-=-
+  </font><font color="#FF0000"><b>To</b></font><font color="#000080">: </font>DANIEL KEMPTON               Date<font color="#000080">: </font><font color="#800000">01</font><font color="#000080">-</font><font color="#800000">20</font><font color="#000080">-</font><font color="#800000">93 </font><font color="#000080">(</font><font color="#800000">05</font><font color="#000080">:</font><font color="#800000">13</font><font color="#000080">)
+</font>From<font color="#000080">: </font>GREG VIGNEAULT             Number<font color="#000080">: </font><font color="#800000">3196   </font><font color="#000080">[</font><font color="#800000">140</font><font color="#000080">] </font><font color="#FF0000"><b>Pascal
+</b></font>Subj<font color="#000080">: </font>CRITICAL ERROR HANDLER     Status<font color="#000080">: </font><font color="#FF0000"><b>Public
+</b></font><font color="#000080">------------------------------------------------------------------------------
+</font>DK<font color="#000080">&gt; </font>Can anyone PLEASE give me information <font color="#FF0000"><b>on </b></font>how <font color="#FF0000"><b>to </b></font>write a critical
+  <font color="#000080">&gt; </font>error handler<font color="#000080">.
+
+ </font>Below <font color="#FF0000"><b>is </b></font>a quick<font color="#800000">'n-dirty critical error handler, written without
+ </font>any <font color="#FF0000"><b>Asm </b></font><font color="#FF00FF">(so is usable from TP v4.0+).  To test it, put a write-
+ protected diskette in drive A:, then run the program.  It should
+ report error #19 (13 hex, disk write-protected).
+
+ It'll need to be modified &amp; trimmed to your purpose.  You might
+ code your handler to simply ignore errors, then let your main
+ program take appropriate action, depending on the error, etc.
+
+ DOS functions $00..$0C, $30, and $59 should be safe calls from the
+ handler.  Function $59 will return the extended error information
+ code that you'll need to check (eg. #32 = share violation), as well
+ as other data - which you can read up on, in a Dos reference text.
+
+ I've used one byte of the DOS intra-process communication area (at
+ $40:$F0) to return the value needed to tell Dos what to do about
+ the error, rather than juggle registers.  This should be okay.
+
+ This code is cramped, to fit into a single message ...
+
+</font><font color="#008000"><i>{*******************************************************************}
+ </i></font><font color="#FF00FF">PROGRAM Example;                       </font><font color="#008000"><i>{ Critical Error Handler    }
+ </i></font><font color="#FF00FF">USES Dos,      </font><font color="#008000"><i>{ import MsDos, GetIntVec, SetIntVec, Registers     }
+      </i></font><font color="#FF00FF">Crt;      </font><font color="#008000"><i>{ import CheckBreak                                 }
+ </i></font><font color="#FF00FF">VAR OldISR     : POINTER;              </font><font color="#008000"><i>{ to save original ISR ptr  }
+     </i></font><font color="#FF00FF">Reg        : Registers;            </font><font color="#008000"><i>{ to access CPU registers   }
+     </i></font><font color="#FF00FF">errNumber  : WORD;                 </font><font color="#008000"><i>{ extended error code       }
+     </i></font><font color="#FF00FF">errClass,                          </font><font color="#008000"><i>{ error class               }
+     </i></font><font color="#FF00FF">errAction,                         </font><font color="#008000"><i>{ recommended action        }
+     </i></font><font color="#FF00FF">errLocus   : BYTE;                 </font><font color="#008000"><i>{ error locus               }
+     </i></font><font color="#FF00FF">FileName   : String[13];           </font><font color="#008000"><i>{ for ASCIIZ file name      }
+{-------------------------------------------------------------------}
+ </i></font><font color="#FF00FF">PROCEDURE cErrorISR( AX,BX,CX,DX,SI,DI,DS,ES,BP : WORD); Interrupt;
+    BEGIN  </font><font color="#008000"><i>{ This is it! ...                                        }
+    </i></font><font color="#FF00FF">InLine($FB);                        </font><font color="#008000"><i>{ STI (allow interrupts)    }
+    </i></font><font color="#FF00FF">Reg.AX := $3000;  MsDos(Reg);       </font><font color="#008000"><i>{ fn: get Dos version       }
+    </i></font><font color="#FF00FF">IF (Reg.AH &lt; 3) THEN Reg.AL := 3    </font><font color="#008000"><i>{ if less than Dos 3+ :FAIL }
+        </i></font><font color="#FF00FF">ELSE BEGIN                      </font><font color="#008000"><i>{ else take a closer look.. }
+        </i></font><font color="#FF00FF">Reg.AH := $59;  Reg.BX := 0;    </font><font color="#008000"><i>{ fn: get extended info     }
+        </i></font><font color="#FF00FF">MsDos( Reg );                   </font><font color="#008000"><i>{ call Dos                  }
+        </i></font><font color="#FF00FF">errNumber := Reg.AX;            </font><font color="#008000"><i>{ set|clear error number    }
+        </i></font><font color="#FF00FF">errClass := Reg.BH; errAction := Reg.BL; errLocus := Reg.CH;
+        WriteLn;  Write( 'Critical error (#', errNumber, ') ' );
+        REPEAT WriteLn;                 </font><font color="#008000"><i>{ loop for user response    }
+          </i></font><font color="#FF00FF">Write( 'Abort, Retry, Ignore, Fail (A|R|I|F) ? ',#7);
+          Reg.AH := 1;  MsDos(Reg);     </font><font color="#008000"><i>{ get user input, via Dos   }
+        </i></font><font color="#FF00FF">UNTIL UpCase(CHR(Reg.AL)) IN ['A','R','I','F'];
+        CASE CHR(Reg.AL) OF             </font><font color="#008000"><i>{ ... depending on input    }
+            </i></font><font color="#FF00FF">'i','I' : Reg.AL := 0;      </font><font color="#008000"><i>{ = ignore error            }
+            </i></font><font color="#FF00FF">'r','R' : Reg.AL := 1;      </font><font color="#008000"><i>{ = retry the action        }
+            </i></font><font color="#FF00FF">'a','A' : Reg.AL := 2;      </font><font color="#008000"><i>{ = abort                   }
+            </i></font><font color="#FF00FF">'f','F' : Reg.AL := 3;      </font><font color="#008000"><i>{ = fail                    }
+            </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{case}
+        </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{if Reg.AH}
+    </i></font>Mem<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$F0</font><font color="#000080">] := </font>Reg<font color="#000080">.</font>AL<font color="#000080">;             </font><font color="#008000"><i>{ to tell Dos what to think }
+    </i></font><font color="#FF0000"><b>InLine</b></font><font color="#000080">( </font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$E5</font><font color="#000080">/                    </font><font color="#008000"><i>{ mov   sp,bp               }
+            </i></font><font color="#800000">$5D</font><font color="#000080">/</font><font color="#800000">$07</font><font color="#000080">/</font><font color="#800000">$1F</font><font color="#000080">/</font><font color="#800000">$5F</font><font color="#000080">/</font><font color="#800000">$5E</font><font color="#000080">/        </font><font color="#008000"><i>{ pop   bp,es,ds,di,si      }
+            </i></font><font color="#800000">$5A</font><font color="#000080">/</font><font color="#800000">$59</font><font color="#000080">/</font><font color="#800000">$5B</font><font color="#000080">/</font><font color="#800000">$58</font><font color="#000080">/            </font><font color="#008000"><i>{ pop   dx,cx,bx,ax         }
+            </i></font><font color="#800000">$06</font><font color="#000080">/                        </font><font color="#008000"><i>{ push  es                  }
+            </i></font><font color="#800000">$2B</font><font color="#000080">/</font><font color="#800000">$C0</font><font color="#000080">/                    </font><font color="#008000"><i>{ sub   ax,ax               }
+            </i></font><font color="#800000">$8E</font><font color="#000080">/</font><font color="#800000">$C0</font><font color="#000080">/                    </font><font color="#008000"><i>{ mov   es,ax               }
+            </i></font><font color="#800000">$26</font><font color="#000080">/</font><font color="#800000">$A0</font><font color="#000080">/</font><font color="#800000">$F0</font><font color="#000080">/</font><font color="#800000">$04</font><font color="#000080">/            </font><font color="#008000"><i>{ mov   al,es:[4F0h]        }
+            </i></font><font color="#800000">$07</font><font color="#000080">/                        </font><font color="#008000"><i>{ pop   es                  }
+            </i></font><font color="#800000">$CF</font><font color="#000080">);                       </font><font color="#008000"><i>{ iret                      }
+    </i></font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{cErrorISR}</i></font><font color="#000080">;
+</font><font color="#008000"><i>{-------------------------------------------------------------------}
+ </i></font><font color="#FF0000"><b>BEGIN  </b></font><font color="#008000"><i>{ the main program...                                       }
+    </i></font>CheckBreak <font color="#000080">:= </font>FALSE<font color="#000080">;                </font><font color="#008000"><i>{ don't allow Ctrl-Break!   }
+    </i></font>errNumber <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                     </font><font color="#008000"><i>{ clear the error code      }
+    </i></font>GetIntVec<font color="#000080">( </font><font color="#800000">$24</font><font color="#000080">, </font>OldISR <font color="#000080">);           </font><font color="#008000"><i>{ save current ISR vector   }
+    </i></font>SetIntVec<font color="#000080">( </font><font color="#800000">$24</font><font color="#000080">, @</font>cErrorISR <font color="#000080">);       </font><font color="#008000"><i>{ set our ISR               }
+        {===========================================================}
+        { insert your test code here ...                            }
+        </i></font>FileName <font color="#000080">:= </font><font color="#800000">'A:TEST.TXT' </font><font color="#000080">+ </font>CHR<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);  </font><font color="#008000"><i>{ ASCIIZ file name      }
+        </i></font>Reg<font color="#000080">.</font>DS <font color="#000080">:= </font>SEG<font color="#000080">( </font>FileName <font color="#000080">);          </font><font color="#008000"><i>{ file name segment     }
+        </i></font>Reg<font color="#000080">.</font>DX <font color="#000080">:= </font>OFS<font color="#000080">( </font>FileName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] );       </font><font color="#008000"><i>{ file name offset      }
+        </i></font>Reg<font color="#000080">.</font>CX <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                        </font><font color="#008000"><i>{ normal attribute      }
+        </i></font>Reg<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$3C</font><font color="#000080">;                      </font><font color="#008000"><i>{ fn: create file       }
+        </i></font>MsDos<font color="#000080">( </font>Reg <font color="#000080">);                       </font><font color="#008000"><i>{ via Dos               }
+        {===========================================================}
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>errNumber <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>Write<font color="#000080">(</font><font color="#800000">#13#10#10</font><font color="#000080">,</font><font color="#800000">'For error #'</font><font color="#000080">,</font>errNumber<font color="#000080">,</font><font color="#800000">', user requested '</font><font color="#000080">);
+        </font><font color="#FF0000"><b>CASE </b></font>Mem<font color="#000080">[</font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$F0</font><font color="#000080">] </font><font color="#FF0000"><b>OF
+            </b></font><font color="#800000">0   </font><font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'IGNORE'</font><font color="#000080">);    </font><font color="#008000"><i>{ just your imagination     }
+            </i></font><font color="#800000">1   </font><font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'RETRY'</font><font color="#000080">);     </font><font color="#008000"><i>{ ... endless futility ?    }
+            </i></font><font color="#800000">2   </font><font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'ABORT'</font><font color="#000080">);     </font><font color="#008000"><i>{ DOS won't come back here! }
+            </i></font><font color="#800000">3   </font><font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'FAIL'</font><font color="#000080">);      </font><font color="#008000"><i>{ call technical support    }
+            </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{case}
+        </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{if errNumber&lt;&gt;0}
+    </i></font>SetIntVec<font color="#000080">( </font><font color="#800000">$24</font><font color="#000080">, </font>OldISR <font color="#000080">);           </font><font color="#008000"><i>{ must restore original ISR }
+ </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font><font color="#008000"><i>{*******************************************************************}
+
+ </i></font>Greg_
+
+ Jan<font color="#000080">.</font><font color="#800000">20.1993.</font>Toronto<font color="#000080">.</font>Canada<font color="#000080">.        </font>greg<font color="#000080">.</font>vigneault<font color="#000080">@</font>bville<font color="#000080">.</font>gts<font color="#000080">.</font>org
+<font color="#000080">---
+ * </font>Baudeville BBS Toronto CANADA <font color="#800000">416</font><font color="#000080">-</font><font color="#800000">283</font><font color="#000080">-</font><font color="#800000">0114 2200</font><font color="#000080">+ </font>confs
+ <font color="#000080">* </font>PostLink<font color="#000080">(</font>tm<font color="#000080">) </font>v1<font color="#000080">.</font><font color="#800000">04  </font>BAUDEVILLE <font color="#000080">(</font><font color="#800000">#1412</font><font color="#000080">) : </font>RelayNet<font color="#000080">(</font>tm<font color="#000080">)
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to INTERRUP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0006.PAS">Original</a><b>]</b></p></body>
+</html>

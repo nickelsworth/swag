@@ -1,0 +1,351 @@
+<html>
+<head><title> "Pascal ANSI Engine" by SCOTT EARNEST & BEN KIMBALL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ANSI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0033.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>program </b></font>FastANSI<font color="#000080">;
+
+</font><font color="#008000"><i>{$R-,S-,B-,A-,F-,Q-,V-}
+
+{FAST!  Buffered ANSI viewer--almost good enough for someone who wants to
+ view ANSI files without ever loading ANSI.SYS.
+
+ Plusses:
+   - Don't hafta load ANSI.SYS
+   - SAFE:  Beeps if there's a key-redefine, and won't change the screen
+            mode
+   - Almost as fast as the real thing--the difference is probably not even
+     noticed on a fast computer, except for with HUGE files.
+
+ Minuses:
+   - Takes up more disk space (but doesn't everything?  :-)
+   - Still not as fast as the real thing.
+   - Currently the code is a bit sloppy and probably hard to read
+     (I can read it, but then I helped write it. . . .)
+     * I've since given cleaner formatting to the code, but it's still
+       a bit tough to read, and isn't fully commented.  The style is
+       pretty dirty, and optimization could help it a lot.
+
+ Yes, one of my *next* plans for this thing is to optimize, organize, and
+ comment the source
+
+ Coauthored by:  Ben Kimball (Kzinti@Platte.UNK.edu)
+                 Scott Earnest (scott@whiplash.pc.cc.cmu.edu)
+}
+
+</i></font><font color="#FF0000"><b>uses </b></font>CRT<font color="#000080">, </font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>IBMColor <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0 </font><font color="#000080">.. </font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">=
+    (</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">7</font><font color="#000080">);
+  </font>Tone <font color="#000080">= </font><font color="#800000">2500</font><font color="#000080">;
+  </font>Duration <font color="#000080">= </font><font color="#800000">250</font><font color="#000080">;
+  </font>buflen <font color="#000080">= </font><font color="#800000">2047</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var  </b></font><font color="#008000"><i>{EEEEK!--it's possible not all of these are used. . . .}
+  </i></font>ch<font color="#000080">, </font>lastch<font color="#000080">, </font>inqchar <font color="#000080">: </font>char<font color="#000080">;
+  </font>f <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>Fileinfo <font color="#000080">: </font>searchrec<font color="#000080">;
+  </font>bytesread <font color="#000080">: </font>word<font color="#000080">;
+  </font>bufloc <font color="#000080">: </font>word<font color="#000080">;
+  </font>ANSIbuf <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0 </font><font color="#000080">.. </font>buflen<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font>FName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+  </font>commandfetch<font color="#000080">, </font>numsread <font color="#000080">: </font>boolean<font color="#000080">;
+  </font>ANSIParam <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1 </font><font color="#000080">.. </font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>of string</b></font><font color="#000080">;
+  </font>index<font color="#000080">, </font>ANSIPcount<font color="#000080">, </font>loop<font color="#000080">, </font>semicount <font color="#000080">: </font>byte<font color="#000080">;
+  </font>blink<font color="#000080">, </font>reverse<font color="#000080">, </font>bold <font color="#000080">: </font>boolean<font color="#000080">;
+  </font>tmpx<font color="#000080">, </font>tmpy<font color="#000080">,
+  </font>savecurx<font color="#000080">, </font>savecury<font color="#000080">,
+  </font>fgcolor<font color="#000080">, </font>bgcolor <font color="#000080">: </font>byte<font color="#000080">;
+  </font>vidpage <font color="#000080">: </font>byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$0000</font><font color="#000080">:</font><font color="#800000">0462</font><font color="#000080">;
+  </font>ncols <font color="#000080">: </font>byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$0000</font><font color="#000080">:</font><font color="#800000">$044a</font><font color="#000080">;
+  </font>nrows <font color="#000080">: </font>byte<font color="#000080">;
+  </font>numbytes <font color="#000080">: </font>longint<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>value<font color="#000080">(</font>st <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>dummy<font color="#000080">,</font>v <font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>val <font color="#000080">(</font>st<font color="#000080">,</font>v<font color="#000080">,</font>dummy<font color="#000080">);
+  </font>value <font color="#000080">:= </font>v<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>outchar <font color="#000080">(</font>ch <font color="#000080">: </font>char<font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>xp<font color="#000080">, </font>yp <font color="#000080">: </font>byte<font color="#000080">;
+  </font>mp <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>xp <font color="#000080">:= </font>WhereX<font color="#000080">;
+  </font>yp <font color="#000080">:= </font>WhereY<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+    </b></font><font color="#800000">#13 </font><font color="#000080">: </font>exit<font color="#000080">;
+    </font><font color="#800000">#10 </font><font color="#000080">: </font>xp <font color="#000080">:= </font>ncols<font color="#000080">;
+  </font><font color="#FF0000"><b>else
+    begin
+      </b></font>mp <font color="#000080">:= ((</font>yp<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>ncols<font color="#000080">+</font>xp<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">2</font><font color="#000080">;
+      </font>mem<font color="#000080">[</font>SegB800<font color="#000080">:</font>mp<font color="#000080">] := </font>ord<font color="#000080">(</font>ch<font color="#000080">);
+      </font>mem<font color="#000080">[</font>SegB800<font color="#000080">:</font>mp<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">] := </font>textattr<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+  end</b></font><font color="#000080">;
+  </font>inc<font color="#000080">(</font>xp<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>xp <font color="#000080">&gt; </font>ncols <font color="#FF0000"><b>then
+    begin
+      </b></font>xp <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font>inc<font color="#000080">(</font>yp<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>GotoXY <font color="#000080">(</font>xp<font color="#000080">,</font>yp<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>inchar <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>ch <font color="#000080">: </font>char<font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>bufloc <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>BlockRead <font color="#000080">(</font>f<font color="#000080">,</font>ANSIbuf<font color="#000080">,</font>buflen<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>bytesread<font color="#000080">);
+  </font>ch <font color="#000080">:= </font>chr<font color="#000080">(</font>ANSIbuf<font color="#000080">[</font>bufloc<font color="#000080">]);
+  </font>inc <font color="#000080">(</font>bufloc<font color="#000080">);
+  </font>inc <font color="#000080">(</font>numbytes<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>bufloc <font color="#000080">&gt;= </font>bytesread<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>bufloc <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>execcode<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  Case </b></font>Ch <font color="#FF0000"><b>of
+    </b></font><font color="#800000">'H'</font><font color="#000080">,</font><font color="#800000">'f' </font><font color="#000080">: </font><font color="#008000"><i>{Cursor Position}
+              </i></font><font color="#FF0000"><b>begin
+                case </b></font>semicount <font color="#FF0000"><b>of
+                  </b></font><font color="#800000">0 </font><font color="#000080">: </font><font color="#FF0000"><b>case </b></font>ANSIPcount <font color="#FF0000"><b>of
+                        </b></font><font color="#800000">0 </font><font color="#000080">: </font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+                      </font><font color="#FF0000"><b>else
+                        </b></font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]));
+                      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                  </font><font color="#800000">1 </font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font>value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+                        </b></font>GotoXY<font color="#000080">(</font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]),</font><font color="#800000">1</font><font color="#000080">)
+                      </font><font color="#FF0000"><b>else
+                        </b></font>GotoXY<font color="#000080">(</font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]),</font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]));
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#800000">'A' </font><font color="#000080">: </font><font color="#008000"><i>{Cursor Up}
+              </i></font><font color="#FF0000"><b>if </b></font>ANSIPcount <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                begin
+                  if </b></font>WhereY <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                    </b></font>GotoXY<font color="#000080">(</font>WhereX<font color="#000080">, </font>WhereY <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">)
+                </font><font color="#FF0000"><b>end
+              else
+                if </b></font>WhereY <font color="#000080">- </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) &lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                  </b></font>GotoXY<font color="#000080">(</font>WhereX<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">)
+                </font><font color="#FF0000"><b>else
+                  </b></font>GotoXY<font color="#000080">(</font>WhereX<font color="#000080">, </font>WhereY <font color="#000080">- </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]));
+
+        </font><font color="#800000">'B' </font><font color="#000080">: </font><font color="#008000"><i>{Cursor Down}
+              </i></font><font color="#FF0000"><b>if </b></font>ANSIPcount <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                begin
+                  if </b></font>WhereY <font color="#000080">&lt; </font>nrows <font color="#FF0000"><b>then
+                    </b></font>GotoXY<font color="#000080">(</font>WhereX<font color="#000080">, </font>WhereY <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">)
+                </font><font color="#FF0000"><b>end
+              else
+                if </b></font>WhereY <font color="#000080">+ </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) &gt; </font>nrows <font color="#FF0000"><b>then
+                  </b></font>GotoXY<font color="#000080">(</font>WhereX<font color="#000080">, </font>nrows<font color="#000080">)
+                </font><font color="#FF0000"><b>else
+                  </b></font>GotoXY<font color="#000080">(</font>WhereX<font color="#000080">, </font>WhereY <font color="#000080">+ </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]));
+
+        </font><font color="#800000">'C' </font><font color="#000080">: </font><font color="#008000"><i>{Cursor Forward}
+              </i></font><font color="#FF0000"><b>if </b></font>ANSIPCount <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                begin
+                  if </b></font>WhereX <font color="#000080">&lt; </font>ncols <font color="#FF0000"><b>then
+                    </b></font>GotoXY<font color="#000080">(</font>WhereX <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>WhereY<font color="#000080">)
+                </font><font color="#FF0000"><b>end
+              else
+                if </b></font>WhereX <font color="#000080">+ </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) &gt; </font>ncols <font color="#FF0000"><b>then
+                  </b></font>GotoXY<font color="#000080">(</font>ncols<font color="#000080">, </font>WhereY<font color="#000080">)
+                </font><font color="#FF0000"><b>else
+                  </b></font>GotoXY<font color="#000080">(</font>WhereX <font color="#000080">+ </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]), </font>WhereY<font color="#000080">);
+
+        </font><font color="#800000">'D' </font><font color="#000080">: </font><font color="#008000"><i>{Cursor Backward}
+              </i></font><font color="#FF0000"><b>if </b></font>ANSIPcount <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                begin
+                  if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                    </b></font>GotoXY<font color="#000080">(</font>WhereX <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">, </font>WhereY<font color="#000080">)
+                </font><font color="#FF0000"><b>end
+              else
+                if </b></font>WhereX <font color="#000080">- </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) &lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                  </b></font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font>WhereY<font color="#000080">)
+                </font><font color="#FF0000"><b>else
+                  </b></font>GotoXY<font color="#000080">(</font>WhereX <font color="#000080">- </font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]), </font>WhereY<font color="#000080">);
+
+        </font><font color="#800000">'p' </font><font color="#000080">: </font><font color="#008000"><i>{Key-redefine}
+              </i></font><font color="#FF0000"><b>begin
+                </b></font>Sound <font color="#000080">(</font>Tone<font color="#000080">);
+                </font>Delay <font color="#000080">(</font>Duration<font color="#000080">);
+                </font>NoSound<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#800000">'s' </font><font color="#000080">: </font><font color="#008000"><i>{Save Cursor Position}
+              </i></font><font color="#FF0000"><b>begin
+                </b></font>SaveCurX <font color="#000080">:= </font>WhereX<font color="#000080">;
+                </font>SaveCurY <font color="#000080">:= </font>WhereY<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#800000">'u' </font><font color="#000080">: </font><font color="#008000"><i>{Restore Cursor Position}
+              </i></font>GotoXY<font color="#000080">(</font>SaveCurX<font color="#000080">, </font>SaveCurY<font color="#000080">);
+
+        </font><font color="#800000">'J' </font><font color="#000080">: </font><font color="#008000"><i>{Erase Display (if ESC[2J ) }
+              </i></font>ClrScr<font color="#000080">;
+
+        </font><font color="#800000">'K' </font><font color="#000080">: </font><font color="#008000"><i>{Erase Line}
+              </i></font>ClrEol<font color="#000080">;
+
+        </font><font color="#800000">'m' </font><font color="#000080">: </font><font color="#008000"><i>{Set Graphics Mode}
+              </i></font><font color="#FF0000"><b>for </b></font>Loop <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>AnsiPCount <font color="#FF0000"><b>do
+                case </b></font>value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font>Loop<font color="#000080">]) </font><font color="#FF0000"><b>of
+                         </b></font><font color="#800000">0 </font><font color="#000080">: </font><font color="#008000"><i>{All Attributes Off}
+                             </i></font><font color="#FF0000"><b>begin
+                               </b></font>Blink   <font color="#000080">:= </font>false<font color="#000080">;
+                               </font>Reverse <font color="#000080">:= </font>false<font color="#000080">;
+                               </font>Bold    <font color="#000080">:= </font>false<font color="#000080">;
+                               </font>TextAttr <font color="#000080">:= </font><font color="#800000">$07</font><font color="#000080">;
+                               </font>FGColor <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+                               </font>BGColor <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                         </font><font color="#800000">1 </font><font color="#000080">: </font><font color="#008000"><i>{Bold On}
+                             </i></font><font color="#FF0000"><b>begin
+                               </b></font>Bold <font color="#000080">:= </font>true<font color="#000080">;
+                               </font>TextAttr <font color="#000080">:= (</font>TextAttr <font color="#FF0000"><b>or </b></font><font color="#800000">$08</font><font color="#000080">);
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                         </font><font color="#800000">4 </font><font color="#000080">: </font><font color="#008000"><i>{Underscore - ignored}</i></font><font color="#000080">;
+                         </font><font color="#800000">5 </font><font color="#000080">: </font><font color="#008000"><i>{Blink On}
+                             </i></font><font color="#FF0000"><b>begin
+                               </b></font>TextAttr <font color="#000080">:= (</font>TextAttr <font color="#FF0000"><b>or </b></font><font color="#800000">$80</font><font color="#000080">);
+                               </font>Blink <font color="#000080">:= </font>true<font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                         </font><font color="#800000">7 </font><font color="#000080">: </font><font color="#008000"><i>{Reverse Video}
+                             </i></font><font color="#FF0000"><b>begin
+                               </b></font>Reverse <font color="#000080">:= </font>true<font color="#000080">;
+                               </font><font color="#FF0000"><b>if </b></font>FGColor <font color="#000080">&gt; </font><font color="#800000">7 </font><font color="#FF0000"><b>then
+                                 </b></font>FGColor <font color="#000080">:= </font><font color="#800000">8
+                               </font><font color="#FF0000"><b>else </b></font>FGColor <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                               </font>BGColor <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+                               </font>TextColor<font color="#000080">(</font>FGColor<font color="#000080">);
+                               </font>TextBackGround<font color="#000080">(</font>BGColor<font color="#000080">);
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+                  </font><font color="#800000">30 </font><font color="#000080">.. </font><font color="#800000">37 </font><font color="#000080">: </font><font color="#008000"><i>{Foreground}
+                             </i></font><font color="#FF0000"><b>begin
+                               </b></font>FGColor <font color="#000080">:= </font>IBMColor<font color="#000080">[</font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font>Loop<font color="#000080">]) - </font><font color="#800000">30</font><font color="#000080">];
+                               </font>TextAttr <font color="#000080">:= </font>BGColor <font color="#000080">* </font><font color="#800000">16 </font><font color="#000080">+ </font>FGColor<font color="#000080">;
+                               </font><font color="#FF0000"><b>if </b></font>blink <font color="#FF0000"><b>then </b></font>TextAttr <font color="#000080">:= </font>TextAttr <font color="#FF0000"><b>or </b></font><font color="#800000">$80</font><font color="#000080">;
+                               </font><font color="#FF0000"><b>if </b></font>bold <font color="#FF0000"><b>then </b></font>TextAttr <font color="#000080">:= </font>TextAttr <font color="#FF0000"><b>or </b></font><font color="#800000">$08</font><font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+                  </font><font color="#800000">40 </font><font color="#000080">.. </font><font color="#800000">47 </font><font color="#000080">: </font><font color="#008000"><i>{Background}
+                             </i></font><font color="#FF0000"><b>begin
+                               </b></font>BGColor <font color="#000080">:= </font>IBMColor<font color="#000080">[</font>Value<font color="#000080">(</font>ANSIParam<font color="#000080">[</font>Loop<font color="#000080">]) - </font><font color="#800000">40</font><font color="#000080">];
+                               </font>TextAttr <font color="#000080">:= </font>BGColor <font color="#000080">* </font><font color="#800000">16 </font><font color="#000080">+ </font>FGColor<font color="#000080">;
+                               </font><font color="#FF0000"><b>if </b></font>blink <font color="#FF0000"><b>then </b></font>TextAttr <font color="#000080">:= </font>TextAttr <font color="#FF0000"><b>or </b></font><font color="#800000">$80</font><font color="#000080">;
+                               </font><font color="#FF0000"><b>if </b></font>bold <font color="#FF0000"><b>then </b></font>TextAttr <font color="#000080">:= </font>TextAttr <font color="#FF0000"><b>or </b></font><font color="#800000">$08</font><font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{Case}
+
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{Case}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>readANSIdata<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>inchar <font color="#000080">(</font>ch<font color="#000080">);
+  </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+    </b></font><font color="#800000">'0' </font><font color="#000080">.. </font><font color="#800000">'9' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                   </b></font>ANSIParam<font color="#000080">[</font>ANSIPcount<font color="#000080">] := </font>ANSIParam<font color="#000080">[</font>ANSIPcount<font color="#000080">] + </font>ch<font color="#000080">;
+                   </font>numsread <font color="#000080">:= </font>true<font color="#000080">;
+                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font><font color="#800000">'&quot;' </font><font color="#000080">: </font><font color="#FF0000"><b>repeat
+                   </b></font>inchar <font color="#000080">(</font>inqchar<font color="#000080">);
+                 </font><font color="#FF0000"><b>until </b></font>inqchar <font color="#000080">= </font><font color="#800000">'&quot;'</font><font color="#000080">;
+           </font><font color="#800000">';' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                   </b></font>inc<font color="#000080">(</font>ANSIPcount<font color="#000080">);
+                   </font>inc<font color="#000080">(</font>semicount<font color="#000080">);
+                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>else
+    begin
+      if not </b></font>numsread <font color="#FF0000"><b>then </b></font>ANSIPCount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>execcode<font color="#000080">;
+      </font>commandfetch <font color="#000080">:= </font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>lastch <font color="#000080">:= </font>ch<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>parseANSI<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>fillchar <font color="#000080">(</font>ANSIParam<font color="#000080">, </font>sizeof<font color="#000080">(</font>ANSIParam<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+  </font>ANSIPcount <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>semicount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>commandfetch <font color="#000080">:= </font>true<font color="#000080">;
+  </font>numsread <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    </b></font>readANSIdata<font color="#000080">;
+  </font><font color="#FF0000"><b>until not </b></font>commandfetch<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>nrows <font color="#000080">:= </font>mem<font color="#000080">[</font><font color="#800000">$0000</font><font color="#000080">:</font><font color="#800000">$0484</font><font color="#000080">] + </font><font color="#800000">1</font><font color="#000080">;
+  </font>TextAttr <font color="#000080">:= </font><font color="#800000">$0f</font><font color="#000080">;
+  </font>semicount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>SaveCurX   <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>SaveCurY   <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Bold       <font color="#000080">:= </font>false<font color="#000080">;
+  </font>Blink      <font color="#000080">:= </font>false<font color="#000080">;
+  </font>Reverse    <font color="#000080">:= </font>false<font color="#000080">;
+  </font>ANSIPcount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{No Params}
+  </i></font>FGColor    <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">; </font><font color="#008000"><i>{Light Grey}
+  </i></font>BGColor    <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{Black}
+  </i></font>numsread <font color="#000080">:= </font>false<font color="#000080">;
+  </font>commandfetch <font color="#000080">:= </font>false<font color="#000080">;
+  </font>bufloc <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>numbytes <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>bytesread <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>fillchar <font color="#000080">(</font>ANSIbuf<font color="#000080">, </font>sizeof<font color="#000080">(</font>ANSIbuf<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) = </font><font color="#800000">'' </font><font color="#FF0000"><b>then
+    begin
+      </b></font>write <font color="#000080">(</font><font color="#800000">'Enter Filename: '</font><font color="#000080">);
+      </font>readln <font color="#000080">(</font>FName<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+  else
+    </b></font>FName <font color="#000080">:= </font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font>findfirst <font color="#000080">(</font>FName<font color="#000080">, </font>AnyFile<font color="#000080">, </font>fileinfo<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>fileinfo<font color="#000080">.</font>name <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>then
+    begin
+      </b></font>writeln <font color="#000080">(</font><font color="#800000">'File not found.'</font><font color="#000080">);
+      </font>halt<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>assign <font color="#000080">(</font>F<font color="#000080">, </font>FName<font color="#000080">);
+  </font>reset <font color="#000080">(</font>F<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font>clrscr<font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>numbytes <font color="#000080">&lt; </font>fileinfo<font color="#000080">.</font>size<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin
+      </b></font>inchar <font color="#000080">(</font>ch<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ch <font color="#000080">= </font><font color="#800000">#27 </font><font color="#FF0000"><b>then
+        begin
+          </b></font>lastch <font color="#000080">:= </font>ch<font color="#000080">;
+          </font>inchar <font color="#000080">(</font>ch<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>ch <font color="#000080">&lt;&gt; </font><font color="#800000">'[' </font><font color="#FF0000"><b>then
+            begin
+              </b></font>outchar <font color="#000080">(</font>lastch<font color="#000080">);
+              </font>outchar <font color="#000080">(</font>ch<font color="#000080">);
+            </font><font color="#FF0000"><b>end
+          else </b></font><font color="#008000"><i>{parse}
+            </i></font>parseANSI<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      else
+        </b></font>outchar <font color="#000080">(</font>ch<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>readln<font color="#000080">;
+  </font>close <font color="#000080">(</font>f<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ANSI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0033.PAS">Original</a><b>]</b></p></body>
+</html>

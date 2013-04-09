@@ -1,0 +1,81 @@
+<html>
+<head><title> "Trapping Int21" by CHRIS PRIEDE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to INTERRUP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0009.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#000080">===========================================================================
+ </font>BBS<font color="#000080">: </font>Canada Remote Systems
+Date<font color="#000080">: </font><font color="#800000">07</font><font color="#000080">-</font><font color="#800000">15</font><font color="#000080">-</font><font color="#800000">93 </font><font color="#000080">(</font><font color="#800000">18</font><font color="#000080">:</font><font color="#800000">15</font><font color="#000080">)             </font>Number<font color="#000080">: </font><font color="#800000">26295
+</font>From<font color="#000080">: </font>CHRIS PRIEDE                 Refer<font color="#800000">#</font><font color="#000080">: </font><font color="#800000">26227
+  </font><font color="#FF0000"><b>To</b></font><font color="#000080">: </font>PIERRE DARMON                 Recvd<font color="#000080">: </font>NO  
+Subj<font color="#000080">: </font>DOS interrupt handler          Conf<font color="#000080">: (</font><font color="#800000">552</font><font color="#000080">) </font>R<font color="#000080">-</font>TP
+<font color="#000080">---------------------------------------------------------------------------
+</font>PD<font color="#000080">&gt;</font>What additional steps need <font color="#FF0000"><b>to </b></font>be taken <font color="#FF0000"><b>for </b></font><font color="#800000">$21</font><font color="#000080">? </font>I even tried <font color="#FF0000"><b>to </b></font>remove
+PD<font color="#000080">&gt;</font>the clicking part<font color="#000080">, </font>which boils down <font color="#FF0000"><b>to </b></font>installing a new handler that just
+PD<font color="#000080">&gt;</font>calls the old one<font color="#000080">. </font>Still no go<font color="#000080">. </font>What<font color="#800000">'s wrong?
+
+</font>PD<font color="#000080">&gt;</font>My ultimate goal <font color="#FF0000"><b>is to </b></font>trap <font color="#FF0000"><b>file </b></font>opens <font color="#000080">(</font><font color="#FF0000"><b>function </b></font><font color="#800000">3</font>Dh<font color="#000080">), </font>check the SHAREing
+PD<font color="#000080">&gt;</font>mode used <font color="#000080">(</font><font color="#FF0000"><b>in </b></font>AL<font color="#000080">), </font>modify it <font color="#FF0000"><b>if </b></font>necessary<font color="#000080">, </font><font color="#FF0000"><b>and </b></font>execute the old handler<font color="#000080">.
+</font>PD<font color="#000080">&gt;</font>Doesn<font color="#800000">'t sound like a very complicated thing to do but ... I am stuck.
+
+    </font>Your handler <font color="#FF0000"><b>is </b></font>changing some registers <font color="#FF0000"><b>or </b></font>suffering from some
+registers being changed by INT <font color="#800000">21. </font>DOS EXEC service trashes everything<font color="#000080">,
+</font>including SS<font color="#000080">:</font>SP<font color="#000080">, </font><font color="#FF0000"><b>for </b></font>example<font color="#000080">. </font><font color="#FF0000"><b>In </b></font>my opinion<font color="#000080">, </font>one can<font color="#800000">'t write a stable
+</font>INT <font color="#800000">21 </font>handler <font color="#FF0000"><b>in Pascal or </b></font>any other HLL<font color="#000080">. </font>HLL interrupt handlers are
+usable <font color="#FF0000"><b>to </b></font>certain extent<font color="#000080">, </font>but this <font color="#FF0000"><b>is </b></font>too low level<font color="#000080">.
+
+    </font>It can be done <font color="#FF0000"><b>in </b></font>BASM<font color="#000080">, </font>though<font color="#000080">. </font>We will declare interrupt handler <font color="#FF0000"><b>as
+</b></font>simple <font color="#FF0000"><b>procedure with </b></font>no arguments <font color="#FF0000"><b>to </b></font>avoid entry<font color="#000080">/</font>exit code TP generates
+<font color="#FF0000"><b>for </b></font>interrupt handlers<font color="#000080">. </font>Our handler will force all files <font color="#FF0000"><b>to </b></font>be opened <font color="#FF0000"><b>in
+</b></font>Deny Write mode <font color="#000080">(</font>modify <font color="#FF0000"><b>for </b></font>your needs<font color="#000080">).
+
+
+</font><font color="#FF0000"><b>const
+  </b></font>shCompatibility <font color="#000080">= </font><font color="#800000">$00</font><font color="#000080">;
+  </font>shDenyAll       <font color="#000080">= </font><font color="#800000">$10</font><font color="#000080">;
+  </font>shDenyWrite     <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+  </font>shDenyRead      <font color="#000080">= </font><font color="#800000">$30</font><font color="#000080">;
+  </font>shDenyNone      <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>NewInt21<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">cmp   ah, 3Dh         </font><font color="#008000"><i>{open file?}
+  </i></font><font color="#FF00FF">je    @CheckModeAL
+  cmp   ah, 6Ch         </font><font color="#008000"><i>{DOS 4.0+ extended open?}
+  </i></font><font color="#FF00FF">je    @CheckModeBL    </font><font color="#008000"><i>{extended takes mode in BX}
+  </i></font><font color="#FF00FF">jmp   @Chain
+
+@CheckModeAL:
+  and   al, 10001111b     </font><font color="#008000"><i>{clear sharing mode bits}
+  </i></font><font color="#FF00FF">or    al, shDenyWrite   </font><font color="#008000"><i>{set to our mode}
+  </i></font><font color="#FF00FF">jmp   @Chain
+
+@CheckModeBL:
+  and   bl, 10001111b
+  or    bl, shDenyWrite
+  jmp   @Chain
+
+@I21:
+  DD      0       </font><font color="#008000"><i>{temp. var. for old vector -- must be in code seg.}
+
+</i></font><font color="#FF00FF">@Chain:
+  push  ds
+  push  ax
+  mov   ax, SEG @Data
+  mov   ds, ax
+  mov   ax, WORD PTR OldInt21
+  mov   WORD PTR cs:[offset @I21], ax
+  mov   ax, WORD PTR OldInt21 +2
+  mov   WORD PTR cs:[offset @I21 +2], ax
+  pop   ax
+  pop   ds
+  jmp   DWORD PTR cs:[offset @I21]
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+    </font><font color="#FF0000"><b>To try </b></font>this save old vector <font color="#FF0000"><b>in </b></font>a global variable named OldInt21 <font color="#FF0000"><b>and
+</b></font>install this handler <font color="#FF0000"><b>as </b></font>usual<font color="#000080">. </font>It also traps <font color="#FF0000"><b>function </b></font><font color="#800000">6</font>Ch<font color="#000080">, </font>DOS <font color="#800000">4.0</font><font color="#000080">+
+</font>extended open<font color="#000080">/</font>create<font color="#000080">. </font>Very few programs use it<font color="#000080">, </font>but why <font color="#FF0000"><b>not</b></font><font color="#000080">...
+---
+ * </font>Faster<font color="#000080">-</font>Than<font color="#000080">-</font>Light <font color="#000080">(</font>FTL<font color="#000080">) &thorn; </font>Atlanta<font color="#000080">, </font>GA <font color="#000080">&thorn; </font><font color="#800000">404</font><font color="#000080">-</font><font color="#800000">292</font><font color="#000080">-</font><font color="#800000">8761</font><font color="#000080">/</font><font color="#800000">299</font><font color="#000080">-</font><font color="#800000">3930
+ </font><font color="#000080">* </font>PostLink<font color="#000080">(</font>tm<font color="#000080">) </font>v1<font color="#000080">.</font><font color="#800000">06  </font>FTL <font color="#000080">(</font><font color="#800000">#93</font><font color="#000080">) : </font>RelayNet <font color="#000080">(</font>tm<font color="#000080">)
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to INTERRUP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0009.PAS">Original</a><b>]</b></p></body>
+</html>

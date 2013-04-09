@@ -1,0 +1,1174 @@
+<html>
+<head><title> "Full Screen Editor" by MIKE PERRY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTEDIT SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>Unit </b></font>MPEditor<font color="#000080">;  </font><font color="#008000"><i>{ VERSION 1.0  May 14, 1994 }
+{  A general full-screen text editor that should compile under varying
+   versions of Borland's Turbo Pascal, relying solely on the CRT
+   (and System) units.
+
+ (c) 1994, Michael Perry / Progressive Computer Services, Inc.
+            All rights reserved worldwide.
+
+  LICENSE:  This code is NOT Public Domain; It can be freely
+            distributed as long as it is not modified in any
+            form.  If you incorporate any part of the code into
+            a program, please credit Mike Perry in the program;
+            No other remuneration or consideration necessary,
+            although it would be nice to get a &quot;thank you&quot; postcard.
+            If you have suggestions or enhancements (please do)
+            send them to me and I'll make sure that you get
+            credit and that this unit will be continually updated.
+
+    Author: Mike Perry / Progressive Computer Services, Inc.
+            PO Box 7638, Metairie, LA 70010 USA
+            BBS: (504) 835-0085  FAX: (504) 834-2160
+            Fidonet: 1:396/21  Cserve: 71127,2105  AOL: Arpegi0
+            Internet: 71127.2105@compuserve.com    PAN: MIKEPERRY
+            Unison: MIKEP
+
+  USAGE:    MPEDITOR manipulates text in an allocated area of memory
+            specified by the TXT^ pointer.  To incorporate this unit
+            into your program, simply copy your text into the array of
+            byte specified by TXT^ and call the appropriate procedures.
+            Supported commands:
+              Arrow keys for cursor movement, INS, DEL, PgUp, PgDn
+              CTRL-(left/right) moves cursor to next word;
+              ^Y = delete line,
+              ^B = reformat text from cursor to end of paragraph
+              Ctrl-PgUp = go to top of file
+              Ctrl-PgDn = go to end of file
+  NOTES:
+  % Statements in the unit which are commented out pertain to features
+    and options which are either for demonstration purposes or have
+    yet to be implemented; look for updates soon.
+  % This editor unit assumes that linefeed characters (#10) are
+    stripped from the input prior to editing.  If you import
+    data to be edited, make sure you convert CR+LF to CR!!
+  % The following routines are critical to performance and if
+    implemented in ASM would improve efficiency of the unit:
+    GET_LINE_DATA, SET_POSITION, SET_CURSOR
+    If you can help, contact me at the addresses at the top.
+}
+{$R-}   { range checking off - causes error when referencing buffer array }
+
+{ If you want to implement your own screen i/o routines, look for the
+  USEQWIK directive which identifies areas in the program where you can
+  make modifications to suit your objective }
+{-$DEFINE USEQWIK} { implements FAST direct screen writing / requires }
+                   { Eagle Performance Software's QWIK screen units }
+                   { available as Shareware }
+</i></font><font color="#FF0000"><b>INTERFACE
+
+</b></font><font color="#008000"><i>{$IFDEF USEQWIK}
+  </i></font><font color="#FF0000"><b>USES     </b></font>CRT<font color="#000080">,</font>Qwik<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+  </i></font><font color="#FF0000"><b>USES     </b></font>CRT<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>CONST
+  </b></font>TEXTMAX<font color="#000080">:</font>WORD<font color="#000080">= </font><font color="#800000">40000</font><font color="#000080">; </font><font color="#008000"><i>{ Maximum size of text editing buffer in bytes }
+  </i></font>CR       <font color="#000080">= </font><font color="#800000">13</font><font color="#000080">;       </font><font color="#008000"><i>{ ordinal value used to indicate a new line }
+  </i></font>SPACE    <font color="#000080">= </font><font color="#800000">32</font><font color="#000080">;       </font><font color="#008000"><i>{ ordinal value used to indicate a space }
+  </i></font>REFORMAT <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;        </font><font color="#008000"><i>{ ordinal value to initiate reformat command / CTRL-B }
+  </i></font>TABSIZE  <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;        </font><font color="#008000"><i>{ tab stop every five characters }
+
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>TXT_TYPE  <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>TXT       <font color="#000080">: ^</font>TXT_TYPE<font color="#000080">;    </font><font color="#008000"><i>{ TEXT BUFFER, pointer to memory block }
+
+  { operational status variables ------(set during operation)------------- }
+  </i></font>TEXTSIZE  <font color="#000080">: </font>LONGINT<font color="#000080">;      </font><font color="#008000"><i>{ size of txt array in use / max current index }
+  </i></font>POSITION  <font color="#000080">: </font>LONGINT<font color="#000080">;      </font><font color="#008000"><i>{ index of current (cursor) position in TXT array }
+  </i></font>WINTOP    <font color="#000080">: </font>LONGINT<font color="#000080">;      </font><font color="#008000"><i>{ index position in buffer of top of text window }
+  </i></font>XLINE     <font color="#000080">: </font>BOOLEAN<font color="#000080">;      </font><font color="#008000"><i>{ TRUE if cursor position outside of data area }
+  </i></font>INSERTON  <font color="#000080">: </font>BOOLEAN<font color="#000080">;      </font><font color="#008000"><i>{ TRUE indicates insert mode on }
+  </i></font>VROW<font color="#000080">,
+  </font>VCOLUMN   <font color="#000080">: </font>BYTE<font color="#000080">;         </font><font color="#008000"><i>{ VIRTUAL ROW/COLUMN position within editing area }
+  </i></font>WIDTH<font color="#000080">,
+  </font>HEIGHT    <font color="#000080">: </font>BYTE<font color="#000080">;         </font><font color="#008000"><i>{ width and height of current editing window }
+  </i></font>SCRBUMP   <font color="#000080">: </font>BYTE<font color="#000080">;         </font><font color="#008000"><i>{ chars to bump over display / not to exceed
+WIDTH! }
+  </i></font>OFFSET    <font color="#000080">: </font>LONGINT<font color="#000080">;      </font><font color="#008000"><i>{ screen display offset, column position to begin
+displaying }
+{  MARKSTART,
+   MARKEND  : LONGINT;      { start/end index of marked text / NOT IMPLEMENTED
+}
+  { operational configuration vars ----(set by user)----------------------- }
+  </i></font>MARKATTR<font color="#000080">,                 </font><font color="#008000"><i>{ marked text attribute }
+  </i></font>BACKATTR<font color="#000080">,                 </font><font color="#008000"><i>{ background text window attribute }
+  </i></font>NORMATTR<font color="#000080">,                 </font><font color="#008000"><i>{ attribute values for normal &amp; hilighted text }
+  </i></font>BORDATTR  <font color="#000080">: </font>WORD<font color="#000080">;         </font><font color="#008000"><i>{ attribute value for border }
+  </i></font>R1<font color="#000080">,</font>C1<font color="#000080">,                    </font><font color="#008000"><i>{ row,column of upper left coord of edit window }
+  </i></font>R2<font color="#000080">,</font>C2     <font color="#000080">: </font>BYTE<font color="#000080">;         </font><font color="#008000"><i>{ row,column of lower right coord on edit win }
+  </i></font>MAXCOLUMN <font color="#000080">: </font>LONGINT<font color="#000080">;      </font><font color="#008000"><i>{ maximum line length/column size, 0=No Limit }
+{  MAXROW    : LONGINT;      { maximum number of lines allowed, 0=No Limit }
+
+  { prototypes ------------------------------------------------------------ }
+
+   {FUNCTION GETINPUT(VAR FUNCTIONKEY:BOOLEAN):BYTE; NEAR }
+   {FUNCTION SPACES(COUNT:BYTE):STRING;              NEAR }
+   {PROCEDURE CLEAR_TXT;                             NEAR }
+  </i></font><font color="#FF0000"><b>FUNCTION </b></font>GETTEXTEND<font color="#000080">:</font>LONGINT<font color="#000080">;
+  </font><font color="#FF0000"><b>FUNCTION </b></font>INITIALIZE_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PTXT<font color="#000080">:</font>POINTER<font color="#000080">;</font>SIZE<font color="#000080">:</font>LONGINT<font color="#000080">):</font>BOOLEAN<font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DISPOSE_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PTXT<font color="#000080">:</font>POINTER<font color="#000080">;</font>SIZE<font color="#000080">:</font>LONGINT<font color="#000080">);
+   </font><font color="#008000"><i>{PROCEDURE DRAW_BOX(R1,C1,R2,C2:BYTE);            NEAR }
+   {PROCEDURE INITIALIZE_WINDOW(R1,C1,R2,C2:BYTE);   NEAR }
+   {PROCEDURE CLEAR_WINDOW;                          NEAR }
+   {PROCEDURE CLEAR_LINE;                            NEAR }
+   {PROCEDURE BUMP_TXT(COUNT:LONGINT);               NEAR }
+   {PROCEDURE DEL_CHARS(COUNT:LONGINT);              NEAR }
+   {PROCEDURE GET_LINE_DATA(POS:LONGINT; VAR STARTINDEX,ENDINDEX,COL:LONGINT);}
+   {PROCEDURE STUFF_TXT(s:string);                   NEAR }
+  </i></font><font color="#FF0000"><b>FUNCTION </b></font>WINBOTTOM<font color="#000080">:</font>LONGINT<font color="#000080">;
+   </font><font color="#008000"><i>{PROCEDURE SHOW_LINE;                             NEAR }
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>SHOW_TXT<font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DISPLAY_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PT<font color="#000080">:</font>POINTER<font color="#000080">);
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>SCROLLUP<font color="#000080">(</font>LINES<font color="#000080">:</font>BYTE<font color="#000080">);
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>SCROLLDOWN<font color="#000080">(</font>LINES<font color="#000080">:</font>BYTE<font color="#000080">);
+   </font><font color="#008000"><i>{PROCEDURE SET_POSITION;                          NEAR }
+   {PROCEDURE SET_CURSOR;                            NEAR }
+   {PROCEDURE WORD_WRAP(startpoint,endpoint,length:LONGINT);}
+   {FUNCTION LINEUP:LONGINT;                         NEAR }
+   {FUNCTION LINEDOWN:LONGINT;                       NEAR }
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>READ_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PT<font color="#000080">:</font>POINTER<font color="#000080">;</font>FILENAME<font color="#000080">:</font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>TEXTSIZE<font color="#000080">:</font>LONGINT<font color="#000080">);
+   </font><font color="#008000"><i>{PROCEDURE DIRECTION(C:BYTE);                     NEAR }
+   {FUNCTION PARSE_INPUT:BYTE;                       NEAR }
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>SETUP_TEXT_SETTINGS<font color="#000080">(</font>Row1<font color="#000080">,</font>Column1<font color="#000080">,</font>Row2<font color="#000080">,</font>Column2<font color="#000080">:</font>BYTE<font color="#000080">;</font>DRAWBOX<font color="#000080">:</font>BOOLEAN<font color="#000080">) ;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>EDIT<font color="#000080">(</font>PT<font color="#000080">:</font>POINTER<font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>RETURNCODE<font color="#000080">:</font>BYTE<font color="#000080">);
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+</b></font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>GETINPUT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>FUNCTIONKEY<font color="#000080">:</font>BOOLEAN<font color="#000080">):</font>BYTE<font color="#000080">;
+</font><font color="#008000"><i>{ read keyboard and return character/function key }
+</i></font><font color="#FF0000"><b>VAR </b></font>CH<font color="#000080">: </font>CHAR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>CH<font color="#000080">:=</font>ReadKey<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>CH<font color="#000080">=</font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>CH<font color="#000080">:=</font>ReadKey<font color="#000080">;
+      </font>FUNCTIONKEY<font color="#000080">:=</font>TRUE<font color="#000080">;
+    </font><font color="#FF0000"><b>END
+  ELSE </b></font>FUNCTIONKEY<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font>GETINPUT<font color="#000080">:=</font>ORD<font color="#000080">(</font>CH<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>SPACES<font color="#000080">(</font>COUNT<font color="#000080">:</font>BYTE<font color="#000080">):</font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ returns COUNT number of spaces }
+{ NOTE: Unpredictable results if count exceeds 255!! }
+</i></font><font color="#FF0000"><b>var </b></font>temp<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>TEMP<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>COUNT<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>TEMP<font color="#000080">:=</font>TEMP<font color="#000080">+</font><font color="#800000">#32</font><font color="#000080">;
+    </font>DEC<font color="#000080">(</font>COUNT<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>SPACES<font color="#000080">:=</font>TEMP<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>CLEAR_TXT<font color="#000080">;
+</font><font color="#008000"><i>{ zeros the text array &amp; associated values }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>fillchar<font color="#000080">(</font>txt<font color="#000080">^,</font>TEXTMAX<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font>textsize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>position<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>GETTEXTEND<font color="#000080">:</font>LONGINT<font color="#000080">;
+</font><font color="#008000"><i>{ find the end of text by looking for null character
+  %% This is a technique that I use to identify the actual size of
+     a text buffer; if you're reading data from a disk structure,
+     unless you save the actual size, you'll need to determine it.
+     I make sure any unused area in my text buffer is padded with
+     nuls }
+</i></font><font color="#FF0000"><b>var </b></font>I<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>I<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>TEXTMAX <font color="#FF0000"><b>DO
+    IF </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>GETTEXTEND<font color="#000080">:=</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+      </font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>GETTEXTEND<font color="#000080">:=</font>TEXTSIZE<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>INITIALIZE_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PTXT<font color="#000080">:</font>POINTER<font color="#000080">;</font>SIZE<font color="#000080">:</font>LONGINT<font color="#000080">):</font>BOOLEAN<font color="#000080">;
+</font><font color="#008000"><i>{ create/allocate memory for text buffer }
+</i></font><font color="#FF0000"><b>BEGIN
+  if </b></font>MaxAvail <font color="#000080">&lt; </font>SIZE <font color="#FF0000"><b>then
+    </b></font>INITIALIZE_TXT<font color="#000080">:=</font>FALSE     <font color="#008000"><i>{ not enough available memory }
+  </i></font><font color="#FF0000"><b>else BEGIN
+    </b></font>GETMEM<font color="#000080">(</font>PTXT<font color="#000080">,</font>SIZE<font color="#000080">);
+    </font>INITIALIZE_TXT<font color="#000080">:=</font>TRUE<font color="#000080">;
+    </font>TEXTMAX<font color="#000080">:=</font>SIZE<font color="#000080">;            </font><font color="#008000"><i>{ set max size of text }
+    </i></font>TXT<font color="#000080">:=</font>PTXT<font color="#000080">;                </font><font color="#008000"><i>{ establish pointer for routines }
+    </i></font>CLEAR_TXT<font color="#000080">;                </font><font color="#008000"><i>{ zero text }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DISPOSE_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PTXT<font color="#000080">:</font>POINTER<font color="#000080">;</font>SIZE<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#008000"><i>{ disposes text buffer }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>FREEMEM<font color="#000080">(</font>PTXT<font color="#000080">,</font>SIZE<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DRAW_BOX<font color="#000080">(</font>R1<font color="#000080">,</font>C1<font color="#000080">,</font>R2<font color="#000080">,</font>C2<font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ surrounds the specified area with a box }
+{ NOTE! There are no checks to make sure the box area isn't off the screen!
+        and this (and other) routines must be slightly modified if you want
+        the text area to fill up the entire screen due to anomolies with
+        TP's WINDOW function }
+</i></font><font color="#FF0000"><b>var </b></font>I<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>{$IFDEF USEQWIK}
+  { draw horizontal line }
+  </i></font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=(</font>C1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>qwrite<font color="#000080">(</font>R1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>I<font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">);
+    </font>qwrite<font color="#000080">(</font>R2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>I<font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ draw vertical line }
+  </i></font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=(</font>R1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>R2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>QWRITE<font color="#000080">(</font>I<font color="#000080">,</font>C1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&sup3;'</font><font color="#000080">);
+    </font>QWRITE<font color="#000080">(</font>I<font color="#000080">,</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&sup3;'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>QWRITE<font color="#000080">(</font>R1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&Uacute;'</font><font color="#000080">);
+  </font>QWRITE<font color="#000080">(</font>R2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&Agrave;'</font><font color="#000080">);
+  </font>QWRITE<font color="#000080">(</font>R1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&iquest;'</font><font color="#000080">);
+  </font>QWRITE<font color="#000080">(</font>R2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>BORDATTR<font color="#000080">,</font><font color="#800000">'&Ugrave;'</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>TEXTATTR<font color="#000080">:=</font>BORDATTR<font color="#000080">;
+  </font><font color="#008000"><i>{ draw horizontal line }
+  </i></font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=(</font>C1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>GOTOXY<font color="#000080">(</font>I<font color="#000080">,</font>R1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&Auml;'</font><font color="#000080">);
+    </font>GOTOXY<font color="#000080">(</font>I<font color="#000080">,</font>R2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&Auml;'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ draw vertical line }
+  </i></font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=(</font>R1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>R2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>GOTOXY<font color="#000080">(</font>C1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>I<font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&sup3;'</font><font color="#000080">);
+    </font>GOTOXY<font color="#000080">(</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>I<font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&sup3;'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>GOTOXY<font color="#000080">(</font>c1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>r1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&Uacute;'</font><font color="#000080">);
+  </font>GOTOXY<font color="#000080">(</font>c1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>r2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&Agrave;'</font><font color="#000080">);
+  </font>GOTOXY<font color="#000080">(</font>c2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>r1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&iquest;'</font><font color="#000080">);
+  </font>GOTOXY<font color="#000080">(</font>c2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>r2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">); </font>WRITE<font color="#000080">(</font><font color="#800000">'&Ugrave;'</font><font color="#000080">);
+  </font>TEXTATTR<font color="#000080">:=</font>NORMATTR<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>INITIALIZE_WINDOW<font color="#000080">(</font>R1<font color="#000080">,</font>C1<font color="#000080">,</font>R2<font color="#000080">,</font>C2<font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ defines text window and clears screen }
+</i></font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>{$IFNDEF USEQWIK}
+  </i></font>WINDOW<font color="#000080">(</font>C1<font color="#000080">,</font>R1<font color="#000080">,</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>R2<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>CLEAR_WINDOW<font color="#000080">;
+</font><font color="#008000"><i>{ clears the current text window }
+</i></font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>{$IFDEF USEQWIK}
+  </i></font>QFILL<font color="#000080">(</font>r1<font color="#000080">,</font>c1<font color="#000080">,</font>HEIGHT<font color="#000080">,</font>WIDTH<font color="#000080">,</font>BACKATTR<font color="#000080">,</font><font color="#800000">#32</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>textattr<font color="#000080">:=</font>backattr<font color="#000080">;
+</font><font color="#008000"><i>{ since TP forces an unwanted scroll when writing to the lower right corner
+  of a window, we create a window 1-column larger and init a smaller one when
+  we want to clear the screen, there is an extra column defined in the
+  working window so that unwanted scrolls are not accomplished }
+  </i></font>WINDOW<font color="#000080">(</font>C1<font color="#000080">,</font>R1<font color="#000080">,</font>C2<font color="#000080">,</font>R2<font color="#000080">);
+  </font>CLRSCR<font color="#000080">;
+  </font>WINDOW<font color="#000080">(</font>C1<font color="#000080">,</font>R1<font color="#000080">,</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>R2<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>CLEAR_LINE<font color="#000080">;
+</font><font color="#008000"><i>{ clears the current line }
+</i></font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>{$IFDEF USEQWIK}
+  </i></font>QFILL<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>WIDTH<font color="#000080">,</font>BACKATTR<font color="#000080">,</font><font color="#800000">#32</font><font color="#000080">);
+  </font><font color="#008000"><i>{ FYI, the arguments for QFILL are:
+     QFILL(row,column,rows,columns,attribute,char);  }
+{$ELSE}
+  </i></font>TEXTATTR<font color="#000080">:=</font>BACKATTR<font color="#000080">;
+  </font>WINDOW<font color="#000080">(</font>C1<font color="#000080">,</font>R1<font color="#000080">,</font>C2<font color="#000080">,</font>R2<font color="#000080">);
+  </font>gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font>vrow<font color="#000080">); </font>clreol<font color="#000080">;
+  </font>WINDOW<font color="#000080">(</font>C1<font color="#000080">,</font>R1<font color="#000080">,</font>C2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>R2<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>BUMP_TXT<font color="#000080">(</font>COUNT<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#008000"><i>{ moves text at POSITION index over COUNT bytes, for inserting data }
+{ this procedure does NOT change, position or cursor indexes }
+</i></font><font color="#FF0000"><b>VAR </b></font>I<font color="#000080">:</font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>inc<font color="#000080">(</font>textsize<font color="#000080">,</font>COUNT<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font>textsize <font color="#FF0000"><b>downto </b></font>position <font color="#FF0000"><b>do </b></font><font color="#008000"><i>{ move everything forward 1 }
+    </i></font>txt<font color="#000080">^[</font>i<font color="#000080">]:=</font>txt<font color="#000080">^[</font>i<font color="#000080">-</font>COUNT<font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DEL_CHARS<font color="#000080">(</font>COUNT<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#008000"><i>{ erase COUNT chars at position, shorten text array }
+</i></font><font color="#FF0000"><b>var </b></font>I<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>I<font color="#000080">:=</font>POSITION <font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>TEXTSIZE<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]:=</font>TXT<font color="#000080">^[</font>I<font color="#000080">+</font>COUNT<font color="#000080">];
+  </font>DEC<font color="#000080">(</font>TEXTSIZE<font color="#000080">,</font>COUNT<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>GET_LINE_DATA<font color="#000080">(</font>POS<font color="#000080">:</font>LONGINT<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>STARTINDEX<font color="#000080">,</font>ENDINDEX<font color="#000080">,</font>COL<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#008000"><i>{ given the array index (position), calculate the start &amp; ending index of the
+  current line, also returning VIRTUAL column position on the current line
+
+  procedure returns:  1,1,1 if at the top of the file;
+  procedure returns:  textsize,textsize,1 at bottom of file
+
+  This is one procedure, that if implemented in ASM would improve the
+  overall performance of this unit (I'm open to suggestions).
+}
+</i></font><font color="#FF0000"><b>VAR </b></font>i<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>startindex<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>endindex<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>col<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>pos<font color="#000080">&lt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;               </font><font color="#008000"><i>{ invalid position }
+  </i></font><font color="#FF0000"><b>if </b></font>pos<font color="#000080">&gt;</font>textsize <font color="#FF0000"><b>then begin        </b></font><font color="#008000"><i>{ at end of text }
+    </i></font>endindex<font color="#000080">:=</font>textsize<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end else begin
+    for </b></font>i<font color="#000080">:=</font>pos <font color="#FF0000"><b>to </b></font>textsize <font color="#FF0000"><b>do       </b></font><font color="#008000"><i>{ find end of line index }
+      </i></font><font color="#FF0000"><b>if </b></font>txt<font color="#000080">^[</font>i<font color="#000080">]=</font>CR <font color="#FF0000"><b>then begin      </b></font><font color="#008000"><i>{ found CR at end of line }
+        </i></font>endindex<font color="#000080">:=</font>i<font color="#000080">;
+        </font>i<font color="#000080">:=</font>textsize<font color="#000080">;                </font><font color="#008000"><i>{ force end of loop }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>endindex<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>endindex<font color="#000080">:=</font>textsize<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ last line obviously }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                    </font><font color="#008000"><i>{ find beginning of line index }
+  </i></font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=(</font>endindex<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do   </b></font><font color="#008000"><i>{ FOR checks=endvalue, if not increments! }
+    </i></font><font color="#FF0000"><b>if </b></font>txt<font color="#000080">^[</font>i<font color="#000080">]=</font>CR <font color="#FF0000"><b>then begin        </b></font><font color="#008000"><i>{ found CR at beginning of line }
+      </i></font>startindex<font color="#000080">:=</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;              </font><font color="#008000"><i>{ index of previous CR+1 }
+      </i></font>i<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;                         </font><font color="#008000"><i>{ force end of loop }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>startindex<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>startindex<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ begin of line is top of text }
+
+  </i></font>col<font color="#000080">:=</font>pos<font color="#000080">-</font>startindex<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;            </font><font color="#008000"><i>{ calculate VIRTUAL column position }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>STUFF_TXT<font color="#000080">(</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ add string/char to txt array, bump POSITION up one }
+</i></font><font color="#FF0000"><b>VAR </b></font>j<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">:</font>longint<font color="#000080">; </font>t<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>t<font color="#000080">:=</font>length<font color="#000080">(</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>inserton<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>txt<font color="#000080">^[</font>position<font color="#000080">]=</font>CR<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">((</font>textsize<font color="#000080">+</font>t<font color="#000080">)&gt;</font>textmax<font color="#000080">) </font><font color="#FF0000"><b>then
+begin  </b></font><font color="#008000"><i>{ no more room }
+    </i></font>write<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">); </font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ if xline, and text added, make sure to bump position to the end of line }
+  </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>XLINE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN </b></font><font color="#008000"><i>{ pad the short line with spaces to the position }
+    </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+    </font>j<font color="#000080">:=(</font>offset<font color="#000080">+</font>vcolumn<font color="#000080">)-(</font>e1<font color="#000080">-</font>b1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{ number of spaces to pad }
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">((</font>textsize<font color="#000080">+</font>t<font color="#000080">+</font>j<font color="#000080">)&gt;</font>textmax<font color="#000080">) </font><font color="#FF0000"><b>then BEGIN </b></font><font color="#008000"><i>{ check for avail space }
+      </i></font>write<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">); </font>exit<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>bump_txt<font color="#000080">(</font>j<font color="#000080">);
+    </font><font color="#FF0000"><b>for </b></font>b1<font color="#000080">:=</font>position <font color="#FF0000"><b>to </b></font><font color="#000080">(</font>position<font color="#000080">+</font>j<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do
+      </b></font>txt<font color="#000080">^[</font>b1<font color="#000080">]:=</font>SPACE<font color="#000080">;
+    </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+    </font>POSITION<font color="#000080">:=</font>POSITION<font color="#000080">+</font>J<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>inserton<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>txt<font color="#000080">^[</font>position<font color="#000080">]=</font>CR<font color="#000080">) </font><font color="#FF0000"><b>then
+    if </b></font><font color="#000080">(</font>position<font color="#000080">&lt;=</font>textsize<font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{ insert }
+      </i></font>bump_txt<font color="#000080">(</font>t<font color="#000080">);
+      </font><font color="#FF0000"><b>FOR </b></font>J<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>T <font color="#FF0000"><b>DO BEGIN
+        </b></font>txt<font color="#000080">^[</font>position<font color="#000080">]:=</font>ORD<font color="#000080">(</font>S<font color="#000080">[</font>J<font color="#000080">]);  </font><font color="#008000"><i>{ add/replace character }
+        </i></font>INC<font color="#000080">(</font>POSITION<font color="#000080">);              </font><font color="#008000"><i>{ move pointer up one }
+        </i></font>INC<font color="#000080">(</font>VCOLUMN<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end else begin                  </b></font><font color="#008000"><i>{ append / position &gt; textsize }
+      </i></font><font color="#FF0000"><b>FOR </b></font>J<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>T <font color="#FF0000"><b>DO BEGIN
+        </b></font>inc<font color="#000080">(</font>textsize<font color="#000080">);
+        </font>txt<font color="#000080">^[</font>textsize<font color="#000080">]:=</font>ORD<font color="#000080">(</font>S<font color="#000080">[</font>J<font color="#000080">]);
+        </font>INC<font color="#000080">(</font>VCOLUMN<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>position<font color="#000080">:=</font>textsize<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;         </font><font color="#008000"><i>{ position pointer at end of text }
+    </i></font><font color="#FF0000"><b>end
+  else if </b></font>position<font color="#000080">&lt;=</font>textsize <font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{ overwrite }
+    </i></font><font color="#FF0000"><b>FOR </b></font>J<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>T <font color="#FF0000"><b>DO BEGIN
+      </b></font>txt<font color="#000080">^[</font>position<font color="#000080">]:=</font>ORD<font color="#000080">(</font>S<font color="#000080">[</font>J<font color="#000080">]);        </font><font color="#008000"><i>{ overwrite current position }
+      </i></font>inc<font color="#000080">(</font>position<font color="#000080">);                    </font><font color="#008000"><i>{ move pointer one over }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>INC<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>T<font color="#000080">);
+  </font><font color="#FF0000"><b>end else begin </b></font><font color="#008000"><i>{ append }
+    </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>textsize<font color="#000080">+</font>T<font color="#000080">)&gt;=</font>textmax<font color="#000080">) </font><font color="#FF0000"><b>then begin  </b></font><font color="#008000"><i>{ can't append if buffer full }
+      </i></font>write<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">);
+      </font>exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>FOR </b></font>J<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>T <font color="#FF0000"><b>DO BEGIN
+      </b></font>inc<font color="#000080">(</font>textsize<font color="#000080">);
+      </font>txt<font color="#000080">^[</font>textsize<font color="#000080">]:=</font>ORD<font color="#000080">(</font>S<font color="#000080">[</font>J<font color="#000080">]);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>position<font color="#000080">:=</font>textsize<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+    </font>INC<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>T<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>WINBOTTOM<font color="#000080">:</font>LONGINT<font color="#000080">;
+</font><font color="#008000"><i>{ returns the text array index value of the last character in the text window }
+</i></font><font color="#FF0000"><b>var </b></font>i<font color="#000080">:</font>longint<font color="#000080">; </font>linecount<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>LINECOUNT<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=</font>WINTOP <font color="#FF0000"><b>TO </b></font>TEXTSIZE <font color="#FF0000"><b>DO BEGIN
+    IF </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]=</font>CR <font color="#FF0000"><b>THEN </b></font>INC<font color="#000080">(</font>LINECOUNT<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>LINECOUNT<font color="#000080">=</font>HEIGHT <font color="#FF0000"><b>THEN BEGIN </b></font><font color="#008000"><i>{ found last line in text window }
+      </i></font>WINBOTTOM<font color="#000080">:=</font>I<font color="#000080">;
+      </font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ for loop thru text }
+  </i></font>WINBOTTOM<font color="#000080">:=</font>TEXTSIZE<font color="#000080">; </font><font color="#008000"><i>{ end before last text line found, so text ends in
+window }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SHOW_LINE<font color="#000080">;
+</font><font color="#008000"><i>{ rewrites the current line to the window }
+</i></font><font color="#FF0000"><b>VAR </b></font>I<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">:</font>longint<font color="#000080">; </font>S<font color="#000080">:</font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>GET_LINE_DATA<font color="#000080">(</font>position<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>B1<font color="#000080">&gt;</font>TEXTSIZE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN </b></font>CLEAR_LINE<font color="#000080">; </font>EXIT<font color="#000080">; </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ nothing there }
+  </i></font>col1<font color="#000080">:=(</font>offset<font color="#000080">+</font>b1<font color="#000080">+</font>width<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">); </font><font color="#FF0000"><b>if </b></font>col1<font color="#000080">&gt;</font>textsize <font color="#FF0000"><b>then </b></font>col1<font color="#000080">:=</font>textsize<font color="#000080">; </font><font color="#008000"><i>{eol pos}
+  </i></font>S<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=(</font>offset<font color="#000080">+</font>b1<font color="#000080">) </font><font color="#FF0000"><b>to </b></font>col1 <font color="#008000"><i>{(offset+b1+width-1)} </i></font><font color="#FF0000"><b>do begin
+    if </b></font>txt<font color="#000080">^[</font>i<font color="#000080">]=</font>CR <font color="#FF0000"><b>then </b></font>i<font color="#000080">:=</font>col1 <font color="#008000"><i>{(offset+b1+width-1)} { force end }
+    </i></font><font color="#FF0000"><b>else begin
+      </b></font>s<font color="#000080">:=</font>s<font color="#000080">+</font>chr<font color="#000080">(</font>txt<font color="#000080">^[</font>i<font color="#000080">]);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>CLEAR_LINE<font color="#000080">;
+</font><font color="#008000"><i>{$ifdef USEQWIK}
+  </i></font>QWRITE<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">,</font>NORMATTR<font color="#000080">,</font>S<font color="#000080">);
+  </font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>TEXTATTR<font color="#000080">:=</font>NORMATTR<font color="#000080">;
+  </font>GOTOXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font>VROW<font color="#000080">);  </font>WRITE<font color="#000080">(</font>S<font color="#000080">);
+  </font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SHOW_TXT<font color="#000080">;
+</font><font color="#008000"><i>{ display text to screen area
+  sets VROW and VCOLUMN to match displayed area where position
+  is and moves cursor to that location }
+</i></font><font color="#FF0000"><b>var </b></font>I<font color="#000080">,</font>R<font color="#000080">,</font>C<font color="#000080">,</font>CWIDTH<font color="#000080">:</font>LONGINT<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>R<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>C<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ set start row/column }
+  </i></font>CWIDTH<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>CLEAR_WINDOW<font color="#000080">;
+
+  </font><font color="#008000"><i>{ % hide cursor }
+  </i></font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=</font>WINTOP <font color="#FF0000"><b>TO </b></font>TEXTSIZE <font color="#FF0000"><b>DO BEGIN
+    IF </b></font><font color="#000080">(</font>R<font color="#000080">&gt;</font>HEIGHT<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>I<font color="#000080">&gt;</font>TEXTSIZE<font color="#000080">) </font><font color="#FF0000"><b>THEN begin </b></font><font color="#008000"><i>{ check for outside vertical
+boundaries OR end }
+      {$IFDEF USEQWIK}
+        </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+      </font><font color="#008000"><i>{$ELSE}
+        </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+      </font><font color="#008000"><i>{$ENDIF}
+      </i></font>EXIT<font color="#000080">;  </font><font color="#008000"><i>{ done, filled window }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>TXT<font color="#000080">^[</font>I<font color="#000080">]=</font>CR<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN   </b></font><font color="#008000"><i>{ -------------- check for carriage return }
+      </i></font>INC<font color="#000080">(</font>R<font color="#000080">);   </font><font color="#008000"><i>{ bump row down }
+      </i></font>CWIDTH<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font>C<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#008000"><i>{ % IF TXT^[I+1]=10 THEN INC(I);  { check for additional LF / skip over }
+
+    </i></font><font color="#FF0000"><b>END ELSE BEGIN   </b></font><font color="#008000"><i>{ ----------------------------------- printable char }
+      </i></font>INC<font color="#000080">(</font>CWIDTH<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>CWIDTH<font color="#000080">&gt;</font>OFFSET <font color="#FF0000"><b>THEN       </b></font><font color="#008000"><i>{ if screen offset in effect }
+        </i></font><font color="#FF0000"><b>IF </b></font>C<font color="#000080">&lt;= </font>WIDTH <font color="#FF0000"><b>THEN BEGIN    </b></font><font color="#008000"><i>{ if line not off the screen }
+{$IFDEF USEQWIK}
+          </i></font>QWRITE<font color="#000080">(</font>R1<font color="#000080">+</font>R<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>C<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>NORMATTR<font color="#000080">,</font>CHR<font color="#000080">(</font>TXT<font color="#000080">^[</font>I<font color="#000080">]));
+</font><font color="#008000"><i>{$ELSE}
+          </i></font>GOTOXY<font color="#000080">(</font>C<font color="#000080">,</font>R<font color="#000080">); </font>textattr<font color="#000080">:=</font>normattr<font color="#000080">;
+          </font>WRITE<font color="#000080">(</font>CHR<font color="#000080">(</font>TXT<font color="#000080">^[</font>I<font color="#000080">]));
+</font><font color="#008000"><i>{$ENDIF}
+          </i></font>INC<font color="#000080">(</font>C<font color="#000080">);
+        </font><font color="#FF0000"><b>END else </b></font>INC<font color="#000080">(</font>C<font color="#000080">);  </font><font color="#008000"><i>{ increment column counter anyway even though not
+printed }
+     </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font>I<font color="#000080">&gt;</font>TEXTSIZE <font color="#FF0000"><b>THEN </b></font>I<font color="#000080">:=</font>TEXTSIZE<font color="#000080">;  </font><font color="#008000"><i>{ if bumped past, set to end loop }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;  </font><font color="#008000"><i>{ FOR loop }
+{$IFDEF USEQWIK}
+  </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font>EXIT<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DISPLAY_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PT<font color="#000080">:</font>POINTER<font color="#000080">);
+</font><font color="#008000"><i>{ display text, specified by pointer
+  can be used by an external viewing routine }
+</i></font><font color="#FF0000"><b>VAR </b></font>TEMP<font color="#000080">:</font>POINTER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>TEMP<font color="#000080">:=</font>addr<font color="#000080">(</font>TXT<font color="#000080">);
+  </font>TXT<font color="#000080">:=</font>PT<font color="#000080">;
+  </font>SHOW_TXT<font color="#000080">;
+  </font>TXT<font color="#000080">:=</font>TEMP<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SCROLLUP<font color="#000080">(</font>LINES<font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ scroll screen up x lines; does not change cursor or text pointer }
+</i></font><font color="#FF0000"><b>var </b></font>i<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">,</font>LINECOUNT<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>LINECOUNT<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=</font>WINTOP <font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    if </b></font>txt<font color="#000080">^[</font>i<font color="#000080">]=</font>CR <font color="#FF0000"><b>then begin  </b></font><font color="#008000"><i>{ found end of prev line }
+       </i></font>INC<font color="#000080">(</font>LINECOUNT<font color="#000080">);
+       </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>LINECOUNT<font color="#000080">=</font>LINES<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+         </b></font>GET_LINE_DATA<font color="#000080">(</font>I<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+         </font>WINTOP<font color="#000080">:=</font>B1<font color="#000080">;
+         </font>EXIT<font color="#000080">;
+       </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ cr found }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ for loop }
+  </i></font>WINTOP<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SCROLLDOWN<font color="#000080">(</font>LINES<font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ scroll screen down x lines, does not change cursor or text pointer }
+</i></font><font color="#FF0000"><b>var </b></font>i<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">,</font>LINECOUNT<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>linecount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font>WINTOP <font color="#FF0000"><b>to </b></font>textsize <font color="#FF0000"><b>do begin
+    if </b></font>txt<font color="#000080">^[</font>i<font color="#000080">]=</font>CR <font color="#FF0000"><b>then begin
+      </b></font><font color="#008000"><i>{ i=index pos of CR of next line }
+      </i></font>inc<font color="#000080">(</font>linecount<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>linecount<font color="#000080">=</font>lines<font color="#000080">) </font><font color="#008000"><i>{or (i=textsize)} </i></font><font color="#FF0000"><b>then begin
+        </b></font>WINTOP<font color="#000080">:=</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+        </font>SHOW_TXT<font color="#000080">;
+        </font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ found specified number of lines }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ if CR found }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ loop thru text }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SET_POSITION<font color="#000080">;
+</font><font color="#008000"><i>{ sets POSITION index based on cursor location and WINTOP index }
+</i></font><font color="#FF0000"><b>var </b></font>I<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">,</font>R<font color="#000080">,</font>LINECOUNT<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>R<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>LINECOUNT<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=</font>WINTOP <font color="#FF0000"><b>TO </b></font>TEXTSIZE <font color="#FF0000"><b>DO BEGIN
+    if </b></font><font color="#000080">(</font>VROW<font color="#000080">=</font>R<font color="#000080">) </font><font color="#FF0000"><b>then begin  </b></font><font color="#008000"><i>{ line cursor on found }
+      </i></font>GET_LINE_DATA<font color="#000080">(</font>I<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">((</font>E1<font color="#000080">-</font>B1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) &lt; (</font>VCOLUMN<font color="#000080">+</font>OFFSET<font color="#000080">)) </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>POSITION<font color="#000080">:=</font>E1<font color="#000080">;
+        </font>XLINE<font color="#000080">:=</font>TRUE<font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE BEGIN
+        </b></font>POSITION<font color="#000080">:=</font>B1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+        </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ cursor line found }
+    </i></font><font color="#FF0000"><b>if </b></font>txt<font color="#000080">^[</font>i<font color="#000080">]=</font>CR <font color="#FF0000"><b>then begin
+      </b></font>INC<font color="#000080">(</font>R<font color="#000080">);
+      </font>INC<font color="#000080">(</font>LINECOUNT<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ for loop thru text }
+  </i></font>POSITION<font color="#000080">:=</font>TEXTSIZE<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ assuming cursor at end of text then }
+  </i></font>VROW<font color="#000080">:=</font>LINECOUNT<font color="#000080">;  </font><font color="#008000"><i>{ not sure if this should be here, but takes care
+                      of case where scrolling causes most of screen to
+                      be past the end of file (where the cursor pos is)
+                    }
+  </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>VCOLUMN<font color="#000080">&gt;</font>COL1<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>XLINE<font color="#000080">:=</font>TRUE <font color="#FF0000"><b>ELSE BEGIN
+    </b></font>POSITION<font color="#000080">:=</font>B1<font color="#000080">+</font>VCOLUMN<font color="#000080">+</font>OFFSET<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+    </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SET_CURSOR<font color="#000080">;
+</font><font color="#008000"><i>{ finds position and sets VCOLUMN &amp; VROW and OFFSET appropriately in window }
+{ ALWAYS sets XLINE to FALSE }
+</i></font><font color="#FF0000"><b>var </b></font>i<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">,</font>R<font color="#000080">,</font>C<font color="#000080">:</font>longint<font color="#000080">; </font>screenchanged<font color="#000080">:</font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>R<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>C<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>SCREENCHANGED<font color="#000080">:=</font>FALSE<font color="#000080">; </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=</font>WINTOP <font color="#FF0000"><b>TO </b></font>TEXTSIZE<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    IF </b></font>I<font color="#000080">=</font>POSITION <font color="#FF0000"><b>THEN BEGIN   </b></font><font color="#008000"><i>{ found it ------------------------ }
+      </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>c<font color="#000080">&gt;</font>offset<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>c<font color="#000080">&lt;=(</font>offset<font color="#000080">+</font>width<font color="#000080">)) </font><font color="#FF0000"><b>then begin  </b></font><font color="#008000"><i>{ in window }
+        </i></font>dec<font color="#000080">(</font>c<font color="#000080">,</font>offset<font color="#000080">);
+      </font><font color="#FF0000"><b>end else BEGIN
+        </b></font>SCREENCHANGED<font color="#000080">:=</font>TRUE<font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>C<font color="#000080">&lt;=</font>WIDTH<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+          </b></font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>END ELSE BEGIN
+          </b></font>OFFSET<font color="#000080">:=(</font>C<font color="#000080">-</font>WIDTH<font color="#000080">)+</font>SCRBUMP<font color="#000080">;
+          </font>C<font color="#000080">:=</font>WIDTH<font color="#000080">-</font>SCRBUMP<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>VCOLUMN<font color="#000080">:=</font>C<font color="#000080">;
+      </font>VROW<font color="#000080">:=</font>R<font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>SCREENCHANGED<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>SHOW_TXT <font color="#FF0000"><b>else
+</b></font><font color="#008000"><i>{$IFDEF USEQWIK}
+        </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+        </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+      </i></font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ position found }
+  </i></font><font color="#FF0000"><b>IF </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]=</font>CR <font color="#FF0000"><b>THEN BEGIN
+    </b></font>INC<font color="#000080">(</font>R<font color="#000080">); </font>C<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END ELSE </b></font>INC<font color="#000080">(</font>C<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>R<font color="#000080">&gt;</font>HEIGHT<font color="#000080">) </font><font color="#008000"><i>{OR (R&lt;1)} </i></font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>GET_LINE_DATA<font color="#000080">(</font>WINTOP<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+    </font>WINTOP<font color="#000080">:=</font>E1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+    </font>R<font color="#000080">:=</font>HEIGHT<font color="#000080">;
+    </font>SCREENCHANGED<font color="#000080">:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ for }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>WORD_WRAP<font color="#000080">(</font>startpoint<font color="#000080">,</font>endpoint<font color="#000080">,</font>length<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#008000"><i>{ word wrap a section of text }
+</i></font><font color="#FF0000"><b>var </b></font>ccount<font color="#000080">,</font>i<font color="#000080">,</font>spacepos<font color="#000080">,</font>lastcr<font color="#000080">:</font>longint<font color="#000080">; </font>showit<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>LENGTH<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;  </font><font color="#008000"><i>{ no length specified so get outta here }
+  </i></font>SPACEPOS<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>SHOWIT<font color="#000080">:=</font>FALSE<font color="#000080">; </font>CCOUNT<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>LASTCR<font color="#000080">:=-</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>I<font color="#000080">:=</font>STARTPOINT <font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>ENDPOINT<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>INC<font color="#000080">(</font>CCOUNT<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]=</font>SPACE <font color="#FF0000"><b>THEN </b></font>SPACEPOS<font color="#000080">:=</font>I<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]=</font>CR <font color="#FF0000"><b>THEN    </b></font><font color="#008000"><i>{ end wrap when to CRs follow, otherwise -&gt; space }
+      </i></font><font color="#FF0000"><b>IF </b></font>LASTCR<font color="#000080">=(</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>CR<font color="#000080">; </font><font color="#008000"><i>{ restore prev CR }
+        </i></font>SET_CURSOR<font color="#000080">;
+        </font>SHOW_TXT<font color="#000080">;
+        </font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE BEGIN
+        </b></font>TXT<font color="#000080">^[</font>I<font color="#000080">]:=</font>SPACE<font color="#000080">;
+        </font>SPACEPOS<font color="#000080">:=</font>I<font color="#000080">;
+        </font>LASTCR<font color="#000080">:=</font>I<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>CCOUNT<font color="#000080">)&gt;</font>LENGTH <font color="#FF0000"><b>THEN BEGIN  </b></font><font color="#008000"><i>{ past point }
+      </i></font><font color="#FF0000"><b>IF </b></font>SPACEPOS<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN     </b></font><font color="#008000"><i>{ force a CR }
+        </i></font>SPACEPOS<font color="#000080">:=</font>POSITION<font color="#000080">; </font><font color="#008000"><i>{ save pos }
+        </i></font>POSITION<font color="#000080">:=</font>I<font color="#000080">;
+        </font>BUMP_TXT<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{ insert 1 byte at position }
+        </i></font>INC<font color="#000080">(</font>ENDPOINT<font color="#000080">);
+        </font>POSITION<font color="#000080">:=</font>SPACEPOS<font color="#000080">; </font><font color="#008000"><i>{ restore pos }
+        </i></font>TXT<font color="#000080">^[</font>I<font color="#000080">]:=</font>CR<font color="#000080">;
+        </font>CCOUNT<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE BEGIN
+        </b></font>TXT<font color="#000080">^[</font>SPACEPOS<font color="#000080">]:=</font>CR<font color="#000080">; </font><font color="#008000"><i>{ turn last space into a CR }
+        </i></font>CCOUNT<font color="#000080">:=</font>I<font color="#000080">-</font>SPACEPOS<font color="#000080">; </font><font color="#008000"><i>{ calc next line len w/wrap }
+      </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>SHOWIT<font color="#000080">:=</font>TRUE<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ line past length }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ for }
+  </i></font><font color="#FF0000"><b>IF </b></font>SHOWIT <font color="#FF0000"><b>THEN BEGIN
+    </b></font>SET_CURSOR<font color="#000080">;
+    </font>SHOW_TXT<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>LINEUP<font color="#000080">:</font>LONGINT<font color="#000080">;
+</font><font color="#008000"><i>{ returns new index in file, one line up }
+{ MOVES cursor on screen as well }
+</i></font><font color="#FF0000"><b>var </b></font>b1<font color="#000080">,</font>b2<font color="#000080">,</font>e1<font color="#000080">,</font>e2<font color="#000080">, </font>col1<font color="#000080">,</font>col2<font color="#000080">,</font>len1<font color="#000080">,</font>len2<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>GET_LINE_DATA<font color="#000080">(</font>position<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">); </font><font color="#008000"><i>{ get data on current line }
+  </i></font>len1<font color="#000080">:=</font>e1<font color="#000080">-</font>b1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;                       </font><font color="#008000"><i>{ length of line + CR }
+  </i></font><font color="#FF0000"><b>if </b></font>b1<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>then BEGIN                   </b></font><font color="#008000"><i>{ check for top of text }
+    </i></font>LINEUP<font color="#000080">:=</font>POSITION<font color="#000080">; </font>EXIT<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>GET_LINE_DATA<font color="#000080">(</font>B1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,     </font>b2<font color="#000080">,</font>e2<font color="#000080">,</font>col2<font color="#000080">); </font><font color="#008000"><i>{ get data on previous line }
+  </i></font>len2<font color="#000080">:=</font>e2<font color="#000080">-</font>b2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>XLINE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>col2<font color="#000080">:=</font>b2<font color="#000080">+</font>vcolumn<font color="#000080">+</font>offset<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">; </font><font color="#008000"><i>{ in case of move to non-xline, set position }
+  </i></font><font color="#FF0000"><b>END ELSE
+    </b></font>col2<font color="#000080">:=</font>b2<font color="#000080">+</font>col1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ index position of one line up, tentative }
+
+  </i></font><font color="#FF0000"><b>if </b></font>col2<font color="#000080">&lt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>col2<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>else </b></font><font color="#008000"><i>{ top of file }
+    </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>col2<font color="#000080">&gt;</font>e2<font color="#000080">) </font><font color="#FF0000"><b>then begin   </b></font><font color="#008000"><i>{ previous line shorter than current line }
+      </i></font>col2<font color="#000080">:=</font>e2<font color="#000080">;               </font><font color="#008000"><i>{ make one line up, end of previous line }
+      </i></font>XLINE<font color="#000080">:=</font>TRUE<font color="#000080">;
+    </font><font color="#FF0000"><b>end else begin
+      </b></font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LINEUP<font color="#000080">:=</font>COL2<font color="#000080">;
+
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WINTOP<font color="#000080">&gt;</font>col2<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN  </b></font><font color="#008000"><i>{ scroll the screen up }
+    </i></font>WINTOP<font color="#000080">:=</font>B2<font color="#000080">;
+    </font>SHOW_TXT<font color="#000080">;
+  </font><font color="#FF0000"><b>END ELSE </b></font>DEC<font color="#000080">(</font>VROW<font color="#000080">);  </font><font color="#008000"><i>{ bump cursor up }
+{$IFDEF USEQWIK}
+  </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>LINEDOWN<font color="#000080">:</font>LONGINT<font color="#000080">;
+</font><font color="#008000"><i>{ returns new index in file, one line down }
+{ MOVES cursor on screen as well }
+</i></font><font color="#FF0000"><b>var </b></font>b1<font color="#000080">,</font>b2<font color="#000080">,</font>e1<font color="#000080">,</font>e2<font color="#000080">, </font>col1<font color="#000080">,</font>col2<font color="#000080">,</font>len1<font color="#000080">,</font>len2<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>GET_LINE_DATA<font color="#000080">(</font>position<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">); </font><font color="#008000"><i>{ get data on current line }
+  </i></font>len1<font color="#000080">:=</font>e1<font color="#000080">-</font>b1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;                       </font><font color="#008000"><i>{ calc length of line incl. CR }
+  </i></font><font color="#FF0000"><b>if </b></font>e1<font color="#000080">&gt;=</font>textsize <font color="#FF0000"><b>then begin           </b></font><font color="#008000"><i>{ can't go down on last line }
+    </i></font>LINEDOWN<font color="#000080">:=</font>POSITION<font color="#000080">; </font>EXIT<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>GET_LINE_DATA<font color="#000080">(</font>e1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,     </font>b2<font color="#000080">,</font>e2<font color="#000080">,</font>col2<font color="#000080">); </font><font color="#008000"><i>{ get data on next line }
+  </i></font>len2<font color="#000080">:=</font>e2<font color="#000080">-</font>b2<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>XLINE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>col2<font color="#000080">:=</font>b2<font color="#000080">+</font>vcolumn<font color="#000080">+</font>offset<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;   </font><font color="#008000"><i>{ in case of move to non-xline, set position }
+  </i></font><font color="#FF0000"><b>END ELSE
+    </b></font>col2<font color="#000080">:=</font>b2<font color="#000080">+</font>col1<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;   </font><font color="#008000"><i>{ index position of one line down, tentative }
+
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>col2<font color="#000080">&gt;</font>e2<font color="#000080">) </font><font color="#FF0000"><b>then begin  </b></font><font color="#008000"><i>{ next line position is past end of next line }
+      </i></font>col2<font color="#000080">:=</font>e2<font color="#000080">;            </font><font color="#008000"><i>{ make one line down, end of next line }
+      </i></font>xline<font color="#000080">:=</font>TRUE<font color="#000080">;
+    </font><font color="#FF0000"><b>end else begin
+      </b></font>xline<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>LINEDOWN<font color="#000080">:=</font>COL2<font color="#000080">;
+
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>VROW<font color="#000080">=</font>HEIGHT<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN   </b></font><font color="#008000"><i>{ down off screen, scroll text up }
+    </i></font>SCROLLDOWN<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{WINTOP:=B2;}
+  </i></font><font color="#FF0000"><b>END ELSE </b></font>INC<font color="#000080">(</font>VROW<font color="#000080">);  </font><font color="#008000"><i>{ bump screen down }
+{$IFDEF USEQWIK}
+  </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>READ_TXT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>PT<font color="#000080">:</font>POINTER<font color="#000080">;</font>FILENAME<font color="#000080">:</font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>TEXTSIZE<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#008000"><i>{ reads text from file into buffer, strips LFs }
+{ HORRIBLY SLOW, but not intended to be a real part of this unit }
+</i></font><font color="#FF0000"><b>VAR
+    </b></font>F    <font color="#000080">:</font><font color="#FF0000"><b>FILE OF </b></font>BYTE<font color="#000080">;
+    </font>PTXT <font color="#000080">:^</font>TXT_TYPE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>PTXT<font color="#000080">:=</font>PT<font color="#000080">;
+  </font>ASSIGN<font color="#000080">(</font>F<font color="#000080">,</font>FILENAME<font color="#000080">);
+  </font>RESET<font color="#000080">(</font>F<font color="#000080">);
+  </font>TEXTSIZE<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>IORESULT<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>EOF<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN </b></font>CLOSE<font color="#000080">(</font>F<font color="#000080">); </font>EXIT<font color="#000080">; </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE NOT</b></font><font color="#000080">(</font>EOF<font color="#000080">(</font>F<font color="#000080">)) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>INC<font color="#000080">(</font>TEXTSIZE<font color="#000080">);
+    </font>READ<font color="#000080">(</font>F<font color="#000080">,</font>PTXT<font color="#000080">^[</font>TEXTSIZE<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Ptxt<font color="#000080">^[</font>textsize<font color="#000080">]=</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>dec<font color="#000080">(</font>textsize<font color="#000080">);  </font><font color="#008000"><i>{ remove LFs }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>TEXTSIZE<font color="#000080">&gt;=</font>TEXTMAX <font color="#FF0000"><b>THEN BEGIN
+      </b></font>CLOSE<font color="#000080">(</font>F<font color="#000080">);
+      </font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>CLOSE<font color="#000080">(</font>F<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DIRECTION<font color="#000080">(</font>C<font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ act on direction keys }
+</i></font><font color="#FF0000"><b>var </b></font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">:</font>longint<font color="#000080">; </font>T<font color="#000080">:</font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+      case </b></font>C <font color="#FF0000"><b>of
+       </b></font><font color="#800000">72</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ up }
+           </i></font>POSITION<font color="#000080">:=</font>LINEUP<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">80</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ down }
+            </i></font>POSITION<font color="#000080">:=</font>LINEDOWN<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">75</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ left }
+            </i></font><font color="#FF0000"><b>if </b></font>position<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+              </b></font>write<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">);
+              </font>exit<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>xline<font color="#000080">) </font><font color="#FF0000"><b>then begin
+              </b></font>dec<font color="#000080">(</font>vcolumn<font color="#000080">);
+              </font><font color="#008000"><i>{ check to see if moved onto text }
+              </i></font>get_line_data<font color="#000080">(</font>position<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>offset<font color="#000080">+</font>vcolumn<font color="#000080">)=(</font>e1<font color="#000080">-</font>b1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+                </b></font>xline<font color="#000080">:=</font>FALSE<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end else begin  </b></font><font color="#008000"><i>{ not xline }
+              </i></font><font color="#FF0000"><b>if </b></font>txt<font color="#000080">^[</font>position<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]=</font>CR <font color="#FF0000"><b>then begin      </b></font><font color="#008000"><i>{ back up one line? }
+                </i></font>get_line_data<font color="#000080">(</font>position<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+                </font>vcolumn<font color="#000080">:=</font>col1<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>col1<font color="#000080">&gt;</font>width <font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{ left to prev line off screen }
+                  </i></font>offset<font color="#000080">:=</font>col1<font color="#000080">-</font>width<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">;
+                  </font>vcolumn<font color="#000080">:=</font>col1<font color="#000080">-</font>offset<font color="#000080">;
+                  </font>SHOW_TXT<font color="#000080">;
+                </font><font color="#FF0000"><b>end else </b></font>offset<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+                </font>dec<font color="#000080">(</font>vrow<font color="#000080">)
+              </font><font color="#FF0000"><b>end else begin
+                </b></font>dec<font color="#000080">(</font>vcolumn<font color="#000080">);
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font>dec<font color="#000080">(</font>position<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ xline }
+            </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>vcolumn<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>offset<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+              </b></font>vcolumn<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+              </font>dec<font color="#000080">(</font>offset<font color="#000080">);
+              </font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF USEQWIK}
+            </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+            </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">77</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ right }
+            </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>xline<font color="#000080">) </font><font color="#FF0000"><b>then begin
+              </b></font>inc<font color="#000080">(</font>vcolumn<font color="#000080">);
+            </font><font color="#FF0000"><b>end else begin
+              </b></font>inc<font color="#000080">(</font>position<font color="#000080">);
+              </font>inc<font color="#000080">(</font>vcolumn<font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>txt<font color="#000080">^[</font>position<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]=</font>CR<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">((</font>position<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)&gt;=</font>TEXTSIZE<font color="#000080">) </font><font color="#FF0000"><b>then begin
+</b></font><font color="#008000"><i>{ at eol }
+                </i></font>dec<font color="#000080">(</font>position<font color="#000080">);
+                </font>xline<font color="#000080">:=</font>true<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>MAXCOLUMN<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">((</font>VCOLUMN<font color="#000080">+</font>OFFSET<font color="#000080">)&gt;</font>MAXCOLUMN<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+              </b></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+              </font><font color="#FF0000"><b>IF </b></font>E1<font color="#000080">&gt;=</font>TEXTSIZE <font color="#FF0000"><b>THEN BEGIN
+                </b></font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">);
+              </font><font color="#FF0000"><b>END ELSE BEGIN
+                </b></font>POSITION<font color="#000080">:=</font>E1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+                </font>SET_CURSOR<font color="#000080">;
+                </font>EXIT<font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+            </font><font color="#FF0000"><b>if </b></font>vcolumn<font color="#000080">&gt;</font>width <font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{ moved outside window }
+              </i></font>inc<font color="#000080">(</font>offset<font color="#000080">);
+              </font>dec<font color="#000080">(</font>vcolumn<font color="#000080">);
+              </font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF USEQWIK}
+            </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+            </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">71</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ HOME, to beginning of current line }
+            </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">,</font>B1<font color="#000080">,</font>E1<font color="#000080">,</font>COL1<font color="#000080">);
+            </font>POSITION<font color="#000080">:=</font>B1<font color="#000080">; </font>VCOLUMN<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+            </font><font color="#FF0000"><b>IF </b></font>OFFSET<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN
+              </b></font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+              </font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF USEQWIK}
+            </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+            </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+            </i></font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">79</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ END, to end of current line }
+            </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">,</font>B1<font color="#000080">,</font>E1<font color="#000080">,</font>COL1<font color="#000080">);
+            </font>POSITION<font color="#000080">:=</font>E1<font color="#000080">;
+            </font><font color="#008000"><i>{ calculate offset &amp; cursor position }
+            </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>E1<font color="#000080">-(</font>B1<font color="#000080">+</font>OFFSET<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">)&gt;</font>WIDTH <font color="#FF0000"><b>THEN BEGIN  </b></font><font color="#008000"><i>{ off screen }
+              </i></font>offset<font color="#000080">:=(</font>e1<font color="#000080">-</font>b1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)-</font>width<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">; </font><font color="#008000"><i>{SCRBUMP}
+              </i></font>vcolumn<font color="#000080">:=</font>width<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">; </font><font color="#008000"><i>{SCRBUMP}
+              </i></font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>END ELSE </b></font>VCOLUMN<font color="#000080">:=((</font>E1<font color="#000080">-</font>B1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)-</font>offset<font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF USEQWIK}
+            </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+            </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">73</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ PGUP, up one screen }
+            </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WINTOP<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+              </b></font>POSITION<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+              </font>VCOLUMN<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>VROW<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF USEQWIK}
+              </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+              </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+            </i></font><font color="#FF0000"><b>END ELSE BEGIN
+              </b></font>SCROLLUP<font color="#000080">(</font>HEIGHT<font color="#000080">);
+              </font>SET_POSITION<font color="#000080">;
+              </font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">81</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ PGDN, down one screen }
+            </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WINBOTTOM<font color="#000080">=</font>TEXTSIZE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+              </b></font>POSITION<font color="#000080">:=</font>TEXTSIZE<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+              </font>SET_CURSOR<font color="#000080">;
+            </font><font color="#FF0000"><b>END ELSE BEGIN
+              </b></font>SCROLLDOWN<font color="#000080">(</font>HEIGHT<font color="#000080">);
+              </font>SET_POSITION<font color="#000080">;
+              </font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#800000">82</font><font color="#000080">:</font><font color="#FF0000"><b>BEGIN
+             </b></font>INSERTON<font color="#000080">:=</font><font color="#FF0000"><b>NOT</b></font><font color="#000080">(</font>INSERTON<font color="#000080">);     </font><font color="#008000"><i>{ INS toggle insert status }
+{ %      IF (INSERTON) THEN GETBLOCKCURSOR ELSE GETUNDERLINECURSOR;}
+           </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#800000">83</font><font color="#000080">:</font><font color="#FF0000"><b>BEGIN                        </b></font><font color="#008000"><i>{ DEL }
+             </i></font>T<font color="#000080">:=</font>ORD<font color="#000080">(</font>TXT<font color="#000080">^[</font>POSITION<font color="#000080">]);
+             </font><font color="#FF0000"><b>IF </b></font>POSITION<font color="#000080">=</font>TEXTSIZE<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+             </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>XLINE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN   </b></font><font color="#008000"><i>{ hitting DEL past eol, special case }
+               </i></font>STUFF_TXT<font color="#000080">(</font><font color="#800000">#0</font><font color="#000080">);
+               </font>DEC<font color="#000080">(</font>POSITION<font color="#000080">);
+               </font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">);
+               </font>DEL_CHARS<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+             </font>DEL_CHARS<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+             </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>T<font color="#000080">=</font>CR<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>POSITION<font color="#000080">&gt;=</font>TEXTSIZE<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>SHOW_TXT <font color="#FF0000"><b>ELSE </b></font>SHOW_LINE<font color="#000080">;
+           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+       </font><font color="#800000">132</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ CTRL-PgUP - top of text }
+             </i></font>POSITION<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>VROW<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>VCOLUMN<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+             </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WINTOP<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>OFFSET<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+</b></font><font color="#008000"><i>{$IFDEF USEQWIK}
+               </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)
+</font><font color="#008000"><i>{$ELSE}
+               </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">)
+</font><font color="#008000"><i>{$ENDIF}
+             </i></font><font color="#FF0000"><b>ELSE BEGIN
+               </b></font>WINTOP<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+               </font>SHOW_TXT<font color="#000080">;
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">115</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ CTRL &lt;- }
+             </i></font><font color="#FF0000"><b>if </b></font>position<font color="#000080">&lt;</font><font color="#800000">3 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+             </font><font color="#FF0000"><b>for </b></font>col1<font color="#000080">:=(</font>position<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do
+               if </b></font><font color="#000080">(</font>txt<font color="#000080">^[</font>col1<font color="#000080">]=</font>SPACE<font color="#000080">) </font><font color="#FF0000"><b>then begin
+                 </b></font>position<font color="#000080">:=</font>col1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+                 </font><font color="#FF0000"><b>if </b></font>position<font color="#000080">&lt;</font>wintop <font color="#FF0000"><b>then begin
+                   </b></font>wintop<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+ </font><font color="#008000"><i>{ this could be avoided if set-cursor started at 1 instead of wintop,
+   but it would reduce overal performance }
+                   </i></font>set_cursor<font color="#000080">;
+                   </font>show_txt
+                 <font color="#FF0000"><b>end else
+                   </b></font>set_cursor<font color="#000080">;
+                 </font>exit<font color="#000080">;
+               </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">116</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ CTRL -&gt; }
+             </i></font><font color="#FF0000"><b>if </b></font>position<font color="#000080">&gt;=</font>textsize <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+             </font><font color="#FF0000"><b>for </b></font>col1<font color="#000080">:=</font>position<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>textsize <font color="#FF0000"><b>do
+               if </b></font><font color="#000080">(</font>txt<font color="#000080">^[</font>col1<font color="#000080">]=</font>SPACE<font color="#000080">) </font><font color="#FF0000"><b>then begin
+                 </b></font>position<font color="#000080">:=</font>col1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+                 </font>set_cursor<font color="#000080">;
+                 </font>exit<font color="#000080">;
+               </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">118</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ CTRL-PgDN - end of text }
+             </i></font>position<font color="#000080">:=</font>textsize<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+             </font>SET_CURSOR<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">67</font><font color="#000080">:</font><font color="#FF0000"><b>BEGIN    </b></font><font color="#008000"><i>{ F9 }
+          </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ case }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>PARSE_INPUT<font color="#000080">:</font>BYTE<font color="#000080">;
+</font><font color="#008000"><i>{ main encapsulation of editing routine, read keys and act }
+</i></font><font color="#FF0000"><b>var </b></font>c         <font color="#000080">:</font>byte<font color="#000080">;
+    </font>fkey      <font color="#000080">:</font>boolean<font color="#000080">;
+    </font>leaving   <font color="#000080">:</font>boolean<font color="#000080">;
+    </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#008000"><i>{ RETURNS:
+      1=ESC
+      2=ALT-X
+      3=F1
+      4=F10
+      5=F2
+}
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>LEAVING<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>REPEAT
+    </b></font>c<font color="#000080">:=</font>getinput<font color="#000080">(</font>fkey<font color="#000080">);
+
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>C<font color="#000080">=</font><font color="#800000">27</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">((</font>FKEY<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>C <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">59</font><font color="#000080">,</font><font color="#800000">45</font><font color="#000080">,</font><font color="#800000">60</font><font color="#000080">,</font><font color="#800000">68</font><font color="#000080">])) </font><font color="#FF0000"><b>THEN BEGIN  </b></font><font color="#008000"><i>{ exit
+conditions }
+      </i></font><font color="#FF0000"><b>IF </b></font>C<font color="#000080">=</font><font color="#800000">27 </font><font color="#FF0000"><b>THEN </b></font>PARSE_INPUT<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>ELSE  </b></font><font color="#008000"><i>{ esc }
+      </i></font><font color="#FF0000"><b>IF </b></font>C<font color="#000080">=</font><font color="#800000">45 </font><font color="#FF0000"><b>THEN </b></font>PARSE_INPUT<font color="#000080">:=</font><font color="#800000">2 </font><font color="#FF0000"><b>ELSE  </b></font><font color="#008000"><i>{ Alt-X }
+      </i></font><font color="#FF0000"><b>IF </b></font>C<font color="#000080">=</font><font color="#800000">59 </font><font color="#FF0000"><b>THEN </b></font>PARSE_INPUT<font color="#000080">:=</font><font color="#800000">3 </font><font color="#FF0000"><b>ELSE  </b></font><font color="#008000"><i>{ F1 }
+      </i></font><font color="#FF0000"><b>IF </b></font>C<font color="#000080">=</font><font color="#800000">68 </font><font color="#FF0000"><b>THEN </b></font>PARSE_INPUT<font color="#000080">:=</font><font color="#800000">4 </font><font color="#FF0000"><b>ELSE  </b></font><font color="#008000"><i>{ F10 }
+      </i></font><font color="#FF0000"><b>IF </b></font>C<font color="#000080">=</font><font color="#800000">60 </font><font color="#FF0000"><b>THEN </b></font>PARSE_INPUT<font color="#000080">:=</font><font color="#800000">5</font><font color="#000080">;      </font><font color="#008000"><i>{ F2 }
+      </i></font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE
+    IF </b></font><font color="#000080">(</font>FKEY<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN  </b></font><font color="#008000"><i>{ ------------------ eval FNC &amp; CURSOR keys ----- }
+      </i></font>DIRECTION<font color="#000080">(</font>C<font color="#000080">);
+    </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ if function key pressed }
+    </i></font><font color="#FF0000"><b>ELSE BEGIN                      </b></font><font color="#008000"><i>{ alphanumeric key - process data }
+      </i></font><font color="#FF0000"><b>CASE </b></font>C <font color="#FF0000"><b>OF                     </b></font><font color="#008000"><i>{ check alpha keys }
+       </i></font>REFORMAT<font color="#000080">:</font><font color="#FF0000"><b>BEGIN               </b></font><font color="#008000"><i>{ CTRL-B, 02, REFORMAT }
+            </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+            </font>WORD_WRAP<font color="#000080">(</font>B1<font color="#000080">,</font>TEXTSIZE<font color="#000080">,</font>MAXCOLUMN<font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+       </font>CR<font color="#000080">:</font><font color="#FF0000"><b>begin                     </b></font><font color="#008000"><i>{ carriage return }
+            </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>INSERTON<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>POSITION<font color="#000080">&gt;</font>TEXTSIZE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+              </b></font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+              </font>INC<font color="#000080">(</font>VROW<font color="#000080">);
+              </font><font color="#FF0000"><b>IF </b></font>VROW<font color="#000080">&gt;</font>HEIGHT <font color="#FF0000"><b>THEN BEGIN
+                 </b></font>SCROLLDOWN<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+                 </font>DEC<font color="#000080">(</font>VROW<font color="#000080">);
+               </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+               </font>STUFF_TXT<font color="#000080">(</font>CHR<font color="#000080">(</font>C<font color="#000080">));
+               </font>VCOLUMN<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+               </font>SHOW_TXT<font color="#000080">;
+             </font><font color="#FF0000"><b>end ELSE BEGIN  </b></font><font color="#008000"><i>{ enter pressed with overwrite on }
+               </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">,</font>B1<font color="#000080">,</font>E1<font color="#000080">,</font>COL1<font color="#000080">);
+               </font>POSITION<font color="#000080">:=</font>E1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+               </font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+               </font>SET_CURSOR<font color="#000080">;
+               </font>show_txt<font color="#000080">;
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#800000">08</font><font color="#000080">:</font><font color="#FF0000"><b>IF </b></font>POSITION<font color="#000080">&lt;&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>THEN BEGIN    </b></font><font color="#008000"><i>{ backspace }
+             </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>XLINE<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN   </b></font><font color="#008000"><i>{ can't erase dead zone }
+                </i></font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">);        </font><font color="#008000"><i>{ just move cursor left }
+                </i></font>SET_POSITION<font color="#000080">;
+             </font><font color="#FF0000"><b>END ELSE BEGIN
+               </b></font>DEC<font color="#000080">(</font>POSITION<font color="#000080">);
+               </font><font color="#FF0000"><b>IF </b></font>TXT<font color="#000080">^[</font>POSITION<font color="#000080">]=</font>CR <font color="#FF0000"><b>THEN BEGIN </b></font><font color="#008000"><i>{ backspace/erase line }
+                 </i></font>DEL_CHARS<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+                 </font>SET_CURSOR<font color="#000080">;
+                 </font>SHOW_TXT<font color="#000080">;
+               </font><font color="#FF0000"><b>END ELSE BEGIN
+                 </b></font>DEL_CHARS<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+                 </font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">);
+                 </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>VCOLUMN<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+                   IF </b></font><font color="#000080">(</font>OFFSET<font color="#000080">&gt;=</font>SCRBUMP<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+                     </b></font>DEC<font color="#000080">(</font>OFFSET<font color="#000080">,</font>SCRBUMP<font color="#000080">); </font>VCOLUMN<font color="#000080">:=</font>SCRBUMP<font color="#000080">;
+                     </font>SHOW_TXT<font color="#000080">;
+                   </font><font color="#FF0000"><b>END ELSE BEGIN
+                     </b></font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>SET_CURSOR<font color="#000080">;
+                     </font>SHOW_TXT<font color="#000080">;
+                   </font><font color="#FF0000"><b>END
+                 ELSE </b></font>SHOW_LINE<font color="#000080">;
+               </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ xline / else }
+{$IFDEF USEQWIK}
+             </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+             </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+           </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+         </font><font color="#800000">09</font><font color="#000080">:</font><font color="#FF0000"><b>BEGIN                      </b></font><font color="#008000"><i>{ TAB }
+              </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+              </font>col1<font color="#000080">:=</font>tabsize<font color="#000080">-((</font>position<font color="#000080">-</font>b1<font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>tabsize<font color="#000080">); </font><font color="#008000"><i>{ spaces to next tab
+stop }
+              </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>INSERTON<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+                </b></font>stuff_txt<font color="#000080">(</font>SPACES<font color="#000080">(</font>COL1<font color="#000080">));
+                </font>SHOW_LINE<font color="#000080">;
+              </font><font color="#FF0000"><b>END ELSE BEGIN
+                </b></font>INC<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>COL1<font color="#000080">);
+                </font><font color="#FF0000"><b>IF </b></font>VCOLUMN<font color="#000080">&gt;</font>WIDTH <font color="#FF0000"><b>THEN BEGIN
+                  </b></font>INC<font color="#000080">(</font>OFFSET<font color="#000080">,</font>SCRBUMP<font color="#000080">);
+                  </font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>SCRBUMP<font color="#000080">);
+                  </font>SHOW_TXT<font color="#000080">;
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>POSITION<font color="#000080">+</font>COL1<font color="#000080">)&gt;</font>E1 <font color="#FF0000"><b>THEN BEGIN
+                  </b></font>POSITION<font color="#000080">:=</font>E1<font color="#000080">; </font>XLINE<font color="#000080">:=</font>TRUE<font color="#000080">;
+                </font><font color="#FF0000"><b>END ELSE begin </b></font>POSITION<font color="#000080">:=</font>POSITION<font color="#000080">+</font>COL1<font color="#000080">; </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">; </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF USEQWIK}
+                </i></font>GOTORC<font color="#000080">(</font>R1<font color="#000080">+</font>VROW<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>C1<font color="#000080">+</font>VCOLUMN<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+                </i></font>GOTOXY<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>VROW<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+              </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+         </font><font color="#800000">25</font><font color="#000080">:</font><font color="#FF0000"><b>BEGIN                      </b></font><font color="#008000"><i>{ CTRL-Y / ERASE LINE }
+              </i></font>GET_LINE_DATA<font color="#000080">(</font>POSITION<font color="#000080">, </font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+              </font><font color="#FF0000"><b>IF </b></font>E1<font color="#000080">&gt;</font>TEXTSIZE <font color="#FF0000"><b>THEN </b></font>E1<font color="#000080">:=</font>E1<font color="#000080">-</font>B1 <font color="#FF0000"><b>ELSE </b></font>E1<font color="#000080">:=</font>E1<font color="#000080">-</font>B1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+              </font>POSITION<font color="#000080">:=</font>B1<font color="#000080">; </font><font color="#008000"><i>{ E1:=E1-B1+1; }
+              </i></font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>VCOLUMN<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+              </font>DEL_CHARS<font color="#000080">(</font>E1<font color="#000080">);
+              </font>SHOW_TXT<font color="#000080">;
+              </font><font color="#FF0000"><b>IF </b></font>POSITION<font color="#000080">&gt;</font>TEXTSIZE <font color="#FF0000"><b>THEN </b></font>POSITION<font color="#000080">:=</font>TEXTSIZE<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>ELSE BEGIN   </b></font><font color="#008000"><i>{------------------ unspecific alphanumeric char }
+          </i></font>STUFF_TXT<font color="#000080">(</font>CHR<font color="#000080">(</font>C<font color="#000080">));           </font><font color="#008000"><i>{ store it }
+          </i></font><font color="#FF0000"><b>IF </b></font>MAXCOLUMN<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN BEGIN    </b></font><font color="#008000"><i>{ check for column boundaries }
+            </i></font><font color="#FF0000"><b>IF </b></font>VCOLUMN<font color="#000080">&gt;</font>WIDTH <font color="#FF0000"><b>THEN BEGIN
+              </b></font>INC<font color="#000080">(</font>OFFSET<font color="#000080">,</font>SCRBUMP<font color="#000080">);
+              </font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>SCRBUMP<font color="#000080">);
+              </font>SHOW_TXT<font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END ELSE BEGIN  </b></font><font color="#008000"><i>{ limited screen/line size }
+            </i></font>SHOW_LINE<font color="#000080">;
+            </font><font color="#FF0000"><b>IF </b></font><font color="#000080">((</font>VCOLUMN<font color="#000080">+</font>OFFSET<font color="#000080">)&gt;</font>MAXCOLUMN<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN  </b></font><font color="#008000"><i>{ hit edge limit }
+              </i></font>get_line_data<font color="#000080">(</font>position<font color="#000080">,</font>b1<font color="#000080">,</font>e1<font color="#000080">,</font>col1<font color="#000080">);
+              </font>word_wrap<font color="#000080">(</font>b1<font color="#000080">,</font>textsize<font color="#000080">,</font>MAXCOLUMN<font color="#000080">);
+            </font><font color="#FF0000"><b>END ELSE BEGIN
+              IF </b></font>VCOLUMN<font color="#000080">&gt;</font>WIDTH <font color="#FF0000"><b>THEN BEGIN </b></font><font color="#008000"><i>{ maxcolumn&gt;width but set }
+                </i></font>INC<font color="#000080">(</font>OFFSET<font color="#000080">,</font>SCRBUMP<font color="#000080">);
+                </font>DEC<font color="#000080">(</font>VCOLUMN<font color="#000080">,</font>SCRBUMP<font color="#000080">);
+                </font>SHOW_TXT<font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font>SHOW_LINE<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ case }
+    </i></font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{ alpha key }
+  </i></font><font color="#FF0000"><b>UNTIL </b></font>LEAVING<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SETUP_TEXT_SETTINGS<font color="#000080">(</font>Row1<font color="#000080">,</font>Column1<font color="#000080">,</font>Row2<font color="#000080">,</font>Column2<font color="#000080">:</font>BYTE<font color="#000080">;</font>DRAWBOX<font color="#000080">:</font>BOOLEAN<font color="#000080">);
+</font><font color="#008000"><i>{ sets appropriate system values for text window }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>R1<font color="#000080">:=</font>ROW1<font color="#000080">; </font>C1<font color="#000080">:=</font>COLUMN1<font color="#000080">; </font>R2<font color="#000080">:=</font>ROW2<font color="#000080">; </font>C2<font color="#000080">:=</font>COLUMN2<font color="#000080">;  </font><font color="#008000"><i>{ set global position of win }
+{ % these are arbitrary attribute values - tweak them to suit your tastes }
+  </i></font>NORMATTR<font color="#000080">:=</font><font color="#800000">37</font><font color="#000080">; </font><font color="#008000"><i>{ % }
+  </i></font>BACKATTR<font color="#000080">:=</font><font color="#800000">37</font><font color="#000080">; </font><font color="#008000"><i>{ % }
+  </i></font>BORDATTR<font color="#000080">:=</font><font color="#800000">36</font><font color="#000080">; </font><font color="#008000"><i>{ % }
+  </i></font>OFFSET<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>INSERTON<font color="#000080">:=</font>TRUE<font color="#000080">;
+  </font>XLINE<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font>HEIGHT<font color="#000080">:=</font>R2<font color="#000080">-</font>R1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ current height of text window }
+  </i></font>WIDTH<font color="#000080">:=</font>C2<font color="#000080">-</font>C1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;   </font><font color="#008000"><i>{ current width (in columns) of text window }
+  </i></font>SCRBUMP<font color="#000080">:=</font>WIDTH <font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">;
+  </font>VROW<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;          </font><font color="#008000"><i>{ virtual row and column of cursor inside text window }
+  </i></font>VCOLUMN<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+
+</font><font color="#008000"><i>{ % maxcolumn sets automatic formatting and word wrapping !! }
+{  MAXCOLUMN:=WIDTH; { set to 0 to disable word wrap and line length limits }
+  </i></font>MAXCOLUMN<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;   </font><font color="#008000"><i>{ no word wrapping }
+
+  </i></font>position<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>wintop<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>DRAWBOX <font color="#FF0000"><b>THEN BEGIN
+    </b></font>DRAW_BOX<font color="#000080">(</font>R1<font color="#000080">,</font>C1<font color="#000080">,</font>R2<font color="#000080">,</font>C2<font color="#000080">);
+    </font><font color="#008000"><i>{ DRAW_BOX must be prior to initialize window if not using qwik }
+    </i></font>INITIALIZE_WINDOW<font color="#000080">(</font>R1<font color="#000080">,</font>C1<font color="#000080">,</font>R2<font color="#000080">,</font>C2<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>EDIT<font color="#000080">(</font>PT<font color="#000080">:</font>POINTER<font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>RETURNCODE<font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#008000"><i>{ Edit text; assumes text has already been initialized }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>TXT<font color="#000080">:=</font>PT<font color="#000080">;    </font><font color="#008000"><i>{ assign specified text pointer to working name }
+  </i></font>SHOW_TXT<font color="#000080">;
+
+  </font>RETURNCODE<font color="#000080">:=</font>PARSE_INPUT<font color="#000080">;
+</font><font color="#008000"><i>{ RETURNCODE the following values based on keys pressed:
+      1=ESC
+      2=ALT-X
+      3=F1
+      4=F10
+      5=F2
+}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>(***************************************************************************)
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">. </font><font color="#008000"><i>{ Unit MPEDITOR.PAS }
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTEDIT SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p></body>
+</html>

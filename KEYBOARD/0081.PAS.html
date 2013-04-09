@@ -1,0 +1,697 @@
+<html>
+<head><title> "Keyboard Unit" by ALEX GRISCHENKO</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to KEYBOARD SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0081.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{$X+,S-,R-,I-,L-,O-,B-,D-}
+{*****************************************}
+{*  Keyboard unit for BP 7.0             *}
+{*  Direct INT 9h support                *}
+{*  Written by Alex Grischenko           *}
+{*  Modified by Olaf Bartelt for DPMI    *}
+{*  (C) AntSoft Lab , 1994               *}
+{*  Version 1.0 30-06-94                 *}
+{*****************************************}
+
+</i></font><font color="#FF0000"><b>Unit  </b></font>Keyboard<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+type
+  </b></font>DoubleKey <font color="#000080">= </font><font color="#FF0000"><b>object
+    </b></font>Left<font color="#000080">,</font>Right <font color="#000080">: </font>boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>Both <font color="#000080">: </font>boolean<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>Any  <font color="#000080">: </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>LockKey <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Pressed<font color="#000080">,</font>Locked <font color="#000080">: </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>KeyEvent <font color="#000080">= </font><font color="#FF0000"><b>record
+    case </b></font>Integer <font color="#FF0000"><b>of
+     </b></font><font color="#800000">0</font><font color="#000080">: (</font>KeyCode <font color="#000080">: </font>Word<font color="#000080">);
+     </font><font color="#800000">1</font><font color="#000080">: (</font>CharCode<font color="#000080">: </font>Char<font color="#000080">; </font>ScanCode<font color="#000080">: </font>Byte<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>const
+  </b></font>SEG0000  <font color="#000080">: </font>WORD <font color="#000080">= </font><font color="#800000">$0000</font><font color="#000080">;
+
+  </font>k_LShift <font color="#000080">= </font><font color="#800000">$2A00</font><font color="#000080">;
+  </font>k_RShift <font color="#000080">= </font><font color="#800000">$3600</font><font color="#000080">;
+  </font>k_LAlt   <font color="#000080">= </font><font color="#800000">$3800</font><font color="#000080">;
+  </font>k_RAlt   <font color="#000080">= </font><font color="#800000">$3800 </font><font color="#FF0000"><b>or </b></font><font color="#800000">$8000</font><font color="#000080">;
+  </font>k_LCtrl  <font color="#000080">= </font><font color="#800000">$1D00</font><font color="#000080">;
+  </font>k_RCtrl  <font color="#000080">= </font><font color="#800000">$1D00 </font><font color="#FF0000"><b>or </b></font><font color="#800000">$8000</font><font color="#000080">;
+
+  </font>k_PrtScr     <font color="#000080">= </font><font color="#800000">$F900</font><font color="#000080">;
+  </font>k_SysReg     <font color="#000080">= </font><font color="#800000">$F800</font><font color="#000080">;
+  </font>k_Pause      <font color="#000080">= </font><font color="#800000">$F700</font><font color="#000080">;
+  </font>k_Break      <font color="#000080">= </font><font color="#800000">$F600</font><font color="#000080">;
+  </font>k_CapsLock   <font color="#000080">= </font><font color="#800000">$3A00</font><font color="#000080">;
+  </font>k_NumLock    <font color="#000080">= </font><font color="#800000">$4500</font><font color="#000080">;
+  </font>k_ScrollLock <font color="#000080">= </font><font color="#800000">$4600</font><font color="#000080">;
+
+  </font>k_AltCtrlDel <font color="#000080">= </font><font color="#800000">$F200</font><font color="#000080">;
+
+  </font>WasKeybEvent <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;  </font><font color="#008000"><i>{ Was event from keyboard }
+  </i></font>Pressed  <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;      </font><font color="#008000"><i>{ TRUE - key pressed, FALSE - released }
+
+  </i></font>ESC    <font color="#000080">: </font>boolean   <font color="#000080">= </font>false<font color="#000080">;
+  </font>Alt    <font color="#000080">: </font>DoubleKey <font color="#000080">= ( </font>Left <font color="#000080">: </font>false<font color="#000080">; </font>Right <font color="#000080">: </font>false <font color="#000080">);
+  </font>Ctrl   <font color="#000080">: </font>DoubleKey <font color="#000080">= ( </font>Left <font color="#000080">: </font>false<font color="#000080">; </font>Right <font color="#000080">: </font>false <font color="#000080">);
+  </font>Shift  <font color="#000080">: </font>DoubleKey <font color="#000080">= ( </font>Left <font color="#000080">: </font>false<font color="#000080">; </font>Right <font color="#000080">: </font>false <font color="#000080">);
+  </font>PrtScr    <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+  </font>CapsLock  <font color="#000080">: </font>LockKey <font color="#000080">= ( </font>Pressed <font color="#000080">: </font>false<font color="#000080">; </font>Locked <font color="#000080">: </font>false <font color="#000080">);
+  </font>NumLock   <font color="#000080">: </font>LockKey <font color="#000080">= ( </font>Pressed <font color="#000080">: </font>false<font color="#000080">; </font>Locked <font color="#000080">: </font>false <font color="#000080">);
+  </font>ScrollLock<font color="#000080">: </font>LockKey <font color="#000080">= ( </font>Pressed <font color="#000080">: </font>false<font color="#000080">; </font>Locked <font color="#000080">: </font>false <font color="#000080">);
+  </font>Pause     <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+  </font>CtrlBreak <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+
+  </font>AltCtrlDel<font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>InitKeyboard<font color="#000080">;             </font><font color="#008000"><i>{ Initalize driver }
+</i></font><font color="#FF0000"><b>procedure </b></font>DoneKeyboard<font color="#000080">;             </font><font color="#008000"><i>{ Uninstall driver }
+</i></font><font color="#FF0000"><b>function  </b></font>ReadKeyboard <font color="#000080">: </font>byte<font color="#000080">;      </font><font color="#008000"><i>{ Read current scancode from keyboard
+                                      ( }
+</i></font><font color="#FF0000"><b>function  </b></font>KeyPressed  <font color="#000080">: </font>boolean<font color="#000080">;    </font><font color="#008000"><i>{ Keys was pressed?             }
+</i></font><font color="#FF0000"><b>function  </b></font>ReadKey  <font color="#000080">: </font>char<font color="#000080">;          </font><font color="#008000"><i>{ For using instead CRT.ReadKey }
+</i></font><font color="#FF0000"><b>function  </b></font>ReadChar <font color="#000080">: </font>char<font color="#000080">;          </font><font color="#008000"><i>{ Converts scancode to ASC-key  }
+</i></font><font color="#FF0000"><b>procedure </b></font>GetKeyEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>KEvent <font color="#000080">: </font>KeyEvent<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>NullProc<font color="#000080">;
+</font><font color="#008000"><i>{procedure KeybLights(On : boolean; Light : byte);}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>AltCtrlDelproc <font color="#000080">: </font><font color="#FF0000"><b>procedure </b></font><font color="#000080">= </font>NullProc<font color="#000080">;
+  </font><font color="#008000"><i>{ Alt-Ctrl-Del Handler }
+
+</i></font><font color="#FF0000"><b>implementation
+
+function </b></font>DoubleKey<font color="#000080">.</font>Both <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Both<font color="#000080">:=</font>Right <font color="#FF0000"><b>and </b></font>Left<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>DoubleKey<font color="#000080">.</font>Any <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Any<font color="#000080">:=</font>Right <font color="#FF0000"><b>or </b></font>Left<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>Key <font color="#000080">: </font>byte <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>KeyboardSet <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+
+  </font>KeyCodes <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">$58</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word <font color="#000080">= (
+
+</font><font color="#008000"><i>{******** 85 - key **********}
+       {ESC  1  2  3  4  5  6  7  8  9  0  -  =  BkSp}
+ </i></font><font color="#800000">27</font><font color="#000080">, </font><font color="#800000">49</font><font color="#000080">,</font><font color="#800000">50</font><font color="#000080">,</font><font color="#800000">51</font><font color="#000080">,</font><font color="#800000">52</font><font color="#000080">,</font><font color="#800000">53</font><font color="#000080">,</font><font color="#800000">54</font><font color="#000080">,</font><font color="#800000">55</font><font color="#000080">,</font><font color="#800000">56</font><font color="#000080">,</font><font color="#800000">57</font><font color="#000080">,</font><font color="#800000">48</font><font color="#000080">,</font><font color="#800000">45</font><font color="#000080">,</font><font color="#800000">61</font><font color="#000080">,    </font><font color="#800000">8</font><font color="#000080">,
+
+       </font><font color="#008000"><i>{TAB  Q  W  E  R  T  Y  U  I  O  P  [  ] Enter}
+        </i></font><font color="#800000">9</font><font color="#000080">,  </font><font color="#800000">81</font><font color="#000080">,</font><font color="#800000">87</font><font color="#000080">,</font><font color="#800000">69</font><font color="#000080">,</font><font color="#800000">82</font><font color="#000080">,</font><font color="#800000">84</font><font color="#000080">,</font><font color="#800000">89</font><font color="#000080">,</font><font color="#800000">85</font><font color="#000080">,</font><font color="#800000">73</font><font color="#000080">,</font><font color="#800000">79</font><font color="#000080">,</font><font color="#800000">80</font><font color="#000080">,</font><font color="#800000">91</font><font color="#000080">,</font><font color="#800000">93</font><font color="#000080">,   </font><font color="#800000">13</font><font color="#000080">,
+
+     </font><font color="#008000"><i>{LCtrl  A  S  D  F  G  H  J  K  L  ;  '  `}
+    </i></font>k_LCtrl<font color="#000080">,</font><font color="#800000">65</font><font color="#000080">,</font><font color="#800000">83</font><font color="#000080">,</font><font color="#800000">68</font><font color="#000080">,</font><font color="#800000">70</font><font color="#000080">,</font><font color="#800000">71</font><font color="#000080">,</font><font color="#800000">72</font><font color="#000080">,</font><font color="#800000">74</font><font color="#000080">,</font><font color="#800000">75</font><font color="#000080">,</font><font color="#800000">76</font><font color="#000080">,</font><font color="#800000">59</font><font color="#000080">,</font><font color="#800000">39</font><font color="#000080">,</font><font color="#800000">96</font><font color="#000080">,
+
+    </font><font color="#008000"><i>{LShift  \  Z  X  C  V  B  N  M  ,  .  /  RShift}
+   </i></font>k_LShift<font color="#000080">,</font><font color="#800000">92</font><font color="#000080">,</font><font color="#800000">90</font><font color="#000080">,</font><font color="#800000">88</font><font color="#000080">,</font><font color="#800000">67</font><font color="#000080">,</font><font color="#800000">86</font><font color="#000080">,</font><font color="#800000">66</font><font color="#000080">,</font><font color="#800000">78</font><font color="#000080">,</font><font color="#800000">77</font><font color="#000080">,</font><font color="#800000">44</font><font color="#000080">,</font><font color="#800000">46</font><font color="#000080">,</font><font color="#800000">47</font><font color="#000080">, </font>k_RShift<font color="#000080">,
+
+       </font><font color="#008000"><i>{ *  LAlt   Space  CapsLock}
+ </i></font><font color="#800000">42</font><font color="#000080">, </font>k_LAlt<font color="#000080">,   </font><font color="#800000">32</font><font color="#000080">, </font>k_CapsLock<font color="#000080">,
+
+       </font><font color="#008000"><i>{F1    F2    F3    F4    F5    F6    F7    F8    F9   F10}
+     </i></font><font color="#800000">$3B00</font><font color="#000080">,</font><font color="#800000">$3C00</font><font color="#000080">,</font><font color="#800000">$3D00</font><font color="#000080">,</font><font color="#800000">$3E00</font><font color="#000080">,</font><font color="#800000">$3f00</font><font color="#000080">,</font><font color="#800000">$4000</font><font color="#000080">,</font><font color="#800000">$4100</font><font color="#000080">,</font><font color="#800000">$4200</font><font color="#000080">,</font><font color="#800000">$4300</font><font color="#000080">,</font><font color="#800000">$4400</font><font color="#000080">,
+
+    </font><font color="#008000"><i>{  NumLock    ScrollLock}
+     </i></font>k_NumLock<font color="#000080">, </font>k_ScrollLock<font color="#000080">,
+
+     </font><font color="#008000"><i>{Home    Up  PgUp  K  -  Left  K  5 Right  K  +}
+     </i></font><font color="#800000">$4700</font><font color="#000080">,</font><font color="#800000">$4800</font><font color="#000080">,</font><font color="#800000">$4900</font><font color="#000080">,</font><font color="#800000">$4A2D</font><font color="#000080">,</font><font color="#800000">$4b00</font><font color="#000080">,</font><font color="#800000">$4c00</font><font color="#000080">,</font><font color="#800000">$4d00</font><font color="#000080">,</font><font color="#800000">$4e2b</font><font color="#000080">,
+
+     </font><font color="#008000"><i>{ End  Down  PgDn   Ins   Del}
+     </i></font><font color="#800000">$4f00</font><font color="#000080">,</font><font color="#800000">$5000</font><font color="#000080">,</font><font color="#800000">$5100</font><font color="#000080">,</font><font color="#800000">$5200</font><font color="#000080">,</font><font color="#800000">$5300</font><font color="#000080">,
+
+</font><font color="#008000"><i>{******** 101 - key **********}
+    {AltPrtScr          F11     F12}
+         </i></font><font color="#800000">$5400</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">$5700</font><font color="#000080">,  </font><font color="#800000">$5800</font><font color="#000080">);
+
+    </font>ExtCode    <font color="#000080">: </font>byte    <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+    </font>ExtExtCode <font color="#000080">: </font>byte    <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+    </font>Extent     <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>oldint9seg<font color="#000080">,</font>oldint9ofs <font color="#000080">: </font>word<font color="#000080">;
+  </font>Lights <font color="#000080">: </font>byte <font color="#000080">;
+</font><font color="#008000"><i>{  Queue : array[0..30] of byte;
+}  </i></font>QHead<font color="#000080">,</font>QTail <font color="#000080">: </font>word<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ - Wait keyboard }
+</i></font><font color="#FF0000"><b>procedure </b></font>WaitKeyb<font color="#000080">; </font><font color="#FF0000"><b>near</b></font><font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">push ax
+@@Wait:
+   in   al,64h
+   test al,02h
+   loopnz @@Wait
+   pop  ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ - Send byte to keyboard port }
+</i></font><font color="#FF0000"><b>procedure </b></font>SendIt<font color="#000080">; </font><font color="#FF0000"><b>near</b></font><font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">cli
+  call WaitKeyb
+  out 64h,al
+  sti
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetLights<font color="#000080">; </font><font color="#FF0000"><b>near</b></font><font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+</b></font><font color="#008000"><i>(*
+  push ax
+  mov  al,0EDh
+{  call SendIt}
+  out  60h,al
+  mov  cx,200h
+@loop:
+  loop @loop
+  mov  al,Lights
+{  call SendIt }
+  out  60h,al
+  pop  ax
+*)
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>MyInt9<font color="#000080">(</font>Flags<font color="#000080">, </font>CS<font color="#000080">, </font>IP<font color="#000080">, </font>AX<font color="#000080">, </font>BX<font color="#000080">,
+</font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP<font color="#000080">: </font>Word<font color="#000080">); </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>label </b></font>IntEnd<font color="#000080">,</font>SendEOI<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">mov  ax, seg @data
+    mov  ds,ax
+
+    mov  al,0adh   </font><font color="#008000"><i>{ Disable keyboard }
+    </i></font><font color="#FF00FF">call sendit
+    cli
+
+    call WaitKeyb  </font><font color="#008000"><i>{ Wait }
+
+    </i></font><font color="#FF00FF">in  al,60h     </font><font color="#008000"><i>{ Get keycode }
+    </i></font><font color="#FF00FF">sti
+    mov key,al;
+
+push ax
+mov  al,0AEh
+call sendit
+mov  al,20h
+out  20h,al
+pop  ax
+
+@@keyEvent:
+    mov WasKeybEvent,1    </font><font color="#008000"><i>{ Set event flag }
+
+    </i></font><font color="#FF00FF">mov ah,al
+    and ah,0F0h      </font><font color="#008000"><i>{ Was extented keystroke ? }
+
+    </i></font><font color="#FF00FF">cmp ah,0E0h
+    jne @NormalCode
+</font><font color="#008000"><i>(*    jne  @CheckAA    { no, check next ext. code AAh }
+
+    cmp ExtCode,0AAh { Was sequence E0 AA E0 ? }
+    jne @ExtCode     { No, set as firts extent code }
+
+    mov Extent,0     { yes, clear exten flags }
+    mov ExtCode,0
+{    mov al,91        { Return as Shift key pressed }
+    jmp IntEnd
+*)
+  </i></font><font color="#FF00FF">@ExtCode:
+    mov Extent,1   </font><font color="#008000"><i>{ yes, set flag and store extented code }
+    </i></font><font color="#FF00FF">mov ExtCode,al
+    mov WasKeybEvent,0
+    jmp IntEnd     </font><font color="#008000"><i>{ finish interrupt }
+
+  </i></font><font color="#FF00FF">@NormalCode:
+    mov ah,al
+    and al,7Fh     </font><font color="#008000"><i>{ mask low 7 bits }
+
+    </i></font><font color="#FF00FF">cmp al,60h
+    jb @@IsKey
+
+    cmp al,0A0h
+    jb IntEnd
+
+@@IsKey:
+    and ah,80h     </font><font color="#008000"><i>{ check pressing  }
+    </i></font><font color="#FF00FF">je @@Pressed
+
+    mov Pressed,0  </font><font color="#008000"><i>{ if higher bit set to 1, then key released }
+    </i></font><font color="#FF00FF">jmp @@1
+
+  @@Pressed:
+    mov Pressed,1
+
+  @@1:
+    mov key,al     </font><font color="#008000"><i>{ store key }
+    </i></font><font color="#FF00FF">mov ah,Pressed
+
+</font><font color="#008000"><i>{------------------------}
+    </i></font><font color="#FF00FF">cmp al,1
+    jne @PrtScr
+    mov ESC,ah
+    jmp IntEnd
+
+@PrtScr:
+    cmp al,37h
+    jne @next0
+    cmp ExtCode,0E0h
+    jne IntEnd
+    mov PrtScr,ah
+
+@next0:
+    cmp al,2ah
+    jne @next1
+    cmp ExtCode,0E0h
+    jne @ShiftL
+@ExtShift:
+    xor ax,ax
+    mov WasKeybEvent,al
+    mov ExtCode,al
+    mov key,al
+    jmp IntEnd
+@ShiftL:
+    mov Shift.Left,ah
+    jmp IntEnd
+
+@next1:
+    cmp al,36h
+    jne @next2
+    cmp ExtCode,0E0h
+    je  @ExtShift
+    mov Shift.Right,ah
+    jmp IntEnd
+
+@next2:
+    cmp al,38h
+    jne @next3
+    cmp ExtCode,0E0h
+    je  @RAlt
+    mov Alt.Left,ah
+    jmp IntEnd
+  @Ralt:
+    mov Alt.Right,ah
+    jmp @@ResetExt
+
+
+@next3:
+    cmp al,1Dh
+    jne @next4
+    cmp ExtCode,0E0h
+    je  @RCtrl
+    mov Ctrl.Left,ah
+    jmp IntEnd
+  @RCtrl:
+    mov Ctrl.Right,ah
+    jmp @@ResetExt
+
+@next4:
+    cmp al,3ah
+    jne @next5
+    mov CapsLock.Pressed,ah
+    cmp ah,1
+    je  IntEnd
+    xor CapsLock.Locked,1
+    xor Lights,4
+    mov ax,0AEh
+</font><font color="#008000"><i>{    call SendIt}
+    </i></font><font color="#FF00FF">call SetLights
+    jmp SendEOI
+
+@next5:
+    cmp al,45h
+    jne @next6
+    mov NumLock.Pressed,ah
+    cmp ah,1
+    je  IntEnd
+    xor NumLock.Locked,1
+    xor Lights,2
+    mov ax,0AEh
+</font><font color="#008000"><i>{    call SendIt  }
+    </i></font><font color="#FF00FF">call SetLights
+    jmp SendEOI
+
+@next6:
+    cmp al,46h
+    jne @next7
+    mov ScrollLock.Pressed,ah
+    cmp ah,1
+    je  IntEnd
+    xor ScrollLock.Locked,1
+    xor Lights,1
+    mov ax,0AEh
+ </font><font color="#008000"><i>{   call SendIt}
+    </i></font><font color="#FF00FF">call SetLights
+    jmp SendEOI
+
+@@ResetExt:
+    xor ax,ax
+    mov ExtCode,al
+    mov Extent,al
+    jmp IntEnd
+
+@next7:
+    cmp al,53h
+    jne IntEnd
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>AltCtrlDel<font color="#000080">:=</font>pressed <font color="#FF0000"><b>and </b></font>Alt<font color="#000080">.</font>Any <font color="#FF0000"><b>and </b></font>Ctrl<font color="#000080">.</font>Any<font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>AltCtrlDel <font color="#FF0000"><b>then </b></font>AltCtrlDelProc<font color="#000080">;
+
+</font>IntEnd<font color="#000080">:
+</font><font color="#FF0000"><b>asm
+</b></font><font color="#008000"><i>{ Interrupt end }{
+    mov  al,0aeh
+    call sendit   }
+</i></font><font color="#FF00FF">SendEOI:           </font><font color="#008000"><i>{
+    mov  al,20h
+    out  20h,al     }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>InitKeyboard<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">cmp KeyboardSet,0
+   jne @@Quit
+
+@ClearBufferLoop:
+   mov ah,1
+   int 16h
+   jz  @NoKeyb
+   xor ax,ax
+   int 16h
+   jmp @ClearBufferLoop
+
+@NoKeyb:
+   mov ax,3509h
+   int 21h
+   mov oldint9seg,es
+   mov oldint9ofs,bx
+
+   push ds
+
+   push cs
+   pop  ds
+   mov  ax,2509h
+   mov  dx,offset MyInt9
+   int  21h
+   pop  ds
+
+   cli
+   xor  ax,ax
+   mov  QHead,ax
+   mov  QTail,ax
+   mov  Key,al
+
+   xor  ax,ax
+   mov  es,SEG0000
+   mov  al,byte ptr es:[417h]
+   mov  cl,4
+   shr  al,cl
+   mov  Lights,al
+
+   mov  KeyboardSet,1
+   sti
+@@Quit:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DoneKeyboard<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">cmp  KeyboardSet,0
+   je   @@Quit
+   xor  ax,ax
+   mov  es,SEG0000
+   mov  ax,word ptr es:[417h]
+   mov  bl,Lights
+   mov  cl,4
+   shl  bl,cl
+   and  al,10001111b  </font><font color="#008000"><i>{ Set Lights status }
+   </i></font><font color="#FF00FF">or   al,bl
+   and  ax,111110011110000b
+   mov  word ptr es:[417h],ax
+
+
+   push ds
+   mov  dx,oldint9ofs
+   mov  ax,oldint9seg
+   mov  ds,ax
+   mov  ax,2509h
+   int  21h
+   pop  ds
+@@Quit:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ReadKeyboard <font color="#000080">: </font>byte<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">xor  ax,ax
+  mov  al,Key;
+  mov  Key,ah;
+  mov  WasKeybEvent,ah
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>KeyPressed <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>KeyPressed<font color="#000080">:=</font>WasKeybEvent <font color="#FF0000"><b>and </b></font>Pressed<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ReadKey <font color="#000080">: </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>KeyboardSet <font color="#FF0000"><b>then
+  begin
+
+  end
+  else begin
+    </b></font>Writeln<font color="#000080">(</font><font color="#800000">#7'KEYBOARD.TPU Error : use InitKeyboard first!'</font><font color="#000080">);
+    </font>halt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ReadChar <font color="#000080">: </font>char<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>scancode <font color="#000080">: </font>char <font color="#000080">= </font><font color="#800000">#0</font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">cmp ScanCode,0     </font><font color="#008000"><i>{ if were extented keystrokes }
+  </i></font><font color="#FF00FF">je  @@NoScanCode
+
+  mov al,ScanCode    </font><font color="#008000"><i>{ then return scan code }
+  </i></font><font color="#FF00FF">mov ScanCode,0
+  jmp @@Quit
+
+@@NoScanCode:
+  mov al,0
+  cmp Key,0
+  je  @@Quit
+
+  mov bh,al
+  mov bl,Key
+  dec bl
+  shl bx,1
+  mov ax,[offset KeyCodes + bx]
+
+  cmp al,0
+  jne @@Quit
+
+  mov ScanCode,ah
+@@Quit:
+  mov key,0
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>GetKeyEvent<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>KEvent <font color="#000080">: </font>KeyEvent<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les di,KEvent
+  mov word ptr es:[di],0
+  cmp WasKeybEvent,0
+  je  @Quit
+
+  xor bx,bx
+  mov bl,key
+  dec bx
+  shl bx,1
+  mov ax,[offset KeyCodes + bx]
+
+  cmp al,0
+  je  @Store
+
+  mov ah,key
+@Store:
+  mov word ptr es:[di],ax
+  mov WasKeybEvent,0
+  mov Key,0
+@Quit:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>KeybLights<font color="#000080">(</font><font color="#FF0000"><b>On </b></font><font color="#000080">: </font>boolean<font color="#000080">; </font>Light <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>L <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>Light<font color="#000080">&gt;</font><font color="#800000">7</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov al,0EDh
+    out 60h,al
+    mov cx,2000h
+  @loop:
+    loop @loop
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if On then </b></font>L <font color="#000080">:= </font>Lights <font color="#FF0000"><b>or  </b></font>Light
+        <font color="#FF0000"><b>else </b></font>L <font color="#000080">:= </font>Lights <font color="#FF0000"><b>and not </b></font>Light<font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$60</font><font color="#000080">]:=</font>L<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>NullProc<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>OldExitProc <font color="#000080">: </font>pointer<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ExitProcedure<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DoneKeyboard<font color="#000080">;
+  </font>ExitProc<font color="#000080">:=</font>OldExitProc<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION  </b></font>get_selector<font color="#000080">(</font>segment <font color="#000080">: </font>WORD<font color="#000080">) : </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>selector <font color="#000080">: </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font><font color="#008000"><i>{$IFDEF DPMI}
+  </i></font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">MOV AX, $0002
+    MOV BX, segment
+    INT $31
+    JNC @@1
+    MOV AX, segment
+@@1:
+    MOV selector, AX
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{$ELSE}
+  </i></font>selector <font color="#000080">:= </font>segment<font color="#000080">;
+  </font><font color="#008000"><i>{$ENDIF}
+
+  </i></font>get_selector <font color="#000080">:= </font>selector<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>SEG0000 <font color="#000080">:= </font>get_selector<font color="#000080">(</font><font color="#800000">$0000</font><font color="#000080">);
+  </font>OldExitProc<font color="#000080">:=</font>ExitProc<font color="#000080">;
+  </font>ExitProc<font color="#000080">:=@</font>ExitProcedure<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ---------------------------  DEMO ------------------------------ }
+
+</i></font><font color="#FF0000"><b>program </b></font>KeybDemo<font color="#000080">;
+</font><font color="#008000"><i>{ Copyright (c) 1994 by Andrew Eigus   Fidonet: 2:5100/33 }
+
+</i></font><font color="#FF0000"><b>uses </b></font>Crt<font color="#000080">, </font>Keyboard<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>Status <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>Boolean<font color="#000080">] </font><font color="#FF0000"><b>of String</b></font><font color="#000080">[</font><font color="#800000">11</font><font color="#000080">] = (</font><font color="#800000">'Not pressed'</font><font color="#000080">, </font><font color="#800000">'Pressed    '</font><font color="#000080">);
+  </font>Lock <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>Boolean<font color="#000080">] </font><font color="#FF0000"><b>of String</b></font><font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] = (</font><font color="#800000">'Not locked'</font><font color="#000080">, </font><font color="#800000">'Locked    '</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>key <font color="#000080">: </font>KeyEvent<font color="#000080">;
+  </font>ch <font color="#000080">: </font>char<font color="#000080">;
+  </font>CursorShape <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetCursor<font color="#000080">(</font>CursorOnOff <font color="#000080">: </font>boolean<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">CMP CursorOnOff,True
+  JNE @@2
+  CMP BYTE PTR [LastMode],Mono
+  JE  @@1
+  MOV CX,0607h
+  JMP @@4
+@@1:
+  MOV CX,0B0Ch
+  JMP @@4
+@@2:
+  CMP BYTE PTR [LastMode],Mono
+  JE  @@3
+  MOV CX,2000h
+  JMP @@4
+@@3:
+  XOR CX,CX
+@@4:
+  MOV AH,01h
+  XOR BH,BH
+  INT 10h
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ SetCursor }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>AltCtrlDelp<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Writeln<font color="#000080">(</font><font color="#800000">#13#10#10'That was it. Not bad, eh?'</font><font color="#000080">);
+  </font>SetCursor<font color="#000080">(</font>True<font color="#000080">);
+  </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>WriteXY<font color="#000080">(</font>X<font color="#000080">, </font>Y <font color="#000080">: </font>byte<font color="#000080">; </font>S <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  </b></font>GotoXY<font color="#000080">(</font>X<font color="#000080">, </font>Y<font color="#000080">);
+  </font>Write<font color="#000080">(</font>S<font color="#000080">)
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ WriteXY }
+
+</i></font><font color="#FF0000"><b>Function </b></font>Hex<font color="#000080">(</font>W <font color="#000080">: </font>Word<font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>hexChars<font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">$F</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char <font color="#000080">= </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Hex<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">#4</font><font color="#000080">;
+  </font>Hex<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>hexChars<font color="#000080">[</font>Hi<font color="#000080">(</font>W<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">];
+  </font>Hex<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>hexChars<font color="#000080">[</font>Hi<font color="#000080">(</font>W<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">];
+  </font>Hex<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] := </font>hexChars<font color="#000080">[</font>Lo<font color="#000080">(</font>W<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">];
+  </font>Hex<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] := </font>hexChars<font color="#000080">[</font>Lo<font color="#000080">(</font>W<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">]
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Hex }
+
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>InitKeyboard<font color="#000080">;
+  </font>AltCtrlDelproc<font color="#000080">:=</font>AltCtrlDelp<font color="#000080">;
+  </font>SetCursor<font color="#000080">(</font>False<font color="#000080">);
+  </font>TextAttr <font color="#000080">:= </font>LightGray<font color="#000080">;
+  </font>ClrScr<font color="#000080">;
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Keyboard unit demo  by Andrew Eigus (c) 1994   Fidonet: 2:5100/33'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Hit any key to scan or Ctrl-Alt-Del to quit.'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>repeat
+    </b></font>GetKeyEvent<font color="#000080">(</font>Key<font color="#000080">);
+
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">'Left Shift state  : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Shift<font color="#000080">.</font>Left<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">'Right Shift state  : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Shift<font color="#000080">.</font>Right<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">'Left Alt state    : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Alt<font color="#000080">.</font>Left<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">'Right Alt state    : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Alt<font color="#000080">.</font>Right<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">'Left Ctrl state   : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Ctrl<font color="#000080">.</font>Left<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">'Right Ctrl state   : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Ctrl<font color="#000080">.</font>Right<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">9</font><font color="#000080">, </font><font color="#800000">'Scroll Lock state : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>ScrollLock<font color="#000080">.</font>Pressed<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">9</font><font color="#000080">, </font><font color="#800000">'Scroll Lock toggle : ' </font><font color="#000080">+ </font>Lock<font color="#000080">[</font>ScrollLock<font color="#000080">.</font>Locked<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">'Num Lock state    : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>NumLock<font color="#000080">.</font>Pressed<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">'Num Lock toggle    : ' </font><font color="#000080">+ </font>Lock<font color="#000080">[</font>NumLock<font color="#000080">.</font>Locked<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">'Caps Lock state   : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>CapsLock<font color="#000080">.</font>Pressed<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">'Caps Lock toggle   : ' </font><font color="#000080">+ </font>Lock<font color="#000080">[</font>CapsLock<font color="#000080">.</font>Locked<font color="#000080">]);
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">13</font><font color="#000080">, </font><font color="#800000">'PrtScr key state : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>PrtScr<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font>Key<font color="#000080">.</font>ScanCode <font color="#FF0000"><b>and </b></font><font color="#800000">$F0 </font><font color="#000080">= </font><font color="#800000">$E0 </font><font color="#FF0000"><b>then
+      </b></font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">'Key code        : ' </font><font color="#000080">+ </font>Hex<font color="#000080">(</font>Key<font color="#000080">.</font>ScanCode<font color="#000080">))
+    </font><font color="#FF0000"><b>else
+    begin
+      </b></font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">16</font><font color="#000080">, </font><font color="#800000">'Scan code       : ' </font><font color="#000080">+
+        </font>Hex<font color="#000080">(</font>Key<font color="#000080">.</font>ScanCode <font color="#FF0000"><b>and </b></font><font color="#800000">$7F</font><font color="#000080">) + </font><font color="#800000">',' </font><font color="#000080">+ </font>Hex<font color="#000080">(</font>Key<font color="#000080">.</font>ScanCode <font color="#FF0000"><b>and </b></font><font color="#800000">$7F</font><font color="#000080">));
+      </font>WriteXY<font color="#000080">(</font><font color="#800000">35</font><font color="#000080">, </font><font color="#800000">16</font><font color="#000080">, </font><font color="#800000">'Key state      : ' </font><font color="#000080">+ </font>Status<font color="#000080">[</font>Pressed<font color="#000080">])
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>WriteXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">17</font><font color="#000080">, </font><font color="#800000">'Key ASCII code      : &quot;' </font><font color="#000080">+
+      </font>Key<font color="#000080">.</font>CharCode <font color="#000080">+ </font><font color="#800000">'&quot;,' </font><font color="#000080">+ </font>Hex<font color="#000080">(</font>Byte<font color="#000080">(</font>Key<font color="#000080">.</font>CharCode<font color="#000080">)));
+
+    </font><font color="#FF0000"><b>repeat until </b></font>WasKeybEvent
+  <font color="#FF0000"><b>until </b></font>False
+<font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to KEYBOARD SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0081.PAS">Original</a><b>]</b></p></body>
+</html>

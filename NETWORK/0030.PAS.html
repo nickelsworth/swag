@@ -1,0 +1,135 @@
+<html>
+<head><title> "IPX Packet Transfer" by GREG MILLER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+     A while back I posted a unit which allows one to interrface Pascal
+programs to IPX.  Since I've had several people ask about how to use it,
+I'll post this short example program now.  It should be enough to get
+anyone started on sending packets.
+     NOTE:  You must already have the IPX.PAS unit posted earlier in
+this conference in order to use this program.  Also, this program uses
+two NetWare functions to get the address of the remote user, so both
+users must be logged in on the same server (but don't have to be on the
+same network) to get the program to work.  The title of the program is
+TALK.PAS.  In order to run the program you type TALK &lt;username&gt; from the
+command line.
+
+From: greg.miller@shivasys.com
+
+ This program sends packets between two users logged in
+ to the same server.  This program is meant to be an example
+ of how to send IPX packets over an IPX network and is not
+ meant to be an actual utility.
+}
+</i></font><font color="#FF0000"><b>program </b></font>send<font color="#000080">;
+</font><font color="#FF0000"><b>uses </b></font>crt<font color="#000080">,</font>ipx<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+ </b></font>receive_socket <font color="#000080">= </font><font color="#800000">$7777</font><font color="#000080">; </font><font color="#008000"><i>{Arbitrary socket numbers are chosen}
+ </i></font>send_socket <font color="#000080">= </font><font color="#800000">$6666</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>abort<font color="#000080">(</font><font color="#FF0000"><b>message</b></font><font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ </b></font>writeln<font color="#000080">(</font><font color="#FF0000"><b>message</b></font><font color="#000080">);
+ </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+ </b></font>connection_number<font color="#000080">:</font>word<font color="#000080">;
+ </font>network_number<font color="#000080">:</font>networkNumber<font color="#000080">;
+ </font>network_node<font color="#000080">:</font>networkNode<font color="#000080">;
+ </font>receive_ecb<font color="#000080">,</font>send_ecb<font color="#000080">:</font>ECB<font color="#000080">;
+ </font>receive_header<font color="#000080">,</font>send_header<font color="#000080">:</font>IPXHeader<font color="#000080">;
+ </font>receive_message<font color="#000080">,</font>send_message<font color="#000080">:</font>MessageSTR<font color="#000080">;
+ </font>done<font color="#000080">,</font>stop <font color="#000080">: </font>boolean<font color="#000080">;
+
+ </font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{Make sure IPX is installed, otherwise don't continue}
+  </i></font><font color="#FF0000"><b>if not </b></font>IPXinstalled <font color="#FF0000"><b>then </b></font>abort<font color="#000080">(</font><font color="#800000">'IPX not loaded'</font><font color="#000080">);
+
+  </font><font color="#008000"><i>{Get the username from the command line, and use it to get the users
+   connection number}
+  </i></font>connection_number <font color="#000080">:= </font>Get1stConnectionNumber<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+  </font><font color="#008000"><i>{0 is returned, if the user isn't logged in}
+  </i></font><font color="#FF0000"><b>if </b></font>connection_number <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>abort<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) + </font><font color="#800000">' not found. '</font><font color="#000080">);
+
+  </font><font color="#008000"><i>{Use the connection number obtained from above to get the users 
+address}
+  </i></font><font color="#FF0000"><b>if </b></font>GetINternetAddress<font color="#000080">(</font>connection_number<font color="#000080">,</font>network_number<font color="#000080">,</font>network_node<font color="#000080">) 
+&lt;&gt; </font><font color="#800000">0
+      </font><font color="#FF0000"><b>then </b></font>abort<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) + </font><font color="#800000">'network error.'</font><font color="#000080">);
+
+  </font><font color="#008000"><i>{Initialize IPX sockets for communication}
+  </i></font>IpxCloseSocket<font color="#000080">(</font>send_socket<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>IPXOpenSocket<font color="#000080">(</font>send_socket<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>abort<font color="#000080">(</font><font color="#800000">'Socket error.'</font><font color="#000080">);
+  </font>IPXCloseSocket<font color="#000080">(</font>receive_socket<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>IPXOpenSocket<font color="#000080">(</font>receive_socket<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>abort<font color="#000080">(</font><font color="#800000">'Socket error.'</font><font color="#000080">);
+
+</font><font color="#008000"><i>{The chat program}
+</i></font>stop <font color="#000080">:= </font>false<font color="#000080">;
+</font>writeln<font color="#000080">(</font><font color="#800000">'Attempting to enter chat (^ to stop)'</font><font color="#000080">);
+</font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>receive_message <font color="#000080">&lt;&gt; </font><font color="#800000">'ack'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>stop<font color="#000080">) </font><font color="#FF0000"><b>do
+ begin
+  if </b></font>keypressed <font color="#FF0000"><b>then
+   if </b></font>readkey <font color="#000080">= </font><font color="#800000">'^' </font><font color="#FF0000"><b>then </b></font>stop <font color="#000080">:= </font>true<font color="#000080">;
+  </font>send_message <font color="#000080">:= </font><font color="#800000">'ack'</font><font color="#000080">;
+  </font>IPXSend<font color="#000080">(</font>network_number<font color="#000080">,
+          </font>network_node<font color="#000080">,
+          </font>receive_socket<font color="#000080">,
+          @</font>send_message<font color="#000080">,
+          </font>length<font color="#000080">(</font>send_message<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,
+          </font>send_ecb<font color="#000080">,
+          </font>send_header<font color="#000080">,
+          </font>send_socket<font color="#000080">);
+
+  </font>IPXReceive<font color="#000080">(</font>receive_ecb<font color="#000080">, </font>receive_header<font color="#000080">, </font>receive_socket<font color="#000080">,
+             @</font>receive_message<font color="#000080">, </font>sizeof<font color="#000080">(</font>receive_message<font color="#000080">));
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>if </b></font>stop <font color="#000080">= </font>true <font color="#FF0000"><b>then
+ else
+  begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'Entering Chat mode: type ^ to exit'</font><font color="#000080">);
+  </font>done <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+   if </b></font><font color="#000080">(</font>receive_ecb<font color="#000080">.</font>completion_code <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>receive_ecb<font color="#000080">.</font>in_use <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+        </font><font color="#FF0000"><b>then
+         begin
+          </b></font>textcolor<font color="#000080">(</font>lightgreen<font color="#000080">);
+          </font>write<font color="#000080">(</font>receive_message<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>receive_message<font color="#000080">=</font>chr<font color="#000080">(</font><font color="#800000">13</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>writeln<font color="#000080">;
+          </font>IPXReceive<font color="#000080">(</font>receive_ecb<font color="#000080">, </font>receive_header<font color="#000080">, </font>receive_socket<font color="#000080">,
+          @</font>receive_message<font color="#000080">, </font>sizeof<font color="#000080">(</font>receive_message<font color="#000080">));
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+   </font>IPXRelinquishControl<font color="#000080">; </font><font color="#008000"><i>{This line allows IPX to do computation}
+   </i></font><font color="#FF0000"><b>if </b></font>KeyPressed
+    <font color="#FF0000"><b>then
+     begin
+      </b></font>send_message <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font>send_message <font color="#000080">:= </font>ReadKey<font color="#000080">;
+      </font>textcolor<font color="#000080">(</font>yellow<font color="#000080">);
+      </font>write<font color="#000080">(</font>send_message<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>send_message<font color="#000080">=</font>chr<font color="#000080">(</font><font color="#800000">13</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>writeln<font color="#000080">;
+      </font>IPXSend<font color="#000080">(</font>network_number<font color="#000080">,
+              </font>network_node<font color="#000080">,
+              </font>receive_socket<font color="#000080">,
+              @</font>send_message<font color="#000080">,
+              </font>length<font color="#000080">(</font>send_message<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,
+              </font>send_ecb<font color="#000080">,
+              </font>send_header<font color="#000080">,
+              </font>send_socket<font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>send_message <font color="#000080">= </font><font color="#800000">'^'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>receive_message<font color="#000080">= </font><font color="#800000">'^'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+     </b></font>writeln<font color="#000080">(</font><font color="#800000">'Exiting Chat mode'</font><font color="#000080">);
+     </font>done <font color="#000080">:= </font>true<font color="#000080">;
+     </font>IPXCloseSocket<font color="#000080">(</font>send_socket<font color="#000080">);
+     </font>IPXCloseSocket<font color="#000080">(</font>receive_socket<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>done<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p></body>
+</html>

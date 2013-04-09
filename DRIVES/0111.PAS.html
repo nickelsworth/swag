@@ -1,0 +1,715 @@
+<html>
+<head><title> "Disk free space" by RAY BERNARD</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0111.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>program </b></font>FREE<font color="#000080">;  </font><font color="#008000"><i>{ show free disk space and other info }
+{$M 32000,0,100000}
+
+
+{$IFDEF Windows}
+  </i></font>This <font color="#FF0000"><b>program is </b></font>intended <font color="#FF0000"><b>for </b></font>DOS real mode only<font color="#000080">!
+</font><font color="#008000"><i>{$ELSE}
+  {$IFDEF DPMI}
+    </i></font>Compile <font color="#FF0000"><b>for </b></font>real mode so <font color="#FF0000"><b>program </b></font>does <font color="#FF0000"><b>not </b></font>need RTM<font color="#000080">.</font>EXE <font color="#FF0000"><b>and </b></font>DPMI16BI<font color="#000080">.</font>OVL<font color="#000080">!
+  </font><font color="#008000"><i>{$ENDIF}
+{$ENDIF}
+
+   {-------------------------------------------------------------------------}
+   {                                                                         }
+   {                              FREE.PAS                                   }
+   {                              ========                                   }
+   {     Display drive information and handle phantom floppy drives so       }
+   {     that you don't get the annoying 'insert disk in drive' message.     }
+   {     That means when a non-active phantom floppy drive letter is         }
+   {     listed on the command line, list it's mapped drive and show the     }
+   {     info for the mapped drive, like this:                               }
+   {                                                                         }
+   {             Free A:   ----------- - same drive as B                     }
+   {             Free B:             0 - drive not ready                     }
+   {                                                                         }
+   {     See the program Usage display (FREE /?) for more information.       }
+   {                                                                         }
+   {-------------------------------------------------------------------------}
+   {           This program uses the Object Professional library by          }
+   {                          TurboPower Software.                           }
+   {-------------------------------------------------------------------------}
+   {   (c) 1995 by Ray Bernard Consulting and Design. All Rights Reserved.   }
+   {   Portions (c) 1995 by TurboPower Software. All Rights Reserved.        }
+   {-------------------------------------------------------------------------}
+
+
+   {-------------------------------------------------------------------------}
+   {  ABOUT THIS PROGRAM                                                     }
+   {  ==================                                                     }
+   {  We developed this program to show drive information because it seemed  }
+   {  like we were always adding new drives to our computers, then changing  }
+   {  around the drive contents to optimize their usage. Most of the 1 gig   }
+   {  drives are partitioned into 4 drives for maximum utilization (to make  }
+   {  16K sectors instead of 32K sectors). Whenever we would rearrange       }
+   {  drive contents, it was helpful to have a utility that would identify   }
+   {  all of a computers local and networked drives, and display the drive   }
+   {  volume label and type of drive.                                        }
+   {                                                                         }
+   {  Now that most of the kinks are worked out of this program, it seemed   }
+   {  fitting to upload the source code to TurboPower's BBS and CIS forum,   }
+   {  in case others would find it handy.                                    }
+   {                                                                         }
+   {  This program is provided &quot;AS-IS&quot; without any warranty. Although it is  }
+   {  copyrighted, free use may be made of the source code by any registered }
+   {  TurboPower software customers. Free use may be made of the compiled    }
+   {  version regardless of TurboPower customer status.                      }
+   {                                                                         }
+   {  -Ray Bernard                                                           }
+   {   Ray Bernard Consulting and Design      CIS: [73354,3325]              }
+   {   June 17, 995                                                          }
+   {-------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>DOS<font color="#000080">,
+  </font>OpDOS<font color="#000080">,
+  </font>OpCrt<font color="#000080">,
+  </font>OpString<font color="#000080">,
+  </font>OpInline<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>type
+  </b></font>TPhantomRec <font color="#000080">= </font><font color="#FF0000"><b>record
+                  </b></font>DrvLtr<font color="#000080">,
+                  </font>MapDrvLtr <font color="#000080">: </font>Char<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>DriveList      <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">26</font><font color="#000080">];  </font><font color="#008000"><i>{ drive letters extracted from command line }
+  </i></font>HighDriveSpace<font color="#000080">,
+  </font>LowDriveSpace  <font color="#000080">: </font>LongInt<font color="#000080">;     </font><font color="#008000"><i>{ to hold LOW and HIGH options space values }
+  </i></font>ReportOptions  <font color="#000080">: </font>Word<font color="#000080">;        </font><font color="#008000"><i>{ set per command line options }
+  </i></font>PhantomList    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>TPhantomRec<font color="#000080">; </font><font color="#008000"><i>{ phantom drive global list }
+
+</i></font><font color="#FF0000"><b>const
+ </b></font><font color="#008000"><i>{ Report Options for ShowFreeSpaceAllDrives }
+
+  </i></font>ShowAtOrAbove   <font color="#000080">= </font><font color="#800000">$00000001</font><font color="#000080">;   </font><font color="#008000"><i>{ /H }
+  </i></font>ShowAtOrBelow   <font color="#000080">= </font><font color="#800000">$00000002</font><font color="#000080">;   </font><font color="#008000"><i>{ /L }
+  </i></font>ShowAndPause    <font color="#000080">= </font><font color="#800000">$00000004</font><font color="#000080">;   </font><font color="#008000"><i>{ /P }
+  </i></font>ShowAllDrives   <font color="#000080">= </font><font color="#800000">$00000008</font><font color="#000080">;   </font><font color="#008000"><i>{ /A }
+  </i></font>ShowSize        <font color="#000080">= </font><font color="#800000">$00000010</font><font color="#000080">;   </font><font color="#008000"><i>{ /C }
+  </i></font>ShowType        <font color="#000080">= </font><font color="#800000">$00000020</font><font color="#000080">;   </font><font color="#008000"><i>{ /T }
+  </i></font>ShowVolumeLabel <font color="#000080">= </font><font color="#800000">$00000040</font><font color="#000080">;   </font><font color="#008000"><i>{ /V }
+  </i></font>ShowFloppies    <font color="#000080">= </font><font color="#800000">$00000080</font><font color="#000080">;   </font><font color="#008000"><i>{ /F }
+
+  </i></font>MsPerSec       <font color="#000080">= </font><font color="#800000">1000</font><font color="#000080">;
+  </font>Kbyte          <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">;
+  </font>Megabyte       <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">*</font>Kbyte<font color="#000080">;
+  </font>Gigabyte       <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">*</font>Megabyte<font color="#000080">;
+  </font>FreeSpacePad   <font color="#000080">= </font><font color="#800000">11</font><font color="#000080">;   </font><font color="#008000"><i>{ pad free space number string to 11 spaces }
+
+ { global declarations }
+  </i></font>DriveLetterSet     <font color="#000080">: </font><font color="#FF0000"><b>set of </b></font>Char <font color="#000080">= [</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">];  </font><font color="#008000"><i>{ for parameter checking }
+  </i></font>CommandDelimiters  <font color="#000080">: </font><font color="#FF0000"><b>set of </b></font>char <font color="#000080">= [</font><font color="#800000">'-'</font><font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">];   </font><font color="#008000"><i>{ for parameter checking }
+
+  </i></font>PauseDelaySecs     <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;  </font><font color="#008000"><i>{ default seconds to pause after display }
+  </i></font>Debug              <font color="#000080">: </font>Boolean <font color="#000080">= </font>True<font color="#000080">;
+
+  </font>DosVer300 <font color="#000080">= </font><font color="#800000">$0300</font><font color="#000080">; </font><font color="#008000"><i>{for DOS 3.00}
+  </i></font>DosVer320 <font color="#000080">= </font><font color="#800000">$0314</font><font color="#000080">; </font><font color="#008000"><i>{for DOS 3.20, $14 = 20}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>ShowUsageAndHalt<font color="#000080">;
+</font><font color="#008000"><i>{-Show the usage information for this program }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>HighVideo<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'FREE.EXE - Display drive free space and other information.'</font><font color="#000080">);
+  </font>LowVideo<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'(c) 1995 by Ray Bernard Consulting and Design, CompuServe: 73354,3325.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Portions (c) 1987-1995 by TurboPower Software. All Rights Reserved.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'FREE.EXE is &quot;freeware&quot;, distributed &quot;as is&quot; and without warranty.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>HighVideo<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'Usage: '</font><font color="#000080">);
+  </font>LowVideo<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'FREE [Drives] [Options]'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>HighVideo<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'Drives: '</font><font color="#000080">);
+  </font>LowVideo<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'One or more drive letters, with or without spaces'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'separating them. If no drives are listed the default drive is assumed.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>HighVideo<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'Options: '</font><font color="#000080">);
+  </font>LowVideo<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'One or more options, separated by spaces. You may'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'also use the first letter of the option, such as /A for /ALL.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/ALL       show all drives (A and B)'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/FLOPPY    show all drives including A and B'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/HIGH n    all drives with n or more free space'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/LOW n     all drives with n or less free space'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/PAUSE     pause 5 seconds after display or until key pressed'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/PAUSE n   pause n seconds after the display or until key pressed'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/SIZE      drive size (formatted capacity)'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/TYPE      type of drive'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'/VOLUME    show volume label'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'Press a key to continue . . .'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ReadKey <font color="#000080">&lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>then
+   </b></font><font color="#008000"><i>{do nothing} </i></font><font color="#000080">;
+  </font>ClrScr<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'FREE.EXE - Usage information, page 2.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'High and Low free space amounts can be specified in bytes, kbytes, '</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'megabytes or gigabytes using (K, M or G), with or without commas to separate'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'thousands. Example: 52,428,800 or 52428800 or 50M for fifty megabytes.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'EXAMPLE PROGRAM OUTPUT:'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'C:&gt;FREE /f /t /v /s'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free A:             0 (Size 0.0MB) - drive not ready'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free B:             0 (Size 0.0MB) - drive not ready'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free C:    48,283,648 (Size 515MB) - local hard drive  IDE#1_V1'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free D:    47,218,688 (Size 251MB) - local hard drive  IDE#2_V1'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free E:   162,906,112 (Size 519MB) - local hard drive  SCSI#1_V1'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free F:    72,351,744 (Size 257MB) - local hard drive  IDE#1_V3'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free G:    34,570,240 (Size 257MB) - local hard drive  IDE#1_V4'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free H:    35,274,752 (Size 251MB) - local hard drive  IDE#2_V2'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free K:   203,807,616 (Size   2GB) - remote or network drive  AT_SERV_C'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free O:   ----------- - same drive as B'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free N:    34,570,240 (Size 257MB) - logical SUBST or ASSIGN on G  IDE#1_V4'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Free R:             0 (Size 127MB) - CD-ROM Drive      MFCDISC'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Halt<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>IsDriveLocal<font color="#000080">(</font>Drive <font color="#000080">: </font>Byte<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{ -Returns TRUE if drive is local.
+   Drive is the drive number (0 for default, 1 for A:, 2 for B: ...).
+   NOTE: If DOS 3 or greater is not loaded, it is assumed that the Drive is
+   local (since DOS has no standard way of knowing under DOS 2).
+   IsDriveLocal is taken from SHARE.PAS, a unit supplied with TurboPower's
+   B-Tree Filer. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>OpDos<font color="#000080">.</font>DosVersion <font color="#000080">&gt;= </font>DosVer300 <font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{DOS 3 or greater required}
+    </i></font><font color="#FF0000"><b>begin  
+      with </b></font>Regs <font color="#FF0000"><b>do
+        begin
+          </b></font>AX <font color="#000080">:= </font><font color="#800000">$4409</font><font color="#000080">;
+          </font>BL <font color="#000080">:= </font>Drive<font color="#000080">;
+          </font>MsDos<font color="#000080">(</font>Regs<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>Odd<font color="#000080">(</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>then
+            </b></font>IsDriveLocal <font color="#000080">:= </font>True  <font color="#008000"><i>{if error, then assume drive is local}
+          </i></font><font color="#FF0000"><b>else
+            </b></font><font color="#008000"><i>{the drive is local if bit 12 of DX is clear}
+            </i></font>IsDriveLocal <font color="#000080">:= </font><font color="#FF0000"><b>not </b></font>FlagIsSet<font color="#000080">(</font>DX<font color="#000080">,</font><font color="#800000">$1000</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+  else
+    </b></font>IsDriveLocal <font color="#000080">:= </font>True<font color="#000080">;     </font><font color="#008000"><i>{assume it's local for DOS &lt; 3}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>DrvNumToLtr<font color="#000080">(</font>DriveNum <font color="#000080">: </font>Byte<font color="#000080">) : </font>Char<font color="#000080">;
+</font><font color="#008000"><i>{-Return Drive Letter for 1-based Drive Number (A=1, B=2, etc.)}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>DrvNumToLtr <font color="#000080">:= </font>Chr<font color="#000080">(</font>DriveNum<font color="#000080">+</font><font color="#800000">64</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>DrvLtrToNum<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">) : </font>Byte<font color="#000080">;
+</font><font color="#008000"><i>{-Return 1-based Drive Number (A=1, B=2, etc.) for DriveLetter}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>DrvLtrToNum <font color="#000080">:= </font>Ord<font color="#000080">(</font>Upcase<font color="#000080">(</font>DriveLetter<font color="#000080">))-</font><font color="#800000">64</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>IsDrivePhantom<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>MappedTo <font color="#000080">: </font>Char<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{-Return True if Phantom drive and pass back original drive mapped to. }
+{ Will recognize floppy drives drives reassigned using DRIVER.SYS.     }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+  </font>IsPhantom <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>DriveNum <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IsPhantom <font color="#000080">:= </font>False<font color="#000080">;
+  </font>DriveNum <font color="#000080">:= </font>DrvLtrToNum<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>OpDos<font color="#000080">.</font>DosVersion <font color="#000080">&gt; </font>DosVer320 <font color="#FF0000"><b>then
+    begin  </b></font><font color="#008000"><i>{DOS 3.2 or greater required}
+      </i></font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do
+        begin
+          </b></font>AX <font color="#000080">:= </font><font color="#800000">$440E</font><font color="#000080">;
+          </font>BL <font color="#000080">:= </font>DriveNum<font color="#000080">;
+          </font>MsDos<font color="#000080">(</font>Regs<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>Odd<font color="#000080">(</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>then
+            begin
+              </b></font>IsPhantom <font color="#000080">:= </font>False<font color="#000080">;  </font><font color="#008000"><i>{if error, then assume drive not phantom }
+            </i></font><font color="#FF0000"><b>end
+          else
+            begin
+              if </b></font>AL <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then       </b></font><font color="#008000"><i>{the drive is not phantom drive if AL = 0}
+                </i></font>IsPhantom <font color="#000080">:= </font>False
+              <font color="#FF0000"><b>else
+                begin
+                  </b></font>IsPhantom <font color="#000080">:= (</font>AL <font color="#000080">&lt;&gt; </font>DriveNum<font color="#000080">);
+                  </font><font color="#FF0000"><b>if </b></font>IsPhantom <font color="#FF0000"><b>then
+                    </b></font>MappedTo <font color="#000080">:= </font>DrvNumToLtr<font color="#000080">(</font>AL<font color="#000080">);
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>IsDrivePhantom <font color="#000080">:= </font>IsPhantom<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ IsDrivePhantom }
+
+
+</i></font><font color="#FF0000"><b>function </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{-Refer to this program's global PhantomList variable }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>IsListedAsPhantom <font color="#000080">:= </font>PhantomList<font color="#000080">[</font>DriveLetter<font color="#000080">].</font>DrvLtr <font color="#000080">= </font>DriveLetter<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>RestoreOutputRedirection<font color="#000080">;
+</font><font color="#008000"><i>{-Return Write and Writeln to Standard I/O to allow }
+{ redirection of program output to file or printer  }
+</i></font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ undo OpCrt's assignment of Output to CRT }
+  </i></font>Close<font color="#000080">(</font>Output<font color="#000080">);
+  </font>Assign<font color="#000080">(</font>Output<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+  </font>Rewrite<font color="#000080">(</font>Output<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>NumFloppies <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#008000"><i>{-Return the number of floppy drives installed per DOS &quot;List of Lists&quot; }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Equipment <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Equipment <font color="#000080">:= </font>mem<font color="#000080">[</font><font color="#800000">$0040</font><font color="#000080">:</font><font color="#800000">$0010</font><font color="#000080">];
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>equipment <font color="#FF0000"><b>and </b></font><font color="#800000">$0001</font><font color="#000080">) = </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+    </b></font>NumFloppies <font color="#000080">:= ((</font>Equipment <font color="#FF0000"><b>shr </b></font><font color="#800000">6</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$0003</font><font color="#000080">)+</font><font color="#800000">1
+  </font><font color="#FF0000"><b>else
+    </b></font>NumFloppies <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>HaltWithMessage<font color="#000080">(</font><font color="#FF0000"><b>Message </b></font><font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#008000"><i>{-Display Message and halt }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>Writeln<font color="#000080">(</font><font color="#FF0000"><b>Message</b></font><font color="#000080">);
+  </font>Halt<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>InsertCommas<font color="#000080">(</font>S <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-Add commas to string for thousands. Work from the end  }
+{ of the string exit on the first space encountered, to  }
+{ be able to handle strings like: 'TOTAL: 1,000'.        }
+</i></font><font color="#FF0000"><b>var
+  </b></font>I <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Len <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Len <font color="#000080">:= </font>Length<font color="#000080">(</font>S<font color="#000080">);
+  </font>I <font color="#000080">:= </font>Len<font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>I <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+    if </b></font><font color="#000080">(</font>Len<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">-</font>I<font color="#000080">) </font><font color="#FF0000"><b>mod </b></font><font color="#800000">3 </font><font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      if </b></font>S<font color="#000080">[</font>I<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">' ' </font><font color="#FF0000"><b>then
+        </b></font>Break
+      <font color="#FF0000"><b>else
+        </b></font>insert<font color="#000080">(</font><font color="#800000">','</font><font color="#000080">, </font>S<font color="#000080">, </font>I<font color="#000080">);
+    </font>dec<font color="#000080">(</font>I<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>InsertCommas <font color="#000080">:= </font>S<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>GetAndSavePhantomInfo<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">);
+</font><font color="#008000"><i>{-If DriveLetter is a Phantom drive, set data in PhantomList }
+</i></font><font color="#FF0000"><b>var
+  </b></font>MapCh <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>IsDrivePhantom<font color="#000080">(</font>DriveLetter<font color="#000080">,</font>MapCh<font color="#000080">) </font><font color="#FF0000"><b>then
+    with </b></font>PhantomList<font color="#000080">[</font>DriveLetter<font color="#000080">] </font><font color="#FF0000"><b>do
+      begin
+        </b></font>DrvLtr <font color="#000080">:= </font>DriveLetter<font color="#000080">;
+        </font>MapDrvLtr <font color="#000080">:= </font>MapCh<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>DiskTypeString<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-Return the disk class information as a string with leading space &amp; dash. }
+{ Checks the global variable PhantomList for phantom drive info, and exit  }
+{ for phantom drive without calling GetDiskClass to avoid disk hit.        }
+</i></font><font color="#FF0000"><b>var
+  </b></font>DiskType   <font color="#000080">: </font>DiskClass<font color="#000080">;
+  </font>DriveNum   <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>SubDriveCh <font color="#000080">: </font>Char<font color="#000080">;
+  </font>DTStr      <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DriveNum <font color="#000080">:= </font>DrvLtrToNum<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>DiskTypeString <font color="#000080">:= </font><font color="#800000">' - same drive as '</font><font color="#000080">+</font>PhantomList<font color="#000080">[</font>DriveLetter<font color="#000080">].</font>MapDrvLtr<font color="#000080">;
+      </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>DiskType <font color="#000080">:= </font>GetDiskClass<font color="#000080">(</font>DriveLetter<font color="#000080">,</font>SubDriveCh<font color="#000080">);
+  </font><font color="#FF0000"><b>case </b></font>DiskType <font color="#FF0000"><b>of
+    </b></font>Floppy360    <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - 360KB,  5.25&quot; diskette'</font><font color="#000080">;
+    </font>Floppy720    <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - 720KB,  3.50&quot; diskette'</font><font color="#000080">;
+    </font>Floppy12     <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - 1.2MB,  5.25&quot; diskette'</font><font color="#000080">;
+    </font>Floppy144    <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - 1.44MB, 3.50&quot; diskette'</font><font color="#000080">;
+    </font>OtherFloppy  <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - unlised diskette type'</font><font color="#000080">;
+    </font>Bernoulli    <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - Bernouli drive'</font><font color="#000080">;
+    </font>HardDisk     <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - local hard drive'</font><font color="#000080">;
+    </font>RamDisk      <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - RAM drive'</font><font color="#000080">;
+    </font>SubstDrive   <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - logical SUBST or ASSIGN on '</font><font color="#000080">+
+                                       </font>SubDriveCh<font color="#000080">;
+    </font>UnknownDisk  <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - unlisted disk type'</font><font color="#000080">;
+    </font>InvalidDrive <font color="#000080">: </font><font color="#FF0000"><b>if not </b></font>IsDriveLocal<font color="#000080">(</font>DriveNum<font color="#000080">) </font><font color="#FF0000"><b>then
+                     </b></font>DTStr <font color="#000080">:= </font><font color="#800000">' - remote or network drive'
+                   </font><font color="#FF0000"><b>else
+                     </b></font>DTStr <font color="#000080">:= </font><font color="#800000">' - drive not ready'</font><font color="#000080">;
+    </font>NovellDrive  <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - Novelle network drive'</font><font color="#000080">;
+    </font>CDRomDisk    <font color="#000080">: </font>DTStr <font color="#000080">:= </font><font color="#800000">' - CD-ROM drive'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>else
+    </b></font><font color="#008000"><i>{ Trap for GetDiskClass update to include new types}
+    { before this routine is revised, and ensure that  }
+    { a function result is always assigned.            }
+    </i></font>DTStr <font color="#000080">:= </font><font color="#800000">'unrecognized disk type'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{case}
+  </i></font>DiskTypeString <font color="#000080">:= </font>DTStr<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>function </b></font>DiskCapacity<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>char<font color="#000080">) : </font>longint<font color="#000080">;
+</font><font color="#008000"><i>{-Return the disk capacity in number of bytes for the specified drive. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>DriveNum          <font color="#000080">: </font>byte<font color="#000080">;
+  </font>BytesPerCluster<font color="#000080">,
+  </font>AvailClusters<font color="#000080">,
+  </font>TotalClusters<font color="#000080">,
+  </font>SectorsPerCluster<font color="#000080">,
+  </font>BytesPerSector    <font color="#000080">: </font>word<font color="#000080">;
+  </font>TotalBytes        <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DiskCapacity <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Exit<font color="#000080">;
+  </font>DriveNum <font color="#000080">:= </font>DrvLtrToNum<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>GetDiskInfo<font color="#000080">(</font>DriveNum<font color="#000080">,</font>AvailClusters<font color="#000080">,</font>TotalClusters<font color="#000080">,
+                 </font>BytesPerSector<font color="#000080">,</font>SectorsPerCluster<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>BytesPerCluster <font color="#000080">:= </font>LongInt<font color="#000080">(</font>SectorsPerCluster<font color="#000080">) * </font>BytesPerSector<font color="#000080">;
+      </font>DiskCapacity <font color="#000080">:= </font>LongInt<font color="#000080">(</font>TotalClusters<font color="#000080">) * </font>BytesPerCluster<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ DiskCapacity }
+
+
+</i></font><font color="#FF0000"><b>function </b></font>DiskCapacityString<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-Return disk capacity info in megabytes or gigabytes formatted with commas }
+</i></font><font color="#FF0000"><b>var
+  </b></font>DiskCap <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>TempStr <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DiskCap <font color="#000080">:= </font>DiskCapacity<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>DiskCap <font color="#000080">&gt;= </font>Gigabyte <font color="#FF0000"><b>then
+    </b></font>TempStr <font color="#000080">:= </font>Long2Str<font color="#000080">(</font>DiskCap <font color="#FF0000"><b>div </b></font>Gigabyte<font color="#000080">)+</font><font color="#800000">'GB'
+  </font><font color="#FF0000"><b>else
+    if </b></font>DiskCap <font color="#000080">&gt; </font><font color="#800000">9</font><font color="#000080">*</font>Megabyte <font color="#FF0000"><b>then
+      </b></font>TempStr <font color="#000080">:= </font>InsertCommas<font color="#000080">(</font>Long2Str<font color="#000080">(</font>DiskCap <font color="#FF0000"><b>div </b></font>Megabyte<font color="#000080">))+</font><font color="#800000">'MB'
+    </font><font color="#FF0000"><b>else
+      </b></font>TempStr <font color="#000080">:= </font>Long2Str<font color="#000080">(</font>DiskCap <font color="#FF0000"><b>div </b></font>Megabyte<font color="#000080">)+</font><font color="#800000">'.'</font><font color="#000080">+
+           </font>copy<font color="#000080">(</font>Long2Str<font color="#000080">(</font>DiskCap <font color="#FF0000"><b>mod </b></font>Megabyte<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">'MB'</font><font color="#000080">;
+  </font>DiskCapacityString <font color="#000080">:= </font>TempStr<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>AvailableDriveSpace<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>char<font color="#000080">) : </font>longint<font color="#000080">;
+</font><font color="#008000"><i>{-Return the number of bytes free on specified drive}
+</i></font><font color="#FF0000"><b>var
+  </b></font>DriveNum            <font color="#000080">: </font>byte<font color="#000080">;
+  </font>BytesPerCluster<font color="#000080">,
+  </font>AvailClusters<font color="#000080">,
+  </font>TotalClusters<font color="#000080">,
+  </font>SectorsPerCluster<font color="#000080">,
+  </font>BytesPerSector      <font color="#000080">: </font>word<font color="#000080">;
+  </font>TotalBytes          <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>AvailableDriveSpace <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Exit<font color="#000080">;
+  </font>DriveNum <font color="#000080">:= </font>DrvLtrToNum<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>GetDiskInfo<font color="#000080">(</font>DriveNum<font color="#000080">,</font>AvailClusters<font color="#000080">,</font>TotalClusters<font color="#000080">,
+                 </font>BytesPerSector<font color="#000080">,</font>SectorsPerCluster<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>BytesPerCluster <font color="#000080">:= </font>LongInt<font color="#000080">(</font>SectorsPerCluster<font color="#000080">) * </font>BytesPerSector<font color="#000080">;
+      </font>AvailableDriveSpace <font color="#000080">:= </font>LongInt<font color="#000080">(</font>AvailClusters<font color="#000080">) * </font>BytesPerCluster<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ AvailableDriveSpace }
+
+
+</i></font><font color="#FF0000"><b>function </b></font>DriveInfoString<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-Return the formatted drive information for DriveLetter.  }
+{ Use global variable ReportOptions to determine what data }
+{ should be inlcuded in returned string. Return a nul      }
+{ string if the drive's infor should not be displayed      }
+{ per high or low options.                                 }
+</i></font><font color="#FF0000"><b>var
+  </b></font>N  <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>InfoStr <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>ProcResult <font color="#000080">: </font>Word<font color="#000080">;
+  </font>VolumeStr <font color="#000080">: </font>VolumeNameStr<font color="#000080">;
+  </font>FreeSpace <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font>ShowThisDrive <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>SpacePadWidth <font color="#000080">= </font><font color="#800000">13</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>InfoStr <font color="#000080">:= </font><font color="#800000">'Free '</font><font color="#000080">+</font>DriveLetter<font color="#000080">+</font><font color="#800000">': '</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if not </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>FreeSpace <font color="#000080">:= </font>AvailableDriveSpace<font color="#000080">(</font>DriveLetter<font color="#000080">);
+      </font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+
+                  </font>LeftPad<font color="#000080">(</font>InsertCommas<font color="#000080">(</font>Long2Str<font color="#000080">(</font>FreeSpace<font color="#000080">)),</font>SpacePadWidth<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+  else
+    begin
+      </b></font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+ </font><font color="#800000">'  -----------'</font><font color="#000080">;
+      </font>FreeSpace <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowSize<font color="#000080">) </font><font color="#FF0000"><b>then
+    if not </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+ </font><font color="#800000">' (Size '</font><font color="#000080">+ </font>DiskCapacityString<font color="#000080">(</font>DriveLetter<font color="#000080">) + </font><font color="#800000">')'
+    </font><font color="#FF0000"><b>else
+      </b></font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+ </font><font color="#800000">' (Size -----)'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowType<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+ </font>DiskTypeString<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowVolumeLabel<font color="#000080">) </font><font color="#FF0000"><b>then
+    if not </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>ProcResult <font color="#000080">:= </font>GetVolumeLabel<font color="#000080">(</font>DriveLetter<font color="#000080">,</font>VolumeStr<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>ProcResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          if </b></font>Length<font color="#000080">(</font>VolumeStr<font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            </b></font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+ </font><font color="#800000">'  '</font><font color="#000080">+</font>VolumeStr
+          <font color="#FF0000"><b>else
+            </b></font>InfoStr <font color="#000080">:= </font>InfoStr <font color="#000080">+ </font><font color="#800000">'  no label'</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ handle high and low disk space options }
+  </i></font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAtOrAbove<font color="#000080">) </font><font color="#FF0000"><b>or
+     </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAtOrBelow<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin  </b></font><font color="#008000"><i>{ allow both settings combined }
+      </i></font>ShowThisDrive <font color="#000080">:= ( (</font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAtOrAbove<font color="#000080">) </font><font color="#FF0000"><b>and
+                             </b></font><font color="#000080">(</font>FreeSpace <font color="#000080">&gt;= </font>HighDriveSpace<font color="#000080">)) </font><font color="#FF0000"><b>or
+                         </b></font><font color="#000080">(</font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAtOrBelow<font color="#000080">) </font><font color="#FF0000"><b>and
+                             </b></font><font color="#000080">(</font>FreeSpace <font color="#000080">&lt;= </font>LowDriveSpace<font color="#000080">)) );
+    </font><font color="#FF0000"><b>end
+  else
+    </b></font>ShowThisDrive <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>if not </b></font>ShowThisDrive <font color="#FF0000"><b>then
+    </b></font>DriveInfoString <font color="#000080">:= </font><font color="#800000">''
+  </font><font color="#FF0000"><b>else
+    </b></font>DriveInfoString <font color="#000080">:= </font>InfoStr<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>DisplayDriveInfoString<font color="#000080">(</font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">);
+</font><font color="#008000"><i>{-Writeln DriveInfoString's result for DriveLetter if not a nul string }
+</i></font><font color="#FF0000"><b>var
+  </b></font>DisplayStr <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DisplayStr <font color="#000080">:= </font>DriveInfoString<font color="#000080">(</font>DriveLetter<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Length<font color="#000080">(</font>DisplayStr<font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>Writeln<font color="#000080">(</font>DisplayStr<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DisplayDrivesInfo<font color="#000080">;
+</font><font color="#008000"><i>{-Display the info for all drives in DriveList, checking ReportOptions   }
+{ for display settings.                                                  }
+{ Before calling DriveInfoString, make all calls to GetPhantomInfo.      }
+{ DriveInfoString's call to GetDiskInfo will cause a disk in each drive, }
+{ making any phantom drive current and thus undetectable by our methods. }
+{ If a single drive was specified on the command line, and it turns out  }
+{ to be a phantom drive, show the drive info for the mapped drive, too.  }
+</i></font><font color="#FF0000"><b>var
+  </b></font>N <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font><font color="#008000"><i>{ build global list of phantom drive maps }
+  </i></font><font color="#FF0000"><b>for </b></font>N <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>DriveList<font color="#000080">) </font><font color="#FF0000"><b>do
+    </b></font>GetAndSavePhantomInfo<font color="#000080">(</font>DriveList<font color="#000080">[</font>N<font color="#000080">]);
+
+ </font><font color="#008000"><i>{ now get and display drive information }
+ </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>DriveList<font color="#000080">) = </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+   begin  </b></font><font color="#008000"><i>{ hangle single specified phantom drive }
+     </i></font>DisplayDriveInfoString<font color="#000080">(</font>DriveList<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+     </font><font color="#FF0000"><b>if </b></font>IsListedAsPhantom<font color="#000080">(</font>DriveList<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) </font><font color="#FF0000"><b>then
+       </b></font>DisplayDriveInfoString<font color="#000080">(</font>PhantomList<font color="#000080">[</font>DriveList<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]].</font>MapDrvLtr<font color="#000080">);
+   </font><font color="#FF0000"><b>end
+ else    </b></font><font color="#008000"><i>{ show drive info for all listed drives }
+  </i></font><font color="#FF0000"><b>for </b></font>N <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>DriveList<font color="#000080">) </font><font color="#FF0000"><b>do
+    </b></font>DisplayDriveInfoString<font color="#000080">(</font>DriveList<font color="#000080">[</font>N<font color="#000080">]);
+ </font><font color="#008000"><i>{ pause if option enabled }
+  </i></font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAndPause<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Delay<font color="#000080">(</font>PauseDelaySecs<font color="#000080">*</font>MsPerSec<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>function </b></font>AllValidDrivesList <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-Return a string containing drive letters of all valid drives}
+</i></font><font color="#FF0000"><b>var
+  </b></font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">;
+  </font>TempDrivesList <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>FirstDrive <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>LastDrive <font color="#000080">= </font><font color="#800000">'Z'</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>TempDrivesList <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowFloppies<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>FirstDrive <font color="#000080">:= </font><font color="#800000">'A'
+  </font><font color="#FF0000"><b>else
+    </b></font>FirstDrive <font color="#000080">:= </font><font color="#800000">'C'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>DriveLetter <font color="#000080">:= </font>FirstDrive <font color="#FF0000"><b>to </b></font>LastDrive <font color="#FF0000"><b>do
+    if </b></font>ValidDrive<font color="#000080">(</font>DriveLetter<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>TempDrivesList <font color="#000080">:= </font>TempDrivesList <font color="#000080">+ </font>DriveLetter
+    <font color="#FF0000"><b>else
+  </b></font><font color="#008000"><i>{ primary floppies show invalid when last access was via the the Phantom }
+  { drive, so check DOS equipment list for floppies by calling NumFloppies }
+      </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>DriveLetter <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">,</font><font color="#800000">'B'</font><font color="#000080">]) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>NumFloppies <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>TempDrivesList <font color="#000080">:= </font>TempDrivesList <font color="#000080">+ </font>DriveLetter<font color="#000080">;
+  </font>AllValidDrivesList <font color="#000080">:= </font>TempDrivesList<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>StripCommas<font color="#000080">(</font>S <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{-Remove any commas from S and return as result }
+</i></font><font color="#FF0000"><b>var
+  </b></font>LenS <font color="#000080">: </font>Byte <font color="#FF0000"><b>absolute </b></font>S<font color="#000080">;
+  </font>P <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>P <font color="#000080">:= </font>LenS <font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do
+    if </b></font>S<font color="#000080">[</font>P<font color="#000080">] = </font><font color="#800000">',' </font><font color="#FF0000"><b>then
+      </b></font>Delete<font color="#000080">(</font>S<font color="#000080">,</font>P<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font>StripCommas <font color="#000080">:= </font>S<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ParseCommandLine<font color="#000080">;
+</font><font color="#008000"><i>{-Parse command line to get drive list and options }
+{ First, check to see if a parameter is a drive letter or list of them.   }
+{ If so, put the letter or letters in the drive list.                     }
+{ If not a drive letter, the parameter should be a command option.        }
+{ Process the command option, or ignore if not a valid option (could be   }
+{ an option parameter or an invalid option).                              }
+</i></font><font color="#FF0000"><b>var
+  </b></font>ChPos<font color="#000080">,</font>Count   <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>TempDelaySecs <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Param<font color="#000080">,</font>Param2  <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>ParamLen      <font color="#000080">: </font>Byte <font color="#FF0000"><b>absolute </b></font>Param<font color="#000080">;
+  </font>Param2Len     <font color="#000080">: </font>Byte <font color="#FF0000"><b>absolute </b></font>Param2<font color="#000080">;
+  </font>HLChar        <font color="#000080">: </font>Char<font color="#000080">; </font><font color="#008000"><i>{ /HIGH, /LOW: K = Kbytes, M = Megabytes, G = Gig }
+</i></font><font color="#FF0000"><b>const
+  </b></font>HLCharSet     <font color="#000080">: </font><font color="#FF0000"><b>set of </b></font>Char <font color="#000080">= [</font><font color="#800000">'G'</font><font color="#000080">,</font><font color="#800000">'K'</font><font color="#000080">,</font><font color="#800000">'M'</font><font color="#000080">];
+</font><font color="#FF0000"><b>begin
+ </b></font><font color="#008000"><i>{ initialize variables }
+  </i></font>FillChar<font color="#000080">(</font>PhantomList<font color="#000080">, </font>SizeOf<font color="#000080">(</font>PhantomList<font color="#000080">), </font><font color="#800000">#0</font><font color="#000080">);
+  </font>ReportOptions <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>HighDriveSpace <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>LowDriveSpace <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>Count <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ParamCount <font color="#FF0000"><b>do
+    begin
+      </b></font>Param <font color="#000080">:= </font>StUpCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Count<font color="#000080">));
+      </font><font color="#FF0000"><b>if </b></font>Param<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font>DriveLetterSet <font color="#FF0000"><b>then
+        begin
+          for </b></font>ChPos <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ParamLen <font color="#FF0000"><b>do  </b></font><font color="#008000"><i>{ for drives listed w/no spacing }
+            </i></font><font color="#FF0000"><b>if </b></font>Pos<font color="#000080">(</font>Param<font color="#000080">[</font>ChPos<font color="#000080">],</font>DriveList<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ correct user error }
+              </i></font><font color="#FF0000"><b>if </b></font>ValidDrive<font color="#000080">(</font>Param<font color="#000080">[</font>ChPos<font color="#000080">]) </font><font color="#FF0000"><b>then
+                </b></font>DriveList <font color="#000080">:= </font>DriveList <font color="#000080">+ </font>Param<font color="#000080">[</font>ChPos<font color="#000080">]
+              </font><font color="#FF0000"><b>else
+  </b></font><font color="#008000"><i>{ primary floppies show invalid when last access was via the the Phantom }
+  { drive, so check DOS equipment list for floppies by calling NumFloppies }
+                </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Param<font color="#000080">[</font>ChPos<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">,</font><font color="#800000">'B'</font><font color="#000080">]) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>NumFloppies <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+                  </b></font>DriveList <font color="#000080">:= </font>DriveList <font color="#000080">+ </font>Param<font color="#000080">[</font>ChPos<font color="#000080">];
+        </font><font color="#FF0000"><b>end
+      else
+       </b></font><font color="#008000"><i>{ 1st char should be command delimiter }
+       { 2nd char should indicate option      }
+        </i></font><font color="#FF0000"><b>if </b></font>Param<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font>CommandDelimiters <font color="#FF0000"><b>then
+          begin
+            case </b></font>Param<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of
+              </b></font><font color="#800000">'A' </font><font color="#000080">: </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAllDrives<font color="#000080">);
+              </font><font color="#800000">'F' </font><font color="#000080">: </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowFloppies<font color="#000080">);
+              </font><font color="#800000">'H' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                      </b></font>HLChar <font color="#000080">:= </font><font color="#800000">#255</font><font color="#000080">;  </font><font color="#008000"><i>{ to check if set }
+                      </i></font><font color="#FF0000"><b>if </b></font>ParamCount <font color="#000080">&lt;= </font>Count <font color="#FF0000"><b>then
+                        </b></font>HaltWithMessage<font color="#000080">(</font><font color="#800000">'specify drive space with /HIGH option'</font><font color="#000080">);
+                      </font><font color="#008000"><i>{ check for G, K or M }
+                      </i></font>Param2 <font color="#000080">:= </font>StUpCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Count<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">));
+                      </font><font color="#FF0000"><b>if </b></font>Param2<font color="#000080">[</font>Param2Len<font color="#000080">] </font><font color="#FF0000"><b>in </b></font>HLCharSet <font color="#FF0000"><b>then
+                        begin
+                          </b></font>HLChar <font color="#000080">:= </font>Param2<font color="#000080">[</font>Param2Len<font color="#000080">];
+                          </font>Delete<font color="#000080">(</font>Param2<font color="#000080">,</font>Param2Len<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                      </font><font color="#008000"><i>{ validate free space number }
+                      </i></font><font color="#FF0000"><b>if not </b></font>Str2Long<font color="#000080">(</font>StripCommas<font color="#000080">(</font>Param2<font color="#000080">),</font>HighDriveSpace<font color="#000080">) </font><font color="#FF0000"><b>then
+                        </b></font>HaltWithMessage<font color="#000080">(</font><font color="#800000">'specify amount of drive space with /HIGH option'</font><font color="#000080">)
+                      </font><font color="#FF0000"><b>else  </b></font><font color="#008000"><i>{ handle G, K or M }
+                        </i></font><font color="#FF0000"><b>if </b></font>HLChar <font color="#000080">&lt;&gt; </font><font color="#800000">#255 </font><font color="#FF0000"><b>then
+                          begin
+                            case </b></font>HLChar <font color="#FF0000"><b>of
+                              </b></font><font color="#800000">'G' </font><font color="#000080">: </font>HighDriveSpace <font color="#000080">:= </font>HighDriveSpace <font color="#000080">* </font>Gigabyte<font color="#000080">;
+                              </font><font color="#800000">'K' </font><font color="#000080">: </font>HighDriveSpace <font color="#000080">:= </font>HighDriveSpace <font color="#000080">* </font>Kbyte<font color="#000080">;
+                              </font><font color="#800000">'M' </font><font color="#000080">: </font>HighDriveSpace <font color="#000080">:= </font>HighDriveSpace <font color="#000080">* </font>Megabyte<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{case}
+                          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                      </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAtOrAbove<font color="#000080">);
+                      </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAllDrives<font color="#000080">);
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#800000">'L' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                      </b></font>HLChar <font color="#000080">:= </font><font color="#800000">#255</font><font color="#000080">;  </font><font color="#008000"><i>{ to check if set }
+                      </i></font><font color="#FF0000"><b>if </b></font>ParamCount <font color="#000080">&lt;= </font>Count <font color="#FF0000"><b>then
+                        </b></font>HaltWithMessage<font color="#000080">(</font><font color="#800000">'specify drive space with /LOW option'</font><font color="#000080">);
+                      </font><font color="#008000"><i>{ check for G, K or M }
+                      </i></font>Param2 <font color="#000080">:= </font>StUpCase<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Count<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">));
+                      </font><font color="#FF0000"><b>if </b></font>Param2<font color="#000080">[</font>Param2Len<font color="#000080">] </font><font color="#FF0000"><b>in </b></font>HLCharSet <font color="#FF0000"><b>then
+                        begin
+                          </b></font>HLChar <font color="#000080">:= </font>Param2<font color="#000080">[</font>Param2Len<font color="#000080">];
+                          </font>Delete<font color="#000080">(</font>Param2<font color="#000080">,</font>Param2Len<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                      </font><font color="#008000"><i>{ validate free space number }
+                      </i></font><font color="#FF0000"><b>if not </b></font>Str2Long<font color="#000080">(</font>StripCommas<font color="#000080">(</font>Param2<font color="#000080">),</font>LowDriveSpace<font color="#000080">) </font><font color="#FF0000"><b>then
+                        </b></font>HaltWithMessage<font color="#000080">(</font><font color="#800000">'specify amount of drive space with /LOW option'</font><font color="#000080">)
+                      </font><font color="#FF0000"><b>else  </b></font><font color="#008000"><i>{ handle G, K or M }
+                        </i></font><font color="#FF0000"><b>if </b></font>HLChar <font color="#000080">&lt;&gt; </font><font color="#800000">#255 </font><font color="#FF0000"><b>then
+                          begin
+                            case </b></font>HLChar <font color="#FF0000"><b>of
+                              </b></font><font color="#800000">'G' </font><font color="#000080">: </font>LowDriveSpace <font color="#000080">:= </font>LowDriveSpace <font color="#000080">* </font>Gigabyte<font color="#000080">;
+                              </font><font color="#800000">'K' </font><font color="#000080">: </font>LowDriveSpace <font color="#000080">:= </font>LowDriveSpace <font color="#000080">* </font>Kbyte<font color="#000080">;
+                              </font><font color="#800000">'M' </font><font color="#000080">: </font>LowDriveSpace <font color="#000080">:= </font>LowDriveSpace <font color="#000080">* </font>Megabyte<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{case}
+                          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                      </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAtOrBelow<font color="#000080">);
+                      </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAllDrives<font color="#000080">);
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#800000">'P' </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                      </b></font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAndPause<font color="#000080">);
+                      </font><font color="#FF0000"><b>if </b></font>Count <font color="#000080">&lt; </font>ParamCount <font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ next param could be delay }
+                        </i></font><font color="#FF0000"><b>if </b></font>Str2Word<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Count<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">),</font>TempDelaySecs<font color="#000080">) </font><font color="#FF0000"><b>then
+                            </b></font>PauseDelaySecs <font color="#000080">:= </font>TempDelaySecs<font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#800000">'S' </font><font color="#000080">: </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowSize<font color="#000080">);
+              </font><font color="#800000">'T' </font><font color="#000080">: </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowType<font color="#000080">);
+              </font><font color="#800000">'V' </font><font color="#000080">: </font>SetFlag<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowVolumeLabel<font color="#000080">);
+              </font><font color="#800000">'?' </font><font color="#000080">: </font>ShowUsageAndHalt<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ case }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ if Param[1] in CommandDelimiters }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ for Count := 1 to ParamCount }
+  </i></font><font color="#FF0000"><b>if </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowAllDrives<font color="#000080">) </font><font color="#FF0000"><b>or
+     </b></font>FlagIsSet<font color="#000080">(</font>ReportOptions<font color="#000080">,</font>ShowFloppies<font color="#000080">) </font><font color="#FF0000"><b>then
+       </b></font>DriveList <font color="#000080">:= </font>AllValidDrivesList<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ ParseCommandLine }
+
+
+</i></font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ FREE }
+  </i></font>RestoreOutputRedirection<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParamCount <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>ParseCommandLine<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>Length<font color="#000080">(</font>DriveList<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ if no drives on command line }
+    </i></font>DriveList <font color="#000080">:= </font>DefaultDrive<font color="#000080">;   </font><font color="#008000"><i>{ default to current the drive }
+  </i></font>DisplayDrivesInfo<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">. </font><font color="#008000"><i>{ FREE }
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0111.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,282 @@
+<html>
+<head><title> "Read/Write Sectors/Boot Records" by ARNE DE.BRUIJN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0089.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; I'm programming in BP 7.0 and would like to know how one can read/write
+&gt; some clusters, sectors and boot records from a disk (hard or flop).
+
+You need the dos interrupts $25 and $26. But, they have a quirk, they don't
+pop off the flags register (which is stored by the INT instruction).
+Also, you need to know which calling method you need, with 16 bit or 32 bit
+cluster numbers.
+}
+{ Some proc's to read/write sectors, PD by Arne de Bruijn }
+</i></font><font color="#FF0000"><b>uses </b></font>Dos<font color="#000080">,</font>Strings<font color="#000080">;
+</font><font color="#FF0000"><b>type
+ </b></font>JmpRec<font color="#000080">=</font><font color="#FF0000"><b>record       </b></font><font color="#008000"><i>{ The starting jump in the bootsector }
+  </i></font>Code<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>{ $E9 XX XX / $EB XX XX}
+  </i></font><font color="#FF0000"><b>case </b></font>byte <font color="#FF0000"><b>of
+   </b></font><font color="#800000">0</font><font color="#000080">:(</font>Adr1<font color="#000080">:</font>byte<font color="#000080">; </font>NOP<font color="#000080">:</font>byte<font color="#000080">);
+   </font><font color="#800000">1</font><font color="#000080">:(</font>Adr2<font color="#000080">:</font>word<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>BpbRec<font color="#000080">=</font><font color="#FF0000"><b>record       </b></font><font color="#008000"><i>{ The Bios Data Block (returned by DOS, and stored in }
+</i></font>BytesPSec<font color="#000080">:</font>word<font color="#000080">;    </font><font color="#008000"><i>{ the bootsector }  </i></font>SecPClus<font color="#000080">:</font>byte<font color="#000080">;
+  </font>ResSec<font color="#000080">:</font>word<font color="#000080">;
+  </font>NrFATs<font color="#000080">:</font>byte<font color="#000080">;
+  </font>NrROOT<font color="#000080">:</font>word<font color="#000080">;
+  </font>TotalSec<font color="#000080">:</font>word<font color="#000080">;
+  </font>MDB<font color="#000080">:</font>byte<font color="#000080">;
+  </font>SecPFAT<font color="#000080">:</font>word<font color="#000080">;
+  </font>SecPSpoor<font color="#000080">:</font>word<font color="#000080">;
+  </font>NrHead<font color="#000080">:</font>word<font color="#000080">;
+  </font>HidSec32<font color="#000080">:</font>longint<font color="#000080">;
+  </font>TotalSec32<font color="#000080">:</font>longint<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>BootSec<font color="#000080">=</font><font color="#FF0000"><b>record      </b></font><font color="#008000"><i>{ The bootsector format in DOS }
+  </i></font>JmpCode<font color="#000080">:</font>JmpRec<font color="#000080">;
+  </font>Name<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">; </font><font color="#008000"><i>{ Isn't meaningfull at all, just FORMAT prg name }
+  </i></font>Bpb<font color="#000080">:</font>BpbRec<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>BootSecP<font color="#000080">=^</font>BootSec<font color="#000080">;
+</font><font color="#FF0000"><b>var
+ </b></font>BigPart<font color="#000080">:</font>boolean<font color="#000080">;                 </font><font color="#008000"><i>{ 32-bit sectors? }
+ </i></font>Drive<font color="#000080">:</font>byte<font color="#000080">;                      </font><font color="#008000"><i>{ which drive are we using }
+ </i></font>ROOTSec<font color="#000080">,</font>FATSec<font color="#000080">,</font>DataSec<font color="#000080">:</font>longint<font color="#000080">;  </font><font color="#008000"><i>{ Some starting sectors }
+ </i></font>FAT12<font color="#000080">:</font>boolean<font color="#000080">;                   </font><font color="#008000"><i>{ 12-bit FAT? }
+ </i></font>LastSecNo<font color="#000080">:</font>longint<font color="#000080">;               </font><font color="#008000"><i>{ Save last sector number... }
+ </i></font>LastError<font color="#000080">:</font>word<font color="#000080">;                  </font><font color="#008000"><i>{ ... and error code for error report }
+
+</i></font><font color="#FF0000"><b>function </b></font>ReadSec<font color="#000080">(</font>SecNo<font color="#000080">:</font>longint<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">):</font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Read a sector using DOS int 25h }
+{ Parameters: }
+{  SecNo   Sector number to read }
+{  Buf     Your buffer to receive the data (512 bytes will be stored here, }
+{          make sure you have enough space allocated!) }
+{ Returns TRUE if success, else FALSE }
+{ Uses global boolean BigPart to choose between 16-bit (false) and }
+{ 32-bit (true) sector number calling }
+{ Uses global byte Drive to choose the drive to read from. 0=A:, 1=B: etc. }
+</i></font><font color="#FF0000"><b>var
+ </b></font>ParBuf<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+ </font><font color="#008000"><i>{ Buffer to hold parameters on 32-bit sector call: }
+ {  ofs size         meaning }
+ {   0   4 (longint) sectornumber }
+ {   4   2 (word)    number of sectors to read (set to 1 in this proc.) }
+ {   6   4 (pointer) address of buffer }
+</i></font><font color="#FF0000"><b>asm
+ </b></font><font color="#008000"><i>{ Copy sectornumber to global var for error report }
+ </i></font><font color="#FF00FF">mov ax,word ptr [SecNo]
+ mov word ptr [LastSecNo],ax
+ mov ax,word ptr [SecNo+2]
+ mov word ptr [LastSecNo+2],ax
+ push ds                </font><font color="#008000"><i>{ Store DS register (needs to be preserved in TP/BP) }
+ </i></font><font color="#FF00FF">mov al,Drive           </font><font color="#008000"><i>{ Load Drive no. from global var (DS points still to }
+                        { data segment }
+ </i></font><font color="#FF00FF">push ax                </font><font color="#008000"><i>{ Store it on stack }
+ </i></font><font color="#FF00FF">cmp BigPart,0          </font><font color="#008000"><i>{ Must we use 32-bit calling? }
+ </i></font><font color="#FF00FF">jne @DoBig             </font><font color="#008000"><i>{ Yes -&gt; goto @DoBig,  No -&gt; continue with 16-bit }
+ </i></font><font color="#FF00FF">lds bx,Buf             </font><font color="#008000"><i>{ Load address of buffer (Buf) }
+ </i></font><font color="#FF00FF">mov cx,1               </font><font color="#008000"><i>{ Number of sectors to read }
+ </i></font><font color="#FF00FF">mov dx,word ptr [SecNo] </font><font color="#008000"><i>{ Get number of sector to read (SecNr) }
+ </i></font><font color="#FF00FF">jmp @DosRead           </font><font color="#008000"><i>{ goto @DosRead, skip the 32-bit part }
+</i></font><font color="#FF00FF">@DoBig:
+ cld                    </font><font color="#008000"><i>{ Store forwards in parameter buffer }
+ </i></font><font color="#FF00FF">mov ax,ss              </font><font color="#008000"><i>{ Load address of parameter buffer (ParBuf) }
+ </i></font><font color="#FF00FF">mov es,ax
+ mov ds,ax
+ lea di,ParBuf          </font><font color="#008000"><i>{ Still loading... }
+ </i></font><font color="#FF00FF">mov bx,di              </font><font color="#008000"><i>{ Save offset of parameter buffer in BX }
+ </i></font><font color="#FF00FF">mov ax,word ptr [SecNo] </font><font color="#008000"><i>{ Get number of sector to read (lo 16-bit part) }
+ </i></font><font color="#FF00FF">stosw </font><font color="#008000"><i>{Lo SecNr}       { Store in our buffer }
+ </i></font><font color="#FF00FF">mov ax,word ptr [SecNo+2] </font><font color="#008000"><i>{ Get number of sector to read (hi 16-bit part) }
+ </i></font><font color="#FF00FF">stosw </font><font color="#008000"><i>{Hi SecNr}       { Store in buffer }
+ </i></font><font color="#FF00FF">mov ax,1               </font><font color="#008000"><i>{ Sectors to read }
+ </i></font><font color="#FF00FF">stosw                  </font><font color="#008000"><i>{ Store in buffer }
+ </i></font><font color="#FF00FF">mov ax,word ptr [Buf]  </font><font color="#008000"><i>{ Get offset of buffer (Buf) }
+ </i></font><font color="#FF00FF">stosw </font><font color="#008000"><i>{Offset Buffer}  { Store in buffer }
+ </i></font><font color="#FF00FF">mov ax,word ptr [Buf+2] </font><font color="#008000"><i>{ Get segment of buffer (Buf) }
+ </i></font><font color="#FF00FF">stosw </font><font color="#008000"><i>{Segment Buffer} { Store in buffer }
+ </i></font><font color="#FF00FF">mov cx,-1              </font><font color="#008000"><i>{ Indicate use of 32-bit calling }
+</i></font><font color="#FF00FF">@DosRead:               </font><font color="#008000"><i>{ Actual interrupt calling starts }
+ </i></font><font color="#FF00FF">pop ax                 </font><font color="#008000"><i>{ Get drive number from stack }
+ </i></font><font color="#FF00FF">push bp                </font><font color="#008000"><i>{ Save BP (must be preserved in TP/BP) }
+ </i></font><font color="#FF00FF">int 25h                </font><font color="#008000"><i>{ DOS function: read sector(s) }
+ </i></font><font color="#FF00FF">mov al,1               </font><font color="#008000"><i>{ Assume success (TRUE, ordinal 1) }
+ </i></font><font color="#FF00FF">sbb al,0               </font><font color="#008000"><i>{ Subtract one if carry flag high (set on error by
+                        { DOS) }
+ </i></font><font color="#FF00FF">popf                   </font><font color="#008000"><i>{ Get flags back DOS had forgotten to do }
+ </i></font><font color="#FF00FF">pop bp                 </font><font color="#008000"><i>{ Get BP back }
+ </i></font><font color="#FF00FF">pop ds                 </font><font color="#008000"><i>{ Get DS back }
+ </i></font><font color="#FF00FF">mov LastError,ax       </font><font color="#008000"><i>{ Save the errorcode in global var for errorreporting }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;                    </font><font color="#008000"><i>{ Return to caller, al contains return code }
+                        { (0=FALSE, 1=TRUE) }
+
+</i></font><font color="#FF0000"><b>function </b></font>WriteSec<font color="#000080">(</font>SecNo<font color="#000080">:</font>longint<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">):</font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Same as above, but WRITES a sector with contents of Buf }
+{ USE WITH CAUNTION! YOU CAN DESTROY IMPORTANT DATA WITH THIS! }
+{ (not commented, is exactly the same as ReadSec, only uses INT 26h } { instead
+of INT 25h) }</i></font><font color="#FF0000"><b>var
+ </b></font>ParBuf<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">mov ax,word ptr [SecNo]
+ mov word ptr [LastSecNo],ax
+ mov ax,word ptr [SecNo+2]
+ mov word ptr [LastSecNo+2],ax
+ push ds
+ mov al,Drive
+ push ax
+ cmp BigPart,0
+ jne @DoBig
+ lds bx,Buf
+ mov cx,1
+ mov dx,word ptr [SecNo]
+ jmp @DosRead
+@DoBig:
+ cld
+ mov ax,ss
+ mov es,ax
+ mov ds,ax
+ lea di,ParBuf
+ mov bx,di
+ mov ax,word ptr [SecNo]
+ stosw </font><font color="#008000"><i>{Lo SecNr}
+ </i></font><font color="#FF00FF">mov ax,word ptr [SecNo+2]
+ stosw </font><font color="#008000"><i>{Hi SecNr}
+ </i></font><font color="#FF00FF">mov ax,1
+ stosw </font><font color="#008000"><i>{Aantal Sectors}
+ </i></font><font color="#FF00FF">mov ax,word ptr [Buf]
+ stosw </font><font color="#008000"><i>{Offset Buffer}
+ </i></font><font color="#FF00FF">mov ax,word ptr [Buf+2]
+ stosw </font><font color="#008000"><i>{Segment Buffer}
+ </i></font><font color="#FF00FF">mov cx,-1
+@DosRead:
+ pop ax
+ push bp
+ int 26h
+ mov al,1
+ sbb al,0
+ popf
+ pop bp
+ pop ds
+ mov LastError,ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DiskRError<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Error reading disk! Sector:'</font><font color="#000080">,</font>LastSecNo<font color="#000080">,</font><font color="#800000">' Errorcode:'</font><font color="#000080">,</font>LastError<font color="#000080">);
+ </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+ </b></font>Bpb<font color="#000080">:</font>BpbRec<font color="#000080">; </font><font color="#008000"><i>{ Global copy of Bios Parameter block, for ClusToSec }
+
+</i></font><font color="#FF0000"><b>function </b></font>ClusToSec<font color="#000080">(</font>C<font color="#000080">:</font>word<font color="#000080">):</font>longint<font color="#000080">;
+</font><font color="#008000"><i>{ Convert clusternumber to sector number, because the cluster is often bigger }
+{ than one sector, you need to read multiple succeeding sectors to read the }
+{ whole cluster (number of sectors in a cluster is in BPB (BPB.SecPClus)) }
+{ Uses global BpbRec Bpb and global longint DATASec }
+</i></font><font color="#FF0000"><b>begin
+ </b></font>ClusToSec<font color="#000080">:=((</font>C<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">)*</font>Bpb<font color="#000080">.</font>SecPClus<font color="#000080">)+</font>DATASec<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>const
+ </b></font>SizeBpb<font color="#000080">=</font>SizeOf<font color="#000080">(</font>BpbRec<font color="#000080">);
+ </font><font color="#008000"><i>{ Needed for assembly part, AFAIK you can't get the size of a structure }
+ { (record) in an asm..end; block (shame on you, Borland (or on me :-) )) }
+</i></font><font color="#FF0000"><b>var
+ </b></font>Buf<font color="#000080">:</font>pointer<font color="#000080">;
+ </font>S<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]; </font><font color="#008000"><i>{ To store driveletter }
+ </i></font>I<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>I<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax,3000h   </font><font color="#008000"><i>{ Get DOS version }
+  </i></font><font color="#FF00FF">int 21h
+  cmp al,3
+  jb @BadDos
+  ja @DosOk
+  cmp ah,20
+  jae @DosOk
+ @BadDos:        </font><font color="#008000"><i>{ Lower than 3.2? }
+  </i></font><font color="#FF00FF">mov I,1        </font><font color="#008000"><i>{ Set flag }
+ </i></font><font color="#FF00FF">@DosOk:
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>I<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>then
+  begin </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Sorry, need DOS version 3.2 or higher!'</font><font color="#000080">); </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">); </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>ParamCount<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+   </b></font>WriteLn<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">),</font><font color="#800000">' &lt;driveletter&gt;'</font><font color="#000080">);
+   </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>S<font color="#000080">:=</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+ </font><font color="#FF0000"><b>case </b></font>UpCase<font color="#000080">(</font>S<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) </font><font color="#FF0000"><b>of
+  </b></font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">:;
+ </font><font color="#FF0000"><b>else
+  begin
+   </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Bad drive!'</font><font color="#000080">);
+   </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>Drive<font color="#000080">:=</font>Ord<font color="#000080">(</font>UpCase<font color="#000080">(</font>S<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]))-</font><font color="#800000">65</font><font color="#000080">;
+ </font>GetMem<font color="#000080">(</font>Buf<font color="#000080">,</font><font color="#800000">512</font><font color="#000080">);
+ </font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds                   </font><font color="#008000"><i>{ Copy DS }
+  </i></font><font color="#FF00FF">pop es                    </font><font color="#008000"><i>{ to ES }
+  </i></font><font color="#FF00FF">push ds                   </font><font color="#008000"><i>{ Save DS }
+  </i></font><font color="#FF00FF">mov ax,440dh              </font><font color="#008000"><i>{ DOS function 44h (IOCTL), subfunction 0Dh }
+                            { (blockdriver control) }
+  </i></font><font color="#FF00FF">mov bl,Drive              </font><font color="#008000"><i>{ Driveno. }
+  </i></font><font color="#FF00FF">inc bl                    </font><font color="#008000"><i>{ Incrase by 1 (0=default, 1=A:) }
+  </i></font><font color="#FF00FF">mov cx,860h               </font><font color="#008000"><i>{ subsubfunction 860h (get information) }
+  </i></font><font color="#FF00FF">lds dx,Buf                </font><font color="#008000"><i>{ Load address of buffer where to store result }
+  </i></font><font color="#FF00FF">int 21h                   </font><font color="#008000"><i>{ Call DOS subfunction }
+  </i></font><font color="#FF00FF">mov al,1                  </font><font color="#008000"><i>{ Assume error }
+  </i></font><font color="#FF00FF">jc @EndR                  </font><font color="#008000"><i>{ Got error? Yes -&gt; goto @EndR }
+  </i></font><font color="#FF00FF">mov si,dx                 </font><font color="#008000"><i>{ Set SI on offset parameterblock }
+  </i></font><font color="#FF00FF">mov al,2                  </font><font color="#008000"><i>{ Assume floppy }
+  </i></font><font color="#FF00FF">cmp byte ptr [si+1],5     </font><font color="#008000"><i>{ Is it a harddisk? }
+  </i></font><font color="#FF00FF">jne @EndR                 </font><font color="#008000"><i>{ No -&gt; goto @EndR }
+  </i></font><font color="#FF00FF">mov cx,SizeBpb            </font><font color="#008000"><i>{ Get size of BPB record }
+  </i></font><font color="#FF00FF">add si,7                  </font><font color="#008000"><i>{ Starts at offset 7 in DOS parameter block }
+  </i></font><font color="#FF00FF">lea di,Bpb                </font><font color="#008000"><i>{ Get address of our global BPB block }
+  </i></font><font color="#FF00FF">cld                       </font><font color="#008000"><i>{ Store forwards }
+  </i></font><font color="#FF00FF">rep movsb                 </font><font color="#008000"><i>{ Copy BPB from DOS to ours }
+  </i></font><font color="#FF00FF">xor al,al                 </font><font color="#008000"><i>{ No errors }
+ </i></font><font color="#FF00FF">@EndR:                     </font><font color="#008000"><i>{ AL contains errorcode: 0=no err., 1=DOS err, }
+                            { 2=it's a floppy (need something special) }
+  </i></font><font color="#FF00FF">pop ds                    </font><font color="#008000"><i>{ Restore DS }
+  </i></font><font color="#FF00FF">mov I,al                  </font><font color="#008000"><i>{ Save result }
+ </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>case </b></font>I <font color="#FF0000"><b>of
+  </b></font><font color="#800000">0</font><font color="#000080">:</font>BigPart<font color="#000080">:=</font>Bpb<font color="#000080">.</font>TotalSec<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ It's a harddisk, 16-bit field is 0 for 32-bit }
+                             { access }   </i></font><font color="#800000">1</font><font color="#000080">:                         </font><font color="#008000"><i>{ Error
+from DOS, report }   </i></font><font color="#FF0000"><b>begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Can''t get parameter block for drive '</font><font color="#000080">,</font>chr<font color="#000080">(</font>Drive<font color="#000080">+</font><font color="#800000">65</font><font color="#000080">),</font><font color="#800000">'!'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#800000">2</font><font color="#000080">:                         </font><font color="#008000"><i>{ It's a floppy. DOS' bpb is only right }
+                             { for the largest disk size, so we need to read }
+                             { it ourself }
+   </i></font><font color="#FF0000"><b>begin
+    </b></font>BigPart<font color="#000080">:=</font>false<font color="#000080">;          </font><font color="#008000"><i>{ No 32-bit sectors on floppies }
+    </i></font><font color="#FF0000"><b>if not </b></font>ReadSec<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>Buf<font color="#000080">^) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ Read bootsector (sector 0) }
+     </i></font>DiskRError<font color="#000080">;                     </font><font color="#008000"><i>{ Show error if we got one }
+    </i></font>Bpb<font color="#000080">:=</font>BootSecP<font color="#000080">(</font>Buf<font color="#000080">)^.</font>Bpb<font color="#000080">;       </font><font color="#008000"><i>{ Copy BPB }
+   </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>with </b></font>Bpb <font color="#FF0000"><b>do  </b></font><font color="#008000"><i>{Store some handy information for accessing the disk ourself }
+  </i></font><font color="#FF0000"><b>begin
+   </b></font>FATSec<font color="#000080">:=</font>ResSec<font color="#000080">;                     </font><font color="#008000"><i>{ Starting FAT sector }
+   </i></font>ROOTSec<font color="#000080">:=</font>FATSec<font color="#000080">+(</font>NrFATs<font color="#000080">*</font>SecPFAT<font color="#000080">);   </font><font color="#008000"><i>{ Starting ROOT directory sector }
+   </i></font>DATASec<font color="#000080">:=</font>ROOTSec<font color="#000080">+(</font>NrROOT <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">);    </font><font color="#008000"><i>{ Starting DATA sector }
+   </i></font><font color="#FF0000"><b>if not </b></font>BigPart <font color="#FF0000"><b>then                 </b></font><font color="#008000"><i>{ Is it a 12-bit FAT? }
+    </i></font>FAT12<font color="#000080">:=((</font>TotalSec<font color="#000080">-</font>DATASec<font color="#000080">) </font><font color="#FF0000"><b>div </b></font>SecPClus<font color="#000080">)&lt;</font><font color="#800000">4087 </font><font color="#008000"><i>{ Yes if less than 4087 sec}
+   </i></font><font color="#FF0000"><b>else
+    </b></font>FAT12<font color="#000080">:=</font>false<font color="#000080">;                      </font><font color="#008000"><i>{ Not with 32-bit sectors }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>FreeMem<font color="#000080">(</font>Buf<font color="#000080">,</font><font color="#800000">512</font><font color="#000080">);
+ </font><font color="#008000"><i>{ do what you want }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0089.PAS">Original</a><b>]</b></p></body>
+</html>

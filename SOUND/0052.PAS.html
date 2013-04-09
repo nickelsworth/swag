@@ -1,0 +1,301 @@
+<html>
+<head><title> "Wav Player" by DANIEL SANDS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0052.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt;Does anybody know how to load and play a wav in pascal? And I still need to
+&gt;know how to load mods. And I would like to know how to load any other sound
+&gt;files that you know of other than pc speaker beeps. Thanks
+
+I made a WAV player in Pascal, but the source is a few lines long.  &lt;G&gt;
+
+ Okay.  It will play 4-bit ADPCM wavs, but not well.  Need to get the SB
+developer's kit to figure out why.  Oh well.
+}
+
+{$M 16384,0,655360}
+
+</i></font><font color="#FF0000"><b>uses </b></font>Dos<font color="#000080">, </font>CRT<font color="#000080">, </font>objects<font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>SBase <font color="#000080">= </font><font color="#800000">$220</font><font color="#000080">;               </font><font color="#008000"><i>{Default port base for Sound Blaster.
+                                   Change if necessary}
+      </i></font>SIrq  <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;                  </font><font color="#008000"><i>{Default Irq line for Sound Blaster.
+                                   Change if necessary}
+      </i></font>SDMA  <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;                  </font><font color="#008000"><i>{Default DMA channel for Sound Blaster.}
+
+</i></font><font color="#FF0000"><b>type
+ </b></font>TWAVRec <font color="#000080">= </font><font color="#FF0000"><b>record
+             </b></font>ID<font color="#000080">: </font>LongInt<font color="#000080">;
+            </font>Len<font color="#000080">: </font>LongInt<font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>PWAVFmt <font color="#000080">= ^</font>TWAVFmt<font color="#000080">;
+ </font>TWAVFmt <font color="#000080">= </font><font color="#FF0000"><b>record
+            case </b></font>word <font color="#FF0000"><b>of
+             </b></font><font color="#800000">1</font><font color="#000080">:( </font>FTag<font color="#000080">: </font>word<font color="#000080">;
+                 </font>NChan<font color="#000080">: </font>word<font color="#000080">;
+                 </font>SampR<font color="#000080">: </font>word<font color="#000080">;
+                 </font>AvgSR<font color="#000080">: </font>word<font color="#000080">;
+                 </font>BLKAl<font color="#000080">: </font>word<font color="#000080">;
+                 </font>FMTLen<font color="#000080">: </font>word<font color="#000080">;
+                 </font>FMTDat<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">256</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">);
+             </font><font color="#800000">2</font><font color="#000080">:( </font>Chunk<font color="#000080">:</font>Pointer<font color="#000080">);
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+ </b></font>WAVFile<font color="#000080">: </font>TDosStream<font color="#000080">;             </font><font color="#008000"><i>{WAV file object}
+ </i></font>BlkID<font color="#000080">: </font>TWAVRec<font color="#000080">;                  </font><font color="#008000"><i>{ID for each block in WAV}
+ </i></font>BlkFmt<font color="#000080">: </font>PWAVFmt<font color="#000080">;                 </font><font color="#008000"><i>{Block format}
+ </i></font>TotalSz<font color="#000080">: </font>LongInt<font color="#000080">;                </font><font color="#008000"><i>{Total size of WAV data}
+ </i></font>DSPCmd<font color="#000080">: </font>byte<font color="#000080">;
+ </font>NumBits<font color="#000080">: </font>byte<font color="#000080">;
+ </font>SampByte<font color="#000080">: </font>byte<font color="#000080">;
+ </font>BlockSize<font color="#000080">: </font>word<font color="#000080">;
+ </font>EOB<font color="#000080">: </font>boolean<font color="#000080">;
+ </font>DF<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>NewBlock<font color="#000080">; </font>interrupt<font color="#000080">;    </font><font color="#008000"><i>{Procedure to set up next block or}
+</i></font><font color="#FF0000"><b>var </b></font>X<font color="#000080">:</font>Byte<font color="#000080">;                       </font><font color="#008000"><i>{end playback}
+</i></font><font color="#FF0000"><b>begin
+
+ </b></font>X <font color="#000080">:= </font>port<font color="#000080">[</font>SBase<font color="#000080">+</font><font color="#800000">$e</font><font color="#000080">];
+ </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">;
+ </font>EOB <font color="#000080">:= </font>true<font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>PrepareSB<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+
+ </b></font>SetIntVec<font color="#000080">(</font>SIrq <font color="#000080">+ </font><font color="#800000">8</font><font color="#000080">, @</font>NewBlock<font color="#000080">);           </font><font color="#008000"><i>{Set up service routine}
+
+ </i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">in al,$61                                 </font><font color="#008000"><i>{Enable timer 2, but}
+  </i></font><font color="#FF00FF">and al,$fc                                </font><font color="#008000"><i>{do not turn on sound.}
+  </i></font><font color="#FF00FF">or al,1
+  out $61,al
+
+  sti
+
+  mov dx,SBase+6                            </font><font color="#008000"><i>{DSP (Digital Sound Processor)
+                                             reset port}
+  </i></font><font color="#FF00FF">mov al,1                                  </font><font color="#008000"><i>{Reset command}
+  </i></font><font color="#FF00FF">out dx,al
+
+  mov bx,4
+  call @9                                   </font><font color="#008000"><i>{Wait 4 clocks}
+
+  </i></font><font color="#FF00FF">mov al,0                                  </font><font color="#008000"><i>{Normal mode}
+  </i></font><font color="#FF00FF">out dx,al
+
+ @3: mov dx,SBase+$e                        </font><font color="#008000"><i>{DSP status port}
+ </i></font><font color="#FF00FF">@2: in al,dx                               </font><font color="#008000"><i>{Read status}
+  </i></font><font color="#FF00FF">test al,$80                               </font><font color="#008000"><i>{If high bit not set, no data}
+  </i></font><font color="#FF00FF">jz @2                                     </font><font color="#008000"><i>{ready}
+
+  </i></font><font color="#FF00FF">mov dx,Sbase+$a                           </font><font color="#008000"><i>{DSP read port}
+  </i></font><font color="#FF00FF">in al,dx                                  </font><font color="#008000"><i>{Read status}
+  </i></font><font color="#FF00FF">cmp al,$aa                                </font><font color="#008000"><i>{AA indicates ready}
+  </i></font><font color="#FF00FF">jnz @3
+  jmp @4
+ @5:
+  in al,dx                                  </font><font color="#008000"><i>{Wait for response to last byte}
+  </i></font><font color="#FF00FF">test al,$80                               </font><font color="#008000"><i>{sent}
+  </i></font><font color="#FF00FF">jnz @5
+  mov al,ah
+  out dx,al                                 </font><font color="#008000"><i>{Send next byte}
+  </i></font><font color="#FF00FF">ret
+
+ @9:
+  push bx
+  mov al,$b6                                </font><font color="#008000"><i>{Write count to timer #3}
+  </i></font><font color="#FF00FF">out $43,al
+
+  mov al,0                                  </font><font color="#008000"><i>{Low byte of count}
+  </i></font><font color="#FF00FF">out $42,al
+
+  mov al,$10                                </font><font color="#008000"><i>{High byte count}
+  </i></font><font color="#FF00FF">out $42,al
+
+  sub bx,$1000
+  neg bx                                    </font><font color="#008000"><i>{1000h-clocks=desired count}
+ </i></font><font color="#FF00FF">@10:
+  mov al,$80                                </font><font color="#008000"><i>{Read count from timer}
+  </i></font><font color="#FF00FF">out $43,al
+
+  in  al,$42                                </font><font color="#008000"><i>{Low byte}
+  </i></font><font color="#FF00FF">mov ah,al
+  in  al,$42                                </font><font color="#008000"><i>{High byte}
+  </i></font><font color="#FF00FF">xchg ah,al
+
+  cmp bx,ax                                 </font><font color="#008000"><i>{Pause until count reached}
+  </i></font><font color="#FF00FF">jl  @10
+  pop bx
+  ret
+ @4:
+  mov dx,SBase+$c
+
+  mov ah,$40                                </font><font color="#008000"><i>{Set time constant}
+  </i></font><font color="#FF00FF">call @5
+
+  mov ah,SampByte                           </font><font color="#008000"><i>{Time divisor}
+  </i></font><font color="#FF00FF">call @5
+
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>and not </b></font><font color="#000080">(</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font>SIRQ<font color="#000080">);   </font><font color="#008000"><i>{Enable SB interrupt}
+
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ErrorEnd<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>WAVFile<font color="#000080">.</font>Done<font color="#000080">;
+ </font>Writeln<font color="#000080">(</font><font color="#800000">'Error in .WAV'</font><font color="#000080">);
+ </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>PlaySound<font color="#000080">(</font>SndLen<font color="#000080">: </font>longint<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>AbsAddr<font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>FirstBlk<font color="#000080">, </font>SecBlk<font color="#000080">, </font>CurBlk<font color="#000080">: </font>Pointer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+
+ </b></font>EOB <font color="#000080">:= </font>False<font color="#000080">;
+
+ </font>GetMem<font color="#000080">(</font>BlkFmt<font color="#000080">, </font>BlockSize<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">);
+ </font>FirstBlk <font color="#000080">:= </font>BlkFmt<font color="#000080">;
+ </font>SecBlk <font color="#000080">:= </font>pointer<font color="#000080">(</font>longint<font color="#000080">(</font>FirstBlk<font color="#000080">) + </font>BlockSize<font color="#000080">);
+ </font>CurBlk <font color="#000080">:= </font>FirstBlk<font color="#000080">;
+
+
+ </font>WAVFile<font color="#000080">.</font>Read<font color="#000080">(</font>BlkFmt<font color="#000080">^, </font>BlockSize<font color="#000080">);
+ </font>SndLen <font color="#000080">:= </font>SndLen <font color="#000080">- </font>BlockSize<font color="#000080">;
+
+ </font><font color="#FF0000"><b>repeat
+  </b></font>AbsAddr <font color="#000080">:= </font>Seg<font color="#000080">(</font>CurBlk<font color="#000080">^);
+  </font>AbsAddr <font color="#000080">:= </font>AbsAddr <font color="#000080">* </font><font color="#800000">16 </font><font color="#000080">+</font>Ofs<font color="#000080">(</font>CurBlk<font color="#000080">^);
+  </font>SndLen <font color="#000080">:= </font>SndLen <font color="#000080">- </font>BlockSize<font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">jmp @4
+
+  @5:
+   in al,dx                                 </font><font color="#008000"><i>{Wait for response to last byte}
+   </i></font><font color="#FF00FF">test al,$80                              </font><font color="#008000"><i>{sent}
+   </i></font><font color="#FF00FF">jnz @5
+   mov al,ah
+   out dx,al                                </font><font color="#008000"><i>{Send next byte}
+   </i></font><font color="#FF00FF">ret
+
+  @4:
+
+   mov bx,1
+   mov cx,integer(AbsAddr)
+   mov dx,SBase+$c
+
+   mov al,0                                 </font><font color="#008000"><i>{Clear byte high/low flip-flop}
+   </i></font><font color="#FF00FF">out $c,al
+
+   mov al,$49                               </font><font color="#008000"><i>{Set memory read, single transfer,}
+   </i></font><font color="#FF00FF">out $b,al                                </font><font color="#008000"><i>{channel 1}
+
+   </i></font><font color="#FF00FF">mov al,cl                                </font><font color="#008000"><i>{Enter base address}
+   </i></font><font color="#FF00FF">out SDMA*2,al
+   mov al,ch
+   out SDMA*2,al
+
+   mov ax,integer(AbsAddr+2)                </font><font color="#008000"><i>{High 4 bits goes to DMA page reg}
+   </i></font><font color="#FF00FF">mov dx,$83
+   mov cl,SDMA
+   sub cl,2
+   mov ch,2                                 </font><font color="#008000"><i>{Calculate DMA page address}
+   </i></font><font color="#FF00FF">shr ch,cl                                </font><font color="#008000"><i>{87, 83, 81, 82 channel order}
+   </i></font><font color="#FF00FF">xor dl,ch
+   out dx,al                                </font><font color="#008000"><i>{Send page byte}
+
+   </i></font><font color="#FF00FF">mov ax,BlockSize                         </font><font color="#008000"><i>{Set byte count}
+   </i></font><font color="#FF00FF">out SDMA*2+1,al
+   xchg al,ah
+   out SDMA*2+1,al
+   push ax
+
+   mov al,SDMA                              </font><font color="#008000"><i>{Re-enable DMA channel 1}
+   </i></font><font color="#FF00FF">out $a,al
+
+   mov dx,SBase+$c                          </font><font color="#008000"><i>{DSP port}
+
+   </i></font><font color="#FF00FF">mov ah,DSPCmd                            </font><font color="#008000"><i>{DMA 8-bit transfer}
+   </i></font><font color="#FF00FF">call @5
+
+   pop ax                                   </font><font color="#008000"><i>{Get transfer again}
+   </i></font><font color="#FF00FF">mov bl,al
+   call @5
+   mov ah,bl
+   call @5
+
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>DSPCmd <font color="#000080">:= </font>DSPCmd <font color="#FF0000"><b>and </b></font><font color="#800000">$fe</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>CurBlk <font color="#000080">= </font>FirstBlk<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>CurBlk <font color="#000080">:= </font>SecBlk <font color="#FF0000"><b>else </b></font>CurBlk <font color="#000080">:= </font>FirstBlk<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>SndLen <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>WAVFile<font color="#000080">.</font>Read<font color="#000080">(</font>CurBlk<font color="#000080">^, </font>BlockSize<font color="#000080">);
+
+  </font><font color="#FF0000"><b>while not </b></font>EOB <font color="#FF0000"><b>do
+   if </b></font>Keypressed <font color="#FF0000"><b>then </b></font>ErrorEnd<font color="#000080">;
+  </font>EOB <font color="#000080">:= </font>False<font color="#000080">;
+
+ </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>SndLen<font color="#000080">&lt;=</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+
+ </b></font>DF <font color="#000080">:= </font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+
+ </font>WAVFile<font color="#000080">.</font>Init<font color="#000080">(</font>DF<font color="#000080">, </font>stOpenRead<font color="#000080">);              </font><font color="#008000"><i>{Open WAV file}
+ </i></font>WAVFile<font color="#000080">.</font>Read<font color="#000080">(</font>BlkID<font color="#000080">, </font>SizeOf<font color="#000080">(</font>TWAVRec<font color="#000080">));      </font><font color="#008000"><i>{Read in first block}
+
+ </i></font><font color="#FF0000"><b>if </b></font>BlkID<font color="#000080">.</font>ID <font color="#000080">= </font><font color="#800000">$46464952 </font><font color="#FF0000"><b>then               </b></font><font color="#008000"><i>{ID of WAV file}
+ </i></font><font color="#FF0000"><b>begin
+  </b></font>TotalSz <font color="#000080">:= </font>BlkID<font color="#000080">.</font>Len<font color="#000080">;                     </font><font color="#008000"><i>{Get total size}
+  </i></font><font color="#FF0000"><b>repeat
+   </b></font>WAVFile<font color="#000080">.</font>Read<font color="#000080">(</font>BlkID<font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);                  </font><font color="#008000"><i>{Read in type chunk}
+   </i></font>TotalSz <font color="#000080">:= </font>TotalSz <font color="#000080">- </font><font color="#800000">4</font><font color="#000080">;                  </font><font color="#008000"><i>{and update TS}
+
+   </i></font><font color="#FF0000"><b>if </b></font>BlkID<font color="#000080">.</font>ID <font color="#000080">&lt;&gt; </font><font color="#800000">$45564157 </font><font color="#FF0000"><b>then </b></font>ErrorEnd<font color="#000080">;  </font><font color="#008000"><i>{Must be &quot;WAVE&quot;}
+   </i></font><font color="#FF0000"><b>repeat
+    </b></font>WAVFile<font color="#000080">.</font>Read<font color="#000080">(</font>BlkID<font color="#000080">, </font>SizeOf<font color="#000080">(</font>TWAVRec<font color="#000080">));    </font><font color="#008000"><i>{Read in format chunk}
+    </i></font>TotalSz <font color="#000080">:= </font>TotalSz <font color="#000080">- </font>SizeOf<font color="#000080">(</font>TWavRec<font color="#000080">);
+
+    </font><font color="#FF0000"><b>if </b></font>BlkID<font color="#000080">.</font>ID <font color="#000080">= </font><font color="#800000">$20746d66  </font><font color="#FF0000"><b>then            </b></font><font color="#008000"><i>{&quot;fmt &quot;, set WAV format}
+    </i></font><font color="#FF0000"><b>begin
+     </b></font>getmem<font color="#000080">(</font>BlkFmt<font color="#000080">, </font>BlkID<font color="#000080">.</font>Len<font color="#000080">);
+     </font>WAVFile<font color="#000080">.</font>Read<font color="#000080">(</font>BlkFmt<font color="#000080">^, </font>BlkID<font color="#000080">.</font>Len<font color="#000080">);
+     </font>TotalSz <font color="#000080">:= </font>TotalSz <font color="#000080">- </font>BlkID<font color="#000080">.</font>Len<font color="#000080">;
+     </font><font color="#FF0000"><b>with </b></font>BlkFmt<font color="#000080">^ </font><font color="#FF0000"><b>do
+     begin
+      if </b></font>FTag <font color="#000080">= </font><font color="#800000">$200 </font><font color="#FF0000"><b>then </b></font>DSPCmd <font color="#000080">:= </font><font color="#800000">$75 </font><font color="#FF0000"><b>else </b></font><font color="#008000"><i>{ADPCM 4-bit compression}
+       </i></font><font color="#FF0000"><b>if </b></font>FTag <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>DSPCmd <font color="#000080">:= </font><font color="#800000">$14 </font><font color="#FF0000"><b>else   </b></font><font color="#008000"><i>{Normal}
+        </i></font>ErrorEnd<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>DSPCmd <font color="#000080">= </font><font color="#800000">$75 </font><font color="#FF0000"><b>then </b></font>NumBits <font color="#000080">:= </font><font color="#800000">4 </font><font color="#FF0000"><b>else </b></font>NumBits <font color="#000080">:= </font><font color="#800000">8</font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>NChan <font color="#000080">= </font><font color="#800000">2 </font><font color="#FF0000"><b>then </b></font>DSPCmd <font color="#000080">:= </font>DSPCmd <font color="#000080">+ </font><font color="#800000">8</font><font color="#000080">; </font><font color="#008000"><i>{Stereo}
+      </i></font>SampByte <font color="#000080">:= </font><font color="#800000">256</font><font color="#000080">-(</font><font color="#800000">1000000 </font><font color="#FF0000"><b>div </b></font>SampR<font color="#000080">);   </font><font color="#008000"><i>{Sampling rate}
+      </i></font>BlockSize <font color="#000080">:= </font>BlkAl<font color="#000080">;                    </font><font color="#008000"><i>{Size of buffer}
+     </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>freemem<font color="#000080">(</font>BlkFmt<font color="#000080">, </font>BlkID<font color="#000080">.</font>Len<font color="#000080">);
+    </font><font color="#FF0000"><b>end else
+
+    if </b></font>BlkID<font color="#000080">.</font>ID <font color="#000080">= </font><font color="#800000">$61746164 </font><font color="#FF0000"><b>then
+    begin
+     </b></font>PrepareSB<font color="#000080">;                              </font><font color="#008000"><i>{Perform init stuff}
+     </i></font>TotalSz <font color="#000080">:= </font>TotalSz <font color="#000080">- </font>BlkID<font color="#000080">.</font>Len<font color="#000080">;
+     </font>PlaySound<font color="#000080">(</font>BlkID<font color="#000080">.</font>Len<font color="#000080">);
+    </font><font color="#FF0000"><b>end else
+
+     </b></font>ErrorEnd<font color="#000080">;
+   </font><font color="#FF0000"><b>until </b></font>TotalSz <font color="#000080">&lt;= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>TotalSz <font color="#000080">&lt;= </font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>end else
+  </b></font>ErrorEnd<font color="#000080">;
+ </font>WAVFile<font color="#000080">.</font>Done<font color="#000080">;
+ </font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font>SIrq<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0052.PAS">Original</a><b>]</b></p></body>
+</html>

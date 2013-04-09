@@ -1,0 +1,414 @@
+<html>
+<head><title> "Delux Paint II LBM decode" by WIM VAN DER VEGT</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0087.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Here a program to display files from deLux Paint II (*.LBM files)
+drawings. It uses a PD BGI driver for 320x200x256 color mode. Other
+drivers can also be used. Otherwise look in the SWAG lib for routines to
+enter this graphics mode and set a pixel in a certain color.
+
+Code isn't optimal and can be made much faster but works. It doesn't
+display some brushes because of some undocumented sections in the LBM
+file. If the defines are made active the file is decoded and dumped
+textual to the screen. After the program a part of a small PD text file
+I found and used as base for this program. It contained some bugs but
+one evening works does a lot.
+
+Btw. Does anybody know how to distinguish deLux Paint II and deLux Paint
+II Enhanced files?
+}
+
+{---------------------------------------------------------}
+{ Written by : Ir. G.W. van der Vegt                      }
+{ Purpose    : a Delux Paint II LBM file displayer/decoder}
+{              displays 16 and 256 color bitmaps but no   }
+{              brushes and Delux Paint IIe files yet      }
+{                                                         }
+{              Displays at the moment only                }
+{              320x200 or smaller pictures.               }
+{                                                         }
+{              Uses a PD SVGA driver to access MCGA mode. }
+{              Substitute your own if you havn't got it.  }
+{                                                         }
+{ File format info by Bob Montgomery 9-21-90, although    }
+{ it wasn't very accurate (he forgot Motorola swaps       }
+{ lo &amp; hi byes of words) and didn't cover the             }
+{ DPPV, CRNG &amp; GRAB sections.                             }
+{                                                         }
+{ Use the verbose (and rle) defines to get a dump of the  }
+{ lbm file.                                               }
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>lbm<font color="#000080">(</font>INPUT<font color="#000080">,</font>OUTPUT<font color="#000080">);
+
+</font><font color="#FF0000"><b>USES
+  </b></font>crt<font color="#000080">,
+  </font>dos<font color="#000080">,
+  </font>graph<font color="#000080">;
+  </font>routines<font color="#000080">;
+
+</font><font color="#008000"><i>{ DEFINE verbose}
+{ DEFINE rle    }
+{$I SVGA256.INC}
+
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>rgb  <font color="#000080">= (</font>r<font color="#000080">,</font>g<font color="#000080">,</font>b<font color="#000080">);
+  </font>dp2l <font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">; </font><font color="#008000"><i>{read left to right}
+  </i></font>dp2m <font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+  </font>dp2t <font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font>rgb<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+  </font>dp2h <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+           </b></font>msg1         <font color="#000080">: </font>dp2m<font color="#000080">; </font><font color="#008000"><i>{ &quot;FORM&quot; }
+           </i></font>flen         <font color="#000080">: </font>dp2l<font color="#000080">;                 </font><font color="#008000"><i>{ File length - 8 }
+           </i></font>msg2<font color="#000080">,                </font><font color="#008000"><i>{ &quot;ILBM&quot; }
+           </i></font>msg3         <font color="#000080">: </font>dp2m<font color="#000080">; </font><font color="#008000"><i>{ &quot;BMHD&quot; }
+           </i></font>hlen         <font color="#000080">: </font>dp2l<font color="#000080">;                 </font><font color="#008000"><i>{ Length of header }
+           </i></font>width<font color="#000080">,
+           </font>Length<font color="#000080">,
+           </font>xoff<font color="#000080">,
+           </font>yoff         <font color="#000080">: </font>WORD<font color="#000080">;
+           </font>planes<font color="#000080">,
+           </font>masking<font color="#000080">,
+           </font>compression<font color="#000080">,
+           </font>pad          <font color="#000080">: </font>BYTE<font color="#000080">;
+           </font>tansparent   <font color="#000080">: </font>INTEGER<font color="#000080">;
+           </font>x_aspect<font color="#000080">,
+           </font>y_aspect     <font color="#000080">: </font>BYTE<font color="#000080">;
+           </font>screenwidth<font color="#000080">,
+           </font>screenheight <font color="#000080">: </font>WORD<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>max  <font color="#000080">= </font><font color="#800000">1023</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+   </b></font>f   <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+   </font>dp2 <font color="#000080">: </font>dp2h<font color="#000080">;
+   </font>msg <font color="#000080">: </font>dp2m<font color="#000080">;
+   </font>len <font color="#000080">: </font>dp2l<font color="#000080">;
+   </font>col <font color="#000080">: </font>dp2t<font color="#000080">;
+
+   </font>i<font color="#000080">,
+   </font>j<font color="#000080">,
+   </font>k<font color="#000080">,
+   </font>y   <font color="#000080">: </font>INTEGER<font color="#000080">;
+   </font>c   <font color="#000080">: </font>BYTE<font color="#000080">;
+   </font>bl<font color="#000080">,
+   </font>h<font color="#000080">,
+   </font>l   <font color="#000080">: </font>LONGINT<font color="#000080">;
+   </font>w   <font color="#000080">: </font>WORD<font color="#000080">;
+   </font>grmode<font color="#000080">,
+   </font>grdriver <font color="#000080">: </font>INTEGER<font color="#000080">;
+   </font>lin      <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>max<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>form  <font color="#000080">: </font>dp2m <font color="#000080">= (</font><font color="#800000">'F'</font><font color="#000080">,</font><font color="#800000">'O'</font><font color="#000080">,</font><font color="#800000">'R'</font><font color="#000080">,</font><font color="#800000">'M'</font><font color="#000080">);
+  </font>ilbm  <font color="#000080">: </font>dp2m <font color="#000080">= (</font><font color="#800000">'I'</font><font color="#000080">,</font><font color="#800000">'L'</font><font color="#000080">,</font><font color="#800000">'B'</font><font color="#000080">,</font><font color="#800000">'M'</font><font color="#000080">);
+  </font>bmhd  <font color="#000080">: </font>dp2m <font color="#000080">= (</font><font color="#800000">'B'</font><font color="#000080">,</font><font color="#800000">'M'</font><font color="#000080">,</font><font color="#800000">'H'</font><font color="#000080">,</font><font color="#800000">'D'</font><font color="#000080">);
+  </font>cmap  <font color="#000080">: </font>dp2m <font color="#000080">= (</font><font color="#800000">'C'</font><font color="#000080">,</font><font color="#800000">'M'</font><font color="#000080">,</font><font color="#800000">'A'</font><font color="#000080">,</font><font color="#800000">'P'</font><font color="#000080">);
+  </font>body  <font color="#000080">: </font>dp2m <font color="#000080">= (</font><font color="#800000">'B'</font><font color="#000080">,</font><font color="#800000">'O'</font><font color="#000080">,</font><font color="#800000">'D'</font><font color="#000080">,</font><font color="#800000">'Y'</font><font color="#000080">);
+
+</font><font color="#008000"><i>{$F+}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Detectvga256 <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Detectvga256 <font color="#000080">:= </font>svga320x200x256<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Len2long<font color="#000080">(</font>a <font color="#000080">: </font>dp2l<font color="#000080">) : </font>LONGINT<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Len2long<font color="#000080">:=(((</font>a<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]*</font><font color="#800000">256</font><font color="#000080">+</font>a<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])*</font><font color="#800000">256</font><font color="#000080">+</font>a<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">])*</font><font color="#800000">256</font><font color="#000080">+</font>a<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Msg2str<font color="#000080">(</font>a <font color="#000080">: </font>dp2m<font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Msg2str<font color="#000080">:=</font>a<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]+</font>a<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]+</font>a<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]+</font>a<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Readnext <font color="#000080">: </font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+ </b></font>w <font color="#000080">: </font>WORD<font color="#000080">;
+ </font>c <font color="#000080">: </font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>c<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>w<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>w<font color="#000080">&lt;&gt;</font><font color="#800000">1</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Closegraph<font color="#000080">;
+        </font>Writeln<font color="#000080">(</font><font color="#800000">'Unexpected EOF encountered'</font><font color="#000080">);
+        </font>Halt<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">);
+      </font><font color="#FF0000"><b>END
+    ELSE </b></font>Readnext<font color="#000080">:=</font>c<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>cnt <font color="#000080">: </font>BYTE    <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>rle <font color="#000080">: </font>BOOLEAN <font color="#000080">= </font>false<font color="#000080">;
+  </font>dat <font color="#000080">: </font>BYTE    <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>vir <font color="#000080">: </font>LONGINT <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>rel <font color="#000080">: </font>LONGINT <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Getnext <font color="#000080">: </font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>c <font color="#000080">: </font>BYTE<font color="#000080">;
+  </font>w <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>(*
+get a code BYTE from the data stream.
+IF the msb is 1, the 'count' is (1 - code), max = 127. get the next
+   BYTE from the data stream, AND REPEAT it 'count' times.
+IF the msb is 0, the 'count' is (1 + code), max = 128. get the next
+   'count' bytes from the data stream.
+*)
+  </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>dp2<font color="#000080">.</font>compression<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN </b></font>Getnext<font color="#000080">:=</font>Readnext
+    <font color="#FF0000"><b>ELSE
+      IF </b></font><font color="#000080">(</font>cnt<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>c<font color="#000080">:=</font>Readnext<font color="#000080">;
+            </font>rle<font color="#000080">:=(</font>c<font color="#000080">&gt;</font><font color="#800000">127</font><font color="#000080">);
+            </font><font color="#FF0000"><b>IF </b></font>rle
+              <font color="#FF0000"><b>THEN
+                BEGIN
+                  </b></font>cnt    <font color="#000080">:=</font>SHORTINT<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">-</font>c<font color="#000080">);
+                  </font>dat    <font color="#000080">:=</font>Readnext<font color="#000080">;
+                  </font>Getnext<font color="#000080">:=</font>dat<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF rle}
+  </i></font>Delay<font color="#000080">(</font><font color="#800000">500</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'RLE : '</font><font color="#000080">,</font>byte2hex<font color="#000080">(</font>c<font color="#000080">),</font><font color="#800000">' = '</font><font color="#000080">,</font>cnt<font color="#000080">:</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>byte2hex<font color="#000080">(</font>dat<font color="#000080">));
+</font><font color="#008000"><i>{$ENDIF}
+                </i></font><font color="#FF0000"><b>END
+              ELSE
+                BEGIN
+                  </b></font>cnt    <font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">+</font>c<font color="#000080">;
+                  </font>dat    <font color="#000080">:=</font>Readnext<font color="#000080">;
+                  </font>Getnext<font color="#000080">:=</font>dat<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF rle}
+  </i></font>Delay<font color="#000080">(</font><font color="#800000">500</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'UNC : '</font><font color="#000080">,</font>byte2hex<font color="#000080">(</font>c<font color="#000080">),</font><font color="#800000">' : '</font><font color="#000080">,</font>byte2hex<font color="#000080">(</font>dat<font color="#000080">));
+</font><font color="#008000"><i>{$ENDIF}
+                </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END
+        ELSE
+          BEGIN
+            IF NOT</b></font><font color="#000080">(</font>rle<font color="#000080">)
+              </font><font color="#FF0000"><b>THEN </b></font>dat<font color="#000080">:=</font>Readnext<font color="#000080">;
+            </font>Getnext<font color="#000080">:=</font>dat<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF rle}
+  </i></font><font color="#FF0000"><b>IF NOT</b></font><font color="#000080">(</font>rle<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>Write<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>byte2hex<font color="#000080">(</font>dat<font color="#000080">));
+</font><font color="#008000"><i>{$ENDIF}
+          </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font>Dec<font color="#000080">(</font>cnt<font color="#000080">);
+  </font>rel<font color="#000080">:=</font>Filepos<font color="#000080">(</font>f<font color="#000080">)-</font>h<font color="#000080">;
+  </font>Inc<font color="#000080">(</font>vir<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Assign<font color="#000080">(</font>f<font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">'.lbm'</font><font color="#000080">);
+  </font>Reset<font color="#000080">(</font>f<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+
+  </font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>dp2<font color="#000080">,</font>Sizeof<font color="#000080">(</font>dp2<font color="#000080">));
+
+  </font><font color="#FF0000"><b>WITH </b></font>dp2 <font color="#FF0000"><b>DO
+    BEGIN
+</b></font><font color="#008000"><i>{$IFDEF verbose}
+      </i></font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>Sizeof<font color="#000080">(</font>msg1<font color="#000080">) </font><font color="#FF0000"><b>DO </b></font>Write<font color="#000080">(</font>msg1<font color="#000080">[</font>i<font color="#000080">]); </font>Writeln<font color="#000080">;
+      </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>Sizeof<font color="#000080">(</font>msg2<font color="#000080">) </font><font color="#FF0000"><b>DO </b></font>Write<font color="#000080">(</font>msg2<font color="#000080">[</font>i<font color="#000080">]); </font>Writeln<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+      </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>msg1<font color="#000080">&lt;&gt;</font>form<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>msg2<font color="#000080">&lt;&gt;</font>ilbm<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>msg3<font color="#000080">&lt;&gt;</font>bmhd<font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>Writeln<font color="#000080">(</font><font color="#800000">'No DeLux Paint LBM file.'</font><font color="#000080">);
+            </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$IFNDEF verbose}
+      </i></font>grdriver<font color="#000080">:=</font>Installuserdriver<font color="#000080">(</font><font color="#800000">'SVGA256'</font><font color="#000080">,@</font>detectvga256<font color="#000080">);
+      </font>grmode  <font color="#000080">:=</font>svga320x200x256<font color="#000080">;
+      </font>grdriver<font color="#000080">:=</font>detect<font color="#000080">;
+      </font>Initgraph<font color="#000080">(</font>grdriver<font color="#000080">,</font>grmode<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+
+    {----Low &amp; high words/bytes are swapped (Motorola 680x0 convention)}
+{$IFDEF verbose}
+      </i></font>Writeln<font color="#000080">(</font><font color="#800000">'filelength : '</font><font color="#000080">,</font>Len2long<font color="#000080">(</font>flen<font color="#000080">));
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'headlength : '</font><font color="#000080">,</font>Len2long<font color="#000080">(</font>hlen<font color="#000080">));
+</font><font color="#008000"><i>{$ENDIF}
+
+    {----Low &amp; high bytes are swapped (Motorola 680x0 convention)}
+      </i></font>width       <font color="#000080">:=</font>Swap<font color="#000080">(</font>width<font color="#000080">);
+      </font>Length      <font color="#000080">:=</font>Swap<font color="#000080">(</font>Length<font color="#000080">);
+      </font>xoff        <font color="#000080">:=</font>Swap<font color="#000080">(</font>xoff<font color="#000080">);
+      </font>yoff        <font color="#000080">:=</font>Swap<font color="#000080">(</font>yoff<font color="#000080">);
+      </font>screenwidth <font color="#000080">:=</font>Swap<font color="#000080">(</font>screenwidth<font color="#000080">);
+      </font>screenheight<font color="#000080">:=</font>Swap<font color="#000080">(</font>screenheight<font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF verbose}
+      </i></font>Writeln<font color="#000080">(</font><font color="#800000">'W .L  : '</font><font color="#000080">,</font>width      <font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>Length<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Xo.Yo : '</font><font color="#000080">,</font>xoff       <font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>yoff  <font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Xa.Ya : '</font><font color="#000080">,</font>x_aspect   <font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>y_aspect<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'W. H  : '</font><font color="#000080">,</font>screenwidth<font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>screenheight<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Planes: '</font><font color="#000080">,</font>planes<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Pad   : '</font><font color="#000080">,</font>pad<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+
+      </i></font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>msg<font color="#000080">,</font>Sizeof<font color="#000080">(</font>msg<font color="#000080">));
+      </font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>len<font color="#000080">,</font>Sizeof<font color="#000080">(</font>len<font color="#000080">));
+
+</font><font color="#008000"><i>{$IFDEF verbose}
+      </i></font>Writeln<font color="#000080">(</font>Msg2str<font color="#000080">(</font>msg<font color="#000080">));
+      </font>Delay<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+
+      </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>msg<font color="#000080">=</font>cmap<font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>l<font color="#000080">:=</font>Len2long<font color="#000080">(</font>len<font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF verbose}
+            </i></font>Writeln<font color="#000080">(</font><font color="#800000">'CMAPlen : '</font><font color="#000080">,</font>l<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+            </i></font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>l <font color="#FF0000"><b>DIV </b></font><font color="#800000">3 </font><font color="#FF0000"><b>DO
+              BEGIN
+                </b></font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>col<font color="#000080">,</font>Sizeof<font color="#000080">(</font>col<font color="#000080">));
+</font><font color="#008000"><i>{$IFDEF verbose}
+                </i></font>Delay<font color="#000080">(</font><font color="#800000">100</font><font color="#000080">);
+                </font>Writeln<font color="#000080">(</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">:</font><font color="#800000">4</font><font color="#000080">,</font>col<font color="#000080">[</font>r<font color="#000080">]:</font><font color="#800000">4</font><font color="#000080">,</font>col<font color="#000080">[</font>g<font color="#000080">]:</font><font color="#800000">4</font><font color="#000080">,</font>col<font color="#000080">[</font>b<font color="#000080">]:</font><font color="#800000">4</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+                </i></font>Setrgbpalette<font color="#000080">(</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>col<font color="#000080">[</font>r<font color="#000080">] </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">4</font><font color="#000080">,</font>col<font color="#000080">[</font>g<font color="#000080">] </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">4</font><font color="#000080">,</font>col<font color="#000080">[</font>b<font color="#000080">] </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">4</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+              </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>msg<font color="#000080">,</font>Sizeof<font color="#000080">(</font>msg<font color="#000080">));
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----dump unkown sections dppv
+     the 4 bytes Length is mostly 104 bytes
+}
+{----dump unkown sections grab
+     the 4 bytes Length is 4, section found IN a brush only,
+}
+{----dump 4 unkown sections crng :
+     seems each TO consist OF two entries WITH :
+              00 00 0a aa,00 00 01 0e
+              00 00 0a aa,00 00 00 00
+              00 00 0a aa,00 00 00 00
+              00 00 0a aa,00 00 00 00
+     brushes contain different values.
+}
+      </i></font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>msg<font color="#000080">&lt;&gt;</font>body<font color="#000080">) </font><font color="#FF0000"><b>DO
+        BEGIN
+          </b></font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>len<font color="#000080">,</font>Sizeof<font color="#000080">(</font>len<font color="#000080">));
+          </font>l<font color="#000080">:=</font>Len2long<font color="#000080">(</font>len<font color="#000080">);
+          </font>Writeln<font color="#000080">(</font>Msg2str<font color="#000080">(</font>msg<font color="#000080">)+</font><font color="#800000">' : '</font><font color="#000080">,</font>l<font color="#000080">);
+          </font><font color="#FF0000"><b>FOR </b></font>h<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>l <font color="#FF0000"><b>DO
+            BEGIN
+              </b></font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>c<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+              </font>Write<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>byte2hex<font color="#000080">(</font>c<font color="#000080">));
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>msg<font color="#000080">,</font>Sizeof<font color="#000080">(</font>msg<font color="#000080">));
+          </font>Writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>msg<font color="#000080">=</font>body<font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          BEGIN
+</b></font><font color="#008000"><i>{$IFDEF verbose}
+            </i></font>Writeln<font color="#000080">(</font>Msg2str<font color="#000080">(</font>msg<font color="#000080">));
+</font><font color="#008000"><i>{$ENDIF}
+            </i></font>Blockread<font color="#000080">(</font>f<font color="#000080">,</font>len<font color="#000080">,</font>Sizeof<font color="#000080">(</font>len<font color="#000080">));
+            </font>l<font color="#000080">:=</font>Len2long<font color="#000080">(</font>len<font color="#000080">);
+            </font>h <font color="#000080">:=</font>Filepos<font color="#000080">(</font>f<font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF verbose}
+            </i></font>Writeln<font color="#000080">(</font><font color="#800000">'BODYlen : '</font><font color="#000080">,</font>l<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+            </i></font><font color="#FF0000"><b>IF </b></font>compression<font color="#000080">=</font><font color="#800000">0
+              </font><font color="#FF0000"><b>THEN </b></font>bl<font color="#000080">:=</font>l <font color="#FF0000"><b>DIV </b></font>Length <font color="#FF0000"><b>DIV </b></font>planes
+              <font color="#FF0000"><b>ELSE </b></font>bl<font color="#000080">:=</font>width <font color="#FF0000"><b>DIV </b></font><font color="#800000">8</font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF verbose}
+            </i></font>Writeln<font color="#000080">(</font><font color="#800000">'Bytew   : '</font><font color="#000080">,</font>bl<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+            </i></font><font color="#FF0000"><b>FOR </b></font>y<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>Length <font color="#FF0000"><b>DO
+              BEGIN
+                FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>max <font color="#FF0000"><b>DO </b></font>lin<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#008000"><i>{$R-}
+                </i></font><font color="#FF0000"><b>FOR </b></font>j<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>planes<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>DO
+                  FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>bl<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>DO
+                    BEGIN
+                      </b></font>c<font color="#000080">:=</font>Getnext<font color="#000080">;
+                      </font><font color="#FF0000"><b>FOR </b></font>k<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">7 </font><font color="#FF0000"><b>DO
+                        IF </b></font><font color="#000080">(</font>c <font color="#FF0000"><b>AND </b></font><font color="#000080">(</font><font color="#800000">128 </font><font color="#FF0000"><b>SHR </b></font>k<font color="#000080">))&gt;</font><font color="#800000">0
+                          </font><font color="#FF0000"><b>THEN </b></font>lin<font color="#000080">[(</font>i<font color="#000080">*</font><font color="#800000">8</font><font color="#000080">)+</font>k<font color="#000080">]:=</font>lin<font color="#000080">[(</font>i<font color="#000080">*</font><font color="#800000">8</font><font color="#000080">)+</font>k<font color="#000080">] </font><font color="#FF0000"><b>OR </b></font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>j<font color="#000080">;
+                    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$R+}
+{$IFNDEF verbose}
+                </i></font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>width <font color="#FF0000"><b>DO
+                  </b></font>Putpixel<font color="#000080">(</font>i<font color="#000080">,</font>y<font color="#000080">,</font>lin<font color="#000080">[</font>i<font color="#000080">])
+</font><font color="#008000"><i>{$ENDIF}
+              </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$IFNDEF verbose}
+      </i></font><font color="#FF0000"><b>WHILE NOT </b></font>Keypressed <font color="#FF0000"><b>DO</b></font><font color="#000080">;
+      </font>Closegraph<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+      </i></font>Writeln<font color="#000080">(</font><font color="#800000">'image  '</font><font color="#000080">,</font>LONGINT<font color="#000080">(</font>width<font color="#000080">)*</font>Length<font color="#000080">*</font>planes <font color="#FF0000"><b>DIV </b></font><font color="#800000">8</font><font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'bodys  '</font><font color="#000080">,</font>h<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'files  '</font><font color="#000080">,</font>Filesize<font color="#000080">(</font>f<font color="#000080">));
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'filep  '</font><font color="#000080">,</font>Filepos<font color="#000080">(</font>f<font color="#000080">));
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'heads  '</font><font color="#000080">,</font>Sizeof<font color="#000080">(</font>dp2h<font color="#000080">));
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'virtu  '</font><font color="#000080">,</font>vir<font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+      </i></font>Close<font color="#000080">(</font>f<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>(*
+deluxe paint ii lbm &amp; iff files
+
+the deluxe paint lbm (AND iff) FILE header (40 bytes) has the following
+content:
+     struct dp2
+     {   CHAR msg1[4];               &quot;form&quot;
+         BYTE a3, a2, a1, a0;        FILE Length - 8  (Read left TO right)
+         CHAR msg2[8];               &quot;ilbmbmhd&quot;
+         BYTE b3, b2, b1, b0;        Length OF header (Read left TO right)
+         Int  width, Length, xoff, yoff;
+         BYTE planes, masking, compression, pad;
+         Int  tansparent;
+         BYTE x_aspect, y_aspect;
+         Int  screenwidth, screenheight;
+     } ;
+   there may be a color map following a STRING &quot;cmap&quot; IN the FILE. after cmap
+        is the Length OF the color map (4 bytes, Read left TO right). the color
+        map is BYTE triples (r, g, b) FOR each colors. the number OF colors is
+        1 shifted left by planes (1 &lt;&lt; planes).
+   the actual picture data follows a STRING &quot;body&quot; AND Length OF the picture
+        data (4 bytes Read left TO right). the picture data is organized on a
+        color plane basis FOR dp2, AND on a pixel basis FOR dp2e (enhanced).
+        thus, FOR dp2:
+            there are (width / 8) bytes per row.
+            the data stream FOR each row consists OF all the bytes FOR plane 0,
+                followed by all the bytes FOR plane 1, etc.
+        AND FOR dp2e:
+            there are (width) bytes/row, where each BYTE is a pixel color.
+   IF the data is uncomperessed (compression flag = 0), the data stream bytes
+        are fed TO the OUTPUT unmodified. IF it is compressed, it is run Length
+        encoded as follows:
+            get a code BYTE from the data stream.
+            IF the msb is 1, the 'count' is (1 - code), max = 127. get the next
+                BYTE from the data stream, AND REPEAT it 'count' times.
+            IF the msb is 0, the 'count' is (1 + code), max = 128. get the next
+                'count' bytes from the data stream.
+*)
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0087.PAS">Original</a><b>]</b></p></body>
+</html>

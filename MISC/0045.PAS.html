@@ -1,0 +1,477 @@
+<html>
+<head><title> "Maze Generator" by RANDALL ELTON DING</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0045.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+randyd@csd4.csd.uwm.edu (Randall Elton Ding)
+
+This is really for Allen who earlier in the month asked about generating
+a maze in pascal.  It may not really be the fastest, but I know of
+no other way which is faster.  Check it out, it lets you try to move
+thru the maze, when you give up it shows you the way.  It has variable
+difficulty and size too.
+
+This was origionally written in Apple][ 6502 machine language, I ported
+it over to pascal a few years later.
+}
+
+(* Big Mind Over Maze
+   maze generator and solver
+   created by Randy Ding
+   July 16,1983   &lt;April 21,1992&gt;  *)
+
+{$R-}   { range checking }
+
+</i></font><font color="#FF0000"><b>program </b></font>makemaze<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses
+  </b></font>crt<font color="#000080">, </font>graph<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>screenwidth   <font color="#000080">= </font><font color="#800000">640</font><font color="#000080">;
+  </font>screenheight  <font color="#000080">= </font><font color="#800000">350</font><font color="#000080">;
+  </font>minblockwidth <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+  </font>maxx <font color="#000080">= </font><font color="#800000">200</font><font color="#000080">;   </font><font color="#008000"><i>{ [3 * maxx * maxy] must be less than 65520 (memory segment) }
+  </i></font>maxy <font color="#000080">= </font><font color="#800000">109</font><font color="#000080">;   </font><font color="#008000"><i>{ here maxx/maxy about equil to screenwidth/screenheight }
+  </i></font>flistsize <font color="#000080">= </font><font color="#800000">5000</font><font color="#000080">; </font><font color="#008000"><i>{ flist size (fnum max, about 1/3 of maxx * maxy) }
+
+  </i></font>background <font color="#000080">= </font>black<font color="#000080">;
+  </font>gridcolor  <font color="#000080">= </font>green<font color="#000080">;
+  </font>solvecolor <font color="#000080">= </font>white<font color="#000080">;
+
+  </font>rightdir <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">;
+  </font>updir    <font color="#000080">= </font><font color="#800000">$02</font><font color="#000080">;
+  </font>leftdir  <font color="#000080">= </font><font color="#800000">$04</font><font color="#000080">;
+  </font>downdir  <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;
+
+  </font>unused   <font color="#000080">= </font><font color="#800000">$00</font><font color="#000080">;    </font><font color="#008000"><i>{ cell types used as flag bits }
+  </i></font>frontier <font color="#000080">= </font><font color="#800000">$10</font><font color="#000080">;
+  </font>reserved <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+  </font>tree     <font color="#000080">= </font><font color="#800000">$30</font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>type
+  </b></font>frec <font color="#000080">= </font><font color="#FF0000"><b>record
+          </b></font>column<font color="#000080">, </font>row <font color="#000080">: </font>byte<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>farr <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>flistsize<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>frec<font color="#000080">;
+
+  </font>cellrec <font color="#000080">= </font><font color="#FF0000"><b>record
+              </b></font>point <font color="#000080">: </font>word<font color="#000080">;  </font><font color="#008000"><i>{ pointer to flist record }
+              </i></font>flags <font color="#000080">: </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>cellarr <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>maxx<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">..</font>maxy<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>cellrec<font color="#000080">;
+
+  </font><font color="#008000"><i>{
+    one byte per cell, flag bits...
+
+    0: right, 1 = barrier removed
+    1: top    &quot;
+    2: left   &quot;
+    3: bottom &quot;
+    5,4: 0,0 = unused cell type
+         0,1 = frontier &quot;
+         1,1 = tree     &quot;
+         1,0 = reserved &quot;
+    6: (not used)
+    7: solve path, 1 = this cell part of solve path
+  }
+
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>flist     <font color="#000080">: </font>farr<font color="#000080">;         </font><font color="#008000"><i>{ list of frontier cells in random order }
+  </i></font>cell      <font color="#000080">: ^</font>cellarr<font color="#000080">;      </font><font color="#008000"><i>{ pointers and flags, on heap }
+  </i></font>fnum<font color="#000080">,
+  </font>width<font color="#000080">,
+  </font>height<font color="#000080">,
+  </font>blockwidth<font color="#000080">,
+  </font>halfblock<font color="#000080">,
+  </font>maxrun    <font color="#000080">: </font>word<font color="#000080">;
+  </font>runset    <font color="#000080">: </font>byte<font color="#000080">;
+  </font>ch        <font color="#000080">: </font>char<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>initbgi<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>grdriver<font color="#000080">,
+  </font>grmode<font color="#000080">,
+  </font>errcode <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>grdriver <font color="#000080">:= </font>DETECT<font color="#000080">;
+  </font>grmode   <font color="#000080">:= </font>EGAhi<font color="#000080">;
+  </font>initgraph<font color="#000080">(</font>grdriver<font color="#000080">, </font>grmode<font color="#000080">, </font><font color="#800000">'e:\bp\bgi'</font><font color="#000080">);
+  </font>errcode<font color="#000080">:= </font>graphresult<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>errcode <font color="#000080">&lt;&gt; </font>grok <font color="#FF0000"><b>then
+  begin
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'Graphics error: '</font><font color="#000080">, </font>grapherrormsg<font color="#000080">(</font>errcode<font color="#000080">));
+    </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>adjust<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">; </font>d <font color="#000080">: </font>byte<font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin                              </b></font><font color="#008000"><i>{ take x,y to next cell in direction d }
+  </i></font><font color="#FF0000"><b>case </b></font>d <font color="#FF0000"><b>of                        </b></font><font color="#008000"><i>{ returns false if new x,y is off grid }
+    </i></font>rightdir<font color="#000080">:
+    </font><font color="#FF0000"><b>begin
+      </b></font>inc <font color="#000080">(</font>x<font color="#000080">);
+      </font>adjust<font color="#000080">:= </font>x <font color="#000080">&lt;= </font>width<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>updir<font color="#000080">:
+    </font><font color="#FF0000"><b>begin
+      </b></font>dec <font color="#000080">(</font>y<font color="#000080">);
+      </font>adjust<font color="#000080">:= </font>y <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>leftdir<font color="#000080">:
+    </font><font color="#FF0000"><b>begin
+      </b></font>dec <font color="#000080">(</font>x<font color="#000080">);
+      </font>adjust<font color="#000080">:= </font>x <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>downdir<font color="#000080">:
+    </font><font color="#FF0000"><b>begin
+      </b></font>inc <font color="#000080">(</font>y<font color="#000080">);
+      </font>adjust<font color="#000080">:= </font>y <font color="#000080">&lt;= </font>height<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>remove<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">);      </font><font color="#008000"><i>{ remove a frontier cell from flist }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{ done by moving last entry in flist into it's place }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>i <font color="#000080">:= </font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>point<font color="#000080">;          </font><font color="#008000"><i>{ old pointer }
+  </i></font><font color="#FF0000"><b>with </b></font>flist<font color="#000080">[</font>fnum<font color="#000080">] </font><font color="#FF0000"><b>do
+    </b></font>cell<font color="#000080">^[</font>column<font color="#000080">,</font>row<font color="#000080">].</font>point <font color="#000080">:= </font>i<font color="#000080">;   </font><font color="#008000"><i>{ move pointer }
+  </i></font>flist<font color="#000080">[</font>i<font color="#000080">] := </font>flist<font color="#000080">[</font>fnum<font color="#000080">];        </font><font color="#008000"><i>{ move data }
+  </i></font>dec<font color="#000080">(</font>fnum<font color="#000080">);                    </font><font color="#008000"><i>{ one less to worry about }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>add<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">; </font>d <font color="#000080">: </font>byte<font color="#000080">);  </font><font color="#008000"><i>{ add a frontier cell to flist }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>i <font color="#000080">:= </font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>i <font color="#FF0000"><b>and </b></font><font color="#800000">$30 </font><font color="#FF0000"><b>of   </b></font><font color="#008000"><i>{ check cell type }
+    </i></font>unused <font color="#000080">:
+    </font><font color="#FF0000"><b>begin
+      </b></font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#000080">:= </font>i <font color="#FF0000"><b>or </b></font>frontier<font color="#000080">;  </font><font color="#008000"><i>{ change to frontier cell }
+      </i></font>inc<font color="#000080">(</font>fnum<font color="#000080">);                        </font><font color="#008000"><i>{ have one more to worry about }
+      </i></font><font color="#FF0000"><b>if </b></font>fnum <font color="#000080">&gt; </font>flistsize <font color="#FF0000"><b>then
+      begin     </b></font><font color="#008000"><i>{ flist overflow error! }
+        </i></font>dispose<font color="#000080">(</font>cell<font color="#000080">);  </font><font color="#008000"><i>{ clean up memory }
+        </i></font>closegraph<font color="#000080">;
+        </font>writeln<font color="#000080">(</font><font color="#800000">'flist overflow! - To correct, increase &quot;flistsize&quot;'</font><font color="#000080">);
+        </font>write<font color="#000080">(</font><font color="#800000">'hit return to halt program '</font><font color="#000080">);
+        </font>readln<font color="#000080">;
+        </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);        </font><font color="#008000"><i>{ exit program }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>with </b></font>flist<font color="#000080">[</font>fnum<font color="#000080">] </font><font color="#FF0000"><b>do
+      begin    </b></font><font color="#008000"><i>{ copy data into last entry of flist }
+        </i></font>column <font color="#000080">:= </font>x<font color="#000080">;
+        </font>row    <font color="#000080">:= </font>y<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>point <font color="#000080">:= </font>fnum<font color="#000080">; </font><font color="#008000"><i>{ make the pointer point to the new cell }
+      </i></font>runset <font color="#000080">:= </font>runset <font color="#FF0000"><b>or </b></font>d<font color="#000080">;   </font><font color="#008000"><i>{ indicate that a cell in direction d was }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;                      </font><font color="#008000"><i>{    added to the flist }
+
+    </i></font>frontier <font color="#000080">: </font>runset <font color="#000080">:= </font>runset <font color="#FF0000"><b>or </b></font>d<font color="#000080">;     </font><font color="#008000"><i>{ allready in flist }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>addfront<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">);    </font><font color="#008000"><i>{ change all unused cells around this }
+</i></font><font color="#FF0000"><b>var                              </b></font><font color="#008000"><i>{    base cell to frontier cells }
+  </i></font>j<font color="#000080">, </font>k <font color="#000080">: </font>word<font color="#000080">;
+  </font>d    <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>remove<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">);       </font><font color="#008000"><i>{ first remove base cell from flist, it is now }
+  </i></font>runset <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;         </font><font color="#008000"><i>{    part of the tree }
+  </i></font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#000080">:= </font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#FF0000"><b>or </b></font>tree<font color="#000080">;   </font><font color="#008000"><i>{ change to tree cell }
+  </i></font>d <font color="#000080">:= </font><font color="#800000">$01</font><font color="#000080">;            </font><font color="#008000"><i>{ look in all four directions- $01,$02,$04,$08 }
+  </i></font><font color="#FF0000"><b>while </b></font>d <font color="#000080">&lt;= </font><font color="#800000">$08 </font><font color="#FF0000"><b>do
+  begin
+    </b></font>j <font color="#000080">:= </font>x<font color="#000080">;
+    </font>k <font color="#000080">:= </font>y<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>adjust<font color="#000080">(</font>j<font color="#000080">, </font>k<font color="#000080">, </font>d<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>add<font color="#000080">(</font>j<font color="#000080">, </font>k<font color="#000080">, </font>d<font color="#000080">);  </font><font color="#008000"><i>{ add only if still in bounds }
+    </i></font>d <font color="#000080">:= </font>d <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;    </font><font color="#008000"><i>{ try next direction }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>remline<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">; </font>d <font color="#000080">: </font>byte<font color="#000080">);  </font><font color="#008000"><i>{ erase line connecting two blocks }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>setcolor<font color="#000080">(</font>background<font color="#000080">);
+  </font>x <font color="#000080">:= (</font>x <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">) * </font>blockwidth<font color="#000080">;
+  </font>y <font color="#000080">:= (</font>y <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">) * </font>blockwidth<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>d <font color="#FF0000"><b>of
+    </b></font>rightdir <font color="#000080">: </font>line <font color="#000080">(</font>x <font color="#000080">+ </font>blockwidth<font color="#000080">, </font>y <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>x <font color="#000080">+ </font>blockwidth<font color="#000080">, </font>y <font color="#000080">+ </font>blockwidth <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+    </font>updir    <font color="#000080">: </font>line <font color="#000080">(</font>x <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>y<font color="#000080">, </font>x <font color="#000080">+ </font>blockwidth <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">, </font>y<font color="#000080">);
+    </font>leftdir  <font color="#000080">: </font>line <font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>x<font color="#000080">, </font>y <font color="#000080">+ </font>blockwidth <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+    </font>downdir  <font color="#000080">: </font>line <font color="#000080">(</font>x <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font>y <font color="#000080">+ </font>blockwidth<font color="#000080">, </font>x <font color="#000080">+ </font>blockwidth <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">, </font>y <font color="#000080">+ </font>blockwidth<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{ erase line and update flags to indicate the barrier has been removed }
+</i></font><font color="#FF0000"><b>procedure </b></font>rembar<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">; </font>d <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>d2 <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>remline<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>d<font color="#000080">);       </font><font color="#008000"><i>{ erase line }
+  </i></font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#000080">:= </font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#FF0000"><b>or </b></font>d<font color="#000080">; </font><font color="#008000"><i>{ show barrier removed dir. d }
+  </i></font>d2 <font color="#000080">:= </font>d <font color="#FF0000"><b>shl </b></font><font color="#800000">2</font><font color="#000080">;  </font><font color="#008000"><i>{ shift left twice to reverse direction }
+  </i></font><font color="#FF0000"><b>if </b></font>d2 <font color="#000080">&gt; </font><font color="#800000">$08 </font><font color="#FF0000"><b>then
+    </b></font>d2 <font color="#000080">:= </font>d2 <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;  </font><font color="#008000"><i>{ wrap around }
+  </i></font><font color="#FF0000"><b>if </b></font>adjust<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>d<font color="#000080">) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ do again from adjacent cell back to base cell }
+    </i></font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#000080">:= </font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#FF0000"><b>or </b></font>d2<font color="#000080">;    </font><font color="#008000"><i>{ skip if out of bounds }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>randomdir <font color="#000080">: </font>byte<font color="#000080">;  </font><font color="#008000"><i>{ get a random direction }
+</i></font><font color="#FF0000"><b>begin
+  case </b></font>random<font color="#000080">(</font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>of
+    </b></font><font color="#800000">0 </font><font color="#000080">: </font>randomdir <font color="#000080">:= </font>rightdir<font color="#000080">;
+    </font><font color="#800000">1 </font><font color="#000080">: </font>randomdir <font color="#000080">:= </font>updir<font color="#000080">;
+    </font><font color="#800000">2 </font><font color="#000080">: </font>randomdir <font color="#000080">:= </font>leftdir<font color="#000080">;
+    </font><font color="#800000">3 </font><font color="#000080">: </font>randomdir <font color="#000080">:= </font>downdir<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>connect<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">);    </font><font color="#008000"><i>{ connect this new branch to the tree }
+</i></font><font color="#FF0000"><b>var                             </b></font><font color="#008000"><i>{    in a random direction }
+  </i></font>j<font color="#000080">, </font>k  <font color="#000080">: </font>word<font color="#000080">;
+  </font>d     <font color="#000080">: </font>byte<font color="#000080">;
+  </font>found <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>found <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>while not </b></font>found <font color="#FF0000"><b>do
+  begin </b></font><font color="#008000"><i>{ loop until we find a tree cell to connect to }
+    </i></font>j <font color="#000080">:= </font>x<font color="#000080">;
+    </font>k <font color="#000080">:= </font>y<font color="#000080">;
+    </font>d <font color="#000080">:= </font>randomdir<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>adjust<font color="#000080">(</font>j<font color="#000080">, </font>k<font color="#000080">, </font>d<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>found <font color="#000080">:= </font>cell<font color="#000080">^[</font>j<font color="#000080">,</font>k<font color="#000080">].</font>flags <font color="#FF0000"><b>and </b></font><font color="#800000">$30 </font><font color="#000080">= </font>tree<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>rembar<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>d<font color="#000080">);   </font><font color="#008000"><i>{ remove barrier connecting the cells }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>branch<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">);  </font><font color="#008000"><i>{ make a new branch of the tree }
+</i></font><font color="#FF0000"><b>var
+  </b></font>runnum <font color="#000080">: </font>word<font color="#000080">;
+  </font>d      <font color="#000080">: </font>byte<font color="#000080">;
+  </font>i      <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>runnum <font color="#000080">:= </font>maxrun<font color="#000080">;      </font><font color="#008000"><i>{ max number of tree cells to add to a branch }
+  </i></font>connect<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">);        </font><font color="#008000"><i>{ first connect frontier cell to the tree }
+  </i></font>addfront<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">);       </font><font color="#008000"><i>{ convert neighboring unused cells to frontier }
+  </i></font>dec<font color="#000080">(</font>runnum<font color="#000080">);         </font><font color="#008000"><i>{ number of tree cells left to add to this branch }
+  </i></font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>runnum <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>fnum <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>runset <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    repeat
+      </b></font>d <font color="#000080">:= </font>randomdir<font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font>d <font color="#FF0000"><b>and </b></font>runset <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ pick random direction to known frontier }
+    </i></font>rembar<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>d<font color="#000080">);          </font><font color="#008000"><i>{    and make it part of the tree }
+    </i></font>i <font color="#000080">:= </font>adjust<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>d<font color="#000080">);
+    </font>addfront<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">);      </font><font color="#008000"><i>{ then pick up the neighboring frontier cells }
+    </i></font>dec<font color="#000080">(</font>runnum<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>drawmaze<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>x<font color="#000080">, </font>y<font color="#000080">, </font>i <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>setcolor<font color="#000080">(</font>gridcolor<font color="#000080">);    </font><font color="#008000"><i>{ draw the grid }
+  </i></font>y <font color="#000080">:= </font>height <font color="#000080">* </font>blockwidth<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>width <font color="#FF0000"><b>do
+  begin
+    </b></font>x <font color="#000080">:= </font>i <font color="#000080">* </font>blockwidth<font color="#000080">;
+    </font>line<font color="#000080">(</font>x<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>x<font color="#000080">, </font>y<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>x <font color="#000080">:= </font>width <font color="#000080">* </font>blockwidth<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>height <font color="#FF0000"><b>do
+  begin
+    </b></font>y <font color="#000080">:= </font>i <font color="#000080">* </font>blockwidth<font color="#000080">;
+    </font>line <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>y<font color="#000080">, </font>x<font color="#000080">, </font>y<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>fillchar<font color="#000080">(</font>cell<font color="#000080">^, </font>sizeof<font color="#000080">(</font>cell<font color="#000080">^), </font>chr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">));    </font><font color="#008000"><i>{ zero flags }
+  </i></font>fnum   <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;   </font><font color="#008000"><i>{ number of frontier cells in flist }
+  </i></font>runset <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ directions to known frontier cells from a base cell }
+  </i></font>randomize<font color="#000080">;
+  </font>x <font color="#000080">:= </font>random<font color="#000080">(</font>width<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;   </font><font color="#008000"><i>{ pick random start cell }
+  </i></font>y <font color="#000080">:= </font>random<font color="#000080">(</font>height<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+  </font>add<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>rightdir<font color="#000080">);       </font><font color="#008000"><i>{ direction ignored }
+  </i></font>addfront<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">);      </font><font color="#008000"><i>{ start with 1 tree cell and some frontier cells }
+  </i></font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>fnum <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+  with </b></font>flist<font color="#000080">[</font>random<font color="#000080">(</font>fnum<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>do
+    </b></font>branch<font color="#000080">(</font>column<font color="#000080">, </font>row<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>dot<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>colr <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>putpixel<font color="#000080">(</font>blockwidth <font color="#000080">* </font>x <font color="#000080">- </font>halfblock<font color="#000080">, </font>blockwidth <font color="#000080">* </font>y <font color="#000080">- </font>halfblock<font color="#000080">, </font>colr<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>solve<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>endx<font color="#000080">, </font>endy <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>j<font color="#000080">, </font>k <font color="#000080">: </font>word<font color="#000080">;
+  </font>d    <font color="#000080">: </font>byte<font color="#000080">;
+  </font>i    <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>d <font color="#000080">:= </font>rightdir<font color="#000080">;  </font><font color="#008000"><i>{ starting from left side of maze going right }
+  </i></font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>x <font color="#000080">&lt;&gt; </font>endx<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>y <font color="#000080">&lt;&gt; </font>endy<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>d <font color="#000080">= </font><font color="#800000">$01 </font><font color="#FF0000"><b>then
+      </b></font>d <font color="#000080">:= </font><font color="#800000">$08
+    </font><font color="#FF0000"><b>else
+      </b></font>d <font color="#000080">:= </font>d <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">; </font><font color="#008000"><i>{ look right, hug right wall }
+    </i></font><font color="#FF0000"><b>while </b></font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#FF0000"><b>and </b></font>d <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+    begin </b></font><font color="#008000"><i>{ look for an opening }
+      </i></font>d <font color="#000080">:= </font>d <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;                            </font><font color="#008000"><i>{ if no opening, turn left }
+      </i></font><font color="#FF0000"><b>if </b></font>d <font color="#000080">&gt; </font><font color="#800000">$08 </font><font color="#FF0000"><b>then
+        </b></font>d <font color="#000080">:= </font>d <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>j <font color="#000080">:= </font>x<font color="#000080">;
+    </font>k <font color="#000080">:= </font>y<font color="#000080">;
+    </font>i <font color="#000080">:= </font>adjust<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>d<font color="#000080">);         </font><font color="#008000"><i>{ go in that direction }
+    </i></font><font color="#FF0000"><b>with </b></font>cell<font color="#000080">^[</font>j<font color="#000080">,</font>k<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin    </b></font><font color="#008000"><i>{ turn on dot, off if we were here before }
+      </i></font>flags <font color="#000080">:= ((((</font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#FF0000"><b>xor </b></font><font color="#800000">$80</font><font color="#000080">) </font><font color="#FF0000"><b>xor </b></font>flags<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$80</font><font color="#000080">) </font><font color="#FF0000"><b>xor </b></font>flags<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>flags <font color="#FF0000"><b>and </b></font><font color="#800000">$80 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        </b></font>dot<font color="#000080">(</font>j<font color="#000080">, </font>k<font color="#000080">, </font>solvecolor<font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>dot<font color="#000080">(</font>j<font color="#000080">, </font>k<font color="#000080">, </font>background<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>dot<font color="#000080">(</font>endx<font color="#000080">, </font>endy<font color="#000080">, </font>solvecolor<font color="#000080">);    </font><font color="#008000"><i>{ dot last cell on }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>mansolve <font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">,</font>endx<font color="#000080">,</font>endy<font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>j<font color="#000080">, </font>k <font color="#000080">: </font>word<font color="#000080">;
+  </font>d    <font color="#000080">: </font>byte<font color="#000080">;
+  </font>ch   <font color="#000080">: </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ch <font color="#000080">:= </font><font color="#800000">' '</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">((</font>x <font color="#000080">&lt;&gt; </font>endx<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>y <font color="#000080">&lt;&gt; </font>endy<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>ch <font color="#000080">&lt;&gt; </font><font color="#800000">'X'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>ch <font color="#000080">&lt;&gt; </font><font color="#800000">#27</font><font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>dot<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>solvecolor<font color="#000080">);    </font><font color="#008000"><i>{ dot man on, show where we are in maze }
+    </i></font>ch <font color="#000080">:= </font>upcase<font color="#000080">(</font>readkey<font color="#000080">);
+    </font>dot<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>background<font color="#000080">);    </font><font color="#008000"><i>{ dot man off after keypress }
+    </i></font>d <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+      </b></font><font color="#800000">#0</font><font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        </b></font>ch <font color="#000080">:= </font>readkey<font color="#000080">;
+        </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+          </b></font><font color="#800000">#72 </font><font color="#000080">: </font>d <font color="#000080">:= </font>updir<font color="#000080">;
+          </font><font color="#800000">#75 </font><font color="#000080">: </font>d <font color="#000080">:= </font>leftdir<font color="#000080">;
+          </font><font color="#800000">#77 </font><font color="#000080">: </font>d <font color="#000080">:= </font>rightdir<font color="#000080">;
+          </font><font color="#800000">#80 </font><font color="#000080">: </font>d <font color="#000080">:= </font>downdir<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">'I' </font><font color="#000080">: </font>d <font color="#000080">:= </font>updir<font color="#000080">;
+      </font><font color="#800000">'J' </font><font color="#000080">: </font>d <font color="#000080">:= </font>leftdir<font color="#000080">;
+      </font><font color="#800000">'K' </font><font color="#000080">: </font>d <font color="#000080">:= </font>rightdir<font color="#000080">;
+      </font><font color="#800000">'M' </font><font color="#000080">: </font>d <font color="#000080">:= </font>downdir<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>if </b></font>d <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      </b></font>j <font color="#000080">:= </font>x<font color="#000080">;
+      </font>k <font color="#000080">:= </font>y<font color="#000080">;    </font><font color="#008000"><i>{ move if no wall and still in bounds }
+      </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>cell<font color="#000080">^[</font>x<font color="#000080">,</font>y<font color="#000080">].</font>flags <font color="#FF0000"><b>and </b></font>d <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>adjust<font color="#000080">(</font>j<font color="#000080">, </font>k<font color="#000080">, </font>d<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>x <font color="#000080">:= </font>j<font color="#000080">;
+        </font>y <font color="#000080">:= </font>k<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>solvemaze<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>x<font color="#000080">, </font>y<font color="#000080">,
+  </font>endx<font color="#000080">,
+  </font>endy <font color="#000080">: </font>word<font color="#000080">;
+  </font>ch   <font color="#000080">: </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>x <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                         </font><font color="#008000"><i>{ pick random start on left side wall }
+  </i></font>y <font color="#000080">:= </font>random<font color="#000080">(</font>height<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+  </font>endx <font color="#000080">:= </font>width<font color="#000080">;                  </font><font color="#008000"><i>{ pick random end on right side wall }
+  </i></font>endy <font color="#000080">:= </font>random<font color="#000080">(</font>height<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+  </font>remline<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>leftdir<font color="#000080">);         </font><font color="#008000"><i>{ show start and end by erasing line }
+  </i></font>remline<font color="#000080">(</font>endx<font color="#000080">, </font>endy<font color="#000080">, </font>rightdir<font color="#000080">);
+  </font>mansolve<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>endx<font color="#000080">, </font>endy<font color="#000080">);      </font><font color="#008000"><i>{ try it manually }
+  </i></font>solve<font color="#000080">(</font>x<font color="#000080">, </font>y<font color="#000080">, </font>endx<font color="#000080">, </font>endy<font color="#000080">);         </font><font color="#008000"><i>{ show how when he gives up }
+  </i></font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do
+    </b></font>ch <font color="#000080">:= </font>readkey<font color="#000080">;
+  </font>ch <font color="#000080">:= </font>readkey<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>getsize<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>j<font color="#000080">, </font>k <font color="#000080">: </font>real<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>clrscr<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'       Mind'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'       Over'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'       Maze'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'   by Randy Ding'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Use I,J,K,M or arrow keys to walk thru maze,'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'then hit X when you give up!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>repeat
+    </b></font>writeln<font color="#000080">;
+    </font>write<font color="#000080">(</font><font color="#800000">'Maze size: '</font><font color="#000080">, </font>minblockwidth<font color="#000080">, </font><font color="#800000">' (hard) .. 95 (easy) '</font><font color="#000080">);
+    </font>readln<font color="#000080">(</font>blockwidth<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>blockwidth <font color="#000080">&gt;= </font>minblockwidth<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>blockwidth <font color="#000080">&lt; </font><font color="#800000">96</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font>write<font color="#000080">(</font><font color="#800000">'Maximum branch length: 1 easy .. 50 harder, (0 unlimited) '</font><font color="#000080">);
+  </font>readln<font color="#000080">(</font>maxrun<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>maxrun <font color="#000080">&lt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>maxrun <font color="#000080">:= </font><font color="#800000">65535</font><font color="#000080">;  </font><font color="#008000"><i>{ infinite }
+  </i></font>j <font color="#000080">:= </font>screenwidth <font color="#000080">/ </font>blockwidth<font color="#000080">;
+  </font>k <font color="#000080">:= </font>screenheight <font color="#000080">/ </font>blockwidth<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>j <font color="#000080">= </font>int<font color="#000080">(</font>j<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>j <font color="#000080">:= </font>j <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>k <font color="#000080">= </font>int<font color="#000080">(</font>k<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>k <font color="#000080">:= </font>k <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+  </font>width  <font color="#000080">:= </font>trunc<font color="#000080">(</font>j<font color="#000080">);
+  </font>height <font color="#000080">:= </font>trunc<font color="#000080">(</font>k<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>width <font color="#000080">&gt; </font>maxx<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>height <font color="#000080">&gt; </font>maxy<font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+    </b></font>width  <font color="#000080">:= </font>maxx<font color="#000080">;
+    </font>height <font color="#000080">:= </font>maxy<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>halfblock <font color="#000080">:= </font>blockwidth <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  repeat
+    </b></font>getsize<font color="#000080">;
+    </font>initbgi<font color="#000080">;
+    </font>new<font color="#000080">(</font>cell<font color="#000080">);    </font><font color="#008000"><i>{ allocate this large array on heap }
+    </i></font>drawmaze<font color="#000080">;
+    </font>solvemaze<font color="#000080">;
+    </font>dispose<font color="#000080">(</font>cell<font color="#000080">);
+    </font>closegraph<font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do
+      </b></font>ch <font color="#000080">:= </font>readkey<font color="#000080">;
+    </font>write <font color="#000080">(</font><font color="#800000">'another one? '</font><font color="#000080">);
+    </font>ch <font color="#000080">:= </font>upcase <font color="#000080">(</font>readkey<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>ch <font color="#000080">= </font><font color="#800000">'N'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ch <font color="#000080">= </font><font color="#800000">#27</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0045.PAS">Original</a><b>]</b></p></body>
+</html>

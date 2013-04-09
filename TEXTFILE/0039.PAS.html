@@ -1,0 +1,355 @@
+<html>
+<head><title> "SConvert Upgrade" by SCOTT F. EARNEST</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0039.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: &quot;Scott F. Earnest&quot; &lt;tiobe+@CMU.EDU&gt;
+
+About a month ago, I posted a program called &quot;SmartConvert&quot; which does auto-
+matic conversions between DOS and UNIX format text files.
+
+Unfortunately, there were a couple problems with the code I posted I wasn't
+aware of:
+
+1.)  While debugging, I accidentally removed the code which called the
+     procedures to check that the files existed.  Hopefully nobody's
+     gotten in trouble by overwriting files they didn't mean to. . . .
+2.)  S . . . L . . . O . . . W . . . !  I clocked a large file (~650K)
+     both ways, and got a time over 7 minutes.  In this version, I
+     reassigned the text file buffers to 8K, and got much better times.
+
+I've also added an overwrite switch to ignore the output file.
+
+And could the kind soul(s) who donated the previous version to SWAG please
+make sure this replaces the old version in the next upgrade?  Thanks!
+
+ &thorn; Done! - Kerry &thorn;
+}
+</i></font><font color="#FF0000"><b>program </b></font>SConvert<font color="#000080">;
+
+</font><font color="#008000"><i>{Smart-converts UN*X/DOS format files
+
+ Usage:  sconvert infile [outfile] [/u | /d] [/o]
+
+         /u -- force output to UNIX  (LF only)
+         /d -- force output to DOS   (CR/LF)
+         /o -- Overwrite output file if it exists (for batch support)
+
+         -- or --
+
+         sconvert /?  (-?, /h, -h, /H, and -H analogous)
+           for help message
+
+         This program is capabable of having its output piped, provided
+          it is the first in the pipeline.  Doesn't do well as an inter-
+          mediary pipe section.
+
+ Written by Scott F. Earnest, Aug 1993
+ Original version:  30 Aug 1993
+ Updated versions:   9 May 1994  (Added force flags.)
+                     9 Jun 1994  (Bug fix, added /o flag.)
+
+ This version uses 8K input/output buffers instead of the default 128-byte
+ text buffers.  The result is a performance of over 250% (only noticeable
+ with large files).  Untyped files turned out to be worthless here--they
+ performed worse than text files, believe it or not.
+
+ Unless I come up with a phenomenal improvement, this is the last version
+ I plan to post.
+}
+
+</i></font><font color="#FF0000"><b>uses </b></font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>CR <font color="#000080">= </font>chr<font color="#000080">(</font><font color="#800000">13</font><font color="#000080">);               </font><font color="#008000"><i>{Carriage Return}
+  </i></font>LF <font color="#000080">= </font>chr<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);               </font><font color="#008000"><i>{Line Feed}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>sys <font color="#000080">= (</font>dos<font color="#000080">,</font>unix<font color="#000080">,</font>bad<font color="#000080">);       </font><font color="#008000"><i>{system identifier}
+                              {Note to people who make upgrades--if you
+                               need the DOS unit, you'll have to modify
+                               this variable so that &quot;DOS&quot; isn't a label.}
+  </i></font>fbuf <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0 </font><font color="#000080">.. </font><font color="#800000">8191</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>sysID <font color="#000080">: </font>sys<font color="#000080">;                </font><font color="#008000"><i>{system identifier for case branch}
+  </i></font>infile<font color="#000080">, </font>outfile <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;   </font><font color="#008000"><i>{input/output files}
+  </i></font>force <font color="#000080">: </font>sys<font color="#000080">;                </font><font color="#008000"><i>{what mode to work in}
+  </i></font>overwrite <font color="#000080">: </font>boolean<font color="#000080">;        </font><font color="#008000"><i>{(don't) check if outfile exists}
+  </i></font>ibuf<font color="#000080">, </font>obuf <font color="#000080">: </font>fbuf<font color="#000080">;          </font><font color="#008000"><i>{increase text buffers}
+
+</i></font><font color="#FF0000"><b>function </b></font>exist <font color="#000080">(</font>filename <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font>boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{Check if a file exists or not
+ returns:  true  --&gt;  file exists
+           false --&gt;  file non-existent}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>openfile <font color="#000080">: </font>text<font color="#000080">;
+  </font>errcode <font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{$I-}                       {Turn off error-checking}
+  </i></font>assign <font color="#000080">(</font>openfile<font color="#000080">, </font>filename<font color="#000080">);
+  </font>reset <font color="#000080">(</font>openfile<font color="#000080">);
+  </font><font color="#008000"><i>{$I+}                       {Turn it back on}
+  </i></font>errcode <font color="#000080">:= </font>IOResult<font color="#000080">;        </font><font color="#008000"><i>{Get error code}
+  </i></font><font color="#FF0000"><b>if  </b></font>errcode <font color="#000080">&lt;&gt; </font><font color="#800000">0  </font><font color="#FF0000"><b>then      </b></font><font color="#008000"><i>{There's an error if non-zero}
+    </i></font>exist <font color="#000080">:= </font>false            <font color="#008000"><i>{So flag that it doesn't exist.}
+  </i></font><font color="#FF0000"><b>else
+    begin
+      </b></font>close <font color="#000080">(</font>openfile<font color="#000080">);       </font><font color="#008000"><i>{Otherwise, close file}
+      </i></font>exist <font color="#000080">:= </font>true<font color="#000080">;          </font><font color="#008000"><i>{Flag that it does exist}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>selectyn <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{Get a yes/no single-keypress response
+ returns:  true  --&gt;  yes response, y or Y
+           false --&gt;  no response, n or N}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>getchar <font color="#000080">: </font>char<font color="#000080">;             </font><font color="#008000"><i>{Need something to read into}
+
+</i></font><font color="#FF0000"><b>begin
+  while </b></font>KeyPressed <font color="#FF0000"><b>do         </b></font><font color="#008000"><i>{Clean keyboard buffer}
+    </i></font>getchar <font color="#000080">:= </font>ReadKey<font color="#000080">;
+  </font><font color="#FF0000"><b>repeat                      </b></font><font color="#008000"><i>{Get a key until it's a (Y)es or (N)o.}
+    </i></font>getchar <font color="#000080">:= </font>ReadKey<font color="#000080">;
+    </font>getchar <font color="#000080">:= </font>upcase <font color="#000080">(</font>getchar<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>getchar <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'Y'</font><font color="#000080">, </font><font color="#800000">'N'</font><font color="#000080">]);
+  </font>writeln <font color="#000080">(</font>getchar<font color="#000080">);          </font><font color="#008000"><i>{Print the response}
+  </i></font><font color="#FF0000"><b>case </b></font>getchar <font color="#FF0000"><b>of             </b></font><font color="#008000"><i>{Tell it what it should return}
+    </i></font><font color="#800000">'Y' </font><font color="#000080">: </font>selectyn <font color="#000080">:= </font>true<font color="#000080">;
+    </font><font color="#800000">'N' </font><font color="#000080">: </font>selectyn <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>help <font color="#000080">(</font>badflag <font color="#000080">: </font>boolean<font color="#000080">);
+
+</font><font color="#008000"><i>{brief message if command format was abused}
+
+</i></font><font color="#FF0000"><b>begin
+  </b></font>writeln <font color="#000080">(</font><font color="#800000">'SmartConvert, Written by Scott F. Earnest -- v1.4 -- 9 Jun 1994'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>badflag <font color="#FF0000"><b>then
+    begin
+      </b></font>writeln <font color="#000080">(</font><font color="#800000">'Invalid flag.'</font><font color="#000080">);
+      </font>writeln<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>writeln <font color="#000080">(</font><font color="#800000">'Usage'</font><font color="#000080">);
+  </font>writeln <font color="#000080">(</font><font color="#800000">'  sconvert infile [outfile] [/d | /u] [/o]'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font>writeln <font color="#000080">(</font><font color="#800000">'  /d -- convert input to DOS format'</font><font color="#000080">);
+  </font>writeln <font color="#000080">(</font><font color="#800000">'  /u -- convert input to UNIX format'</font><font color="#000080">);
+  </font>writeln <font color="#000080">(</font><font color="#800000">'  /o -- unconditionally overwrite output'</font><font color="#000080">);
+  </font>writeln <font color="#000080">(</font><font color="#800000">'        (for batch files or writing to devices)'</font><font color="#000080">);
+  </font>halt <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>incheck <font color="#000080">(</font>filename <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{Make sure source exists, if specified}
+
+</i></font><font color="#FF0000"><b>begin
+  if not </b></font><font color="#000080">(</font>exist <font color="#000080">(</font>filename<font color="#000080">)) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>writeln <font color="#000080">(</font><font color="#800000">'Source file does not exist!'</font><font color="#000080">);
+      </font>halt <font color="#000080">(</font><font color="#800000">3</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>outcheck <font color="#000080">(</font>filename <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{Make sure target does NOT exist, if specified, allow overwrite}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>select <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>exist <font color="#000080">(</font>filename<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>filename <font color="#000080">&lt;&gt; </font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>write <font color="#000080">(</font><font color="#800000">'Target file exists!  Overwrite?  [y/n] '</font><font color="#000080">);
+      </font>select <font color="#000080">:= </font>selectyn<font color="#000080">;
+      </font><font color="#FF0000"><b>case </b></font>select <font color="#FF0000"><b>of
+        </b></font>true <font color="#000080">: ;
+        </font>false <font color="#000080">: </font>halt <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>checktype <font color="#000080">(</font>readfile <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font>sys<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>FileCheck <font color="#000080">: </font>text<font color="#000080">;
+  </font>checkvar <font color="#000080">: </font>sys<font color="#000080">;
+  </font>CROk<font color="#000080">, </font>LFOk <font color="#000080">: </font>boolean<font color="#000080">;
+  </font>ReadBuf <font color="#000080">: </font>char<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>CROk <font color="#000080">:= </font>False<font color="#000080">;
+  </font>LFOk <font color="#000080">:= </font>False<font color="#000080">;                        </font><font color="#008000"><i>{Init flags.}
+  </i></font>checkvar <font color="#000080">:= </font>bad<font color="#000080">;                      </font><font color="#008000"><i>{Assume that type isn't known.}
+  </i></font>assign <font color="#000080">(</font>FileCheck<font color="#000080">, </font>readfile<font color="#000080">);
+  </font>reset <font color="#000080">(</font>FileCheck<font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>eof<font color="#000080">(</font>FileCheck<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>CROk<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>LFOk<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin                               </b></font><font color="#008000"><i>{Look for CR or LF}
+      </i></font>read <font color="#000080">(</font>FileCheck<font color="#000080">, </font>ReadBuf<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ReadBuf <font color="#000080">= </font>CR <font color="#FF0000"><b>then              </b></font><font color="#008000"><i>{CR found?}
+        </i></font><font color="#FF0000"><b>begin
+          </b></font>CROk <font color="#000080">:= </font>True<font color="#000080">;                 </font><font color="#008000"><i>{If yes, set the CR flag.}
+          </i></font>Read <font color="#000080">(</font>FileCheck<font color="#000080">, </font>ReadBuf<font color="#000080">);    </font><font color="#008000"><i>{and get next char}
+          </i></font><font color="#FF0000"><b>if </b></font>ReadBuf <font color="#000080">= </font>LF <font color="#FF0000"><b>then          </b></font><font color="#008000"><i>{next one a LF?}
+            </i></font>LFOk <font color="#000080">:= </font>True<font color="#000080">;               </font><font color="#008000"><i>{Flag it as found.}
+          </i></font><font color="#FF0000"><b>if </b></font>CROk <font color="#FF0000"><b>and </b></font>LFOk <font color="#FF0000"><b>then         </b></font><font color="#008000"><i>{So is it CR/LF?}
+             </i></font><font color="#FF0000"><b>begin
+               </b></font>checktype <font color="#000080">:= </font>dos<font color="#000080">;        </font><font color="#008000"><i>{If yes, specify DOS, and exit.}
+               </i></font>close <font color="#000080">(</font>FileCheck<font color="#000080">);
+               </font>exit<font color="#000080">;
+             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>ReadBuf <font color="#000080">= </font>LF <font color="#FF0000"><b>then              </b></font><font color="#008000"><i>{Found a LF?}
+         </i></font><font color="#FF0000"><b>begin
+           </b></font>checktype <font color="#000080">:= </font>unix<font color="#000080">;           </font><font color="#008000"><i>{If yes, assume unix.}
+           </i></font>close <font color="#000080">(</font>FileCheck<font color="#000080">);           </font><font color="#008000"><i>{Close and exit.}
+           </i></font>exit<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>checkvar <font color="#000080">= </font>bad <font color="#FF0000"><b>then                </b></font><font color="#008000"><i>{If there was a problem:}
+    </i></font><font color="#FF0000"><b>begin
+      </b></font>writeln <font color="#000080">(</font><font color="#800000">'Ambiguous file type.  Can''t determine type.'</font><font color="#000080">);
+      </font>close <font color="#000080">(</font>FileCheck<font color="#000080">);
+      </font>halt<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>dos2unix <font color="#000080">(</font>infile<font color="#000080">, </font>outfile <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>intext<font color="#000080">, </font>outtext <font color="#000080">: </font>text<font color="#000080">;
+  </font>ReadBuf1<font color="#000080">, </font>ReadBuf2 <font color="#000080">: </font>char<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln <font color="#000080">(</font><font color="#800000">'Converting DOS -&gt; UNIX. . . .'</font><font color="#000080">);
+  </font>assign <font color="#000080">(</font>intext<font color="#000080">, </font>infile<font color="#000080">);
+  </font>settextbuf <font color="#000080">(</font>intext<font color="#000080">, </font>ibuf<font color="#000080">, </font>sizeof<font color="#000080">(</font>ibuf<font color="#000080">));
+  </font>reset <font color="#000080">(</font>intext<font color="#000080">);
+  </font>assign <font color="#000080">(</font>outtext<font color="#000080">, </font>outfile<font color="#000080">);
+  </font>settextbuf <font color="#000080">(</font>outtext<font color="#000080">, </font>obuf<font color="#000080">, </font>sizeof<font color="#000080">(</font>obuf<font color="#000080">));
+  </font>rewrite <font color="#000080">(</font>outtext<font color="#000080">);
+  </font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>intext<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin
+      </b></font>read <font color="#000080">(</font>intext<font color="#000080">, </font>ReadBuf1<font color="#000080">);          </font><font color="#008000"><i>{Get character}
+      </i></font><font color="#FF0000"><b>if </b></font>ReadBuf1 <font color="#000080">= </font>CR <font color="#FF0000"><b>then             </b></font><font color="#008000"><i>{If it's CR then. . . }
+        </i></font><font color="#FF0000"><b>begin
+          </b></font>read <font color="#000080">(</font>intext<font color="#000080">, </font>ReadBuf2<font color="#000080">);      </font><font color="#008000"><i>{. . . get next . . .}
+          </i></font><font color="#FF0000"><b>if </b></font>ReadBuf2 <font color="#000080">= </font>LF <font color="#FF0000"><b>then         </b></font><font color="#008000"><i>{. . . and see if it's LF.}
+            </i></font>write <font color="#000080">(</font>outtext<font color="#000080">, </font>LF<font color="#000080">)         </font><font color="#008000"><i>{If yes, just put LF into new file.}
+          </i></font><font color="#FF0000"><b>else
+            </b></font>write <font color="#000080">(</font>outtext<font color="#000080">, </font>ReadBuf1<font color="#000080">, </font>ReadBuf2<font color="#000080">); </font><font color="#008000"><i>{Not CR/LF, dump to file.}
+        </i></font><font color="#FF0000"><b>end
+      else
+        </b></font>write <font color="#000080">(</font>outtext<font color="#000080">, </font>ReadBuf1<font color="#000080">);      </font><font color="#008000"><i>{Dump the character to file.}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>close <font color="#000080">(</font>intext<font color="#000080">);
+  </font>close <font color="#000080">(</font>outtext<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>unix2dos <font color="#000080">(</font>infile<font color="#000080">, </font>outfile <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>intext<font color="#000080">, </font>outtext <font color="#000080">: </font>text<font color="#000080">;
+  </font>ReadBuf <font color="#000080">: </font>char<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln <font color="#000080">(</font><font color="#800000">'Converting UNIX -&gt; DOS. . . .'</font><font color="#000080">);
+  </font>assign <font color="#000080">(</font>intext<font color="#000080">, </font>infile<font color="#000080">);
+  </font>settextbuf <font color="#000080">(</font>intext<font color="#000080">, </font>ibuf<font color="#000080">, </font>sizeof<font color="#000080">(</font>ibuf<font color="#000080">));
+  </font>reset <font color="#000080">(</font>intext<font color="#000080">);
+  </font>assign <font color="#000080">(</font>outtext<font color="#000080">, </font>outfile<font color="#000080">);
+  </font>settextbuf <font color="#000080">(</font>outtext<font color="#000080">, </font>obuf<font color="#000080">, </font>sizeof<font color="#000080">(</font>obuf<font color="#000080">));
+  </font>rewrite <font color="#000080">(</font>outtext<font color="#000080">);
+  </font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>intext<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin
+      </b></font>read <font color="#000080">(</font>intext<font color="#000080">, </font>ReadBuf<font color="#000080">);           </font><font color="#008000"><i>{Get a character.}
+      </i></font><font color="#FF0000"><b>if </b></font>ReadBuf <font color="#000080">= </font>LF <font color="#FF0000"><b>then              </b></font><font color="#008000"><i>{Is it LF?}
+        </i></font>write <font color="#000080">(</font>outtext<font color="#000080">, </font>CR<font color="#000080">+</font>LF<font color="#000080">)          </font><font color="#008000"><i>{If yes, put a CR/LF in its place.}
+      </i></font><font color="#FF0000"><b>else
+        </b></font>write <font color="#000080">(</font>outtext<font color="#000080">, </font>ReadBuf<font color="#000080">);       </font><font color="#008000"><i>{Otherwise, replace the character.}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>close <font color="#000080">(</font>intext<font color="#000080">);
+  </font>close <font color="#000080">(</font>outtext<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>getcommandline<font color="#000080">;
+
+</font><font color="#008000"><i>{get commandline info. . . .}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>pnum <font color="#000080">: </font>byte<font color="#000080">;                          </font><font color="#008000"><i>{paramater counter}
+  </i></font>pstr <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">];                     </font><font color="#008000"><i>{string snippet}
+  </i></font>fname <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;                       </font><font color="#008000"><i>{temporary string}
+
+</i></font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>paramcount <font color="#000080">&lt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>paramcount <font color="#000080">&gt; </font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>help <font color="#000080">(</font>false<font color="#000080">);                       </font><font color="#008000"><i>{too few, too many--show help}
+  </i></font>infile <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;                         </font><font color="#008000"><i>{Init names.}
+  </i></font>outfile <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>force <font color="#000080">:= </font>bad<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>pnum <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>paramcount <font color="#FF0000"><b>do        </b></font><font color="#008000"><i>{Do this in two passes.}
+    </i></font><font color="#FF0000"><b>begin                               </b></font><font color="#008000"><i>{#1.)  Flags}
+      </i></font>pstr <font color="#000080">:= </font>paramstr<font color="#000080">(</font>pnum<font color="#000080">);           </font><font color="#008000"><i>{Get parameter.}
+      </i></font>pstr<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font>upcase<font color="#000080">(</font>pstr<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>if </b></font>pstr<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'-'</font><font color="#000080">, </font><font color="#800000">'/'</font><font color="#000080">] </font><font color="#FF0000"><b>then     </b></font><font color="#008000"><i>{Flag?}
+        </i></font><font color="#FF0000"><b>case </b></font>pstr<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of  
+          </b></font><font color="#800000">'H'</font><font color="#000080">, </font><font color="#800000">'?' </font><font color="#000080">: </font>help <font color="#000080">(</font>false<font color="#000080">);      </font><font color="#008000"><i>{Is help.}
+          </i></font><font color="#800000">'D'      </font><font color="#000080">: </font>force <font color="#000080">:= </font>dos<font color="#000080">;      </font><font color="#008000"><i>{Is force DOS.}
+          </i></font><font color="#800000">'U'      </font><font color="#000080">: </font>force <font color="#000080">:= </font>unix<font color="#000080">;     </font><font color="#008000"><i>{Is force UNIX.}
+          </i></font><font color="#800000">'O'      </font><font color="#000080">: </font>overwrite <font color="#000080">:= </font>true<font color="#000080">; </font><font color="#008000"><i>{is overwrite.}
+        </i></font><font color="#FF0000"><b>else
+          </b></font>help <font color="#000080">(</font>true<font color="#000080">);                  </font><font color="#008000"><i>{Bad switch.}
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>pnum <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>paramcount <font color="#FF0000"><b>do        </b></font><font color="#008000"><i>{#2.)  Filenames}
+    </i></font><font color="#FF0000"><b>begin  
+      </b></font>fname <font color="#000080">:= </font>paramstr<font color="#000080">(</font>pnum<font color="#000080">);          </font><font color="#008000"><i>{Get parameter.}
+      </i></font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>fname<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'-'</font><font color="#000080">, </font><font color="#800000">'/'</font><font color="#000080">]) </font><font color="#FF0000"><b>then
+        begin                           </b></font><font color="#008000"><i>{If not flag then}
+          </i></font><font color="#FF0000"><b>if </b></font>infile <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>then           </b></font><font color="#008000"><i>{Get infile}
+            </i></font>infile <font color="#000080">:= </font>fname
+          <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>infile <font color="#000080">&lt;&gt; </font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>outfile <font color="#000080">= </font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>then
+            </b></font>outfile <font color="#000080">:= </font>fname            <font color="#008000"><i>{Get outfile}
+          </i></font><font color="#FF0000"><b>else
+            </b></font>help <font color="#000080">(</font>false<font color="#000080">);               </font><font color="#008000"><i>{Oops, too many.}
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>overwrite <font color="#000080">:= </font>false<font color="#000080">;                   </font><font color="#008000"><i>{Initialize flag}
+  </i></font>getcommandline<font color="#000080">;                       </font><font color="#008000"><i>{Parse parameters}
+  </i></font>sysID <font color="#000080">:= </font>checktype <font color="#000080">(</font>infile<font color="#000080">);          </font><font color="#008000"><i>{Check the input file type}
+  </i></font>incheck <font color="#000080">(</font>infile<font color="#000080">);                     </font><font color="#008000"><i>{verify that infile exists}
+  </i></font><font color="#FF0000"><b>if not </b></font>overwrite <font color="#FF0000"><b>then                 </b></font><font color="#008000"><i>{/o specified?}
+    </i></font>outcheck <font color="#000080">(</font>outfile<font color="#000080">);                 </font><font color="#008000"><i>{verify that outfile doesn't exist}
+  </i></font><font color="#FF0000"><b>if </b></font>sysID <font color="#000080">= </font>force <font color="#FF0000"><b>then                 </b></font><font color="#008000"><i>{If it's getting forced, then}
+    </i></font><font color="#FF0000"><b>begin                               </b></font><font color="#008000"><i>{compare types and skip if same.}
+      </i></font>write <font color="#000080">(</font><font color="#800000">'Input file is already type '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>case </b></font>sysID <font color="#FF0000"><b>of
+        </b></font>dos  <font color="#000080">: </font>write <font color="#000080">(</font><font color="#800000">'DOS'</font><font color="#000080">);
+        </font>unix <font color="#000080">: </font>write <font color="#000080">(</font><font color="#800000">'UNIX'</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>writeln <font color="#000080">(</font><font color="#800000">', skipped.'</font><font color="#000080">);
+      </font>halt<font color="#000080">(</font><font color="#800000">5</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>sysID <font color="#FF0000"><b>of
+    </b></font>dos <font color="#000080">: </font>dos2unix <font color="#000080">(</font>infile<font color="#000080">, </font>outfile<font color="#000080">);    </font><font color="#008000"><i>{DOS -&gt; UNIX}
+    </i></font>unix <font color="#000080">: </font>unix2dos <font color="#000080">(</font>infile<font color="#000080">, </font>outfile<font color="#000080">);   </font><font color="#008000"><i>{UNIX -&gt; DOS}
+    </i></font>bad <font color="#000080">: </font><font color="#FF0000"><b>begin                          </b></font><font color="#008000"><i>{Not likely to happen but. . . .}
+            </i></font>writeln <font color="#000080">(</font><font color="#800000">'Internal error!  Check source code and recompile.'</font><font color="#000080">);
+            </font>halt <font color="#000080">(</font><font color="#800000">6</font><font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0039.PAS">Original</a><b>]</b></p></body>
+</html>

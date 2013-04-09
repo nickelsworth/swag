@@ -1,0 +1,284 @@
+<html>
+<head><title> "Events on IRQ/TIMERS" by JAKE CHAPPLE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TIMING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0015.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: JAKE CHAPPLE
+Subj: Events on IRQ/TIMERS
+---------------------------------------------------------------------------
+}
+
+{----------------------- Beginning of TIMER.PAS -----------------------}
+</i></font><font color="#FF0000"><b>Unit </b></font>Timer<font color="#000080">;
+
+</font><font color="#008000"><i>{========================================================================}
+{                           INTERFACE SECTION                            }
+{========================================================================}
+{                                                                        }
+{ This unit implements a set of general purpose, low resolution timers   }
+{ for use in any application that requires them.  The design of the      }
+{ timer system is adapted from the following magazine article:           }
+{                                                                        }
+{   Jones S., A High-Performance Lightweight Timer Package, Tech         }
+{      Specialist, Vol. 2, No. 1, Jan 1991, pp 17-27.                    }
+{                                                                        }
+{ Most of Jones' design has been copied, although this implementation is }
+{ in Turbo Pascal rather than MASM.  By default, this unit provides 10   }
+{ timers, although this can be increased by increasing the value of      }
+{ MAX_TIMER and re-compiling.                                            }
+{                                                                        }
+{ Timers are referenced by &quot;handles&quot; i.e. small integers.  These are     }
+{ actually indexes into the timer array.  To obtain a handle one must    }
+{ ALLOCATE a timer.  The Allocate function also requires the address of  }
+{ a routine to execute when the timer expires as well as a user context  }
+{ variable.  The timer function must be compiled as a FAR routine.  The  }
+{ user context variable is a 16 bit word of data that can be used for any}
+{ application specific purpose.  It is passed to the timer routine when  }
+{ the timer expires.  This is useful if a common timer routine is used   }
+{ for multiple timers.  It allows the common timer routine to determine  }
+{ which timer expired and take appropriate action.                       }
+{                                                                        }
+{ Once a timer is allocated, it must be STARTED.  The StartTimer         }
+{ procedure requires the timer handle and a timer running time.  The     }
+{ timer running timer is passed as a RELATIVE number of MILLISECONDS i.e.}
+{ the number of milliseconds from now when the timer should expire.      }
+{                                                                        }
+{ A timer can be stopped before it expires with StopTimer which just     }
+{ requires the timer handle.  There is the possibility that the StopTimer}
+{ routine could be interrupted by a clock tick and the expiration routine}
+{ could run before the StopTimer procedure actually stops the timer.     }
+{ It's up to you to guard against this.                                  }
+{                                                                        }
+{ Finally, an allocated timer can be deallocated with DeallocateTimer    }
+{========================================================================}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+uses
+    </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+    </b></font>UserProc <font color="#000080">= </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">(</font>context <font color="#000080">: </font>word<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>function  </b></font>AllocateTimer<font color="#000080">(</font>UserContext <font color="#000080">: </font>word<font color="#000080">; </font>UserRtn <font color="#000080">: </font>UserProc<font color="#000080">) : </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>StartTimer<font color="#000080">(</font>handle <font color="#000080">: </font>integer<font color="#000080">; </font>rel_timeout <font color="#000080">: </font>longint<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>StopTimer<font color="#000080">(</font>handle <font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>DeallocateTimer<font color="#000080">(</font>handle <font color="#000080">: </font>integer<font color="#000080">);
+
+</font><font color="#008000"><i>{========================================================================}
+{                        IMPLEMENTATION SECTION                          }
+{========================================================================}
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+const
+     </b></font>MAX_TIMER <font color="#000080">= </font><font color="#800000">10</font><font color="#000080">;            </font><font color="#008000"><i>{Total number of timers}
+     </i></font>MILLISECS_PER_TICK <font color="#000080">= </font><font color="#800000">55</font><font color="#000080">;   </font><font color="#008000"><i>{clock tick interval}
+     </i></font>TIMER_ALLOCATED <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;       </font><font color="#008000"><i>{bits in the timer flags word}
+     </i></font>TIMER_RUNNING   <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+    </b></font>timer_rec <font color="#000080">= </font><font color="#FF0000"><b>record                  </b></font><font color="#008000"><i>{Timer descriptor record}
+                  </i></font>timeout <font color="#000080">: </font>longint<font color="#000080">;    </font><font color="#008000"><i>{Timeout.  Absolute number of millisecs}
+                                        {From beginning of program execution}
+                  </i></font>routine <font color="#000080">: </font>UserProc<font color="#000080">;   </font><font color="#008000"><i>{User procedure to run on expiration}
+                  </i></font>flags   <font color="#000080">: </font>word<font color="#000080">;       </font><font color="#008000"><i>{Timer status flags}
+                  </i></font>context <font color="#000080">: </font>word<font color="#000080">;       </font><font color="#008000"><i>{User parameter to pass to User Proc}
+                </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+   </b></font>timers      <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MAX_TIMER<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>timer_rec<font color="#000080">;   </font><font color="#008000"><i>{timer database}
+   </i></font>Int1CSave   <font color="#000080">: </font>pointer<font color="#000080">;  </font><font color="#008000"><i>{dword to hold original Int $1C vector}
+   </i></font>TimeCounter <font color="#000080">: </font>longint<font color="#000080">;  </font><font color="#008000"><i>{incremented by 55 millisecs on every entry to ISR}
+   </i></font>ExitSave    <font color="#000080">: </font>pointer<font color="#000080">;  </font><font color="#008000"><i>{Save the address of next unit exit proc in chain}
+   </i></font>i           <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{loop counter}
+
+{$F+}
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>Clock_ISR<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+{ Description:                                                           }
+{   This is an interrupt service routine which is hooked into the PC's   }
+{   $1C vector.  An Int $1C is generated at each clock tick.  Int $1C is }
+{   executed by the hardware interrupt service routine after it has up-  }
+{   dated the system time-of-day clock.                                  }
+{ Parameters:                                                            }
+{   None.                                                                }
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>var
+   </b></font>i <font color="#000080">: </font>integer<font color="#000080">;        </font><font color="#008000"><i>{local loop counter}
+</i></font><font color="#FF0000"><b>begin
+
+  </b></font><font color="#008000"><i>{Update the current time, relative to the start of the program}
+
+  </i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">); </font><font color="#008000"><i>{cli}
+  </i></font>TimeCounter <font color="#000080">:= </font>TimeCounter <font color="#000080">+ </font>MILLISECS_PER_TICK<font color="#000080">; </font><font color="#008000"><i>{update millisecond counter}
+
+  {Scan the array of timers looking for ones which have expired}
+
+  </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>MAX_TIMER <font color="#FF0000"><b>do
+    with </b></font>timers<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>do
+      if </b></font><font color="#000080">(</font>flags <font color="#FF0000"><b>and </b></font>TIMER_ALLOCATED<font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{Is this timer allocated? if no}
+        </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>flags <font color="#FF0000"><b>and </b></font>TIMER_RUNNING<font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{Is this timer running? if not}
+          </i></font><font color="#FF0000"><b>if </b></font>timeout <font color="#000080">&lt;= </font>TimeCounter <font color="#FF0000"><b>then begin  </b></font><font color="#008000"><i>{Has this timer expired yet?}
+            </i></font>flags <font color="#000080">:= </font>flags <font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>TIMER_RUNNING<font color="#000080">); </font><font color="#008000"><i>{turn off running flag}
+            </i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);          </font><font color="#008000"><i>{sti}
+            </i></font>routine<font color="#000080">(</font>context<font color="#000080">);     </font><font color="#008000"><i>{call user expiration routine}
+            </i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);          </font><font color="#008000"><i>{cli}
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">); </font><font color="#008000"><i>{sti}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>function </b></font>AllocateTimer<font color="#000080">(</font>UserContext <font color="#000080">: </font>word<font color="#000080">; </font>UserRtn <font color="#000080">: </font>UserProc<font color="#000080">) : </font>integer<font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+{ Description:                                                           }
+{   Allocate the next available timer in the timer database for use by   }
+{   application.                                                         }
+{ Parameters:                                                            }
+{   UserContext - application specific word of data to be passed to the  }
+{                 expiration routine when it is called.                  }
+{   UserProc - address of a procedure to be called when the timer expires}
+{ Returns:                                                               }
+{   Handle - integer from 1 to MAX_TIMER                                 }
+{            OR -1 if no timers available.                               }
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>var
+   </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">); </font><font color="#008000"><i>{cli}
+  </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>MAX_TIMER <font color="#FF0000"><b>do begin  </b></font><font color="#008000"><i>{scan timer database looking for 1st free}
+    </i></font><font color="#FF0000"><b>with </b></font>timers<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>do begin
+      if </b></font>flags <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+         </b></font>flags <font color="#000080">:= </font>TIMER_ALLOCATED<font color="#000080">;      </font><font color="#008000"><i>{Mark timer as allocated}
+         </i></font>context <font color="#000080">:= </font>UserContext<font color="#000080">;        </font><font color="#008000"><i>{Save users context variable}
+         </i></font>routine <font color="#000080">:= </font>UserRtn<font color="#000080">;            </font><font color="#008000"><i>{Store user routine}
+         </i></font>AllocateTimer <font color="#000080">:= </font>i<font color="#000080">;            </font><font color="#008000"><i>{Return handle to timer}
+         </i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);                   </font><font color="#008000"><i>{Enable interrupts}
+         </i></font>exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ No timers available, return error}
+  </i></font>AllocateTimer <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>DeallocateTimer<font color="#000080">(</font>handle <font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+{ Description:                                                           }
+{   Return a previously allocated timer to the pool of available timers  }
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>timers<font color="#000080">[</font>handle<font color="#000080">].</font>flags <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>StartTimer<font color="#000080">(</font>handle <font color="#000080">: </font>integer<font color="#000080">; </font>rel_timeout <font color="#000080">: </font>longint<font color="#000080">);
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+{ Description:                                                           }
+{    Start an allocated timer ticking.                                   }
+{ Parameters:                                                            }
+{    Handle - the handle of a previously allocated timer.                }
+{    rel_timeout - number of milliseconds before the timer is to expire. }
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>begin
+  inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);  </font><font color="#008000"><i>{cli}
+  </i></font><font color="#FF0000"><b>with </b></font>timers<font color="#000080">[</font>handle<font color="#000080">] </font><font color="#FF0000"><b>do begin
+    </b></font>flags <font color="#000080">:= </font>flags <font color="#FF0000"><b>or </b></font>TIMER_RUNNING<font color="#000080">;       </font><font color="#008000"><i>{set timmer running flag}
+    </i></font>timeout <font color="#000080">:= </font>TimeCounter <font color="#000080">+ </font>rel_timeout<font color="#000080">;  </font><font color="#008000"><i>{Convert relative timeout to absolute}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);  </font><font color="#008000"><i>{sti}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>StopTimer<font color="#000080">(</font>handle <font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+{ Description:                                                           }
+{   Stop a ticking timer from running.  This routine does not deallocate }
+{   the timer, just stops it.  Remember, it is possible for the clock    }
+{   interrupt to interrupt this routine before it actually stops the     }
+{   timer.  Therefore, it is possible for the expiration routine to run  }
+{   before the timer is stopped i.e. unexpectedly.                       }
+{ Parameters:                                                            }
+{   Handle - handle of timer to stop.                                    }
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>begin
+  with </b></font>timers<font color="#000080">[</font>handle<font color="#000080">] </font><font color="#FF0000"><b>do
+     </b></font>flags <font color="#000080">:= </font>flags <font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>TIMER_RUNNING<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$F+}
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>myExitProc<font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+{ Description:                                                           }
+{  This is the unit exit procedure which is called as part of a chain of }
+{  exit procedures at program termination.                               }
+{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>ExitProc <font color="#000080">:= </font>ExitSave<font color="#000080">;  </font><font color="#008000"><i>{Restore the chain so other units get a turn}
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">, </font>Int1CSave<font color="#000080">);     </font><font color="#008000"><i>{restore the original Int $1C vector}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+{=========================================================================}
+{                        INITIALIZATION SECTION                           }
+{=========================================================================}
+
+</i></font><font color="#FF0000"><b>Begin </b></font><font color="#008000"><i>{unit initialization code}
+
+  (* Establish the unit exit procedure *)
+
+  </i></font>ExitSave <font color="#000080">:= </font>ExitProc<font color="#000080">;
+  </font>ExitProc <font color="#000080">:= @</font>myExitProc<font color="#000080">;
+
+  </font><font color="#008000"><i>{Initialize the timers database and install the custom Clock ISR}
+
+  </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>MAX_TIMER <font color="#FF0000"><b>do   </b></font><font color="#008000"><i>{clear flag word for all timers}
+     </i></font>timers<font color="#000080">[</font>i<font color="#000080">].</font>flags <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>TimeCounter <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;              </font><font color="#008000"><i>{clear current time counter}
+  </i></font>GetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">, </font>Int1CSave<font color="#000080">);     </font><font color="#008000"><i>{Save original Int $1C vector}
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">, @</font>Clock_ISR<font color="#000080">);    </font><font color="#008000"><i>{install the the clock ISR}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{------------------------- End of TIMER.PAS -----------------------------}
+
+{---------------------- Beginning of TIMERTST.PAS -----------------------}
+</i></font><font color="#FF0000"><b>program </b></font>timer_test<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses
+    </b></font>Crt<font color="#000080">, </font>timer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+    </b></font>t1<font color="#000080">, </font>t2 <font color="#000080">: </font>integer<font color="#000080">; </font><font color="#008000"><i>{timer handles}
+    </i></font>done   <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{---- Procedure to be run when timer 1 expires ----}
+</i></font><font color="#FF0000"><b>procedure </b></font>t1_proc<font color="#000080">(</font>context1 <font color="#000080">: </font>word<font color="#000080">); </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'Timer '</font><font color="#000080">,</font>context1<font color="#000080">);
+  </font>StartTimer<font color="#000080">(</font>t1<font color="#000080">, </font><font color="#800000">1000</font><font color="#000080">);        </font><font color="#008000"><i>{Keep timer 1 running}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{---- Procedure to be run when timer 2 expires ----}
+</i></font><font color="#FF0000"><b>procedure </b></font>t2_proc<font color="#000080">(</font>context2 <font color="#000080">: </font>word<font color="#000080">); </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>done <font color="#000080">:= </font>true<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Timer '</font><font color="#000080">,</font>context2<font color="#000080">,</font><font color="#800000">' expired'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>ClrScr<font color="#000080">;
+  </font>done <font color="#000080">:= </font>false<font color="#000080">;
+  </font>t1 <font color="#000080">:= </font>AllocateTimer<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font>t1_proc<font color="#000080">);        </font><font color="#008000"><i>{Create timer 1}
+  </i></font>t2 <font color="#000080">:= </font>AllocateTimer<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">, </font>t2_proc<font color="#000080">);        </font><font color="#008000"><i>{Create timer 2}
+  </i></font>StartTimer<font color="#000080">(</font>t2<font color="#000080">, </font><font color="#800000">5000</font><font color="#000080">);        </font><font color="#008000"><i>{Start timer 2 for 5 second delay}
+  </i></font>StartTimer<font color="#000080">(</font>t1<font color="#000080">, </font><font color="#800000">1000</font><font color="#000080">);        </font><font color="#008000"><i>{Start timer 1 for 1 second delay}
+  </i></font><font color="#FF0000"><b>while not </b></font>done <font color="#FF0000"><b>do begin      </b></font><font color="#008000"><i>{Do nothing until timer 2 expires}
+     </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>StopTimer<font color="#000080">(</font>t1<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TIMING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0015.PAS">Original</a><b>]</b></p></body>
+</html>

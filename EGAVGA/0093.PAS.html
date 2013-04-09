@@ -1,0 +1,386 @@
+<html>
+<head><title> "Vesa Unit 2!" by SEAN PALMER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0093.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Here's some VESA routines. The drawing stuff is quite limited right now
+(to pixels and horizontal lines in 256-color linear modes only) but it
+detects/sets/describes most everything else. Also no save/restore video
+state yet. It uses direct VESA function calls instead of interrupts, and
+tries to optimize where it puts the window based on what the routines
+will be used for . . .
+}
+
+{VESA1.PAS}
+{by Sean Palmer}
+{with help from Ferraro and Olaf Bartlett}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>pModeList <font color="#000080">= ^</font>tModeList<font color="#000080">;
+  </font>tModeList <font color="#000080">= </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">; </font><font color="#008000"><i>{list of modes terminated by -1}
+                                      {VESA modes are &gt;=100h}
+
+  </i></font>modeAttrBits <font color="#000080">= (</font>modeAvail<font color="#000080">,
+                  </font>modeExtendInfo<font color="#000080">,
+                  </font>modeBIOSsupport<font color="#000080">,
+                  </font>modeColor<font color="#000080">,
+                  </font>modeGraphics<font color="#000080">,
+                  </font>modeBit5<font color="#000080">,
+                  </font>modeBit6<font color="#000080">,
+                  </font>modeBit7<font color="#000080">,
+                  </font>modeBit8<font color="#000080">);
+
+  </font>winAttrBits  <font color="#000080">= (</font>winSupported<font color="#000080">,
+                  </font>winReadable<font color="#000080">,
+                  </font>winWriteable<font color="#000080">);
+
+  </font>tMemModel    <font color="#000080">= (</font>modelText<font color="#000080">,
+                  </font>modelCGA<font color="#000080">,
+                  </font>modelHerc<font color="#000080">,
+                  </font>model4Plane<font color="#000080">,
+                  </font>modelPacked<font color="#000080">,
+                  </font>modelModeX<font color="#000080">,
+                  </font>modelRGB<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>var
+  </b></font>VESAinfo <font color="#000080">: </font><font color="#FF0000"><b>record
+    </b></font>signature <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+    </font>version   <font color="#000080">: </font>word<font color="#000080">;
+    </font>str       <font color="#000080">: </font>pChar<font color="#000080">;
+    </font>caps      <font color="#000080">: </font>longint<font color="#000080">;
+    </font>modeList  <font color="#000080">: </font>pModeList<font color="#000080">;
+    </font>pad       <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">18</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>modeInfo <font color="#000080">: </font><font color="#FF0000"><b>record
+    </b></font>attr           <font color="#000080">: </font><font color="#FF0000"><b>set of </b></font>modeAttrBits<font color="#000080">;
+    </font>winAAttr<font color="#000080">,
+    </font>winBAttr       <font color="#000080">: </font><font color="#FF0000"><b>set of </b></font>winAttrBits<font color="#000080">;
+    </font>winGranularity <font color="#000080">: </font>word<font color="#000080">;  </font><font color="#008000"><i>{in K}
+    </i></font>winSize        <font color="#000080">: </font>word<font color="#000080">;         </font><font color="#008000"><i>{in K}
+    </i></font>winASeg<font color="#000080">,
+    </font>winBSeg        <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{segment to access window with}
+    </i></font>winFunct       <font color="#000080">: </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">;
+    </font>scanBytes      <font color="#000080">: </font>word<font color="#000080">;       </font><font color="#008000"><i>{bytes per scan line}
+    </i></font>extendedInfo   <font color="#000080">: </font><font color="#FF0000"><b>record
+      </b></font>xRes<font color="#000080">, </font>yRes <font color="#000080">: </font>word<font color="#000080">;    </font><font color="#008000"><i>{pixels}
+      </i></font>xCharSize<font color="#000080">,
+      </font>yCharSize  <font color="#000080">: </font>byte<font color="#000080">;
+      </font>planes     <font color="#000080">: </font>byte<font color="#000080">;
+      </font>bitsPixel  <font color="#000080">: </font>byte<font color="#000080">;
+      </font>banks      <font color="#000080">: </font>byte<font color="#000080">;
+      </font>memModel   <font color="#000080">: </font>tMemModel<font color="#000080">;
+      </font>bankSize   <font color="#000080">: </font>byte<font color="#000080">;  </font><font color="#008000"><i>{in K}
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>pad <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">29</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>xSize<font color="#000080">,
+  </font>ySize<font color="#000080">,
+  </font>xBytes     <font color="#000080">: </font>word<font color="#000080">;
+  </font>bits       <font color="#000080">: </font>byte<font color="#000080">;
+  </font>model      <font color="#000080">: </font>tMemModel<font color="#000080">;
+  </font>window     <font color="#000080">: </font>byte<font color="#000080">;
+  </font>winSeg     <font color="#000080">: </font>word<font color="#000080">;
+  </font>granShifts <font color="#000080">: </font>byte<font color="#000080">;
+  </font>winLo<font color="#000080">,
+  </font>winHi<font color="#000080">,
+  </font>winBytes<font color="#000080">,
+  </font>granMask   <font color="#000080">: </font>longint<font color="#000080">;
+  </font>funct      <font color="#000080">: </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">;
+
+  </font>m<font color="#000080">, </font>i <font color="#000080">: </font>word<font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>function </b></font>getVESAInfo <font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax,4F00h
+  push ds
+  pop es
+  mov di,offset VESAinfo
+  int 10h
+  sub ax,004Fh  </font><font color="#008000"><i>{make sure we got 004Fh back}
+  </i></font><font color="#FF00FF">cmp ax,1
+  sbb al,al
+  cmp word ptr es:[di],'V'or('E'shl 8)  </font><font color="#008000"><i>{signature should be 'VESA'}
+  </i></font><font color="#FF00FF">jne @@ERR
+  cmp word ptr es:[di+2],'S'or('A'shl 8)
+  je @@X
+ @@ERR:
+  mov al,0
+ @@X:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>getModeInfo<font color="#000080">(</font>mode<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">mov ax,4F01h
+ mov cx,mode
+ push ds
+ pop es
+ mov di,offset modeInfo
+ int 10h
+ sub ax,004Fh   </font><font color="#008000"><i>{make sure it's 004Fh}
+ </i></font><font color="#FF00FF">cmp ax,1
+ sbb al,al
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{if the VESA driver supports info on the regular VGA modes, add them to list}
+</i></font><font color="#FF0000"><b>procedure </b></font>includeStandardVGAModes<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>p<font color="#000080">:^</font>word<font color="#000080">;</font><font color="#FF0000"><b>begin
+ </b></font>p<font color="#000080">:=</font>pointer<font color="#000080">(</font>VESAInfo<font color="#000080">.</font>modeList<font color="#000080">);
+ </font><font color="#FF0000"><b>while </b></font>p<font color="#000080">^&lt;&gt;</font><font color="#800000">$FFFF </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>p<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>getModeInfo<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font>p<font color="#000080">^:=</font><font color="#800000">$10</font><font color="#000080">; </font>inc<font color="#000080">(</font>p<font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>getModeInfo<font color="#000080">(</font><font color="#800000">$12</font><font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font>p<font color="#000080">^:=</font><font color="#800000">$12</font><font color="#000080">; </font>inc<font color="#000080">(</font>p<font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>getModeInfo<font color="#000080">(</font><font color="#800000">$13</font><font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font>p<font color="#000080">^:=</font><font color="#800000">$13</font><font color="#000080">; </font>inc<font color="#000080">(</font>p<font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>p<font color="#000080">^:=</font><font color="#800000">$FFFF</font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>setMode<font color="#000080">(</font>mode<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>i<font color="#000080">:</font>word<font color="#000080">;</font><font color="#FF0000"><b>begin
+ if </b></font>getModeInfo<font color="#000080">(</font>mode<font color="#000080">) </font><font color="#FF0000"><b>then begin
+  with </b></font>modeInfo <font color="#FF0000"><b>do begin
+   if </b></font>winSupported <font color="#FF0000"><b>in </b></font>winAAttr <font color="#FF0000"><b>then begin </b></font>window<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>winSeg<font color="#000080">:=</font>winASeg<font color="#000080">;</font><font color="#FF0000"><b>end
+   else if </b></font>winSupported <font color="#FF0000"><b>in </b></font>winBAttr <font color="#FF0000"><b>then begin </b></font>window<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font>winSeg<font color="#000080">:=</font>winBSeg<font color="#000080">;</font><font color="#FF0000"><b>end
+   else </b></font>exit<font color="#000080">;  </font><font color="#008000"><i>{you call this a VESA mode?}
+   </i></font><font color="#FF0000"><b>with </b></font>extendedInfo <font color="#FF0000"><b>do begin
+    </b></font>xSize<font color="#000080">:=</font>xRes<font color="#000080">; </font>ySize<font color="#000080">:=</font>yRes<font color="#000080">; </font>xBytes<font color="#000080">:=</font>scanBytes<font color="#000080">; </font>bits<font color="#000080">:=</font>bitsPixel<font color="#000080">;
+    </font>model<font color="#000080">:=</font>memModel<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>winBytes<font color="#000080">:=</font>longint<font color="#000080">(</font>winSize<font color="#000080">)*</font><font color="#800000">1024</font><font color="#000080">;  </font><font color="#008000"><i>{wraps to 0 if 64k}
+   </i></font>winLo<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>winHi<font color="#000080">:=</font>winBytes<font color="#000080">;
+   </font>i<font color="#000080">:=</font>winGranularity<font color="#000080">;
+   </font>granShifts<font color="#000080">:=</font><font color="#800000">10</font><font color="#000080">; </font><font color="#008000"><i>{for 1K}
+   </i></font><font color="#FF0000"><b>while not </b></font>odd<font color="#000080">(</font>i<font color="#000080">) </font><font color="#FF0000"><b>do begin
+    </b></font>i<font color="#000080">:=</font>i <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+    </font>inc<font color="#000080">(</font>granShifts<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>i<font color="#000080">&lt;&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin </b></font>setMode<font color="#000080">:=</font>false<font color="#000080">;</font>exit<font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{granularity not power of 2}
+   </i></font>granMask<font color="#000080">:=(</font>longint<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>shl </b></font>granShifts<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">;
+   </font>funct<font color="#000080">:=</font>winFunct<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">mov ax,4F02h
+   mov bx,mode
+   int 10h
+   sub ax,004Fh
+   cmp ax,1
+   sbb al,al
+   mov @RESULT,al
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>getMode<font color="#000080">:</font>word<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm  </b></font><font color="#008000"><i>{return -1 if error}
+ </i></font><font color="#FF00FF">mov ax,4F03h
+ int 10h
+ cmp ax,004Fh
+ je @@OK
+ mov ax,-1
+ jmp @@X
+@@OK: mov ax,bx
+@@X:
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>plot<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">; </font>c <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>bank <font color="#000080">: </font>word<font color="#000080">;
+  </font>offs <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>offs <font color="#000080">:= </font>longint<font color="#000080">(</font>y<font color="#000080">) * </font>xBytes <font color="#000080">+ </font>x<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>offs <font color="#000080">&lt; </font>winLo<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>offs <font color="#000080">&gt;= </font>winHi<font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+    </b></font>winLo <font color="#000080">:= (</font>offs <font color="#000080">- (</font>winBytes <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)) </font><font color="#FF0000"><b>and not </b></font>granMask<font color="#000080">;
+    </font>winHi <font color="#000080">:= </font>winLo <font color="#000080">+ </font>winBytes<font color="#000080">;
+    </font>bank  <font color="#000080">:= </font>winLo <font color="#FF0000"><b>shr </b></font>granShifts<font color="#000080">;
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov bl, window
+      mov dx, bank
+      call [funct]
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>mem<font color="#000080">[</font>winSeg <font color="#000080">: </font>word<font color="#000080">(</font>offs<font color="#000080">) - </font>word<font color="#000080">(</font>winLo<font color="#000080">)] := </font>c<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>hLin<font color="#000080">(</font>x<font color="#000080">,</font>x2<font color="#000080">,</font>y<font color="#000080">:</font>word<font color="#000080">;</font>c<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>bank<font color="#000080">,</font>w<font color="#000080">:</font>word<font color="#000080">; </font>offs<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>w<font color="#000080">:=</font>x2<font color="#000080">-</font>x<font color="#000080">;
+  </font>offs<font color="#000080">:=</font>longint<font color="#000080">(</font>y<font color="#000080">)*</font>xBytes<font color="#000080">+</font>x<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>offs<font color="#000080">&lt;</font>winLo<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">(</font>offs<font color="#000080">+</font>w<font color="#000080">&gt;=</font>winHi<font color="#000080">) </font><font color="#FF0000"><b>then begin
+   </b></font>winLo<font color="#000080">:=</font>offs <font color="#FF0000"><b>and not </b></font>granMask<font color="#000080">;
+   </font>winHi<font color="#000080">:=</font>winLo<font color="#000080">+</font>winBytes<font color="#000080">;
+   </font>bank<font color="#000080">:=</font>winLo <font color="#FF0000"><b>shr </b></font>granShifts<font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov bl,window
+    mov dx,bank
+    call [funct]
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>fillChar<font color="#000080">(</font>mem<font color="#000080">[</font>winSeg<font color="#000080">:</font>word<font color="#000080">(</font>offs<font color="#000080">)-</font>word<font color="#000080">(</font>winLo<font color="#000080">)],</font>w<font color="#000080">,</font>c<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>scrn<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>word<font color="#000080">):</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>bank<font color="#000080">:</font>word<font color="#000080">; </font>offs<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>offs<font color="#000080">:=</font>longint<font color="#000080">(</font>y<font color="#000080">)*</font>xBytes<font color="#000080">+</font>x<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>offs<font color="#000080">&lt;</font>winLo<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">(</font>offs<font color="#000080">&gt;=</font>winHi<font color="#000080">) </font><font color="#FF0000"><b>then begin
+   </b></font>winLo<font color="#000080">:=(</font>offs<font color="#000080">-(</font>winBytes <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">))</font><font color="#FF0000"><b>and not </b></font>granMask<font color="#000080">;
+   </font>winHi<font color="#000080">:=</font>winLo<font color="#000080">+</font>winBytes<font color="#000080">;
+</font>bank<font color="#000080">:=</font>winLo <font color="#FF0000"><b>shr </b></font>granShifts<font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov bl,window
+    mov dx,bank
+    call [funct]
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>scrn<font color="#000080">:=</font>mem<font color="#000080">[</font>winSeg<font color="#000080">:</font>word<font color="#000080">(</font>offs<font color="#000080">)-</font>word<font color="#000080">(</font>winLo<font color="#000080">)];
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{will find a color graphics mode that matches parms}
+{if parm is 0, finds best mode for that parm}
+</i></font><font color="#FF0000"><b>function </b></font>findMode<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>word<font color="#000080">;</font>model<font color="#000080">:</font>tMemModel<font color="#000080">;</font>nBits<font color="#000080">,</font>nPlanes<font color="#000080">,</font>nBanks<font color="#000080">:</font>byte<font color="#000080">):</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>p<font color="#000080">:^</font>word<font color="#000080">; </font>m<font color="#000080">:</font>word<font color="#000080">; </font>gx<font color="#000080">,</font>gy<font color="#000080">,</font>gb<font color="#000080">,</font>lp<font color="#000080">,</font>lb<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>gx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>gy<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>gb<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>lp<font color="#000080">:=</font><font color="#800000">255</font><font color="#000080">;</font>lb<font color="#000080">:=</font><font color="#800000">255</font><font color="#000080">;
+ </font>p<font color="#000080">:=</font>pointer<font color="#000080">(</font>VESAInfo<font color="#000080">.</font>modeList<font color="#000080">);
+ </font>m<font color="#000080">:=</font><font color="#800000">$FFFF</font><font color="#000080">;
+ </font><font color="#FF0000"><b>while </b></font>p<font color="#000080">^&lt;&gt;</font><font color="#800000">$FFFF </font><font color="#FF0000"><b>do begin
+  if </b></font>getModeInfo<font color="#000080">(</font>p<font color="#000080">^) </font><font color="#FF0000"><b>then
+   with </b></font>modeInfo <font color="#FF0000"><b>do
+    if </b></font>attr<font color="#000080">+[</font>modeAvail<font color="#000080">,</font>modeExtendInfo<font color="#000080">,</font>modeColor<font color="#000080">,</font>modeGraphics<font color="#000080">]=</font>attr <font color="#FF0000"><b>then
+     with </b></font>extendedInfo <font color="#FF0000"><b>do
+if </b></font><font color="#000080">((</font>xRes<font color="#000080">=</font>x<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">((</font>x<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>and</b></font><font color="#000080">(</font>gx<font color="#000080">&lt;=</font>xRes<font color="#000080">)))
+      </font><font color="#FF0000"><b>and</b></font><font color="#000080">((</font>yRes<font color="#000080">=</font>y<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">((</font>y<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>and</b></font><font color="#000080">(</font>gy<font color="#000080">&lt;=</font>yRes<font color="#000080">)))
+      </font><font color="#FF0000"><b>and</b></font><font color="#000080">(</font>memModel<font color="#000080">=</font>model<font color="#000080">)
+      </font><font color="#FF0000"><b>and</b></font><font color="#000080">((</font>bitsPixel<font color="#000080">=</font>nBits<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">((</font>nBits<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>and</b></font><font color="#000080">(</font>gb<font color="#000080">&lt;=</font>bitsPixel<font color="#000080">)))
+      </font><font color="#FF0000"><b>and</b></font><font color="#000080">((</font>planes<font color="#000080">=</font>nPlanes<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">((</font>nPlanes<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>and</b></font><font color="#000080">(</font>lp<font color="#000080">&gt;=</font>planes<font color="#000080">)))
+      </font><font color="#FF0000"><b>and</b></font><font color="#000080">((</font>banks<font color="#000080">=</font>nBanks<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">((</font>nBanks<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>and</b></font><font color="#000080">(</font>lb<font color="#000080">&gt;=</font>banks<font color="#000080">)))
+      </font><font color="#FF0000"><b>then begin
+       </b></font>gx<font color="#000080">:=</font>xRes<font color="#000080">;</font>gy<font color="#000080">:=</font>yRes<font color="#000080">;</font>gb<font color="#000080">:=</font>bitsPixel<font color="#000080">;</font>lp<font color="#000080">:=</font>planes<font color="#000080">;</font>lb<font color="#000080">:=</font>banks<font color="#000080">;
+       </font>m<font color="#000080">:=</font>p<font color="#000080">^;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>inc<font color="#000080">(</font>p<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>m<font color="#000080">&lt;&gt;</font><font color="#800000">$FFFF </font><font color="#FF0000"><b>then </b></font>getModeInfo<font color="#000080">(</font>m<font color="#000080">);
+ </font>findMode<font color="#000080">:=</font>m<font color="#000080">;  </font><font color="#008000"><i>{0FFFFh if not found. Try a standard mode number then.}
+ </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>displayVESAInfo<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>string2<font color="#000080">=</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">];
+  </font>string4<font color="#000080">=</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+  </font>string8<font color="#000080">=</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">8</font><font color="#000080">];
+</font><font color="#FF0000"><b>const
+  </b></font>modelStr <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>tMemModel<font color="#000080">]</font><font color="#FF0000"><b>of </b></font>pChar<font color="#000080">=
+    (</font><font color="#800000">'Text'</font><font color="#000080">,</font><font color="#800000">'CGA'</font><font color="#000080">,</font><font color="#800000">'Hercules'</font><font color="#000080">,</font><font color="#800000">'EGA'</font><font color="#000080">,</font><font color="#800000">'Linear'</font><font color="#000080">,</font><font color="#800000">'mode X'</font><font color="#000080">,</font><font color="#800000">'RGB'</font><font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>p<font color="#000080">:^</font>word<font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>hexB<font color="#000080">(</font>n<font color="#000080">:</font>byte<font color="#000080">):</font>string2<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">les di,@RESULT;                    </font><font color="#008000"><i>{adr of function result}
+  </i></font><font color="#FF00FF">cld; mov al,2; stosb;              </font><font color="#008000"><i>{set len}
+   </i></font><font color="#FF00FF">mov al,n; mov ah,al;               </font><font color="#008000"><i>{save it}
+   </i></font><font color="#FF00FF">shr al,1; shr al,1; shr al,1; shr al,1; </font><font color="#008000"><i>{high nibble}
+   </i></font><font color="#FF00FF">add al,$90; daa; adc al,$40; daa;  </font><font color="#008000"><i>{convert hex nibble to ASCII}
+   </i></font><font color="#FF00FF">stosb;
+   mov al,ah; and al,$F;              </font><font color="#008000"><i>{low nibble}
+   </i></font><font color="#FF00FF">add al,$90; daa; adc al,$40; daa;
+   stosb;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>hexW<font color="#000080">(</font>n<font color="#000080">:</font>word<font color="#000080">):</font>string4<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>hexW<font color="#000080">:=</font>hexB<font color="#000080">(</font>hi<font color="#000080">(</font>n<font color="#000080">))+</font>hexB<font color="#000080">(</font>lo<font color="#000080">(</font>n<font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>hexL<font color="#000080">(</font>n<font color="#000080">:</font>longint<font color="#000080">):</font>string8<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>hexL<font color="#000080">:=</font>hexW<font color="#000080">(</font>n <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">)+</font>hexW<font color="#000080">(</font>n<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ if </b></font>getVESAInfo <font color="#FF0000"><b>then
+  with </b></font>VESAinfo <font color="#FF0000"><b>do begin
+   </b></font>includeStandardVGAModes<font color="#000080">;
+   </font>writeln<font color="#000080">(</font>signature<font color="#000080">,</font><font color="#800000">' Version '</font><font color="#000080">,</font>hexB<font color="#000080">(</font>hi<font color="#000080">(</font>version<font color="#000080">)),</font><font color="#800000">'.'</font><font color="#000080">,</font>hexB<font color="#000080">(</font>version<font color="#000080">));
+   </font>writeln<font color="#000080">(</font>str<font color="#000080">);
+   </font>writeln<font color="#000080">(</font><font color="#800000">'Capabilities: $'</font><font color="#000080">,</font>hexL<font color="#000080">(</font>caps<font color="#000080">));
+   </font>p<font color="#000080">:=</font>pointer<font color="#000080">(</font>modeList<font color="#000080">);
+</font><font color="#FF0000"><b>while </b></font>p<font color="#000080">^&lt;&gt;</font><font color="#800000">$FFFF </font><font color="#FF0000"><b>do begin
+    </b></font>write<font color="#000080">(</font><font color="#800000">'Mode $'</font><font color="#000080">,</font>hexW<font color="#000080">(</font>p<font color="#000080">^),</font><font color="#800000">' = '</font><font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>getModeInfo<font color="#000080">(</font>p<font color="#000080">^) </font><font color="#FF0000"><b>then
+     with </b></font>modeInfo <font color="#FF0000"><b>do begin
+      if not</b></font><font color="#000080">(</font>modeAvail <font color="#FF0000"><b>in </b></font>attr<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'Unavailable-'</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>modeColor <font color="#FF0000"><b>in </b></font>attr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'Color '</font><font color="#000080">) </font><font color="#FF0000"><b>else </b></font>write<font color="#000080">(</font><font color="#800000">'Mono '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>modeGraphics <font color="#FF0000"><b>in </b></font>attr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'Graphics'</font><font color="#000080">) </font><font color="#FF0000"><b>else </b></font>write<font color="#000080">(</font><font color="#800000">'Text'</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>modeBIOSSupport <font color="#FF0000"><b>in </b></font>attr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'-BIOSsupport'</font><font color="#000080">);
+      </font>writeln<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>modeExtendInfo <font color="#FF0000"><b>in </b></font>attr <font color="#FF0000"><b>then
+       with </b></font>extendedInfo <font color="#FF0000"><b>do begin
+        </b></font>write<font color="#000080">(</font><font color="#800000">'  '</font><font color="#000080">,</font>xRes<font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>yRes<font color="#000080">,</font><font color="#800000">', '</font><font color="#000080">,</font>bitsPixel<font color="#000080">,</font><font color="#800000">' bits, '</font><font color="#000080">,</font>modelStr<font color="#000080">[</font>memModel<font color="#000080">],
+                </font><font color="#800000">', '</font><font color="#000080">,</font>scanBytes<font color="#000080">,</font><font color="#800000">' bytes per row'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>modeGraphics <font color="#FF0000"><b>in </b></font>attr<font color="#000080">) </font><font color="#FF0000"><b>then
+         </b></font>write<font color="#000080">(^</font>M<font color="#000080">^</font>J<font color="#800000">'  Character size '</font><font color="#000080">,</font>xCharSize<font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font>yCharSize<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>planes<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">', '</font><font color="#000080">,</font>planes<font color="#000080">,</font><font color="#800000">' planes'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>banks<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">', '</font><font color="#000080">,</font>banks<font color="#000080">,</font><font color="#800000">' banks of '</font><font color="#000080">,</font>bankSize<font color="#000080">,</font><font color="#800000">'K'</font><font color="#000080">);
+        </font>writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      else </b></font>write<font color="#000080">(</font><font color="#800000">'  No extended info available'</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>winSupported <font color="#FF0000"><b>in </b></font>winAAttr <font color="#FF0000"><b>then begin
+       </b></font>write<font color="#000080">(</font><font color="#800000">'  Window A: '</font><font color="#000080">);
+       </font><font color="#FF0000"><b>if </b></font>winReadable <font color="#FF0000"><b>in </b></font>winAAttr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'R'</font><font color="#000080">);
+</font><font color="#FF0000"><b>if </b></font>winWriteable <font color="#FF0000"><b>in </b></font>winAAttr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'W'</font><font color="#000080">);
+       </font>writeln<font color="#000080">(</font><font color="#800000">' at segment $'</font><font color="#000080">,</font>hexW<font color="#000080">(</font>winASeg<font color="#000080">),</font><font color="#800000">', '</font><font color="#000080">,</font>winSize<font color="#000080">,</font><font color="#800000">'K, granular by '
+               </font><font color="#000080">,</font>winGranularity<font color="#000080">,</font><font color="#800000">'K, function at $'</font><font color="#000080">,</font>hexL<font color="#000080">(</font>longint<font color="#000080">(@</font>winFunct<font color="#000080">)));
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>winSupported <font color="#FF0000"><b>in </b></font>winBAttr <font color="#FF0000"><b>then begin
+       </b></font>write<font color="#000080">(</font><font color="#800000">'  Window B: '</font><font color="#000080">);
+       </font><font color="#FF0000"><b>if </b></font>winReadable <font color="#FF0000"><b>in </b></font>winBAttr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'R'</font><font color="#000080">);
+       </font><font color="#FF0000"><b>if </b></font>winWriteable <font color="#FF0000"><b>in </b></font>winBAttr <font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font><font color="#800000">'W'</font><font color="#000080">);
+       </font>writeln<font color="#000080">(</font><font color="#800000">' at segment $'</font><font color="#000080">,</font>hexW<font color="#000080">(</font>winBSeg<font color="#000080">),</font><font color="#800000">', '</font><font color="#000080">,</font>winSize<font color="#000080">,</font><font color="#800000">'K, granular by '
+               </font><font color="#000080">,</font>winGranularity<font color="#000080">,</font><font color="#800000">'K, function at $'</font><font color="#000080">,</font>hexL<font color="#000080">(</font>longint<font color="#000080">(@</font>winFunct<font color="#000080">)));
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end
+    else </b></font>writeln<font color="#000080">(</font><font color="#800000">'ERROR'</font><font color="#000080">);
+    </font>inc<font color="#000080">(</font>p<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end
+ else </b></font>writeln<font color="#000080">(</font><font color="#800000">'No VESA driver found'</font><font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">;
+  </font>displayVESAInfo<font color="#000080">;
+  </font>readln<font color="#000080">;
+  </font>m <font color="#000080">:= </font>findMode<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>modelPacked<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font>getModeInfo<font color="#000080">(</font>m<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>m <font color="#000080">&lt;&gt; </font><font color="#800000">$FFFF </font><font color="#FF0000"><b>then
+  with </b></font>modeInfo<font color="#000080">.</font>extendedInfo <font color="#FF0000"><b>do
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'Found '</font><font color="#000080">, </font>xRes<font color="#000080">, </font><font color="#800000">'x'</font><font color="#000080">, </font>yRes<font color="#000080">, </font><font color="#800000">'x'</font><font color="#000080">,
+            </font>longint<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font>bitsPixel<font color="#000080">, </font><font color="#800000">' mode '</font><font color="#000080">, </font>m<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>exit<font color="#000080">;
+
+  </font>setMode<font color="#000080">(</font>m<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">10000 </font><font color="#FF0000"><b>do
+    </b></font>plot<font color="#000080">(</font>random<font color="#000080">(</font>xSize<font color="#000080">), </font>random<font color="#000080">(</font>ySize<font color="#000080">), </font>random<font color="#000080">(</font><font color="#800000">256</font><font color="#000080">));
+
+  </font>readln<font color="#000080">;
+
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">200 </font><font color="#FF0000"><b>do
+    </b></font>hlin<font color="#000080">(</font>random<font color="#000080">(</font>xSize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">), </font>random<font color="#000080">(</font>xSize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) + </font>xSize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">,
+                </font>random<font color="#000080">(</font>ySize<font color="#000080">), </font>random<font color="#000080">(</font><font color="#800000">256</font><font color="#000080">));
+  </font>readln<font color="#000080">;
+
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ax, 3h
+    int 10h
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0093.PAS">Original</a><b>]</b></p></body>
+</html>

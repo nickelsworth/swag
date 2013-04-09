@@ -1,0 +1,330 @@
+<html>
+<head><title> "INI files - Revised" by BRAD ZAVITSKY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0174.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{I found a few errors and made a few improvements with my INI file
+handler I posted this earlier.}
+
+{$A+,B-,D-,F-,G-,I-,L-,N-,O-,P-,Q-,R-,S+,T-,V-,X+}
+
+{INI  Version 1.2   Copr. 1996 Brad Zavitsky
+ FREEWARE: Swag/Commercial use fine
+
+Thanks to Andrew Eigus for his great EnhDos unit from which I got
+Pas2Pchar
+
+Version Info
+1.1
+====
+  o Fixed error, needed StrNew instead of StrCopy
+  o Added support for TP6- users.
+
+1.2
+====
+  o  Better memory detection: now find paragraph size
+  o  Optimized memory testing
+  o  Entries will not be added if the entry or value is blank
+  o  Fixed bug in split
+  o  Added a comment delimeter set
+  o  Added comments to source code
+  o  Optimized space/tab stripping for memory
+  o  Made FName a constant
+  o  Made list global
+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>INI<font color="#000080">; </font><font color="#008000"><i>{031496}
+
+</i></font><font color="#FF0000"><b>interface
+
+</b></font><font color="#008000"><i>{$IFDEF VER70}
+</i></font><font color="#FF0000"><b>uses </b></font>Strings<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>CSet <font color="#000080">= </font><font color="#FF0000"><b>set of </b></font>Char<font color="#000080">;
+  </font>TEntry <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">32</font><font color="#000080">];
+  </font><font color="#008000"><i>{Linked list to store INI entries and values}
+  </i></font>PEntryList <font color="#000080">= ^</font>TEntryList<font color="#000080">;
+  </font>TEntryList <font color="#000080">= </font><font color="#FF0000"><b>record
+     </b></font>Entry<font color="#000080">,
+     </font>Value<font color="#000080">: </font>PChar<font color="#000080">;
+     </font>Next<font color="#000080">: </font>PEntrylist<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font><font color="#008000"><i>{If these characters precede a line, it will be counted as a comment}
+  </i></font>CommentDelim<font color="#000080">: </font>CSet <font color="#000080">= [</font><font color="#800000">';'</font><font color="#000080">,</font><font color="#800000">'['</font><font color="#000080">,</font><font color="#800000">'#'</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>var
+  </b></font>List<font color="#000080">: </font>PEntryList<font color="#000080">; </font><font color="#008000"><i>{Holds entries and values}
+
+
+{Load the ini file into a linked list; this must be done before 
+attempting
+to get any entries
+Returns:
+  0 = Everything is fine
+  1 = Error opening (ie.. File not found)
+  2 = Not enough memory (remember to call freeini to get rid of already
+      stored variables}
+</i></font><font color="#FF0000"><b>function </b></font>LoadINI<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>FName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>Integer<font color="#000080">;
+</font><font color="#008000"><i>{Frees the memory allocated from LoadINI}
+</i></font><font color="#FF0000"><b>procedure </b></font>FreeINI<font color="#000080">;
+</font><font color="#008000"><i>{Gets the value from a specified entry}
+</i></font><font color="#FF0000"><b>function </b></font>GetEntry<font color="#000080">(</font>Entry<font color="#000080">: </font>TEntry<font color="#000080">; </font><font color="#FF0000"><b>const Default</b></font><font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+var
+  </b></font>S<font color="#000080">,</font>E<font color="#000080">,</font>V<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#008000"><i>{Temporary strings, E=Entry, V=Value}
+  </i></font>Temp<font color="#000080">: </font>PChar<font color="#000080">;   </font><font color="#008000"><i>{Used to store a string as a PChar for StrComp}
+  </i></font>T<font color="#000080">: </font>Text<font color="#000080">;       </font><font color="#008000"><i>{INI text file}
+  </i></font>LNew<font color="#000080">: </font>PEntryList<font color="#000080">; </font><font color="#008000"><i>{New link}
+
+{Pascal string to ASCIIZ; Thanks to Andrew Eigus}
+</i></font><font color="#FF0000"><b>function </b></font>Pas2PChar<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>S <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font>PChar<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les di,S
+  mov al,byte ptr [es:di]
+  cmp al,0
+  je  @@1
+  push di
+  sub ah,ah
+  cld
+  inc al
+  stosb
+  add di,ax
+  dec di
+  sub al,al
+  stosb
+  pop di
+@@1:
+  inc di
+  mov dx,es
+  mov ax,di
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Pas2PChar }
+
+{ASCIIZ to Pascal}
+</i></font><font color="#FF0000"><b>function </b></font>PChar2Pas<font color="#000080">(</font>P<font color="#000080">: </font>PChar<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>IDX<font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Idx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>P<font color="#000080">[</font>IDX<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>do
+  begin
+    </b></font>PChar2Pas<font color="#000080">[</font>succ<font color="#000080">(</font>Idx<font color="#000080">)] := </font>P<font color="#000080">[</font>IDX<font color="#000080">];
+    </font>inc<font color="#000080">(</font>Idx<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>PChar2Pas<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>Chr<font color="#000080">(</font>Idx<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Fast uppercase function}
+</i></font><font color="#FF0000"><b>function </b></font>UpperCase<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push ds
+  lds si, s
+  les di, @result
+  lodsb
+  stosb
+  xor ch, ch
+  mov cl, al
+  jcxz @empty
+@upperloop:
+  lodsb
+  cmp al, 'a'
+  jb @cont
+  cmp al, 'z'
+  ja @cont
+  sub al, ' '
+@cont:
+  stosb
+  loop @upperloop
+@empty:
+  pop ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Removes all instances of DELCHAR from the right side of S}
+</i></font><font color="#FF0000"><b>function </b></font>CutRight<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>DelChar<font color="#000080">: </font>Char<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Len<font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CutRight <font color="#000080">:= </font>S<font color="#000080">;
+  </font>Len <font color="#000080">:= </font>Ord<font color="#000080">(</font>S<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]);
+  </font><font color="#FF0000"><b>while </b></font>S<font color="#000080">[</font>Len<font color="#000080">] = </font>DelChar <font color="#FF0000"><b>do </b></font>Dec<font color="#000080">(</font>Len<font color="#000080">);
+  </font>CutRight<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>Chr<font color="#000080">(</font>Len<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Removes all instances of DELCHAR from the left side of S}
+</i></font><font color="#FF0000"><b>function </b></font>CutLeft<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>DelChar<font color="#000080">: </font>Char<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Cnt<font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Cnt <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>S<font color="#000080">[</font>Cnt<font color="#000080">] = </font>DelChar <font color="#FF0000"><b>do </b></font>Inc<font color="#000080">(</font>Cnt<font color="#000080">);
+  </font>CutLeft <font color="#000080">:= </font>Copy<font color="#000080">(</font>S<font color="#000080">, </font>Cnt<font color="#000080">, </font>Length<font color="#000080">(</font>S<font color="#000080">)-</font>pred<font color="#000080">(</font>Cnt<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Splits a INI string into 2 parts: the entry and value}
+</i></font><font color="#FF0000"><b>procedure </b></font>Split<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>E<font color="#000080">,</font>V<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>len<font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Len <font color="#000080">:= </font>Pos<font color="#000080">(</font><font color="#800000">'='</font><font color="#000080">,</font>S<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Len <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>V <font color="#000080">:= </font>Copy<font color="#000080">(</font>S<font color="#000080">, </font>succ<font color="#000080">(</font>Len<font color="#000080">), </font>succ<font color="#000080">(</font>Length<font color="#000080">(</font>S<font color="#000080">)-</font>Len<font color="#000080">));
+    </font>E <font color="#000080">:= </font>S<font color="#000080">;
+    </font>E<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>chr<font color="#000080">(</font>pred<font color="#000080">(</font>Len<font color="#000080">));
+    </font>V <font color="#000080">:= </font>CutLeft<font color="#000080">(</font>V<font color="#000080">, </font><font color="#800000">#32</font><font color="#000080">);
+    </font>V <font color="#000080">:= </font>CutLeft<font color="#000080">(</font>V<font color="#000080">, </font><font color="#800000">#9</font><font color="#000080">);
+    </font>V <font color="#000080">:= </font>CutRight<font color="#000080">(</font>V<font color="#000080">, </font><font color="#800000">#32</font><font color="#000080">);
+    </font>V <font color="#000080">:= </font>CutRight<font color="#000080">(</font>V<font color="#000080">, </font><font color="#800000">#9</font><font color="#000080">);
+    </font>E <font color="#000080">:= </font>CutRight<font color="#000080">(</font>E<font color="#000080">, </font><font color="#800000">#32</font><font color="#000080">);
+    </font>E <font color="#000080">:= </font>CutRight<font color="#000080">(</font>E<font color="#000080">, </font><font color="#800000">#9</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end else
+  begin      </b></font><font color="#008000"><i>{Invalid entry}
+    </i></font>E <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font>V <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{String unit emulation}
+{$IFNDEF VER70}
+</i></font><font color="#FF0000"><b>function </b></font>StrNew<font color="#000080">(</font>S<font color="#000080">: </font>PChar<font color="#000080">): </font>PChar<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>I<font color="#000080">,
+  </font>L<font color="#000080">: </font>Word<font color="#000080">;
+  </font>P<font color="#000080">: </font>PChar<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>StrNew <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>S<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>S<font color="#000080">^ &lt;&gt; </font><font color="#800000">#0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+    </b></font>L <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font>S<font color="#000080">[</font>L<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>L<font color="#000080">);
+    </font>inc<font color="#000080">(</font>L<font color="#000080">);
+    </font>GetMem<font color="#000080">(</font>P<font color="#000080">,</font>L<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>P <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>L <font color="#FF0000"><b>do </b></font>P<font color="#000080">[</font>I<font color="#000080">] := </font>S<font color="#000080">[</font>I<font color="#000080">];
+    </font>StrNew <font color="#000080">:= </font>P<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>StrDispose<font color="#000080">(</font>S<font color="#000080">: </font>PChar<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>L<font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>L <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>S<font color="#000080">[</font>L<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>L<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>S <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then </b></font>FreeMem<font color="#000080">(</font>S<font color="#000080">,</font>succ<font color="#000080">(</font>L<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>StrComp<font color="#000080">(</font>Str1<font color="#000080">, </font>Str2<font color="#000080">: </font>PChar<font color="#000080">): </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>L1<font color="#000080">,
+  </font>L2<font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>StrComp <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>L1 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>Str1<font color="#000080">[</font>L1<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>L1<font color="#000080">);
+  </font>l2 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>Str2<font color="#000080">[</font>L2<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>do </b></font>inc<font color="#000080">(</font>L2<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>L1 <font color="#000080">&lt;&gt; </font>L2 <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>L1 <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>L2 <font color="#FF0000"><b>do if </b></font>Str1<font color="#000080">[</font>L1<font color="#000080">] &lt;&gt; </font>Str2<font color="#000080">[</font>L1<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font>StrComp <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$ENDIF}
+
+{Calculates the amount of memory that would be actually allocated;
+ Counts it in 16byte paragraphs}
+</i></font><font color="#FF0000"><b>function </b></font>MemUsed<font color="#000080">(</font>M<font color="#000080">: </font>Word<font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>R<font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MemUsed <font color="#000080">:= </font>succ<font color="#000080">(</font>M <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LoadINI<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>FName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>T<font color="#000080">, </font>FName<font color="#000080">);
+  </font>reset<font color="#000080">(</font>T<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{Exit if there is a file error}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>LoadINI <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>while not </b></font>Eof<font color="#000080">(</font>T<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>Readln<font color="#000080">(</font>T<font color="#000080">, </font>S<font color="#000080">);
+    </font>S <font color="#000080">:= </font>uppercase<font color="#000080">(</font>S<font color="#000080">);
+    </font>S <font color="#000080">:= </font>CutLeft<font color="#000080">(</font>S<font color="#000080">, </font><font color="#800000">#32</font><font color="#000080">); </font><font color="#008000"><i>{Remove spaces and tabs}
+    </i></font>S <font color="#000080">:= </font>CutLeft<font color="#000080">(</font>S<font color="#000080">, </font><font color="#800000">#9</font><font color="#000080">);
+    </font><font color="#008000"><i>{Make sure string is not a comment}
+    </i></font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>S<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font>CommentDelim<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>S<font color="#000080">) &gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>Split<font color="#000080">(</font>S<font color="#000080">, </font>E<font color="#000080">, </font>V<font color="#000080">); </font><font color="#008000"><i>{Split string into entry and value}
+
+      {When low on memory, start checking to make sure we have enough}
+      </i></font><font color="#FF0000"><b>if </b></font>MaxAvail <font color="#000080">&lt; </font><font color="#800000">300 </font><font color="#FF0000"><b>then if </b></font>MaxAvail <font color="#000080">&lt; </font>MemUsed<font color="#000080">(</font>SizeOf<font color="#000080">(</font>TEntryList<font color="#000080">)) +
+        </font>MemUsed<font color="#000080">(</font>succ<font color="#000080">(</font>Length<font color="#000080">(</font>V<font color="#000080">)))+ </font>MemUsed<font color="#000080">(</font>Succ<font color="#000080">(</font>Length<font color="#000080">(</font>E<font color="#000080">))) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>LoadINI <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font><font color="#008000"><i>{FreeINI;}
+        </i></font>CLose<font color="#000080">(</font>T<font color="#000080">);
+        </font>Exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>V <font color="#000080">&lt;&gt; </font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>E <font color="#000080">&lt;&gt; </font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font><font color="#008000"><i>{Add new link to list}
+        </i></font>New<font color="#000080">(</font>LNew<font color="#000080">);
+        </font><font color="#008000"><i>{Allocate new copies on the stack; we don't want the PChar's
+         pointing to E and V}
+        </i></font>Lnew<font color="#000080">^.</font>Entry <font color="#000080">:= </font>StrNew<font color="#000080">(</font>Pas2Pchar<font color="#000080">(</font>E<font color="#000080">));
+        </font>Lnew<font color="#000080">^.</font>Value <font color="#000080">:= </font>StrNew<font color="#000080">(</font>Pas2Pchar<font color="#000080">(</font>V<font color="#000080">));
+        </font>Lnew<font color="#000080">^.</font>Next <font color="#000080">:= </font>List<font color="#000080">;
+        </font>List <font color="#000080">:= </font>LNew<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>LoadINI <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>close<font color="#000080">(</font>T<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>FreeINI<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  while </b></font>List <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil do
+  begin
+    </b></font>StrDispose<font color="#000080">(</font>List<font color="#000080">^.</font>Entry<font color="#000080">);
+    </font>StrDispose<font color="#000080">(</font>List<font color="#000080">^.</font>Value<font color="#000080">);
+    </font>LNew <font color="#000080">:= </font>List<font color="#000080">;
+    </font>List <font color="#000080">:= </font>List<font color="#000080">^.</font>Next<font color="#000080">;
+    </font>Dispose<font color="#000080">(</font>Lnew<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>GetEntry<font color="#000080">(</font>Entry<font color="#000080">: </font>TEntry<font color="#000080">; </font><font color="#FF0000"><b>const Default</b></font><font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>NotFound<font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NotFound <font color="#000080">:= </font>True<font color="#000080">;
+  </font>LNew <font color="#000080">:= </font>List<font color="#000080">;
+  </font>Entry <font color="#000080">:= </font>uppercase<font color="#000080">(</font>Entry<font color="#000080">);
+  </font><font color="#008000"><i>{Make this a PCHAR so we can use StrComp on it}
+  </i></font>Temp <font color="#000080">:= </font>Pas2Pchar<font color="#000080">(</font>Entry<font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>LNew <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>NotFound <font color="#FF0000"><b>do
+  begin
+    if </b></font>StrComp<font color="#000080">(</font>Lnew<font color="#000080">^.</font>Entry<font color="#000080">, </font>Temp<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      </b></font>NotFound <font color="#000080">:= </font>False<font color="#000080">;
+      </font>GetEntry <font color="#000080">:= </font>PChar2Pas<font color="#000080">(</font>LNew<font color="#000080">^.</font>Value<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Lnew <font color="#000080">:= </font>LNew<font color="#000080">^.</font>Next<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{Return Default uppercase, to provide consistancy}
+  </i></font><font color="#FF0000"><b>if </b></font>NotFound <font color="#FF0000"><b>then </b></font>GetEntry <font color="#000080">:= </font>uppercase<font color="#000080">(</font><font color="#FF0000"><b>Default</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0174.PAS">Original</a><b>]</b></p></body>
+</html>

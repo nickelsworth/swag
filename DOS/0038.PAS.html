@@ -1,0 +1,563 @@
+<html>
+<head><title> "National Language Support" by HELGE OLAV HELGESEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0038.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{
+  Borland Pascal 7.0 National Language Support, with support for protected
+  mode. Written in october 1993 by Helge Olav Helgesen
+
+  The purpose of this unit is to give you the ability to write country-
+  dependant programs. I won't explain much how it works; since you have the
+  source, feel free to explore/change the source.
+
+  To do so I have a written a colletion of procedures, which are described
+  here:
+
+  procedure CreateTable(cc: Word);
+    This one creates a new table with the specified country-code. if you
+    specify a value of 0, the default country will be loaded. You should
+    check for errors thru GetError and PeekError.
+  procedure DumpTable  (const name: string);
+    This one was written for debugging only, and shoudn't be used. It saves
+    the current translation table to the specific file
+  procedure Upper(var s: OpenString);
+  procedure Lower(var s: OpenString);
+    These two translates a string into upper or lower case only.
+  function GetError:  word;
+  function PeekError: word;
+    These two can be used to get (and clear) the result from last
+    CreateTable. GetError clears ErrorCode afterwards, while PeekError
+    doesn't.
+  function Convert2Time(const dt: DateTime): string8;
+    This one will create a formatted string containing the time specified
+    in DateTime.Hour, DateTime.Min and DateTime.Sec. The string is formatted
+    according to the loaded country.
+  function Convert2Date(const dt: DateTime): string8;
+    This one does the same as the one above, except that a date is returned
+    instead.
+  function ConvertR2Currency(no: real): string;
+    This one will turn a real value into a formatted string, with the county's
+    currency symbol placed right.
+    The line 'WriteLn(ConvertR2Currency(1234.123));' will result
+    In USA:    $1,234.12
+    In Norway: Kr 1.234,12
+  function UpChar(Ch: Char): Char;
+  function LoChar(Ch: Char): Char;
+    These two are written with inline statements, and will thus place the
+    expanded code into your program's code segment. Since they became
+    fairly large, you shoudn't use them too much.
+  procedure DumpAllCountries;
+    This one is only compiled in real mode, and is only intended to use with
+    debugging. It writes all countries that is available to the screen.
+  var Table: TTranslationTable;
+    This is *the* 256 byte translation table, which contains the mapping to
+    upper and lower chars.
+  var ErrorCode: word;
+    Result from last CreateTable. This is the Dos error code, as described
+    in 'Run-time error messages'.
+  var CurrTable: word;
+    If last CreateTable successed, this contains the country that is loaded.
+  var UnitOK: boolean;
+    Is TRUE if
+      1) Dos 3+ is loaded
+      2) Could allocate real-mode memory (DPMI only)
+  var CountryInfo: PCountryInfo;
+    This is a pointer to the current countrys info table. This pointer should
+    never derefenced unless UnitOK is true. It contains only valid data if
+  (CurrTable&gt;0) and UnitOK!
+
+  I haven't done much to optimize the code. So even small changes may
+  increase the speed. If you have any comments, suggestion etc. feel free
+  to leave me a note.
+
+  You can reach me thru the following nets:
+    ILink     - thru Qmail, Programming, ASM and Pascal
+    PolarNet  - thru Pascal and Post
+    Rime      - thru Common, Pascal and ASM. I'm located at site MIDNIGHT
+    ScanNet   - virtually any conference
+    SourceNet - thru the Pascal conference
+    WEB       - thru the Pascal conference
+
+  You may also reach me at the following bulletin boards:
+    Group One BBS       - +1 312 752-1258
+    Midnight Sun BBS    - +47 755 84 545
+    Programmer's BBS    - +47 22 71 41 07
+
+  In all cases, my name is HELGE HELGESEN. My mail address is:
+  Helge Olav Helgesen
+  Box 726
+  8001 BODOE
+  Norway
+
+  Tlf. +47 755 23 694
+}
+{$S-,B- Do not change these! A change will cause faults! }
+{$G+,D+,R-,Q-,L+,O+}
+{$IFDEF Windows}</i></font>Sorry<font color="#000080">, </font>Windows <font color="#FF0000"><b>is not </b></font>supported<font color="#000080">...</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>unit </b></font>NLS<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+uses </b></font><font color="#008000"><i>{$IFDEF DPMI}</i></font>WinAPI<font color="#000080">,</font><font color="#008000"><i>{$ENDIF}</i></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>TTranslationTable <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">127</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>AChar <font color="#000080">= </font><font color="#FF0000"><b>record </b></font><font color="#008000"><i>{ ASCIIZ char from Country Info }
+    </i></font>Letter<font color="#000080">: </font>char<font color="#000080">;
+    </font>Dummy<font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ AChar }
+  </i></font>PCountryInfo <font color="#000080">= ^</font>TCountryInfo<font color="#000080">;
+  </font>TCountryInfo <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>DTFormat<font color="#000080">: </font>word<font color="#000080">;                </font><font color="#008000"><i>{ Date/Time format     }
+    </i></font>CurrSym<font color="#000080">:  </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">; </font><font color="#008000"><i>{ currency symbol      }
+    </i></font>ThouSep<font color="#000080">,                       </font><font color="#008000"><i>{ thousand separator   }
+    </i></font>DeciSep<font color="#000080">,                       </font><font color="#008000"><i>{ decimal separator    }
+    </i></font>DateSep<font color="#000080">,                       </font><font color="#008000"><i>{ date separator       }
+    </i></font>TimeSep<font color="#000080">:  </font>AChar<font color="#000080">;               </font><font color="#008000"><i>{ time separator       }
+    </i></font>CurrFmt<font color="#000080">:  </font>byte<font color="#000080">;                </font><font color="#008000"><i>{ currency format      }
+    </i></font>Digits<font color="#000080">:   </font>byte<font color="#000080">;                </font><font color="#008000"><i>{ digits after decimal }
+    </i></font>TimeFmt<font color="#000080">:  </font>boolean<font color="#000080">;             </font><font color="#008000"><i>{ FALSE=12h else 24h   }
+    </i></font>CaseMap<font color="#000080">:  </font>pointer<font color="#000080">;             </font><font color="#008000"><i>{ real mode case map   }
+    </i></font>DataSep<font color="#000080">:  </font>AChar<font color="#000080">;               </font><font color="#008000"><i>{ data list separator  }
+    </i></font>RFU<font color="#000080">:      </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ not used             }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ TCountryInfo }
+  </i></font>String8 <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>var
+  </b></font>Table<font color="#000080">: </font>TTranslationTable<font color="#000080">;  </font><font color="#008000"><i>{ the translation table                   }
+  </i></font>ErrorCode<font color="#000080">: </font>word<font color="#000080">;           </font><font color="#008000"><i>{ error code from last create table       }
+  </i></font>CurrTable<font color="#000080">: </font>word<font color="#000080">;           </font><font color="#008000"><i>{ current country loaded, or 0 if none    }
+  </i></font>UnitOK<font color="#000080">: </font>boolean<font color="#000080">;           </font><font color="#008000"><i>{ true if extentions are allowed          }
+  </i></font>CountryInfo<font color="#000080">: </font>PCountryInfo<font color="#000080">; </font><font color="#008000"><i>{ NB! Protected Mode selector under DPMI! }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>CreateTable<font color="#000080">(</font>cp<font color="#000080">: </font>word<font color="#000080">);
+  </font><font color="#008000"><i>{ -creates new table }
+</i></font><font color="#FF0000"><b>procedure </b></font>DumpTable  <font color="#000080">(</font><font color="#FF0000"><b>const </b></font>name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+  </font><font color="#008000"><i>{ -saves table to disk, mainly written for debugging purposes }
+</i></font><font color="#FF0000"><b>procedure </b></font>Upper      <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>s<font color="#000080">: </font>OpenString<font color="#000080">);
+  </font><font color="#008000"><i>{ -translate string to upper case (A NAME) }
+</i></font><font color="#FF0000"><b>procedure </b></font>Lower      <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>s<font color="#000080">: </font>OpenString<font color="#000080">);
+  </font><font color="#008000"><i>{ -translate string to lower case (a name) }
+</i></font><font color="#FF0000"><b>function  </b></font>GetError<font color="#000080">:  </font>word<font color="#000080">;
+  </font><font color="#008000"><i>{ -get and clear error }
+</i></font><font color="#FF0000"><b>function  </b></font>PeekError<font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#008000"><i>{ -get error }
+</i></font><font color="#FF0000"><b>function  </b></font>Convert2Time<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>dt<font color="#000080">: </font>DateTime<font color="#000080">): </font>string8<font color="#000080">;
+  </font><font color="#008000"><i>{ -converts time part of DateTime rec info country dep. string }
+</i></font><font color="#FF0000"><b>function  </b></font>Convert2Date<font color="#000080">(</font><font color="#FF0000"><b>const </b></font>dt<font color="#000080">: </font>DateTime<font color="#000080">): </font>string8<font color="#000080">;
+  </font><font color="#008000"><i>{ -converts date part into XX:YY:ZZ country dep. }
+</i></font><font color="#FF0000"><b>function  </b></font>ConvertR2Currency<font color="#000080">(</font>no<font color="#000080">: </font>real<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ -converts real value to currency }
+</i></font><font color="#FF0000"><b>function  </b></font>UpChar<font color="#000080">(</font>Ch<font color="#000080">: </font>Char<font color="#000080">): </font>Char<font color="#000080">;
+  </font><font color="#008000"><i>{ -converts char to upper case }
+</i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$58</font><font color="#000080">/        </font><font color="#008000"><i>{ pop ax }
+       </i></font><font color="#800000">$88</font><font color="#000080">/</font><font color="#800000">$c4</font><font color="#000080">/    </font><font color="#008000"><i>{ mov ah, al }
+       </i></font><font color="#800000">$a8</font><font color="#000080">/</font><font color="#800000">$80</font><font color="#000080">/    </font><font color="#008000"><i>{ test al, 80h }
+       </i></font><font color="#800000">$74</font><font color="#000080">/</font><font color="#800000">$10</font><font color="#000080">/    </font><font color="#008000"><i>{ je @1 }
+       </i></font><font color="#800000">$8b</font><font color="#000080">/</font><font color="#800000">$d8</font><font color="#000080">/    </font><font color="#008000"><i>{ mov bx, ax }
+       </i></font><font color="#800000">$32</font><font color="#000080">/</font><font color="#800000">$ff</font><font color="#000080">/    </font><font color="#008000"><i>{ xor bh, bh }
+       </i></font><font color="#800000">$8a</font><font color="#000080">/</font><font color="#800000">$a7</font><font color="#000080">/    </font><font color="#008000"><i>{ mov ah, [bx+ }
+       </i></font><font color="#000080">&gt;</font>Table<font color="#000080">-</font><font color="#800000">$80</font><font color="#000080">/ </font><font color="#008000"><i>{ Table-80h] }
+       </i></font><font color="#800000">$84</font><font color="#000080">/</font><font color="#800000">$e4</font><font color="#000080">/    </font><font color="#008000"><i>{ test ah, ah }
+       </i></font><font color="#800000">$74</font><font color="#000080">/</font><font color="#800000">$0d</font><font color="#000080">/    </font><font color="#008000"><i>{ le @2 }
+       </i></font><font color="#800000">$88</font><font color="#000080">/</font><font color="#800000">$e0</font><font color="#000080">/    </font><font color="#008000"><i>{ mov al, ah }
+       </i></font><font color="#800000">$eb</font><font color="#000080">/</font><font color="#800000">$09</font><font color="#000080">/    </font><font color="#008000"><i>{ jmp @2 }
+{@1:}  </i></font><font color="#800000">$f6</font><font color="#000080">/</font><font color="#800000">$d4</font><font color="#000080">/    </font><font color="#008000"><i>{ not ah }
+       </i></font><font color="#800000">$f6</font><font color="#000080">/</font><font color="#800000">$c4</font><font color="#000080">/</font><font color="#800000">$60</font><font color="#000080">/</font><font color="#008000"><i>{ test ah, 60h }
+       </i></font><font color="#800000">$75</font><font color="#000080">/</font><font color="#800000">$02</font><font color="#000080">/    </font><font color="#008000"><i>{ jne @2 }
+       </i></font><font color="#800000">$34</font><font color="#000080">/</font><font color="#800000">$20     </font><font color="#008000"><i>{ xor al, 20h }
+{@2:} </i></font><font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>LoChar<font color="#000080">(</font>Ch<font color="#000080">: </font>Char<font color="#000080">): </font>Char<font color="#000080">;
+  </font><font color="#008000"><i>{ -translates Ch to lower char }
+</i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$58</font><font color="#000080">/        </font><font color="#008000"><i>{ pop ax }
+       </i></font><font color="#800000">$a8</font><font color="#000080">/</font><font color="#800000">$80</font><font color="#000080">/    </font><font color="#008000"><i>{ test al, 80h }
+       </i></font><font color="#800000">$74</font><font color="#000080">/</font><font color="#800000">$10</font><font color="#000080">/    </font><font color="#008000"><i>{ le @1 }
+       </i></font><font color="#800000">$8b</font><font color="#000080">/</font><font color="#800000">$d8</font><font color="#000080">/    </font><font color="#008000"><i>{ mov bx, ax }
+       </i></font><font color="#800000">$32</font><font color="#000080">/</font><font color="#800000">$ff</font><font color="#000080">/    </font><font color="#008000"><i>{ xor bh, bh }
+       </i></font><font color="#800000">$8a</font><font color="#000080">/</font><font color="#800000">$a7</font><font color="#000080">/    </font><font color="#008000"><i>{ mov ah, [bx+ }
+       </i></font><font color="#000080">&gt;</font>Table<font color="#000080">/     </font><font color="#008000"><i>{ TABLE] }
+       </i></font><font color="#800000">$0a</font><font color="#000080">/</font><font color="#800000">$e4</font><font color="#000080">/    </font><font color="#008000"><i>{ or ah, ah }
+       </i></font><font color="#800000">$74</font><font color="#000080">/</font><font color="#800000">$0c</font><font color="#000080">/    </font><font color="#008000"><i>{ je @2 }
+       </i></font><font color="#800000">$88</font><font color="#000080">/</font><font color="#800000">$e0</font><font color="#000080">/    </font><font color="#008000"><i>{ mov al, ah }
+       </i></font><font color="#800000">$eb</font><font color="#000080">/</font><font color="#800000">$08</font><font color="#000080">/    </font><font color="#008000"><i>{ jmp @2 }
+{@1:}  </i></font><font color="#800000">$88</font><font color="#000080">/</font><font color="#800000">$c4</font><font color="#000080">/    </font><font color="#008000"><i>{ mov ah, al }
+       </i></font><font color="#800000">$a8</font><font color="#000080">/</font><font color="#800000">$c0</font><font color="#000080">/    </font><font color="#008000"><i>{ test al, 0c0h }
+       </i></font><font color="#800000">$74</font><font color="#000080">/</font><font color="#800000">$08</font><font color="#000080">/    </font><font color="#008000"><i>{ je @2 }
+       </i></font><font color="#800000">$34</font><font color="#000080">/</font><font color="#800000">$20     </font><font color="#008000"><i>{ xor al, 20h }
+{@2:} </i></font><font color="#000080">);
+
+</font><font color="#008000"><i>{$IFDEF MSDOS}
+</i></font><font color="#FF0000"><b>procedure </b></font>DumpAllCountries<font color="#000080">;
+  </font><font color="#008000"><i>{ -dumps all country codes supported. For debugging. Works only in real mode }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>implementation
+
+</b></font><font color="#008000"><i>{$IFDEF DPMI}
+</i></font><font color="#FF0000"><b>type
+  </b></font>TBit32 <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Low<font color="#000080">, </font>High<font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Bit32 }
+  </i></font>TCallRealMode <font color="#000080">= </font><font color="#FF0000"><b>record </b></font><font color="#008000"><i>{ DPMI structure used to call real mode procs }
+    </i></font>EDI<font color="#000080">,   </font>ESI<font color="#000080">, </font>EBP<font color="#000080">, </font>RFU1<font color="#000080">, </font>EBX<font color="#000080">,
+    </font>EDX<font color="#000080">,   </font>ECX<font color="#000080">, </font>EAX<font color="#000080">: </font>TBit32<font color="#000080">;
+    </font>Flags<font color="#000080">, </font>rES<font color="#000080">, </font>rDS<font color="#000080">, </font>rFS<font color="#000080">,
+    </font>rGS<font color="#000080">,   </font>rIP<font color="#000080">, </font>rCS<font color="#000080">, </font>rSP<font color="#000080">,
+    </font>rSS<font color="#000080">:   </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ TCallRealMode }
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>ciSelector<font color="#000080">: </font>TBit32<font color="#000080">;  </font><font color="#008000"><i>{ selector and segment to CountryInfo     }
+  </i></font>MyExitProc<font color="#000080">: </font>pointer<font color="#000080">; </font><font color="#008000"><i>{ DPMI exit proc to deallocate Dos memory }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>string2 <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">];
+  </font>Pstring <font color="#000080">= ^</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Convert2Digit<font color="#000080">(</font>no<font color="#000080">: </font>word<font color="#000080">): </font>string2<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>s<font color="#000080">: </font>string8<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Str<font color="#000080">(</font>no<font color="#000080">:</font><font color="#800000">2</font><font color="#000080">, </font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]&gt;</font><font color="#800000">#2 </font><font color="#FF0000"><b>then </b></font>delete<font color="#000080">(</font>s<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>byte<font color="#000080">(</font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">])-</font><font color="#800000">2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">#32 </font><font color="#FF0000"><b>then </b></font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">'0'</font><font color="#000080">;
+  </font>Convert2Digit<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Convert2Digit }
+
+{$IFDEF MSDOS}
+</i></font><font color="#FF0000"><b>procedure </b></font>DumpAllCountries<font color="#000080">;
+  </font><font color="#FF0000"><b>function </b></font>TestCountry<font color="#000080">(</font>no<font color="#000080">: </font>word<font color="#000080">): </font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>var </b></font>dummy<font color="#000080">: </font>TCountryInfo<font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">push ds
+    mov  ax, ss
+    mov  ds, ax
+    lea  dx, dummy
+    mov  ax, $38ff
+    mov  bx, no
+    or   bh, bh
+    je   @1
+    mov  al, bl
+@1: int  $21
+    pop  ds
+    jc   @x
+    xor  ax, ax
+@x:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ DumpAllcountries.TestCountry }
+</i></font><font color="#FF0000"><b>var
+  </b></font>x<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>x<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">900 </font><font color="#FF0000"><b>do if not </b></font>TestCountry<font color="#000080">(</font>x<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>write<font color="#000080">(</font>x<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ DumpAllCountries }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>function </b></font>Convert2Time<font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>AM<font color="#000080">: </font>string2 <font color="#000080">= </font><font color="#800000">'AM'</font><font color="#000080">;
+  </font>PM<font color="#000080">: </font>string2 <font color="#000080">= </font><font color="#800000">'PM'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>function </b></font>To12<font color="#000080">(</font>no<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>no<font color="#000080">&gt;</font><font color="#800000">12 </font><font color="#FF0000"><b>then </b></font>To12<font color="#000080">:=</font>no<font color="#000080">-</font><font color="#800000">12 </font><font color="#FF0000"><b>else </b></font>To12<font color="#000080">:=</font>no<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Convert2Time.To12 }
+  </i></font><font color="#FF0000"><b>function </b></font>AmPm<font color="#000080">(</font>no<font color="#000080">: </font>word<font color="#000080">): </font>Pstring<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>no<font color="#000080">&gt;</font><font color="#800000">12 </font><font color="#FF0000"><b>then </b></font>AmPm<font color="#000080">:=@</font>PM <font color="#FF0000"><b>else </b></font>AmPm<font color="#000080">:=@</font>AM<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Convert2Time.AmPm }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Delemiter<font color="#000080">: </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ Convert2Time }
+  </i></font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>ErrorCode<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Delemiter<font color="#000080">:=</font>CountryInfo<font color="#000080">^.</font>TimeSep<font color="#000080">.</font>Letter
+  <font color="#FF0000"><b>else
+    </b></font>Delemiter<font color="#000080">:=</font><font color="#800000">':'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CurrTable<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>CountryInfo<font color="#000080">^.</font>TimeFmt <font color="#FF0000"><b>then
+    </b></font>Convert2Time<font color="#000080">:=</font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Hour<font color="#000080">)+</font>Delemiter<font color="#000080">+ </font><font color="#008000"><i>{ time }
+                  </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Min<font color="#000080">)+</font>Delemiter<font color="#000080">+  </font><font color="#008000"><i>{ min  }
+                  </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Sec<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>Convert2Time<font color="#000080">:=</font>Convert2Digit<font color="#000080">(</font>To12<font color="#000080">(</font>dt<font color="#000080">.</font>Hour<font color="#000080">))+</font>Delemiter<font color="#000080">+ </font><font color="#008000"><i>{ time }
+                  </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Min<font color="#000080">)+</font>Delemiter<font color="#000080">+        </font><font color="#008000"><i>{ min  }
+                  </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Sec<font color="#000080">)+</font><font color="#800000">#32</font><font color="#000080">+</font>AMPM<font color="#000080">(</font>dt<font color="#000080">.</font>Hour<font color="#000080">)^</font><font color="#008000"><i>{ sec  }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Convert2Time }
+
+</i></font><font color="#FF0000"><b>function </b></font>Convert2Date<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Dele<font color="#000080">: </font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>UnitOK <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CurrTable<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Dele<font color="#000080">:=</font>CountryInfo<font color="#000080">^.</font>DateSep<font color="#000080">.</font>Letter
+  <font color="#FF0000"><b>else
+    </b></font>Dele<font color="#000080">:=</font><font color="#800000">'/'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CurrTable<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CountryInfo<font color="#000080">^.</font>DTFormat<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  case </b></font>CountryInfo<font color="#000080">^.</font>DTFormat <font color="#FF0000"><b>of
+    </b></font><font color="#800000">1</font><font color="#000080">: </font>Convert2Date<font color="#000080">:=</font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Day<font color="#000080">)+</font>Dele<font color="#000080">+   </font><font color="#008000"><i>{ date  }
+                     </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Month<font color="#000080">)+</font>Dele<font color="#000080">+ </font><font color="#008000"><i>{ month }
+                     </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Year<font color="#000080">);       </font><font color="#008000"><i>{ year  }
+    </i></font><font color="#800000">2</font><font color="#000080">: </font>Convert2Date<font color="#000080">:=</font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Year<font color="#000080">)+</font>Dele<font color="#000080">+  </font><font color="#008000"><i>{ year  }
+                     </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Month<font color="#000080">)+</font>Dele<font color="#000080">+ </font><font color="#008000"><i>{ month }
+                     </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Day<font color="#000080">);
+  </font><font color="#FF0000"><b>end </b></font><font color="#008000"><i>{ case }
+  </i></font><font color="#FF0000"><b>else </b></font><font color="#008000"><i>{ if }
+    </i></font>Convert2Date<font color="#000080">:=   </font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Month<font color="#000080">)+</font>Dele<font color="#000080">+ </font><font color="#008000"><i>{ month }
+                     </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Day<font color="#000080">)+</font>Dele<font color="#000080">+   </font><font color="#008000"><i>{ day   }
+                     </i></font>Convert2Digit<font color="#000080">(</font>dt<font color="#000080">.</font>Year<font color="#000080">);       </font><font color="#008000"><i>{ year  }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Convert2Time }
+
+</i></font><font color="#FF0000"><b>function </b></font>ConvertR2Currency<font color="#000080">;
+  </font><font color="#FF0000"><b>function </b></font>GetCurrency<font color="#000080">: </font>string8<font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>s<font color="#000080">: </font>string8<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>s<font color="#000080">:=</font>CountryInfo<font color="#000080">^.</font>CurrSym<font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font>s<font color="#000080">[</font>byte<font color="#000080">(</font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">])]=</font><font color="#800000">#0 </font><font color="#FF0000"><b>do </b></font>dec<font color="#000080">(</font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]);
+    </font>GetCurrency<font color="#000080">:=</font>s<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ ConvertR2Currency.GetCurrency }
+  </i></font><font color="#FF0000"><b>function </b></font>FormatString<font color="#000080">(</font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>Comma<font color="#000080">, </font>Digits<font color="#000080">: </font>byte<font color="#000080">;
+    </font>c<font color="#000080">: </font>integer<font color="#000080">;
+    </font>Dele<font color="#000080">: </font>char<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Dele<font color="#000080">:=</font>CountryInfo<font color="#000080">^.</font>ThouSep<font color="#000080">.</font>Letter<font color="#000080">;     </font><font color="#008000"><i>{ get thousand delemiter          }
+    </i></font>Digits<font color="#000080">:=</font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>s<font color="#000080">);                   </font><font color="#008000"><i>{ digits before delemither        }
+    </i></font>Comma<font color="#000080">:=</font>Digits<font color="#000080">;                         </font><font color="#008000"><i>{ save comma position             }
+    </i></font><font color="#FF0000"><b>if </b></font>Digits<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Digits<font color="#000080">:=</font>Length<font color="#000080">(</font>s<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ start rightmost if no comma     }
+    </i></font>c<font color="#000080">:=</font>Digits<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">;                           </font><font color="#008000"><i>{ init counter                    }
+    </i></font><font color="#FF0000"><b>while </b></font>c<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>do
+    begin
+      </b></font>Insert<font color="#000080">(</font>Dele<font color="#000080">, </font>s<font color="#000080">, </font>c<font color="#000080">);                  </font><font color="#008000"><i>{ insert thousand delemither      }
+      </i></font>Dec<font color="#000080">(</font>c<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);                           </font><font color="#008000"><i>{ adjust pointer                  }
+      </i></font><font color="#FF0000"><b>if </b></font>Comma<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>Inc<font color="#000080">(</font>Comma<font color="#000080">);          </font><font color="#008000"><i>{ increase comma position(if any) }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ while }
+    </i></font><font color="#FF0000"><b>if </b></font>Comma<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then                        </b></font><font color="#008000"><i>{ adjust comma, if any            }
+      </i></font>s<font color="#000080">[</font>Comma<font color="#000080">]:=</font>CountryInfo<font color="#000080">^.</font>DeciSep<font color="#000080">.</font>Letter<font color="#000080">;
+    </font>FormatString<font color="#000080">:=</font>s<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ ConvertR2Currency.FormatString }
+  </i></font><font color="#FF0000"><b>function </b></font>PlaceCurrency<font color="#000080">(</font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>x<font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>x<font color="#000080">:=</font>Pos<font color="#000080">(</font>CountryInfo<font color="#000080">^.</font>DeciSep<font color="#000080">.</font>Letter<font color="#000080">, </font>s<font color="#000080">);
+    </font>Delete<font color="#000080">(</font>s<font color="#000080">, </font>x<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+    </font>Insert<font color="#000080">(</font>GetCurrency<font color="#000080">, </font>s<font color="#000080">, </font>x<font color="#000080">);
+    </font>PlaceCurrency<font color="#000080">:=</font>s<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ ConvertR2Currency.PlaceCurrency }
+</i></font><font color="#FF0000"><b>var
+  </b></font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">20</font><font color="#000080">];
+</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ ConvertR2Currency }
+  </i></font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CurrTable<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+    </b></font>Str<font color="#000080">(</font>no<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">:</font>CountryInfo<font color="#000080">^.</font>Digits<font color="#000080">, </font>s<font color="#000080">);
+    </font><font color="#FF0000"><b>while </b></font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">#32 </font><font color="#FF0000"><b>do </b></font>delete<font color="#000080">(</font>s<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+    </font>s<font color="#000080">:=</font>FormatString<font color="#000080">(</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+    </b></font>Str<font color="#000080">(</font>no<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">:</font><font color="#800000">2</font><font color="#000080">, </font>s<font color="#000080">);
+    </font><font color="#FF0000"><b>while </b></font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">#32 </font><font color="#FF0000"><b>do </b></font>delete<font color="#000080">(</font>s<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ if/else }
+  </i></font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CurrTable<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  case </b></font>CountryInfo<font color="#000080">^.</font>CurrFmt <font color="#FF0000"><b>of
+    </b></font><font color="#800000">0</font><font color="#000080">: </font>s<font color="#000080">:=</font>GetCurrency<font color="#000080">+</font>s<font color="#000080">;
+    </font><font color="#800000">1</font><font color="#000080">: </font>s<font color="#000080">:=</font>s<font color="#000080">+</font>GetCurrency<font color="#000080">;
+    </font><font color="#800000">2</font><font color="#000080">: </font>s<font color="#000080">:=</font>GetCurrency<font color="#000080">+</font><font color="#800000">#32</font><font color="#000080">+</font>s<font color="#000080">;
+    </font><font color="#800000">3</font><font color="#000080">: </font>s<font color="#000080">:=</font>s<font color="#000080">+</font><font color="#800000">#32</font><font color="#000080">+</font>GetCurrency<font color="#000080">;
+    </font><font color="#800000">4</font><font color="#000080">: </font>s<font color="#000080">:=</font>PlaceCurrency<font color="#000080">(</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ case }
+  </i></font>ConvertR2Currency<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ ConvertR2Currency }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DumpTable<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>f<font color="#000080">: </font><font color="#FF0000"><b>file of </b></font>TTranslationTable<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>f<font color="#000080">, </font>name<font color="#000080">);
+  </font>rewrite<font color="#000080">(</font>f<font color="#000080">);
+  </font>write<font color="#000080">(</font>f<font color="#000080">, </font>Table<font color="#000080">);
+  </font>close<font color="#000080">(</font>f<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CreateTable<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>b<font color="#000080">: </font>byte<font color="#000080">;
+  </font>c<font color="#000080">, </font>d<font color="#000080">: </font>char<font color="#000080">;
+  </font><font color="#FF0000"><b>procedure </b></font>GetCountryInfo<font color="#000080">(</font>cp<font color="#000080">: </font>word<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>r<font color="#000080">: </font>Registers<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>r<font color="#000080">.</font>AX<font color="#000080">:=</font><font color="#800000">$38FF</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>cp<font color="#000080">&gt;</font><font color="#800000">255 </font><font color="#FF0000"><b>then </b></font>r<font color="#000080">.</font>BX<font color="#000080">:=</font>cp <font color="#FF0000"><b>else </b></font>r<font color="#000080">.</font>AL<font color="#000080">:=</font>Lo<font color="#000080">(</font>cp<font color="#000080">);
+    </font>r<font color="#000080">.</font>DS<font color="#000080">:=</font>Seg<font color="#000080">(</font>CountryInfo<font color="#000080">^);
+    </font>r<font color="#000080">.</font>DX<font color="#000080">:=</font>Ofs<font color="#000080">(</font>CountryInfo<font color="#000080">^);
+    </font>MsDos<font color="#000080">(</font>r<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>r<font color="#000080">.</font>Flags <font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>ErrorCode<font color="#000080">:=</font>r<font color="#000080">.</font>AX<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ErrorCode<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>CurrTable<font color="#000080">:=</font>r<font color="#000080">.</font>BX <font color="#FF0000"><b>else </b></font>CurrTable<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ CreateTable.GetCoutryInfo }
+  </i></font><font color="#FF0000"><b>function </b></font>CallCaseMap<font color="#000080">(</font>Letter<font color="#000080">: </font>char<font color="#000080">): </font>char<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$IFNDEF MSDOS}
+  </i></font><font color="#FF0000"><b>var
+    </b></font>regs<font color="#000080">: </font>TCallRealMode<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov  al, Letter
+  </font><font color="#008000"><i>{$IFNDEF MSDOS}
+    </i></font><font color="#FF00FF">mov  word ptr regs.EAX, ax
+    mov  regs.rSP, 0
+    mov  regs.rSS, 0
+    les  di, CountryInfo
+    mov  ax, word ptr es:[di].TCountryInfo.CaseMap
+    mov  regs.RIP, ax
+    mov  ax, word ptr es:[di].TCountryInfo.CaseMap+2
+    mov  regs.RCS, ax
+    mov  ax, ss
+    mov  es, ax
+    lea  di, regs
+    xor  cx, cx
+    mov  ax, $301
+    int  $31 </font><font color="#008000"><i>{ execute real mode proc }
+    </i></font><font color="#FF00FF">mov  ax, word ptr regs.EAX
+  </font><font color="#008000"><i>{$ELSE}
+    </i></font><font color="#FF00FF">les  di, CountryInfo
+    call es:[di].TCountryInfo.CaseMap
+  </font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ CreateTable.CallCaseMap }
+  </i></font><font color="#FF0000"><b>procedure </b></font>MapIn<font color="#000080">(</font>NewChar<font color="#000080">, </font>OldChar<font color="#000080">: </font>char<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    </b></font>Table<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">, </font>byte<font color="#000080">(</font>OldChar<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$7f</font><font color="#000080">]:=</font>NewChar<font color="#000080">;
+    </font>Table<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">, </font>byte<font color="#000080">(</font>NewChar<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$7f</font><font color="#000080">]:=</font>OldChar<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ CreateTable.MapIn }
+</i></font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ CreateTable }
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ErrorCode<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or not </b></font>UnitOK <font color="#FF0000"><b>then </b></font>exit<font color="#000080">; </font><font color="#008000"><i>{ leave if any pending error }
+  </i></font>FillChar<font color="#000080">(</font>Table<font color="#000080">, </font>sizeof<font color="#000080">(</font>Table<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+  </font>GetCountryInfo<font color="#000080">(</font>cp<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ErrorCode<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">; </font><font color="#008000"><i>{ leave if any error occured }
+  </i></font><font color="#FF0000"><b>for </b></font>b<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">127 </font><font color="#FF0000"><b>do
+  begin
+    </b></font>c<font color="#000080">:=</font>CallCaseMap<font color="#000080">(</font>char<font color="#000080">(</font>b<font color="#000080">+</font><font color="#800000">128</font><font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>c<font color="#000080">&lt;&gt;</font>char<font color="#000080">(</font>b<font color="#000080">+</font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>MapIn<font color="#000080">(</font>c<font color="#000080">, </font>char<font color="#000080">(</font>b<font color="#000080">+</font><font color="#800000">128</font><font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ for }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ CreateTable }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>UpCase<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  This translates the incoming char in AL into upper case if it is defined
+  in the translation table.
+  Please note that if you enable stack checking, this proc won't work...
+}
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">test al, $80
+  je   @1
+  xor  ah, ah
+  mov  bx, ax
+  mov  ah, byte[Table+bx-$80]
+  test ah, ah
+  je   @x
+  mov  al, ah
+  jmp  @x
+@1:
+  cmp  al, 'z'
+  jg   @x
+  cmp  al, 'a'
+  jl   @x
+  xor  al, $20
+@x:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ UpChar }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LowChar<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">test al, $80
+  je   @1
+  mov  bx, ax
+  xor  bh, bh
+  mov  ah, byte[Table+bx]
+  or   ah, ah
+  je   @x
+  mov  al, ah
+  jmp  @x
+@1:
+  cmp  al, 'Z'
+  jg   @x
+  cmp  al, 'A'
+  jl   @x
+  xor  al, $20
+@x:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ LowChar }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Upper<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les  di, s
+  mov  cl, es:[di]
+  xor  ch, ch
+  jcxz @x
+  inc  di
+@1:
+  mov  al, es:[di]
+  call UpCase
+  mov  es:[di], al
+  inc  di
+  loop @1
+@x:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Upper }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Lower<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les  di, s
+  mov  cl, es:[di]
+  xor  ch, ch
+  jcxz @x
+  inc  di
+@1:
+  mov  al, es:[di]
+  call LowChar
+  mov  es:[di], al
+  inc  di
+  loop @1
+@x:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Lower }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetError<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  ax, ErrorCode
+  mov  ErrorCode, 0
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetError }
+
+</i></font><font color="#FF0000"><b>function </b></font>PeekError<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  ax, ErrorCode
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ PeekError }
+
+{$IFNDEF MSDOS}
+</i></font><font color="#FF0000"><b>procedure </b></font>Leave<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ExitProc<font color="#000080">:=</font>MyExitProc<font color="#000080">;           </font><font color="#008000"><i>{ change to old handler }
+  </i></font>GlobalDosFree<font color="#000080">(</font>ciSelector<font color="#000080">.</font>High<font color="#000080">); </font><font color="#008000"><i>{ release Dos memory    }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Leave }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>InitExitProc<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MyExitProc<font color="#000080">:=</font>ExitProc<font color="#000080">; </font><font color="#008000"><i>{ save old handler }
+  </i></font>ExitProc<font color="#000080">:=@</font>Leave<font color="#000080">; </font><font color="#008000"><i>{ save my own handler  }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ InitExitProc }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ NLS }
+  </i></font>UnitOk<font color="#000080">:=</font>Lo<font color="#000080">(</font>DosVersion<font color="#000080">)&gt;=</font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{ does only work for Dos 3+ }
+  </i></font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ allocate memory }
+  </i></font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{$IFDEF DPMI}
+    </i></font>longint<font color="#000080">(</font>ciSelector<font color="#000080">):=</font>GlobalDosAlloc<font color="#000080">(</font>sizeof<font color="#000080">(</font>TCountryInfo<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>ciSelector<font color="#000080">.</font>Low<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>UnitOK<font color="#000080">:=</font>False<font color="#000080">; </font><font color="#008000"><i>{ if not enough Dos memory }
+    </i></font>CountryInfo<font color="#000080">:=</font>Ptr<font color="#000080">(</font>ciSelector<font color="#000080">.</font>Low<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">); </font><font color="#008000"><i>{ make protected mode pointer }
+    </i></font><font color="#FF0000"><b>if </b></font>UnitOK <font color="#FF0000"><b>then </b></font>InitExitProc<font color="#000080">; </font><font color="#008000"><i>{ change exit proc                    }
+  {$ELSE}
+    </i></font><font color="#FF0000"><b>if </b></font>MaxAvail<font color="#000080">&gt;</font>sizeof<font color="#000080">(</font>CountryInfo<font color="#000080">^) </font><font color="#FF0000"><b>then</b></font><font color="#008000"><i>{ allocate if enough memory   }
+      </i></font>New<font color="#000080">(</font>CountryInfo<font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>UnitOK<font color="#000080">:=</font>False<font color="#000080">; </font><font color="#008000"><i>{ or disable extentions }
+  {$ENDIF}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ if UnitOK }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0038.PAS">Original</a><b>]</b></p></body>
+</html>

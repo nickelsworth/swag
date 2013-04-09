@@ -1,0 +1,208 @@
+<html>
+<head><title> "File Connections in Novell" by JIM ROBB</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Does anyone know how to get the list of connections using a file with
+&gt; pascal (bp 7) under Novell (3.11) ?  I know that it is accessed with INT
+&gt; $21 Function $E3 sub function $DC.
+
+This function works under Novell 2.x, but it doesn't work in 3.x Netware. You
+will need one of the newer $F2 calls.  Here's a unit that should handle it.
+We run a couple of programs using this code on 3.11 and 3.12 networks, and
+we've also tested it on a 4.0 network.  Caveat - the &quot;Get Directory Handle&quot;
+call found herein is fooled by &quot;MAP ROOT&quot; drive mappings.
+}
+
+{ F2Calls ==================================================================}
+{ =======                                                                   }
+{  A collection of calls from Novell's &quot;$F2&quot; series.  This series has neat  }
+{  stuff like &quot;Get Connections Using a File&quot; that haven't been seen since   }
+{  Version 2.2 of NetWare.                                                  }
+{                                                                           }
+{===========================================================================}
+
+</i></font><font color="#FF0000"><b>unit </b></font>F2Calls<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>ConnInfo <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>ConnNo     <font color="#000080">: </font>Word<font color="#000080">;  </font><font color="#008000"><i>{ Number of logical connection holding file open    }
+    </i></font>TaskNo     <font color="#000080">: </font>Word<font color="#000080">;  </font><font color="#008000"><i>{ Task number, within connection, holding file open }
+    </i></font>LockType   <font color="#000080">: </font>Byte<font color="#000080">;  </font><font color="#008000"><i>{ Not locked, File lock, or Begin Share File Set    }
+    </i></font>AccessFlag <font color="#000080">: </font>Byte<font color="#000080">;  </font><font color="#008000"><i>{ Bit flag indicating access rights for the file    }
+    </i></font>LockFlag   <font color="#000080">: </font>Byte   <font color="#008000"><i>{ Bit flag showing lock information                 }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>ConnReplyType <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>NextRequest <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Used if more than 70 connections using file  }
+    </i></font>UseCount    <font color="#000080">: </font>Word<font color="#000080">;
+    </font>OpenCount   <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Total times file is open                     }
+    </i></font>OpenReadCt  <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Total open for read                          }
+    </i></font>OpenWriteCt <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Total open for write                         }
+    </i></font>DenyReadCt  <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Total readlock                               }
+    </i></font>DenyWriteCt <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Total deny write flag                        }
+    </i></font>Locked      <font color="#000080">: </font>Byte<font color="#000080">;      </font><font color="#008000"><i>{ Lock status                                  }
+    </i></font>Fork        <font color="#000080">: </font>Byte<font color="#000080">;      </font><font color="#008000"><i>{ MacJunk - data fork (0) or resource fork (1) }
+    </i></font>ConnCount   <font color="#000080">: </font>Word<font color="#000080">;      </font><font color="#008000"><i>{ Number of connection entries                 }
+    </i></font>ConnArray   <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[ </font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">70 </font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>ConnInfo
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>ConnReplyPtr <font color="#000080">= ^</font>ConnReplyType<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ ConvertPathToDirectoryEntry ----------------------------------------------}
+{ ---------------------------                                               }
+{   &lt;Path&gt; must be a full pathname with drive, path, and filename.  The     }
+{  function returns the number of the volume where the file resides in      }
+{  &lt;VolNo&gt;, and the files entry or sequence number in the file system in    }
+{  &lt;EntryNo&gt;.  The function result is the success code of the Netware       }
+{  API call, where 0 indicates success.                                     }
+
+</i></font><font color="#FF0000"><b>function </b></font>ConvertPathToDirectoryEntry<font color="#000080">( </font>Path <font color="#000080">: </font>PathStr<font color="#000080">;
+                                 </font><font color="#FF0000"><b>var </b></font>VolNo <font color="#000080">: </font>Byte<font color="#000080">;
+                               </font><font color="#FF0000"><b>var </b></font>EntryNo <font color="#000080">: </font>Longint <font color="#000080">) : </font>byte<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ GetConnectionsUsingAFile -------------------------------------------------}
+{ ------------------------                                                  }
+{   &lt; VolNo&gt; is the volume number, and &lt;EntryNo&gt; the directory entry number }
+{  of the file in question, as returned by ConvertPathToDirectoryEntry.     }
+{  &lt;NextRecord&gt; should be zero the first time you use this function.  The   }
+{  reply buffer has room for 70 connections.  If &lt;NextRecord&gt; is non-zero,  }
+{  there are more connections to report.  Call the function again, leaving  }
+{  &lt;NextRecord&gt; unchanged.  The function result is the success code of the  }
+{  NetWare API call, where 0 indicates Success.                             }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetConnectionsUsingAFile<font color="#000080">( </font>VolNo <font color="#000080">: </font>Byte<font color="#000080">;
+                                 </font>EntryNo <font color="#000080">: </font>Longint<font color="#000080">;
+                          </font><font color="#FF0000"><b>var </b></font>NextRecord <font color="#000080">: </font>Word<font color="#000080">;
+                           </font><font color="#FF0000"><b>var </b></font>ConnReply <font color="#000080">: </font>ConnReplyType <font color="#000080">) : </font>Byte<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ ========================================================================= }
+
+</i></font><font color="#FF0000"><b>implementation
+
+var
+  </b></font>NovRegs <font color="#000080">: </font>Registers<font color="#000080">;
+
+
+</font><font color="#008000"><i>{ GetDirHandle -------------------------------------------------------------}
+{ ------------                                                              }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetDirHandle<font color="#000080">( </font>DriveLetter <font color="#000080">: </font>Char<font color="#000080">;
+                       </font>StatusFlags <font color="#000080">: </font>Byte <font color="#000080">) : </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetDirHandle <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>NovRegs <font color="#FF0000"><b>do begin
+    </b></font>AH <font color="#000080">:= </font><font color="#800000">$E9</font><font color="#000080">;
+    </font>AL <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#008000"><i>{ Convert drive letter to a byte:  A=0, B=1, etc. }
+    </i></font>DX <font color="#000080">:= </font>Byte<font color="#000080">( </font>UpCase<font color="#000080">( </font>DriveLetter <font color="#000080">) ) - </font><font color="#800000">65</font><font color="#000080">;
+    </font>MsDos<font color="#000080">( </font>NovRegs <font color="#000080">);
+    </font>GetDirHandle <font color="#000080">:= </font>AL<font color="#000080">;
+    </font>StatusFlags <font color="#000080">:= </font>AH
+  <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{ ConvertPathToDirectoryEntry ----------------------------------------------}
+{ ---------------------------                                               }
+
+</i></font><font color="#FF0000"><b>function </b></font>ConvertPathToDirectoryEntry<font color="#000080">( </font>Path <font color="#000080">: </font>PathStr<font color="#000080">;
+                                 </font><font color="#FF0000"><b>var </b></font>VolNo <font color="#000080">: </font>Byte<font color="#000080">;
+                               </font><font color="#FF0000"><b>var </b></font>EntryNo <font color="#000080">: </font>Longint <font color="#000080">) : </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>RequestPacket <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>StructLen <font color="#000080">: </font>word<font color="#000080">;
+    </font>SFcode    <font color="#000080">: </font>byte<font color="#000080">;
+    </font>DirHandle <font color="#000080">: </font>byte<font color="#000080">;
+    </font>DirPath   <font color="#000080">: </font><font color="#FF0000"><b>string
+  end</b></font><font color="#000080">;
+
+  </font>ReplyBuffer <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>VolumeNo   <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>DirEntryNo <font color="#000080">: </font>Longint
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>Request <font color="#000080">: </font>RequestPacket<font color="#000080">;
+  </font>Reply   <font color="#000080">: </font>ReplyBuffer<font color="#000080">;
+  </font>Status  <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  with </b></font>Request <font color="#FF0000"><b>do begin
+    </b></font>DirHandle <font color="#000080">:= </font>GetDirHandle<font color="#000080">( </font>Path<font color="#000080">[ </font><font color="#800000">1 </font><font color="#000080">], </font>Status <font color="#000080">);
+    </font>StructLen <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>Request <font color="#000080">);
+    </font>SFcode <font color="#000080">:= </font><font color="#800000">244</font><font color="#000080">;
+    </font>DirPath <font color="#000080">:= </font>Copy<font color="#000080">( </font>Path<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Length<font color="#000080">( </font>Path <font color="#000080">) - </font><font color="#800000">2 </font><font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>with </b></font>NovRegs <font color="#FF0000"><b>do begin
+    </b></font>AH <font color="#000080">:= </font><font color="#800000">$F2</font><font color="#000080">;
+    </font>AL <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+    </font>CX <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>Request <font color="#000080">);
+    </font>DX <font color="#000080">:= </font>Sizeof<font color="#000080">( </font>Reply <font color="#000080">);
+    </font>SI <font color="#000080">:= </font>Ofs<font color="#000080">( </font>Request <font color="#000080">);
+    </font>DI <font color="#000080">:= </font>Ofs<font color="#000080">( </font>Reply <font color="#000080">);
+    </font>DS <font color="#000080">:= </font>Seg<font color="#000080">( </font>Request <font color="#000080">);
+    </font>ES <font color="#000080">:= </font>Seg<font color="#000080">( </font>Reply <font color="#000080">);
+    </font>MsDos<font color="#000080">( </font>NovRegs <font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ConvertPathToDirectoryEntry <font color="#000080">:= </font>NovRegs<font color="#000080">.</font>AL<font color="#000080">;
+  </font>VolNo <font color="#000080">:= </font>Reply<font color="#000080">.</font>VolumeNo<font color="#000080">;
+  </font>EntryNo <font color="#000080">:= </font>Reply<font color="#000080">.</font>DirEntryNo
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{ GetConnectionsUsingAFile -------------------------------------------------}
+{ ------------------------                                                  }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetConnectionsUsingAFile<font color="#000080">( </font>VolNo      <font color="#000080">: </font>Byte<font color="#000080">;
+                                   </font>EntryNo    <font color="#000080">: </font>Longint<font color="#000080">;
+                               </font><font color="#FF0000"><b>var </b></font>NextRecord <font color="#000080">: </font>Word<font color="#000080">;
+                               </font><font color="#FF0000"><b>var </b></font>ConnReply  <font color="#000080">: </font>ConnReplyType <font color="#000080">) : </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>RequestBuffer <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>StructLen   <font color="#000080">: </font>Word<font color="#000080">;        </font><font color="#008000"><i>{ Structure length }
+    </i></font>SFcode      <font color="#000080">: </font>Byte<font color="#000080">;        </font><font color="#008000"><i>{ Sub-function code = $EC }
+    </i></font>ForkType    <font color="#000080">: </font>Byte<font color="#000080">;        </font><font color="#008000"><i>{ MacJunk again! }
+    </i></font>VolumeNo    <font color="#000080">: </font>Byte<font color="#000080">;        </font><font color="#008000"><i>{ Set to &lt;VolNo&gt; parameter }
+    </i></font>DirEntryNo  <font color="#000080">: </font>Longint<font color="#000080">;     </font><font color="#008000"><i>{ Set to &lt;EntryNo&gt; parameter }
+    </i></font>LastRecSeen <font color="#000080">: </font>Word         <font color="#008000"><i>{ Set to &lt;NextRecord&gt; parameter }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>Request <font color="#000080">: </font>RequestBuffer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  with </b></font>Request <font color="#FF0000"><b>do begin
+    </b></font>StructLen <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>RequestBuffer <font color="#000080">);
+    </font>SFcode <font color="#000080">:= </font><font color="#800000">236</font><font color="#000080">;
+    </font>ForkType <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>VolumeNo <font color="#000080">:= </font>VolNo<font color="#000080">;
+    </font>DirEntryNo <font color="#000080">:= </font>EntryNo<font color="#000080">;
+    </font>LastRecSeen <font color="#000080">:= </font>NextRecord
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>with </b></font>NovRegs <font color="#FF0000"><b>do begin
+    </b></font>AH <font color="#000080">:= </font><font color="#800000">$F2</font><font color="#000080">;
+    </font>AL <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+    </font>CX <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>RequestBuffer <font color="#000080">);
+    </font>DX <font color="#000080">:= </font>Sizeof<font color="#000080">( </font>ConnReplyType <font color="#000080">);
+    </font>SI <font color="#000080">:= </font>Ofs<font color="#000080">( </font>Request <font color="#000080">);
+    </font>DI <font color="#000080">:= </font>Ofs<font color="#000080">( </font>ConnReply <font color="#000080">);
+    </font>DS <font color="#000080">:= </font>Seg<font color="#000080">( </font>Request <font color="#000080">);
+    </font>ES <font color="#000080">:= </font>Seg<font color="#000080">( </font>ConnReply <font color="#000080">);
+    </font>MsDos<font color="#000080">( </font>NovRegs <font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>GetConnectionsUsingAFile <font color="#000080">:= </font>NovRegs<font color="#000080">.</font>AL<font color="#000080">;
+  </font>NextRecord <font color="#000080">:= </font>ConnReply<font color="#000080">.</font>NextRequest
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p></body>
+</html>

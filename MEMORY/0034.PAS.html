@@ -1,0 +1,448 @@
+<html>
+<head><title> "EMS Unit" by CYRUS PATEL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0034.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: CYRUS PATEL
+Subj: EMS for BP
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>Ems_Test<font color="#000080">;
+</font><font color="#008000"><i>{ *************************************************************
+* This program shows you how to use the basic functions of  *
+* the LIM Expanded Memory Specification. Since it does not  *
+* use any of the LIM EMS 4.0 function calls, you can also   *
+* use it on systems with EMS versions less than 4.0         *
+************************************************************* }
+
+{ Written by:
+Peter Immarco.
+Thought Dynamics
+Manhattan Beach, CA
+Compuserve ID# 73770,123
+*** Public Domain ***
+
+Used by permission of the author.
+}
+
+{ This program does the following:
++------------------------------------------------------------+
+| * Makes sure the LIM Expanded Memory Manager (EMM) has     |
+|   been installed in memory                                 |
+| * Displays the version number of the EMM present in memory |
+| * Determines if there are enough pages (16k blocks) of     |
+|   memory for our test program's usage. It then displays    |
+|   the total number of EMS pages present in the system,     |
+|   and how many are available for our usage                 |
+| * Requests the desired number of pages from the EMM        |
+| * Maps a logical page onto one of the physical pages given |
+|   to us                                                    |
+| * Displays the base address of our EMS memory page frame   |
+| * Performs a simple read/write test on the EMS memory given|
+|   to us                                                    |
+| * Returns the EMS memory given to us back to the EMM, and  |
+|   exits                                                    |
++------------------------------------------------------------|}
+
+
+{ All the calls are structured to return the result or error
+code of the Expanded Memory function performed as an integer.
+If the error code is not zero, which means the call failed,
+a simple error procedure is called and the program terminates.}
+
+</i></font><font color="#FF0000"><b>uses </b></font>Crt<font color="#000080">, </font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+</b></font>ST3  <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">3</font><font color="#000080">];
+</font>ST80 <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+</font>ST5 <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">5</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>Const
+</b></font>EMM_INT                   <font color="#000080">= </font><font color="#800000">$67</font><font color="#000080">;
+</font>DOS_Int                   <font color="#000080">= </font><font color="#800000">$21</font><font color="#000080">;
+</font>GET_PAGE_FRAME            <font color="#000080">= </font><font color="#800000">$41</font><font color="#000080">;
+</font>GET_UNALLOCATED_PAGE_COUNT<font color="#000080">= </font><font color="#800000">$42</font><font color="#000080">;
+</font>ALLOCATE_PAGES            <font color="#000080">= </font><font color="#800000">$43</font><font color="#000080">;
+</font>MAP_PAGES                 <font color="#000080">= </font><font color="#800000">$44</font><font color="#000080">;
+</font>DEALLOCATE_PAGES          <font color="#000080">= </font><font color="#800000">$45</font><font color="#000080">;
+</font>GET_VERSION               <font color="#000080">= </font><font color="#800000">$46</font><font color="#000080">;
+
+</font>STATUS_OK                 <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#008000"><i>{ We'll say we need 1 EMS page for our application }
+</i></font>APPLICATION_PAGE_COUNT    <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font>Emm_Handle<font color="#000080">,
+</font>Page_Frame_Base_Address<font color="#000080">,
+</font>Pages_Needed<font color="#000080">,
+</font>Physical_Page<font color="#000080">,
+</font>Logical_Page<font color="#000080">,
+</font>Offset<font color="#000080">,
+</font>Error_Code<font color="#000080">,
+</font>Pages_EMS_Available<font color="#000080">,
+</font>Total_EMS_Pages<font color="#000080">,
+</font>Available_EMS_Pages<font color="#000080">: </font>Word<font color="#000080">;
+</font>Version_Number<font color="#000080">,
+</font>Pages_Number_String<font color="#000080">: </font>ST3<font color="#000080">;
+</font>Verify<font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{ * --------------------------------------------------------- * }
+{ The function Hex_String converts an Word into a four
+character hexadecimal number(string) with leading zeroes.   }
+</i></font><font color="#FF0000"><b>Function </b></font>Hex_String<font color="#000080">(</font>Number<font color="#000080">: </font>Word<font color="#000080">): </font>ST5<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>Hex_Char<font color="#000080">(</font>Number<font color="#000080">: </font>Word<font color="#000080">): </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+If </b></font>Number<font color="#000080">&lt;</font><font color="#800000">10 </font><font color="#FF0000"><b>then
+</b></font>Hex_Char<font color="#000080">:=</font>Char<font color="#000080">(</font>Number<font color="#000080">+</font><font color="#800000">48</font><font color="#000080">)
+</font><font color="#FF0000"><b>else
+</b></font>Hex_Char<font color="#000080">:=</font>Char<font color="#000080">(</font>Number<font color="#000080">+</font><font color="#800000">55</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Function Hex_Char }
+
+</i></font><font color="#FF0000"><b>Var
+</b></font>S<font color="#000080">: </font>ST5<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+</b></font>S<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+</font>S<font color="#000080">:=</font>Hex_Char<font color="#000080">( (</font>Number <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">2048</font><font color="#000080">);
+</font>Number<font color="#000080">:=( ((</font>Number <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font><font color="#800000">2048</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">)+
+(</font>Number <font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">) ;
+</font>S<font color="#000080">:=</font>S<font color="#000080">+</font>Hex_Char<font color="#000080">(</font>Number <font color="#FF0000"><b>div </b></font><font color="#800000">256</font><font color="#000080">);
+</font>Number<font color="#000080">:=</font>Number <font color="#FF0000"><b>mod </b></font><font color="#800000">256</font><font color="#000080">;
+</font>S<font color="#000080">:=</font>S<font color="#000080">+</font>Hex_Char<font color="#000080">(</font>Number <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">);
+</font>Number<font color="#000080">:=</font>Number <font color="#FF0000"><b>mod </b></font><font color="#800000">16</font><font color="#000080">;
+</font>S<font color="#000080">:=</font>S<font color="#000080">+</font>Hex_Char<font color="#000080">(</font>Number<font color="#000080">);
+</font>Hex_String<font color="#000080">:=</font>S<font color="#000080">+</font><font color="#800000">'h'</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Function Hex_String }
+
+{ * --------------------------------------------------------- * }
+
+{ The function Emm_Installed checks to see if the Expanded
+Memory Manager (EMM) is loaded in memory. It does this by
+looking for the string 'EMMXXXX0', which should be located
+at 10 bytes from the beginning of the code segment pointed
+to by the EMM interrupt, 67h                                }
+</i></font><font color="#FF0000"><b>Function </b></font>Emm_Installed<font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Emm_Device_Name       <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">8</font><font color="#000080">];
+</font>Int_67_Device_Name    <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">8</font><font color="#000080">];
+</font>Position              <font color="#000080">: </font>Word<font color="#000080">;
+</font>Regs                  <font color="#000080">: </font>registers<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+</b></font>Int_67_Device_Name<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+</font>Emm_Device_Name   <font color="#000080">:=</font><font color="#800000">'EMMXXXX0'</font><font color="#000080">;
+</font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Get the code segment pointed to by Interrupt 67h, the EMM
+interrupt by using DOS call $35, 'get interrupt vector'     }
+</i></font>AH<font color="#000080">:=</font><font color="#800000">$35</font><font color="#000080">;
+</font>AL<font color="#000080">:=</font>EMM_INT<font color="#000080">;
+</font>Intr<font color="#000080">(</font>DOS_int<font color="#000080">,</font>Regs<font color="#000080">);
+
+</font><font color="#008000"><i>{ The ES pseudo-register contains the segment address pointed
+to by Interrupt 67h }
+{ Create an 8 character string from the 8 successive bytes
+pointed to by ES:$0A (10 bytes from ES)                   }
+</i></font><font color="#FF0000"><b>For </b></font>Position<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do
+</b></font>Int_67_Device_Name<font color="#000080">:=
+</font>Int_67_Device_Name<font color="#000080">+</font>Chr<font color="#000080">(</font>mem<font color="#000080">[</font>ES<font color="#000080">:</font>Position<font color="#000080">+</font><font color="#800000">$0A</font><font color="#000080">]);
+</font>Emm_Installed<font color="#000080">:=</font>True<font color="#000080">;
+</font><font color="#008000"><i>{ Is it the EMM manager signature, 'EMMXXXX0'? then EMM is
+installed and ready for use, if not, then the EMM manager
+is not present                                            }
+</i></font><font color="#FF0000"><b>If </b></font>Int_67_Device_Name<font color="#000080">&lt;&gt;</font>Emm_Device_Name
+<font color="#FF0000"><b>then </b></font>Emm_Installed<font color="#000080">:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ with Regs do }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ Function Emm_Installed }
+
+{ * --------------------------------------------------------- * }
+
+{ This function returns the total number of EMS pages present
+in the system, and the number of EMS pages that are
+available for our use                                       }
+</i></font><font color="#FF0000"><b>Function </b></font>EMS_Pages_Available
+<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Total_EMS_Pages<font color="#000080">,</font>Pages_Available<font color="#000080">: </font>Word<font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Put the desired EMS function number in the AH pseudo-
+register                                                }
+</i></font>AH<font color="#000080">:=</font>Get_Unallocated_Page_Count<font color="#000080">;
+</font>intr<font color="#000080">(</font>EMM_INT<font color="#000080">,</font>Regs<font color="#000080">);
+</font><font color="#008000"><i>{ The number of EMS pages available is returned in BX     }
+</i></font>Pages_Available<font color="#000080">:=</font>BX<font color="#000080">;
+</font><font color="#008000"><i>{ The total number of pages present in the system is
+returned in DX                                          }
+</i></font>Total_EMS_Pages<font color="#000080">:=</font>DX<font color="#000080">;
+</font><font color="#008000"><i>{ Return the error code                                   }
+</i></font>EMS_Pages_Available<font color="#000080">:=</font>AH
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ EMS_Pages_Available }
+
+{ * --------------------------------------------------------- * }
+
+{ This function requests the desired number of pages from the
+EMM                                                         }
+</i></font><font color="#FF0000"><b>Function </b></font>Allocate_Expanded_Memory_Pages
+<font color="#000080">(</font>Pages_Needed<font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>Handle<font color="#000080">: </font>Word   <font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Put the desired EMS function number in the AH pseudo-
+register                                                }
+</i></font>AH<font color="#000080">:= </font>Allocate_Pages<font color="#000080">;
+</font><font color="#008000"><i>{ Put the desired number of pages in BX                   }
+</i></font>BX<font color="#000080">:=</font>Pages_Needed<font color="#000080">;
+</font>intr<font color="#000080">(</font>EMM_INT<font color="#000080">,</font>Regs<font color="#000080">);
+</font><font color="#008000"><i>{ Our EMS handle is returned in DX                        }
+</i></font>Handle<font color="#000080">:=</font>DX<font color="#000080">;
+</font><font color="#008000"><i>{ Return the error code }
+</i></font>Allocate_Expanded_Memory_Pages<font color="#000080">:=</font>AH<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Function Allocate_Expanded_Memory_Pages }
+
+{ * --------------------------------------------------------- * }
+
+{ This function maps a logical page onto one of the physical
+pages made available to us by the
+Allocate_Expanded_Memory_Pages function                     }
+</i></font><font color="#FF0000"><b>Function </b></font>Map_Expanded_Memory_Pages
+<font color="#000080">(</font>Handle<font color="#000080">,</font>Logical_Page<font color="#000080">,</font>Physical_Page<font color="#000080">: </font>Word<font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Put the desired EMS function number in the AH pseudo-
+register                                                }
+</i></font>AH<font color="#000080">:=</font>Map_Pages<font color="#000080">;
+</font><font color="#008000"><i>{ Put the physical page number to be mapped into AL       }
+</i></font>AL<font color="#000080">:=</font>Physical_Page<font color="#000080">;
+</font><font color="#008000"><i>{ Put the logical page number to be mapped in    BX       }
+</i></font>BX<font color="#000080">:=</font>Logical_Page<font color="#000080">;
+</font><font color="#008000"><i>{ Put the EMS handle assigned to us earlier in   DX       }
+</i></font>DX<font color="#000080">:=</font>Handle<font color="#000080">;
+</font>Intr<font color="#000080">(</font>EMM_INT<font color="#000080">,</font>Regs<font color="#000080">);
+</font><font color="#008000"><i>{ Return the error code }
+</i></font>Map_Expanded_Memory_Pages<font color="#000080">:=</font>AH<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ with Regs do }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Function Map_Expanded_Memory_Pages }
+
+{ * --------------------------------------------------------- * }
+
+{ This function gets the physical address of the EMS page
+frame we are using. The address returned is the segment
+of the page frame.                                          }
+</i></font><font color="#FF0000"><b>Function </b></font>Get_Page_Frame_Base_Address
+<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Page_Frame_Address<font color="#000080">: </font>Word<font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Put the desired EMS function number in the AH pseudo-
+register                                                }
+</i></font>AH<font color="#000080">:=</font>Get_Page_Frame<font color="#000080">;
+</font>intr<font color="#000080">(</font>EMM_INT<font color="#000080">,</font>Regs<font color="#000080">);
+</font><font color="#008000"><i>{ The page frame base address is returned in BX           }
+</i></font>Page_Frame_Address<font color="#000080">:=</font>BX<font color="#000080">;
+</font><font color="#008000"><i>{ Return the error code }
+</i></font>Get_Page_Frame_Base_Address<font color="#000080">:=</font>AH<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Regs }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Function Get_Page_Frame_Base_Address }
+
+{ * --------------------------------------------------------- * }
+
+{ This function releases the EMS memory pages allocated to
+us, back to the EMS memory pool.                            }
+</i></font><font color="#FF0000"><b>Function </b></font>Deallocate_Expanded_Memory_Pages
+<font color="#000080">(</font>Handle<font color="#000080">: </font>Word<font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Put the desired EMS function number in the AH pseudo-register }
+</i></font>AH<font color="#000080">:=</font>DEALLOCATE_PAGES<font color="#000080">;
+</font><font color="#008000"><i>{ Put the EMS handle assigned to our EMS memory pages in DX }
+</i></font>DX<font color="#000080">:=</font>Emm_Handle<font color="#000080">;
+</font>Intr<font color="#000080">(</font>EMM_INT<font color="#000080">,</font>Regs<font color="#000080">);
+</font><font color="#008000"><i>{ Return the error code }
+</i></font>Deallocate_Expanded_Memory_Pages<font color="#000080">:=</font>AH<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ with Regs do }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ Function Deallocate_Expanded_Memory_Pages }
+
+{ * --------------------------------------------------------- * }
+
+{ This function returns the version number of the EMM as
+a 3 character string.                                       }
+</i></font><font color="#FF0000"><b>Function </b></font>Get_Version_Number<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Version_String<font color="#000080">: </font>ST3<font color="#000080">): </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+</b></font>Regs<font color="#000080">: </font>Registers<font color="#000080">;
+</font>Word_Part<font color="#000080">,</font>Fractional_Part<font color="#000080">: </font>Char<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+with </b></font>Regs <font color="#FF0000"><b>do
+Begin
+</b></font><font color="#008000"><i>{ Put the desired EMS function number in the AH pseudo-register }
+</i></font>AH<font color="#000080">:=</font>GET_VERSION<font color="#000080">;
+</font>Intr<font color="#000080">(</font>EMM_INT<font color="#000080">,</font>Regs<font color="#000080">);
+</font><font color="#008000"><i>{ See if call was successful }
+</i></font><font color="#FF0000"><b>If </b></font>AH<font color="#000080">=</font>STATUS_OK <font color="#FF0000"><b>then
+Begin
+</b></font><font color="#008000"><i>{ The upper four bits of AH are the Word portion of the
+version number, the lower four bits are the fractional
+portion. Convert the Word value to ASCII by adding 48. }
+</i></font>Word_Part   <font color="#000080">:= </font>Char<font color="#000080">( </font>AL <font color="#FF0000"><b>shr </b></font><font color="#800000">4 </font><font color="#000080">+ </font><font color="#800000">48</font><font color="#000080">);
+</font>Fractional_Part<font color="#000080">:= </font>Char<font color="#000080">( </font>AL <font color="#FF0000"><b>and </b></font><font color="#800000">$F </font><font color="#000080">+</font><font color="#800000">48</font><font color="#000080">);
+</font>Version_String<font color="#000080">:= </font>Word_Part<font color="#000080">+</font><font color="#800000">'.'</font><font color="#000080">+</font>Fractional_Part<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ If AH=STATUS_OK }
+{ Return the function calls error code }
+</i></font>Get_Version_Number<font color="#000080">:=</font>AH<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ with Regs do }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Function Get_Version_Number }
+
+{ * --------------------------------------------------------- * }
+
+{ This procedure prints an error message passed by the caller,
+prints the error code passed by the caller in hex, and then
+terminates the program with the an error level of 1         }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Error<font color="#000080">(</font>Error_Message<font color="#000080">: </font>ST80<font color="#000080">; </font>Error_Number<font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+</b></font>Writeln<font color="#000080">(</font>Error_Message<font color="#000080">);
+</font>Writeln<font color="#000080">(</font><font color="#800000">'  Error_Number = '</font><font color="#000080">,</font>Hex_String<font color="#000080">(</font>Error_Number<font color="#000080">) );
+</font>Writeln<font color="#000080">(</font><font color="#800000">'EMS test program aborting.'</font><font color="#000080">);
+</font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Procedure Error_Message }
+
+{ * --------------------------------------------------------- * }
+
+{ EMS_TEST }
+
+{ This program is an example of the basic EMS functions that you
+need to execute in order to use EMS memory with Turbo Pascal  }
+
+</i></font><font color="#FF0000"><b>Begin
+</b></font>ClrScr<font color="#000080">;
+</font>Window<font color="#000080">(</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">77</font><font color="#000080">,</font><font color="#800000">22</font><font color="#000080">);
+
+</font><font color="#008000"><i>{ Determine if the Expanded Memory Manager is installed, If
+not, then terminate 'main' with an ErrorLevel code of 1. }
+
+</i></font><font color="#FF0000"><b>If not </b></font><font color="#000080">(</font>Emm_Installed<font color="#000080">) </font><font color="#FF0000"><b>then
+Begin
+</b></font>Writeln<font color="#000080">(</font><font color="#800000">'The LIM Expanded Memory Manager is not installed.'</font><font color="#000080">);
+</font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Get the version number and display it }
+</i></font>Error_Code<font color="#000080">:= </font>Get_Version_Number<font color="#000080">(</font>Version_Number<font color="#000080">);
+</font><font color="#FF0000"><b>If </b></font>Error_Code<font color="#000080">&lt;&gt;</font>STATUS_OK <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'Error trying to get the EMS version number '</font><font color="#000080">,
+</font>Error_code<font color="#000080">)
+</font><font color="#FF0000"><b>else
+</b></font>Writeln<font color="#000080">(</font><font color="#800000">'LIM Expanded Memory Manager, version '</font><font color="#000080">,
+</font>Version_Number<font color="#000080">,</font><font color="#800000">' is ready for use.'</font><font color="#000080">);
+</font>Writeln<font color="#000080">;
+
+</font><font color="#008000"><i>{ Determine if there are enough expanded memory pages for this
+application. }
+</i></font>Pages_Needed<font color="#000080">:=</font>APPLICATION_PAGE_COUNT<font color="#000080">;
+</font>Error_Code<font color="#000080">:=
+</font>EMS_Pages_Available<font color="#000080">(</font>Total_EMS_Pages<font color="#000080">,</font>Available_EMS_Pages<font color="#000080">);
+</font><font color="#FF0000"><b>If </b></font>Error_Code<font color="#000080">&lt;&gt;</font>STATUS_OK <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'Error trying to determine the number of EMS pages available.'</font><font color="#000080">,
+</font>Error_code<font color="#000080">);
+
+</font>Writeln<font color="#000080">(</font><font color="#800000">'There are a total of '</font><font color="#000080">,</font>Total_EMS_Pages<font color="#000080">,
+</font><font color="#800000">' expanded memory pages present in this system.'</font><font color="#000080">);
+</font>Writeln<font color="#000080">(</font><font color="#800000">'  '</font><font color="#000080">,</font>Available_EMS_Pages<font color="#000080">,
+</font><font color="#800000">' of those pages are available for your usage.'</font><font color="#000080">);
+</font>Writeln<font color="#000080">;
+
+</font><font color="#008000"><i>{ If there is an insufficient number of pages for our application,
+then report the error and terminate the EMS test program }
+</i></font><font color="#FF0000"><b>If </b></font>Pages_Needed<font color="#000080">&gt;</font>Available_EMS_Pages <font color="#FF0000"><b>then
+Begin
+</b></font>Str<font color="#000080">(</font>Pages_Needed<font color="#000080">,</font>Pages_Number_String<font color="#000080">);
+</font>Error<font color="#000080">(</font><font color="#800000">'We need '</font><font color="#000080">+</font>Pages_Number_String<font color="#000080">+
+</font><font color="#800000">' EMS pages. There are not that many available.'</font><font color="#000080">,
+</font>Error_Code<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Pages_Needed&gt;Available_EMS_Pages }
+
+{ Allocate expanded memory pages for our usage }
+</i></font>Error_Code<font color="#000080">:= </font>Allocate_Expanded_Memory_Pages<font color="#000080">(</font>Pages_Needed<font color="#000080">,</font>Emm_Handle<font color="#000080">);
+</font>Str<font color="#000080">(</font>Pages_Needed<font color="#000080">,</font>Pages_Number_String<font color="#000080">);
+</font><font color="#FF0000"><b>If </b></font>Error_Code<font color="#000080">&lt;&gt;</font>STATUS_OK <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'EMS test program failed trying to allocate '</font><font color="#000080">+</font>Pages_Number_String<font color="#000080">+
+</font><font color="#800000">' pages for usage.'</font><font color="#000080">,</font>Error_Code<font color="#000080">);
+</font>Writeln<font color="#000080">(</font>APPLICATION_PAGE_COUNT<font color="#000080">,
+</font><font color="#800000">' EMS page(s) allocated for the EMS test program.'</font><font color="#000080">);
+</font>Writeln<font color="#000080">;
+
+</font><font color="#008000"><i>{ Map in the required logical pages to the physical pages
+given to us, in this case just one page                     }
+</i></font>Logical_Page <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font>Physical_Page<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font>Error_Code<font color="#000080">:=
+</font>Map_Expanded_Memory_Pages<font color="#000080">(
+</font>Emm_Handle<font color="#000080">,</font>Logical_Page<font color="#000080">,</font>Physical_Page<font color="#000080">);
+</font><font color="#FF0000"><b>If </b></font>Error_Code<font color="#000080">&lt;&gt;</font>STATUS_OK <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'EMS test program failed trying to map '</font><font color="#000080">+
+</font><font color="#800000">'logical pages onto physical pages.'</font><font color="#000080">,</font>Error_Code<font color="#000080">);
+
+</font>Writeln<font color="#000080">(</font><font color="#800000">'Logical Page '</font><font color="#000080">,</font>Logical_Page<font color="#000080">,
+</font><font color="#800000">' successfully mapped onto Physical Page '</font><font color="#000080">,
+</font>Physical_Page<font color="#000080">);
+</font>Writeln<font color="#000080">;
+
+</font><font color="#008000"><i>{ Get the expanded memory page frame address }
+</i></font>Error_Code<font color="#000080">:= </font>Get_Page_Frame_Base_Address<font color="#000080">(</font>Page_Frame_Base_Address<font color="#000080">);
+</font><font color="#FF0000"><b>If </b></font>Error_Code<font color="#000080">&lt;&gt;</font>STATUS_OK <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'EMS test program unable to get the base Page'</font><font color="#000080">+
+</font><font color="#800000">' Frame Address.'</font><font color="#000080">,</font>Error_Code<font color="#000080">);
+</font>Writeln<font color="#000080">(</font><font color="#800000">'The base address of the EMS page frame is - '</font><font color="#000080">+
+</font>Hex_String<font color="#000080">(</font>Page_Frame_Base_Address<font color="#000080">) );
+</font>Writeln<font color="#000080">;
+
+</font><font color="#008000"><i>{ Write a test pattern to expanded memory }
+</i></font><font color="#FF0000"><b>For </b></font>Offset<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">16382 </font><font color="#FF0000"><b>do
+</b></font>Mem<font color="#000080">[</font>Page_Frame_Base_Address<font color="#000080">:</font>Offset<font color="#000080">]:=</font>Offset <font color="#FF0000"><b>mod </b></font><font color="#800000">256</font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Make sure that what is in EMS memory is what we just wrote }
+</i></font>Writeln<font color="#000080">(</font><font color="#800000">'Testing EMS memory.'</font><font color="#000080">);
+
+</font>Offset<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+</font>Verify<font color="#000080">:=</font>True<font color="#000080">;
+</font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Offset<font color="#000080">&lt;=</font><font color="#800000">16382</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Verify<font color="#000080">=</font>True<font color="#000080">) </font><font color="#FF0000"><b>do
+Begin
+If </b></font>Mem<font color="#000080">[</font>Page_Frame_Base_Address<font color="#000080">:</font>Offset<font color="#000080">]&lt;&gt;</font>Offset <font color="#FF0000"><b>mod </b></font><font color="#800000">256 </font><font color="#FF0000"><b>then
+</b></font>Verify<font color="#000080">:=</font>False<font color="#000080">;
+</font>Offset<font color="#000080">:=</font>Succ<font color="#000080">(</font>Offset<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ while (Offset&lt;=16382) and (Verify=True) }
+
+{ If it isn't report the error }
+</i></font><font color="#FF0000"><b>If not </b></font>Verify <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'What was written to EMS memory was not found during '</font><font color="#000080">+
+</font><font color="#800000">'memory verification  test.'</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+</font>Writeln<font color="#000080">(</font><font color="#800000">'EMS memory test successful.'</font><font color="#000080">);
+</font>Writeln<font color="#000080">;
+
+</font><font color="#008000"><i>{ Return the expanded memory pages given to us back to the
+EMS memory pool before terminating our test program         }
+</i></font>Error_Code<font color="#000080">:=</font>Deallocate_Expanded_Memory_Pages<font color="#000080">(</font>Emm_Handle<font color="#000080">);
+</font><font color="#FF0000"><b>If </b></font>Error_Code<font color="#000080">&lt;&gt;</font>STATUS_OK <font color="#FF0000"><b>then
+</b></font>Error<font color="#000080">(</font><font color="#800000">'EMS test program was unable to deallocate '</font><font color="#000080">+
+</font><font color="#800000">'the EMS pages in use.'</font><font color="#000080">,</font>Error_Code<font color="#000080">);
+</font>Writeln<font color="#000080">(</font>APPLICATION_PAGE_COUNT<font color="#000080">,
+</font><font color="#800000">' page(s) deallocated.'</font><font color="#000080">);
+</font>Writeln<font color="#000080">;
+</font>Writeln<font color="#000080">(</font><font color="#800000">'EMS test program completed.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0034.PAS">Original</a><b>]</b></p></body>
+</html>

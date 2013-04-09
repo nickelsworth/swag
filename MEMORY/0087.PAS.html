@@ -1,0 +1,195 @@
+<html>
+<head><title> "Show Memory Control Blocks" by JOSE ANTONIO NODA</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0087.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$M 4000,0,0}
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>MemMap<font color="#000080">;
+
+</font><font color="#008000"><i>{
+  (C) Copyright 1995, Jose Antonio Noda, Spain.
+  All Rights Reserved.
+
+  I can be reached at the places
+  listed below:
+
+  Jose Antonio Noda
+  Urb: 80 Viviendas, B-5&sect;, 1&sect; Izq.
+  35620 - Gran Tarajal
+  Fuerteventura - (Islas Canarias)
+  Spain
+
+  Compuserve ID  100667,2523
+}
+
+</i></font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>EnvironmentBlock<font color="#000080">:  </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">] = </font><font color="#800000">'Environment '</font><font color="#000080">;
+  </font>ProgramBlock    <font color="#000080">:  </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">] = </font><font color="#800000">'Program     '</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+  </b></font>MemoryControlBlock <font color="#000080">=                    </font><font color="#008000"><i>{MCB -- only needed fields are shown}
+    </i></font><font color="#FF0000"><b>RECORD
+      </b></font>Blocktag   <font color="#000080">:  </font>BYTE<font color="#000080">;                 </font><font color="#008000"><i>{tag is M ($4D) except last is Z ($5A)}
+      </i></font>BlockOwner <font color="#000080">:  </font>WORD<font color="#000080">;                 </font><font color="#008000"><i>{if nonzero, process identifier, usually PID}
+      </i></font>BlockSize  <font color="#000080">:  </font>WORD<font color="#000080">;                 </font><font color="#008000"><i>{size in 16-byte paragraphs (excludes MCB)}
+      </i></font>misc       <font color="#000080">:  </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;  </font><font color="#008000"><i>{placeholder}
+      </i></font>ProgramName<font color="#000080">:  </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR   <font color="#008000"><i>{only used by DOS 4.0; ASCIIZ}
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;                                  </font><font color="#008000"><i>{PID normally taken from PSP}
+  </i></font>ProgramSegmentPrefix <font color="#000080">=                  </font><font color="#008000"><i>{PSP -- only needed fields are shown}
+    </i></font><font color="#FF0000"><b>RECORD                                </b></font><font color="#008000"><i>{ offset }
+      </i></font>PSPtag     <font color="#000080">:  </font>WORD<font color="#000080">;  </font><font color="#008000"><i>{ $20CD or $27CD if PSP}  { 00 $00 }
+      </i></font>misc       <font color="#000080">:  </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">21</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>WORD<font color="#000080">;            </font><font color="#008000"><i>{ 02 $02 }
+      </i></font>Environment<font color="#000080">:  </font>WORD                             <font color="#008000"><i>{ 44 $2C }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>DOSVerNum<font color="#000080">:  </font>BYTE<font color="#000080">;                       </font><font color="#008000"><i>{major version number, e.g., 3 for 3.X}
+  </i></font>LastSize <font color="#000080">:  </font>WORD<font color="#000080">;                       </font><font color="#008000"><i>{used to detect multiple null MCBs}
+  </i></font>MCB      <font color="#000080">:  ^</font>MemoryControlBlock<font color="#000080">;
+  </font>NullMCB  <font color="#000080">:  </font>WORD<font color="#000080">;                       </font><font color="#008000"><i>{counter of MCBs pointing to 0-length blocks}
+  </i></font>r        <font color="#000080">:  </font>Registers<font color="#000080">;                  </font><font color="#008000"><i>{TYPE defined in DOS unit}
+  </i></font>segment  <font color="#000080">:  </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>W2X<font color="#000080">(</font>w<font color="#000080">:  </font>WORD<font color="#000080">):  </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;          </font><font color="#008000"><i>{binary word to hex character string}
+</i></font><font color="#FF0000"><b>CONST </b></font>HexDigit<font color="#000080">:  </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR <font color="#000080">= </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>W2X <font color="#000080">:=  </font>HexDigit<font color="#000080">[</font>Hi<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">] + </font>HexDigit<font color="#000080">[</font>Hi<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$0F</font><font color="#000080">] +
+          </font>HexDigit<font color="#000080">[</font>Lo<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">] + </font>HexDigit<font color="#000080">[</font>Lo<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$0F</font><font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ProcessMCB<font color="#000080">;                     </font><font color="#008000"><i>{Each Memory Control Block}
+</i></font><font color="#FF0000"><b>VAR                                       </b></font><font color="#008000"><i>{is processed by this PROCEDURE.}
+  </i></font>b        <font color="#000080">:  </font>CHAR<font color="#000080">;
+  </font>Blocktype<font color="#000080">:  </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+  </font>bytes    <font color="#000080">:  </font>LongInt<font color="#000080">;
+  </font>EnvSize  <font color="#000080">:  </font>WORD<font color="#000080">;
+  </font>i        <font color="#000080">:  </font>WORD<font color="#000080">;
+  </font>last     <font color="#000080">:  </font>CHAR<font color="#000080">;
+  </font>MCBenv   <font color="#000080">:  ^</font>MemoryControlBlock<font color="#000080">;
+  </font>MCBowner <font color="#000080">:  ^</font>MemoryControlBlock<font color="#000080">;
+  </font>psp      <font color="#000080">:  ^</font>ProgramSegmentPrefix<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF   </b></font><font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockTag <font color="#000080">&lt;&gt; </font><font color="#800000">$4D</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockTag <font color="#000080">&lt;&gt; </font><font color="#800000">$5A</font><font color="#000080">) </font><font color="#FF0000"><b>AND
+       </b></font><font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockTag <font color="#000080">&lt;&gt; </font><font color="#800000">$00</font><font color="#000080">)
+  </font><font color="#FF0000"><b>THEN
+  BEGIN
+    IF   </b></font>NullMCB <font color="#000080">&gt; </font><font color="#800000">0
+    </font><font color="#FF0000"><b>THEN </b></font>WRITELN <font color="#000080">(</font>NullMCB<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">' contiguous MCBs pointing to empty '</font><font color="#000080">,</font><font color="#800000">'blocks not shown.'</font><font color="#000080">);
+    </font>WRITELN <font color="#000080">(</font><font color="#800000">'Unknown Memory Control Block Tag '''</font><font color="#000080">,</font>MCB<font color="#000080">^.</font>BlockTag<font color="#000080">,</font><font color="#800000">'''.'</font><font color="#000080">);
+    </font>WRITELN <font color="#000080">(</font><font color="#800000">'MemMap scan terminated.'</font><font color="#000080">);
+    </font>HALT
+  <font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF   </b></font><font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockSize <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>LastSize <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+  </font><font color="#FF0000"><b>THEN </b></font>INC <font color="#000080">(</font>NullMCB<font color="#000080">)  </font><font color="#008000"><i>{Count but don't output multiple null MCBs}
+  </i></font><font color="#FF0000"><b>ELSE
+  BEGIN
+    </b></font>LastSize <font color="#000080">:= </font>MCB<font color="#000080">^.</font>BlockSize<font color="#000080">;
+    </font><font color="#FF0000"><b>IF   </b></font>NullMCB <font color="#000080">&gt; </font><font color="#800000">0
+    </font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>WRITELN <font color="#000080">(</font>NullMCB<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">' contiguous MCBs pointing to empty '</font><font color="#000080">,</font><font color="#800000">'blocks not shown.'</font><font color="#000080">);
+      </font>NullMCB <font color="#000080">:= </font><font color="#800000">0
+  </font><font color="#FF0000"><b>END
+  ELSE
+  BEGIN
+    </b></font>bytes <font color="#000080">:= </font>LongInt<font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockSize<font color="#000080">) </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">4</font><font color="#000080">; </font><font color="#008000"><i>{size of MCB in bytes}
+    </i></font>WRITE <font color="#000080">(</font>W2X<font color="#000080">(</font>segment<font color="#000080">):</font><font color="#800000">6</font><font color="#000080">,</font>W2X<font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockSize<font color="#000080">):</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">,</font>bytes<font color="#000080">:</font><font color="#800000">9</font><font color="#000080">,
+    </font>W2X<font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockOwner<font color="#000080">):</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">'   '</font><font color="#000080">);
+    </font><font color="#FF0000"><b>IF   </b></font>MCB<font color="#000080">^.</font>BlockOwner <font color="#000080">= </font><font color="#800000">0
+    </font><font color="#FF0000"><b>THEN
+      </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'Free Space    &lt;unallocated&gt;'</font><font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE
+    BEGIN
+      </b></font>psp <font color="#000080">:= </font>Ptr<font color="#000080">(</font>MCB<font color="#000080">^.</font>BlockOwner<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);      </font><font color="#008000"><i>{possible PSP}
+                                          {Almost all programs have a tag of $20CD; DOS MODE is one
+                                           that uses $27CD in some versions.}
+      </i></font><font color="#FF0000"><b>IF   </b></font><font color="#000080">(</font>psp<font color="#000080">^.</font>PSPtag <font color="#000080">&lt;&gt; </font><font color="#800000">$20CD</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>psp<font color="#000080">^.</font>PSPtag <font color="#000080">&lt;&gt; </font><font color="#800000">$27CD</font><font color="#000080">)
+      </font><font color="#FF0000"><b>THEN </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'System        '</font><font color="#000080">,   </font><font color="#008000"><i>{not valid PSP}
+                    </i></font><font color="#800000">'&lt;DOS '</font><font color="#000080">,</font>DosVerNum<font color="#000080">,</font><font color="#800000">'.'</font><font color="#000080">,</font>Hi<font color="#000080">(</font>DOSVersion<font color="#000080">),</font><font color="#800000">'&gt;'</font><font color="#000080">)
+      </font><font color="#FF0000"><b>ELSE
+      BEGIN                        </b></font><font color="#008000"><i>{valid program segment prefix}
+        </i></font>MCBenv <font color="#000080">:= </font>Ptr<font color="#000080">(</font>psp<font color="#000080">^.</font>Environment<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);    </font><font color="#008000"><i>{MCB of environment}
+        </i></font>BlockType <font color="#000080">:= </font><font color="#800000">'Data        '</font><font color="#000080">;            </font><font color="#008000"><i>{assume}
+        </i></font><font color="#FF0000"><b>IF   </b></font>MCB<font color="#000080">^.</font>Blockowner <font color="#000080">= (</font>segment <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          </b></font>BlockType <font color="#000080">:= </font>ProgramBlock
+        <font color="#FF0000"><b>ELSE
+        IF   </b></font>psp<font color="#000080">^.</font>Environment <font color="#000080">= (</font>segment <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          </b></font>BlockType <font color="#000080">:= </font>EnvironmentBlock<font color="#000080">;
+          </font>WRITE <font color="#000080">(</font>BlockType<font color="#000080">:</font><font color="#800000">12</font><font color="#000080">,</font><font color="#800000">'  '</font><font color="#000080">);
+        </font><font color="#FF0000"><b>IF  </b></font>MCB<font color="#000080">^.</font>BlockOwner <font color="#000080">&lt;&gt; </font>MCBenv<font color="#000080">^.</font>BlockOwner
+        <font color="#FF0000"><b>THEN
+        IF   </b></font>DOSVerNum <font color="#000080">&lt;&gt; </font><font color="#800000">4
+        </font><font color="#FF0000"><b>THEN </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'&lt;unknown&gt;'</font><font color="#000080">)  </font><font color="#008000"><i>{different owner; unknown in 3.X}
+        </i></font><font color="#FF0000"><b>ELSE
+        BEGIN                  </b></font><font color="#008000"><i>{in DOS 4.0 short name is in MCB}
+          </i></font>MCBowner <font color="#000080">:= </font>Ptr<font color="#000080">(</font>MCB<font color="#000080">^.</font>Blockowner<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);    </font><font color="#008000"><i>{MCB of owner block}
+          </i></font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>MCBowner<font color="#000080">^.</font>ProgramName<font color="#000080">[</font>i<font color="#000080">] &lt;&gt; </font><font color="#800000">#$00</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font><font color="#800000">9</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+          </b></font>WRITE <font color="#000080">(</font>MCBowner<font color="#000080">^.</font>ProgramName<font color="#000080">[</font>i<font color="#000080">]);
+          </font>INC <font color="#000080">(</font>i<font color="#000080">)
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font>WRITELN
+      <font color="#FF0000"><b>END
+      ELSE
+      BEGIN     </b></font><font color="#008000"><i>{environment must have same owner as MCB}
+        </i></font><font color="#FF0000"><b>IF   </b></font>DOSVerNum <font color="#000080">&lt; </font><font color="#800000">3
+        </font><font color="#FF0000"><b>THEN
+          </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'&lt;unknown&gt;'</font><font color="#000080">)       </font><font color="#008000"><i>{DOS 1.X or 2.X}
+        </i></font><font color="#FF0000"><b>ELSE
+        BEGIN                       </b></font><font color="#008000"><i>{DOS 3.X}
+          </i></font>EnvSize <font color="#000080">:= </font>MCBenv<font color="#000080">^.</font>BlockSize <font color="#FF0000"><b>SHL </b></font><font color="#800000">4</font><font color="#000080">;      </font><font color="#008000"><i>{multiply by 16}
+          </i></font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font>b <font color="#000080">:= </font>CHAR<font color="#000080">( </font>Mem<font color="#000080">[</font>psp<font color="#000080">^.</font>Environment<font color="#000080">:</font>i<font color="#000080">] );
+          </font><font color="#FF0000"><b>REPEAT
+            </b></font>last <font color="#000080">:= </font>b<font color="#000080">;    </font><font color="#008000"><i>{skip through ASCIIZ environment variables}
+            </i></font>INC <font color="#000080">(</font>i<font color="#000080">);
+            </font>b <font color="#000080">:= </font>CHAR<font color="#000080">( </font>Mem<font color="#000080">[</font>psp<font color="#000080">^.</font>Environment<font color="#000080">:</font>i<font color="#000080">] );
+          </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>i <font color="#000080">&gt; </font>EnvSize<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">( (</font>b <font color="#000080">= </font><font color="#800000">#$00</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>last <font color="#000080">= </font><font color="#800000">#$00</font><font color="#000080">));
+          </font>INC <font color="#000080">(</font>i<font color="#000080">);        </font><font color="#008000"><i>{end of environment block is $0000}
+          </i></font>b <font color="#000080">:= </font>CHAR<font color="#000080">( </font>Mem<font color="#000080">[</font>psp<font color="#000080">^.</font>Environment<font color="#000080">:</font>i<font color="#000080">] );
+          </font><font color="#FF0000"><b>IF   </b></font><font color="#000080">(</font>i <font color="#000080">&gt;= </font>EnvSize<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>b <font color="#000080">&lt;&gt; </font><font color="#800000">#$01</font><font color="#000080">)  </font><font color="#008000"><i>{valid signature?}
+          </i></font><font color="#FF0000"><b>THEN
+            </b></font>WRITE <font color="#000080">(</font><font color="#800000">'&lt;shell&gt;'</font><font color="#000080">)    </font><font color="#008000"><i>{shell is probably COMMAND.COM}
+          </i></font><font color="#FF0000"><b>ELSE
+          BEGIN
+            </b></font>INC <font color="#000080">(</font>i<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);              </font><font color="#008000"><i>{skip process signature $0001}
+            </i></font>b <font color="#000080">:= </font>CHAR<font color="#000080">( </font>Mem<font color="#000080">[</font>psp<font color="#000080">^.</font>Environment<font color="#000080">:</font>i<font color="#000080">] );
+            </font><font color="#FF0000"><b>REPEAT
+              </b></font>WRITE <font color="#000080">(</font>b<font color="#000080">);         </font><font color="#008000"><i>{output process name byte-by-byte}
+              </i></font>INC <font color="#000080">(</font>i<font color="#000080">);
+              </font>b <font color="#000080">:= </font>CHAR<font color="#000080">( </font>Mem<font color="#000080">[</font>psp<font color="#000080">^.</font>Environment<font color="#000080">:</font>i<font color="#000080">] )
+            </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>i <font color="#000080">&gt; </font>EnvSize<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>b <font color="#000080">= </font><font color="#800000">#$00</font><font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font>WRITELN
+        <font color="#FF0000"><b>END
+      END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>DOSVerNum <font color="#000080">:= </font>Lo<font color="#000080">(</font>DOSVersion<font color="#000080">);                  </font><font color="#008000"><i>{major DOS version number}
+  </i></font>WRITELN <font color="#000080">(</font><font color="#800000">'Memory'</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">:</font><font color="#800000">41</font><font color="#000080">,</font><font color="#800000">'MemMap (Version 1.0, Jul 95)'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>WRITELN <font color="#000080">(</font><font color="#800000">'Control    Block Size'</font><font color="#000080">);
+  </font>WRITELN <font color="#000080">(</font><font color="#800000">' Block       [Bytes]       Owner'</font><font color="#000080">);
+  </font>WRITELN <font color="#000080">(</font><font color="#800000">'Segment    hex   decimal  Segment      Type      '</font><font color="#000080">,
+           </font><font color="#800000">'          Name'</font><font color="#000080">);
+  </font>WRITELN <font color="#000080">(</font><font color="#800000">'-------  ------- -------  -------  ------------  '</font><font color="#000080">,
+           </font><font color="#800000">'------------------------'</font><font color="#000080">);
+  </font>LastSize <font color="#000080">:= </font><font color="#800000">$FFFF</font><font color="#000080">;
+  </font>NullMCB <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>r<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$52</font><font color="#000080">;                       </font><font color="#008000"><i>{undocumented DOS function that returns a pointer}
+  </i></font>Intr <font color="#000080">(</font><font color="#800000">$21</font><font color="#000080">,</font>r<font color="#000080">);                      </font><font color="#008000"><i>{to the DOS 'list of lists'                      }
+  </i></font>segment <font color="#000080">:= </font>MemW<font color="#000080">[</font>r<font color="#000080">.</font>ES<font color="#000080">:</font>r<font color="#000080">.</font>BX<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">];      </font><font color="#008000"><i>{segment address of first MCB found at}
+                                     {offset -2 from List of List pointer  }
+  </i></font><font color="#FF0000"><b>REPEAT
+    </b></font>MCB <font color="#000080">:= </font>Ptr<font color="#000080">(</font>segment<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);           </font><font color="#008000"><i>{MCB^ points to first MCB}
+    </i></font>ProcessMCB<font color="#000080">;                      </font><font color="#008000"><i>{Look at each MCB}
+    </i></font>segment <font color="#000080">:= </font>segment <font color="#000080">+ </font>MCB<font color="#000080">^.</font>BlockSize <font color="#000080">+ </font><font color="#800000">1
+  </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>MCB<font color="#000080">^.</font>Blocktag <font color="#000080">= </font><font color="#800000">$5A</font><font color="#000080">)        </font><font color="#008000"><i>{last one is $5A; all others are $4D}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0087.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,226 @@
+<html>
+<head><title> "Font Library for Text" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to CHARS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0008.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+User font library for text mode.
+}
+
+
+{$IFDEF DPMI}
+{$X+,S-}
+{$ELSE}
+{$X+,F+,O+}
+{$ENDIF}
+</i></font><font color="#FF0000"><b>unit </b></font>BBFont<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+const
+  </b></font>FontHeight <font color="#000080">= </font><font color="#800000">16</font><font color="#000080">;   </font><font color="#008000"><i>{ 14 for EGA mode }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>PCharShape <font color="#000080">= ^</font>TCharShape<font color="#000080">;
+  </font>TCharShape <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>FontHeight<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>points <font color="#000080">: </font>word<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>ReplaceChar<font color="#000080">(</font>c <font color="#000080">: </font>char<font color="#000080">; </font>NewChar <font color="#000080">: </font>PCharShape<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>implementation
+
+
+</b></font><font color="#008000"><i>{*******************************************************************}
+{ Wen 03-mrt-1993 - wvl                                             }
+{                                                                   }
+{ Get font block index of current (resident) and alternate          }
+{ character set. Up to two fonts can be active at the same time     }
+{                                                                   }
+{*******************************************************************}
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>FontBlock    <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetFontBlock<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>primary<font color="#000080">, </font>secondary <font color="#000080">: </font>FontBlock<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#008000"><i>{ Get character map select register:
+    (VGA sequencer port 3C4h/3C5h index 3)
+
+    7  6  5  4  3  2  1  0
+          3  3  3  3  3  3
+          3  3  3  3  @DDADD   Primary font   (lower 2 bits)
+          3  3  @DDADDDDDDDD   Secondary font (lower 2 bits)
+          3  @DDDDDDDDDDDDDD   Primary font   (high bit)
+          @DDDDDDDDDDDDDDDDD   Secondary font (high bit)     }
+
+        </i></font><font color="#FF00FF">MOV     AL, 3
+        MOV     DX, 3C4h
+        OUT     DX, AL
+        INC     DX
+        IN      AL, DX
+        MOV     BL, AL
+        PUSH    AX
+
+  </font><font color="#008000"><i>{ Get secondary font number: add up bits 5, 3 and 2 }
+
+        </i></font><font color="#FF00FF">SHR     AL, 1
+        SHR     AL, 1
+        AND     AL, 3
+        TEST    BL, 00100000b
+        JZ      @1
+        ADD     AL, 4
+@1:     LES     DI, secondary
+        STOSB
+
+  </font><font color="#008000"><i>{ Get primary font number: add up bits 4, 1 and 0 }
+
+        </i></font><font color="#FF00FF">POP     AX
+        AND     AL, 3
+        TEST    BL, 00010000b
+        JZ      @2
+        ADD     AL, 4
+@2:     LES     DI, primary
+        STOSB
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ GetFontBlock }
+
+
+
+</i></font><font color="#FF0000"><b>function </b></font>postinc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>w <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">;  </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les  di,w
+  mov  ax,word ptr es:[di]
+  inc  word ptr es:[di]
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{* pascal code
+begin
+  postinc := w;
+  inc(w);
+end;
+*}
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>ReplaceChar<font color="#000080">(</font>c <font color="#000080">: </font>char<font color="#000080">; </font>NewChar <font color="#000080">: </font>PCharShape<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+  </font>off <font color="#000080">: </font>word<font color="#000080">;
+  </font>CharPos <font color="#000080">: </font>word<font color="#000080">;
+  </font>primfont<font color="#000080">, </font>secfont <font color="#000080">: </font>FontBlock<font color="#000080">;
+  </font>base <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+
+</b></font><font color="#008000"><i>{* program the VGA controller *}
+  </i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">pushf               </font><font color="#008000"><i>{ Disable interrupts }
+    </i></font><font color="#FF00FF">cli
+    mov  dx, 03c4h      </font><font color="#008000"><i>{ Sequencer port address }
+    </i></font><font color="#FF00FF">mov  ax, 0704h      </font><font color="#008000"><i>{ Sequential addressing }
+    </i></font><font color="#FF00FF">out  dx, ax
+    mov  dx, 03ceh      </font><font color="#008000"><i>{ Graphics Controller port address }
+    </i></font><font color="#FF00FF">mov  ax, 0204h      </font><font color="#008000"><i>{ Select map 2 for CPU reads }
+    </i></font><font color="#FF00FF">out  dx, ax
+    mov  ax, 0005h      </font><font color="#008000"><i>{ Disable odd-even addressing }
+    </i></font><font color="#FF00FF">out  dx, ax
+    mov  ax, 0406h      </font><font color="#008000"><i>{ Map starts at A000:0000 (64K mode) }
+    </i></font><font color="#FF00FF">out  dx, ax
+    mov  dx, 03c4h      </font><font color="#008000"><i>{ Sequencer port address }
+    </i></font><font color="#FF00FF">mov  ax, 0402h      </font><font color="#008000"><i>{ CPU writes only to map 2 }
+    </i></font><font color="#FF00FF">out  dx, ax
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ first get the current font *}
+  </i></font>GetFontBlock<font color="#000080">(</font>primfont<font color="#000080">, </font>secfont<font color="#000080">);
+  </font>base <font color="#000080">:= </font><font color="#800000">8192</font><font color="#000080">*</font>primfont<font color="#000080">;
+
+  </font>off <font color="#000080">:= </font><font color="#800000">16 </font><font color="#000080">- </font>points<font color="#000080">;
+
+  </font>CharPos <font color="#000080">:= </font>Ord<font color="#000080">(</font>c<font color="#000080">) * </font><font color="#800000">32</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>points<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do  begin
+    </b></font>mem<font color="#000080">[</font>SegA000<font color="#000080">:</font>base<font color="#000080">+</font>postinc<font color="#000080">(</font>CharPos<font color="#000080">)] := </font>NewChar<font color="#000080">^[</font>postinc<font color="#000080">(</font>off<font color="#000080">)];
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Ok, put the Sequencer and Graphics Controller back to normal }
+
+  </i></font><font color="#FF0000"><b>asm
+
+  </b></font><font color="#008000"><i>{ Program the Sequencer }
+    </i></font><font color="#FF00FF">pushf               </font><font color="#008000"><i>{ Disable interrupts }
+    </i></font><font color="#FF00FF">cli
+    mov dx, 3c4h        </font><font color="#008000"><i>{ Sequencer port address }
+    </i></font><font color="#FF00FF">mov ax, 0302h       </font><font color="#008000"><i>{ CPU writes to maps 0 and 1 }
+    </i></font><font color="#FF00FF">out dx, ax
+    mov ax, 0304h       </font><font color="#008000"><i>{ Odd-even addressing }
+    </i></font><font color="#FF00FF">out dx, ax
+
+  </font><font color="#008000"><i>{ Program the Graphics Controller }
+    </i></font><font color="#FF00FF">mov dx, 3ceh        </font><font color="#008000"><i>{ Graphics Controller port address }
+    </i></font><font color="#FF00FF">mov ax, 0004h       </font><font color="#008000"><i>{ Select map 0 for CPU reads }
+    </i></font><font color="#FF00FF">out dx, ax
+    mov ax, 1005h       </font><font color="#008000"><i>{ Enable odd-even addressing }
+    </i></font><font color="#FF00FF">out dx, ax;
+    mov ax,Seg0040
+    mov es,ax
+    mov ax, 0e06h       </font><font color="#008000"><i>{ Map starts at B800:0000 }
+    </i></font><font color="#FF00FF">mov bl, 7
+    cmp es:[49h], bl    </font><font color="#008000"><i>{ Get current video mode }
+    </i></font><font color="#FF00FF">jne @@notmono
+    mov ax, 0806h       </font><font color="#008000"><i>{ Map starts at B000:0000 }
+</i></font><font color="#FF00FF">@@notmono:
+    out dx, ax;
+    popf;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>Mem<font color="#000080">[</font>Seg0040<font color="#000080">:</font><font color="#800000">$0084</font><font color="#000080">] = </font><font color="#800000">0</font><font color="#000080">)
+   </font><font color="#FF0000"><b>then  </b></font>points <font color="#000080">:= </font><font color="#800000">8
+   </font><font color="#FF0000"><b>else  begin
+     if </b></font>Mem<font color="#000080">[</font>Seg0040<font color="#000080">:</font><font color="#800000">$0084</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">42</font><font color="#000080">,</font><font color="#800000">49</font><font color="#000080">]
+      </font><font color="#FF0000"><b>then  </b></font>points <font color="#000080">:= </font><font color="#800000">13
+      </font><font color="#FF0000"><b>else  </b></font>points <font color="#000080">:= </font>Mem<font color="#000080">[</font>Seg0040<font color="#000080">:</font><font color="#800000">$0085</font><font color="#000080">];
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.  </font><font color="#008000"><i>{ of unit BBFont }
+
+
+
+</i></font><font color="#FF0000"><b>program </b></font>Test<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses </b></font>BBFont<font color="#000080">,...;
+
+</font><font color="#FF0000"><b>procedure </b></font>TestFont<font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>NewA<font color="#000080">:</font>TCharShape <font color="#000080">= (
+    </font><font color="#800000">$FF</font><font color="#000080">,  </font><font color="#008000"><i>{11111111}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$FF</font><font color="#000080">,  </font><font color="#008000"><i>{11111111}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00</font><font color="#000080">,  </font><font color="#008000"><i>{00000000}
+    </i></font><font color="#800000">$00   </font><font color="#008000"><i>{00000000}
+  </i></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>ReplaceChar<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">, @</font>NewA<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+  </b></font>TestFont<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to CHARS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0008.PAS">Original</a><b>]</b></p></body>
+</html>

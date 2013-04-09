@@ -1,0 +1,334 @@
+<html>
+<head><title> "Peek at network nodes" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0056.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#000000"> <font color="#008000"><i>{
+ Program Name : 10Peek.Pas
+ Written By   : Anonymous
+ E-Mail       : nothing
+ Web Page     : nothing
+ Program
+ Compilation  : Turbo Pascal 5.0 or later
+
+ Program Description :
+
+  This program uses the 10NET network function call $14 of the $6F interrupt
+  (GetRemoteMemory) provided by 10NET to access first the low memory of
+  another node, to find out what video mode it is currently in, and then
+  Video memory, to &quot;peek&quot; at their screen and duplicate it locally. It works
+  for monochrome, CGA in text or graphics mode, and EGA or VGA in all but
+  their highest resolution graphics.
+       The parameters that the program expects on startup are as illustrated:
+
+       10Peek &lt;Nodename&gt; [&lt;delay&gt;]
+
+  where &lt;Nodename&gt; must be currently on the network and available to NetStat,
+  and &lt;delay&gt; is an optional number of seconds to delay between refreshes of
+  the screen. Whether a delay is selected or not, a refresh can be forced by
+  pressing the spacebar.
+     This program takes advantage of TURBO Pascal 5.5 graph procedures to put
+  the local monitor into the proper mode.
+
+   [In the case of high resolution VGA/EGA modes, apparently part of the
+  detail of their screen images is not available in their directly accessible
+  memory.]
+
+  }
+
+</i></font><font color="#FF0000"><b>Program </b></font>TenPeek<font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Uses </b></font>CRT<font color="#000080">,</font>DOS<font color="#000080">,</font>Graph<font color="#000080">;
+</font><font color="#FF0000"><b>TYPE
+    </b></font>VGABuffer <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">32767</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+   </b></font>VGARemScreen <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word <font color="#000080">= (</font><font color="#800000">$A000</font><font color="#000080">,</font><font color="#800000">$A800</font><font color="#000080">,</font><font color="#800000">$B000</font><font color="#000080">,</font><font color="#800000">$B800</font><font color="#000080">);
+   </font>VRec <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font><font color="#000080">^</font>VGABuffer <font color="#000080">= (</font>Ptr<font color="#000080">(</font><font color="#800000">$A000</font><font color="#000080">,</font><font color="#800000">0000</font><font color="#000080">),</font>Ptr<font color="#000080">(</font><font color="#800000">$A800</font><font color="#000080">,</font><font color="#800000">0000</font><font color="#000080">),</font>Ptr<font color="#000080">(</font><font color="#800000">$B000</font><font color="#000080">,</font><font color="#800000">0000</font><font color="#000080">),</font>Ptr<font color="#000080">(</font><font color="#800000">$B800</font><font color="#000080">,</font><font color="#800000">0000</font><font color="#000080">));
+</font><font color="#FF0000"><b>TYPE
+   </b></font>RegRec<font color="#000080">= </font>Registers<font color="#000080">;
+   </font>Buffer <font color="#000080">= </font>Byte<font color="#000080">;
+   </font>VidRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+             </b></font>VMode <font color="#000080">: </font>Byte<font color="#000080">;
+             </font>ColCount <font color="#000080">: </font>Integer<font color="#000080">;
+             </font>ScreenPagelength <font color="#000080">: </font>Word<font color="#000080">;
+             </font>ScreenLoc <font color="#000080">: </font>Integer<font color="#000080">;
+             </font>CursorPos <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+             </font>CursorSize <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+             </font>DisplayPage <font color="#000080">: </font>Byte<font color="#000080">;
+             </font>ControllerAddr <font color="#000080">: </font>Integer<font color="#000080">;
+             </font>CRTMode <font color="#000080">: </font>Byte<font color="#000080">;
+             </font>PalletteMask <font color="#000080">: </font>Byte<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>ScreenBuffer <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65490</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>String12 <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+    </font>ScreenRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+                 </b></font>RNode <font color="#000080">: </font>String12<font color="#000080">;
+                 </font>SBuffer <font color="#000080">: </font>ScreenBuffer<font color="#000080">;
+                 </font>VidBuffer <font color="#000080">: </font>VidRec<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+   </b></font>VGAHi <font color="#000080">: </font>Boolean<font color="#000080">;
+   </font>CGAScreen <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4096</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">0000</font><font color="#000080">;
+   </font>EGAVGAScreen <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">41360</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$A000</font><font color="#000080">:</font><font color="#800000">0000</font><font color="#000080">;
+   </font>LocalScreenBuffer <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4096</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+   </font>PageOffset<font color="#000080">,</font>ErrCode <font color="#000080">: </font>Word<font color="#000080">;
+   </font>VideoMode <font color="#000080">: </font>Byte<font color="#000080">;
+   </font>GDriver<font color="#000080">,</font>GMode <font color="#000080">: </font>Integer<font color="#000080">;
+   </font>PauseCount <font color="#000080">: </font>Word<font color="#000080">;
+   </font>Test<font color="#000080">,</font>I<font color="#000080">,</font>IV<font color="#000080">,</font>VLength <font color="#000080">: </font>Integer<font color="#000080">;
+   </font>VidBuffer <font color="#000080">: </font>VidRec<font color="#000080">;
+   </font>SRec <font color="#000080">: ^</font>ScreenRec<font color="#000080">;
+   </font>LocalScreen <font color="#000080">: ^</font>ScreenBuffer<font color="#000080">;
+   </font>RemScreen <font color="#000080">: </font>Word<font color="#000080">;
+   </font>OneKey <font color="#000080">: </font>Char<font color="#000080">;
+   </font>LocalVideo <font color="#000080">: </font>VidRec <font color="#FF0000"><b>absolute </b></font><font color="#800000">0000</font><font color="#000080">:</font><font color="#800000">$0449</font><font color="#000080">;
+   </font>Reps <font color="#000080">: </font>Integer<font color="#000080">;
+   </font>Regs <font color="#000080">: </font>RegRec<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Save<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+   </b></font>Move<font color="#000080">(</font>LocalVideo<font color="#000080">,</font>VidBuffer<font color="#000080">,</font><font color="#800000">30</font><font color="#000080">);
+   </font><font color="#FF0000"><b>Repeat until </b></font><font color="#000080">((</font>Port<font color="#000080">[</font><font color="#800000">$3DA</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">8</font><font color="#000080">)=</font><font color="#800000">8</font><font color="#000080">);
+   </font>Move<font color="#000080">(</font>LocalScreen<font color="#000080">^,</font>LocalScreenBuffer<font color="#000080">,</font><font color="#800000">4096</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Restore<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+   </b></font>GDriver<font color="#000080">:=</font>CGA<font color="#000080">;
+   </font>GMode<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>Case </b></font>VidBuffer<font color="#000080">.</font>VMode <font color="#FF0000"><b>of
+   </b></font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3 </font><font color="#000080">: </font>TextMode<font color="#000080">(</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">);
+   </font><font color="#800000">4 </font><font color="#000080">: </font>InitGraph<font color="#000080">(</font>GDriver<font color="#000080">,</font>GMode<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+   </font><font color="#800000">5 </font><font color="#000080">: </font>InitGraph<font color="#000080">(</font>GDriver<font color="#000080">,</font>GMode<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+   </font><font color="#800000">6 </font><font color="#000080">: </font>InitGraph<font color="#000080">(</font>GDriver<font color="#000080">,</font>GMode<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>LocalScreen<font color="#000080">:=@</font>CGAScreen<font color="#000080">;
+   </font><font color="#FF0000"><b>Repeat until </b></font><font color="#000080">((</font>Port<font color="#000080">[</font><font color="#800000">$3DA</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">8</font><font color="#000080">)=</font><font color="#800000">8</font><font color="#000080">);
+   </font>Move<font color="#000080">(</font>LocalScreenBuffer<font color="#000080">,</font>LocalScreen<font color="#000080">^,</font><font color="#800000">4096</font><font color="#000080">);
+   </font>Move<font color="#000080">(</font>VidBuffer<font color="#000080">.</font>CursorPos<font color="#000080">,</font>LocalVideo<font color="#000080">.</font>CursorPos<font color="#000080">,</font><font color="#800000">18</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetRemoteMemory<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Node <font color="#000080">: </font>String12<font color="#000080">; </font>RSeg<font color="#000080">,</font>ROfs <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>RLength <font color="#000080">: </font>Integer<font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>LBuffer<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+   With </b></font>Regs <font color="#FF0000"><b>do
+    begin
+       </b></font>AX<font color="#000080">:=</font><font color="#800000">$1400</font><font color="#000080">;
+       </font>BX<font color="#000080">:=</font>RSeg<font color="#000080">;
+       </font>CX<font color="#000080">:=</font>RLength<font color="#000080">;
+       </font>SI<font color="#000080">:=</font>ROfs<font color="#000080">;
+       </font>DS<font color="#000080">:=</font>Seg<font color="#000080">(</font>Node<font color="#000080">);
+       </font>DX<font color="#000080">:=</font>Ofs<font color="#000080">(</font>Node<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">;
+       </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>Node<font color="#000080">)&lt;</font><font color="#800000">12</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>Node<font color="#000080">:=</font>Node<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">;
+       </font>DI<font color="#000080">:=</font>Ofs<font color="#000080">(</font>LBuffer<font color="#000080">);
+       </font>Intr<font color="#000080">(</font><font color="#800000">$6F</font><font color="#000080">,</font>Regs<font color="#000080">);
+       </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Flags <font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">)&gt;</font><font color="#800000">0
+       </font><font color="#FF0000"><b>then
+        begin
+           </b></font>Writeln<font color="#000080">(^</font>G<font color="#000080">,</font><font color="#800000">'Error reading remote memory...Halting'</font><font color="#000080">);
+           </font>Halt<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font>RLength<font color="#000080">:=</font>CX<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetVideoMode<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+   Case </b></font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode <font color="#FF0000"><b>of
+   </b></font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">7 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>VGAHi<font color="#000080">:=</font>False<font color="#000080">;
+               </font><font color="#FF0000"><b>If </b></font><font color="#000080">((</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">=</font><font color="#800000">3</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>ScreenPageLength<font color="#000080">&gt;</font><font color="#800000">4096</font><font color="#000080">))
+               </font><font color="#FF0000"><b>then
+                begin
+                   </b></font>TextMode<font color="#000080">(</font>CO80<font color="#000080">+</font>Font8X8<font color="#000080">);
+                   </font>LocalScreen<font color="#000080">:=@</font>CGAScreen<font color="#000080">;
+                   </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+                   </font>Reps<font color="#000080">:=</font><font color="#800000">17</font><font color="#000080">;
+                </font><font color="#FF0000"><b>end
+               else if </b></font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">=</font><font color="#800000">7 </font><font color="#FF0000"><b>then </b></font>TextMode<font color="#000080">(</font>BW80<font color="#000080">)
+               </font><font color="#FF0000"><b>else </b></font>TextMode<font color="#000080">(</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">);
+               </font>LocalScreen<font color="#000080">:=@</font>CGAScreen<font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#800000">4 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+          </b></font>VGAHi<font color="#000080">:=</font>False<font color="#000080">;
+          </font>GMode<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+          </font>GDriver<font color="#000080">:=</font>CGA<font color="#000080">;
+          </font>LocalScreen<font color="#000080">:=@</font>CGAScreen<font color="#000080">;
+       </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#800000">6 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+          </b></font>VGAHi<font color="#000080">:=</font>False<font color="#000080">;
+          </font>GMode<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;
+          </font>GDriver<font color="#000080">:=</font>CGA<font color="#000080">;
+          </font>LocalScreen<font color="#000080">:=@</font>CGAScreen<font color="#000080">;
+       </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#800000">14 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+           </b></font>VGAHi<font color="#000080">:=</font>False<font color="#000080">;
+           </font>GMode<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+           </font>GDriver<font color="#000080">:=</font>EGA<font color="#000080">;
+           </font>LocalScreen<font color="#000080">:=@</font>EGAVGAScreen<font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#800000">16 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+           </b></font>VGAHi<font color="#000080">:=</font>True<font color="#000080">;
+           </font>GMode<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+           </font>GDriver<font color="#000080">:=</font>VGA<font color="#000080">;
+           </font>LocalScreen<font color="#000080">:=@</font>EGAVGAScreen<font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">19 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+           </b></font>VGAHi<font color="#000080">:=</font>True<font color="#000080">;
+           </font>GMode<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">;
+           </font>GDriver<font color="#000080">:=</font>VGA<font color="#000080">;
+           </font>LocalScreen<font color="#000080">:=@</font>EGAVGAScreen<font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>If </b></font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">14</font><font color="#000080">,</font><font color="#800000">16</font><font color="#000080">,</font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">19</font><font color="#000080">]
+   </font><font color="#FF0000"><b>then
+    begin
+       </b></font>InitGraph<font color="#000080">(</font>GDriver<font color="#000080">,</font>GMode<font color="#000080">,</font><font color="#800000">''</font><font color="#000080">);
+       </font>ErrCode<font color="#000080">:=</font>GraphResult<font color="#000080">;
+       </font><font color="#FF0000"><b>If </b></font>ErrCode<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>VideoMode<font color="#000080">:=</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+   else </b></font>VideoMode<font color="#000080">:=</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>VideoParms<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+   </b></font>VLength<font color="#000080">:=</font><font color="#800000">30</font><font color="#000080">;
+   </font>GetRemoteMemory<font color="#000080">(</font>SRec<font color="#000080">^.</font>RNode<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">$449</font><font color="#000080">,</font>VLength<font color="#000080">,</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">);
+   </font><font color="#FF0000"><b>If </b></font>VLength<font color="#000080">&lt;&gt;</font><font color="#800000">30 </font><font color="#FF0000"><b>then </b></font>Halt<font color="#000080">;
+</font><font color="#008000"><i>{   ClrScr;
+   GotoXY(1,1);
+   Writeln('Mode: ',SRec^.VidBuffer.VMode);
+   Writeln('Columns: ',SRec^.VidBuffer.ColCount);
+   Writeln('Bytes/Page: ',SRec^.VidBuffer.ScreenPageLength);
+   Delay(300);
+ }  </i></font><font color="#FF0000"><b>If </b></font>VideoMode<font color="#000080">&lt;&gt;</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode
+   <font color="#FF0000"><b>then </b></font>SetVideoMode<font color="#000080">;
+   </font><font color="#FF0000"><b>Case </b></font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode <font color="#FF0000"><b>of
+        </b></font><font color="#800000">0 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">1 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">4</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">2 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">8</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">3 </font><font color="#000080">: </font><font color="#FF0000"><b>If not</b></font><font color="#000080">((</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">=</font><font color="#800000">3</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>ScreenPageLength<font color="#000080">&gt;</font><font color="#800000">4096</font><font color="#000080">))
+            </font><font color="#FF0000"><b>then
+             begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">8</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+             </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">4 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">34</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">6 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">34</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B800</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">7 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">34</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$B000</font><font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">14 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+               </b></font>Reps<font color="#000080">:=</font><font color="#800000">34</font><font color="#000080">;
+               </font>RemScreen<font color="#000080">:=</font><font color="#800000">$A000</font><font color="#000080">;
+             </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#800000">16 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+                </b></font>Reps<font color="#000080">:=</font><font color="#800000">69</font><font color="#000080">;
+                </font>RemScreen<font color="#000080">:=</font><font color="#800000">$A000</font><font color="#000080">;
+             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">19 </font><font color="#000080">: </font><font color="#FF0000"><b>Begin
+                </b></font>Reps<font color="#000080">:=</font><font color="#800000">69</font><font color="#000080">;
+                </font>RemScreen<font color="#000080">:=</font><font color="#800000">$A000</font><font color="#000080">;
+             </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>else
+         begin
+</b></font>	    TextMode<font color="#000080">(</font>CO80<font color="#000080">);
+            </font>ClrScr<font color="#000080">;
+            </font>Writeln<font color="#000080">(</font><font color="#800000">'VideoMode= '</font><font color="#000080">,</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode<font color="#000080">);
+            </font>Halt<font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Move<font color="#000080">(</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>CursorPos<font color="#000080">,</font>LocalVideo<font color="#000080">.</font>CursorPos<font color="#000080">,</font><font color="#800000">18</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Main}
+</i></font><font color="#FF0000"><b>Begin
+   If </b></font>ParamCount<font color="#000080">=</font><font color="#800000">0
+   </font><font color="#FF0000"><b>then
+    begin
+       </b></font>Writeln<font color="#000080">(</font><font color="#800000">' Syntax : '</font><font color="#000080">);
+       </font>Writeln<font color="#000080">(</font><font color="#800000">'             10Peek &lt;Nodename&gt;'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+   else
+    begin
+       </b></font>New<font color="#000080">(</font>SRec<font color="#000080">);
+       </font>VideoMode<font color="#000080">:=</font><font color="#800000">255</font><font color="#000080">;
+       </font>VGAHi<font color="#000080">:=</font>False<font color="#000080">;
+       </font>LocalScreen<font color="#000080">:=@</font>CGAScreen<font color="#000080">;
+       </font>ErrCode<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+       </font>SRec<font color="#000080">^.</font>RNode<font color="#000080">:=</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+       </font><font color="#FF0000"><b>For </b></font>I<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>SRec<font color="#000080">^.</font>RNode<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>SRec<font color="#000080">^.</font>RNode<font color="#000080">[</font>I<font color="#000080">]:=</font>Upcase<font color="#000080">(</font>SRec<font color="#000080">^.</font>RNode<font color="#000080">[</font>I<font color="#000080">]);
+       </font>PauseCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+       </font><font color="#FF0000"><b>If </b></font>Paramcount<font color="#000080">&lt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then </b></font>Test<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>else </b></font>VAL<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">),</font>PauseCount<font color="#000080">,</font>Test<font color="#000080">);
+       </font><font color="#FF0000"><b>If </b></font>test<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PauseCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+       </font>PauseCount<font color="#000080">:=</font>PauseCount<font color="#000080">*</font><font color="#800000">10</font><font color="#000080">;
+       </font>Save<font color="#000080">;
+       </font>VideoParms<font color="#000080">;
+       </font><font color="#FF0000"><b>Repeat
+          </b></font>OneKey<font color="#000080">:=</font><font color="#800000">#0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>VMode <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">])
+          </font><font color="#FF0000"><b>then </b></font>PageOffset<font color="#000080">:=</font>Integer<font color="#000080">(</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>DisplayPage<font color="#000080">)*</font>SRec<font color="#000080">^.</font>VidBuffer<font color="#000080">.</font>ScreenPageLength
+          <font color="#FF0000"><b>else </b></font>PageOffset<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>If not </b></font>VGAHi
+          <font color="#FF0000"><b>then
+           begin
+              for </b></font>I<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>Reps <font color="#FF0000"><b>do
+               begin
+                  </b></font>VLength<font color="#000080">:=</font><font color="#800000">470</font><font color="#000080">;
+                  </font>GetRemoteMemory<font color="#000080">(</font>SRec<font color="#000080">^.</font>RNode<font color="#000080">,</font>RemScreen<font color="#000080">,</font>I<font color="#000080">*</font><font color="#800000">470</font><font color="#000080">+</font>PageOffset<font color="#000080">,</font>VLength<font color="#000080">,</font>SRec<font color="#000080">^.</font>SBuffer<font color="#000080">[</font>I<font color="#000080">*</font><font color="#800000">470</font><font color="#000080">]);
+               </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>Repeat until </b></font><font color="#000080">((</font>Port<font color="#000080">[</font><font color="#800000">$3DA</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">8</font><font color="#000080">)=</font><font color="#800000">8</font><font color="#000080">);
+              </font>Move<font color="#000080">(</font>SRec<font color="#000080">^.</font>SBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">],</font>LocalScreen<font color="#000080">^,(</font>Reps<font color="#000080">*</font><font color="#800000">470</font><font color="#000080">)+</font>VLength<font color="#000080">);
+           </font><font color="#FF0000"><b>end
+          else for </b></font>IV<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">3 </font><font color="#FF0000"><b>do
+           begin
+              </b></font>Delay<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+              </font><font color="#FF0000"><b>for </b></font>I<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>Reps <font color="#FF0000"><b>do
+               begin
+                  </b></font>VLength<font color="#000080">:=</font><font color="#800000">470</font><font color="#000080">;
+                  </font>GetRemoteMemory<font color="#000080">(</font>SRec<font color="#000080">^.</font>RNode<font color="#000080">,</font>RemScreen<font color="#000080">,</font>I<font color="#000080">*</font><font color="#800000">470</font><font color="#000080">+</font>PageOffset<font color="#000080">,</font>VLength<font color="#000080">,</font>SRec<font color="#000080">^.</font>SBuffer<font color="#000080">[</font>I<font color="#000080">*</font><font color="#800000">470</font><font color="#000080">]);
+               </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font>Move<font color="#000080">(</font>SRec<font color="#000080">^.</font>SBuffer<font color="#000080">,</font>VRec<font color="#000080">[</font>IV<font color="#000080">]^,</font><font color="#800000">32767</font><font color="#000080">);
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>Sound<font color="#000080">(</font><font color="#800000">6000</font><font color="#000080">);
+          </font>Delay<font color="#000080">(</font><font color="#800000">50</font><font color="#000080">);
+          </font>Nosound<font color="#000080">;
+          </font><font color="#FF0000"><b>Repeat
+             If </b></font>PauseCount<font color="#000080">&lt;&gt;</font><font color="#800000">0
+             </font><font color="#FF0000"><b>then
+              begin
+                 </b></font>OneKey<font color="#000080">:=</font><font color="#800000">#32</font><font color="#000080">;
+                 </font><font color="#FF0000"><b>For </b></font>I<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>PauseCount <font color="#FF0000"><b>do if not </b></font>keypressed
+                  <font color="#FF0000"><b>then </b></font>delay<font color="#000080">(</font><font color="#800000">100</font><font color="#000080">) </font><font color="#FF0000"><b>else
+                   begin
+                      </b></font>I<font color="#000080">:=</font>PauseCount<font color="#000080">;
+                      </font>OneKey<font color="#000080">:=</font>Readkey<font color="#000080">;
+                   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>end
+             else </b></font>OneKey<font color="#000080">:=</font>Readkey<font color="#000080">;
+             </font><font color="#FF0000"><b>If not </b></font><font color="#000080">(</font>Onekey <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">#32</font><font color="#000080">,</font><font color="#800000">#27</font><font color="#000080">]) </font><font color="#FF0000"><b>then </b></font>Write<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">);
+          </font><font color="#FF0000"><b>Until </b></font>OneKey <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">#32</font><font color="#000080">,</font><font color="#800000">#27</font><font color="#000080">];
+          </font><font color="#FF0000"><b>If </b></font>Onekey<font color="#000080">=</font><font color="#800000">#32 </font><font color="#FF0000"><b>then </b></font>Videoparms<font color="#000080">;
+       </font><font color="#FF0000"><b>Until </b></font>OneKey<font color="#000080">=</font><font color="#800000">#27</font><font color="#000080">;
+      </font>Restore<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0056.PAS">Original</a><b>]</b></p></body>
+</html>

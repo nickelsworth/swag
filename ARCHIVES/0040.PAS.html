@@ -1,0 +1,1106 @@
+<html>
+<head><title> "Compression using LHArc" by HARUHIKO OKOMURA</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0040.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(******************************************************************************)
+(*                                                                            *)
+(* LH5.PAS                                                                    *)
+(*                                                                            *)
+(* This code compress/decompress data using the same algorithm as LHArc 2.x   *)
+(* It is roughly derived from the C source code of AR002 (a C version of a    *)
+(* subset of LHArc, written by Haruhiko Okomura).                             *)
+(* The algorithm was created by Haruhiko Okomura and Haruyasu Yoshizaki.      *)
+(*                                                                            *)
+(******************************************************************************)
+
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>Lh5<font color="#000080">;
+
+</font><font color="#008000"><i>{Turn off range checking - MANDATORY ! and stack checking (to speed up things)}
+{$B-,R-,S-}
+
+{$DEFINE PERCOLATE}
+(*
+NOTE :
+   LHArc uses a &quot;percolating&quot; update of its Lempel-Ziv structures.
+   If you use the percolating method, the compressor will run slightly faster,
+   using a little more memory, and will be slightly less efficient than the
+   standard method.
+   You can choose either method, and note that the decompressor is not
+   affected by this choice and is able to decompress data created by each one
+   of the compressors.
+*)
+
+</i></font><font color="#FF0000"><b>TYPE
+  </b></font>PWord<font color="#000080">=^</font>TWord<font color="#000080">;
+  </font>TWord<font color="#000080">=</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">32759</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Integer<font color="#000080">;
+  </font>PByte<font color="#000080">=^</font>TByte<font color="#000080">;
+  </font>TByte<font color="#000080">=</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65519</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+</b></font><font color="#008000"><i>(*
+NOTE :
+   The following constants are set to the values used by LHArc.
+   You can change three of them as follows :
+
+   DICBIT : Lempel-Ziv dictionnary size.
+   Lowering this constant can lower the compression efficiency a lot !
+   But increasing it (on a 32 bit platform only, i.e. Delphi 2) will not yield
+   noticeably better results.
+   If you set DICBIT to 15 or more, set PBIT to 5; and if you set DICBIT to 19
+   or more, set NPT to NP, too.
+
+   WINBIT : Sliding window size.
+   The compression ratio depends a lot of this value.
+   You can increase it to 15 to get better results on large files.
+   I recommend doing this if you have enough memory, except if you want that
+   your compressed data remain compatible with LHArc.
+   On a 32 bit platform, you can increase it to 16. Using a larger value will
+   only waste time and memory.
+
+   BUFBIT : I/O Buffer size. You can lower it to save memory, or increase it
+   to reduce disk access.
+*)
+
+  </i></font>BITBUFSIZ<font color="#000080">=</font><font color="#800000">16</font><font color="#000080">;
+  </font>UCHARMAX<font color="#000080">=</font><font color="#800000">255</font><font color="#000080">;
+
+  </font>DICBIT<font color="#000080">=</font><font color="#800000">13</font><font color="#000080">;
+  </font>DICSIZ<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>DICBIT<font color="#000080">;
+
+  </font>MATCHBIT<font color="#000080">=</font><font color="#800000">8</font><font color="#000080">;
+  </font>MAXMATCH<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>MATCHBIT<font color="#000080">;
+  </font>THRESHOLD<font color="#000080">=</font><font color="#800000">3</font><font color="#000080">;
+  </font>PERCFLAG<font color="#000080">=</font><font color="#800000">$8000</font><font color="#000080">;
+
+  </font>NC<font color="#000080">=(</font>UCHARMAX<font color="#000080">+</font>MAXMATCH<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">-</font>THRESHOLD<font color="#000080">);
+  </font>CBIT<font color="#000080">=</font><font color="#800000">9</font><font color="#000080">;
+  </font>CODEBIT<font color="#000080">=</font><font color="#800000">16</font><font color="#000080">;
+
+  </font>NP<font color="#000080">=</font>DICBIT<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font>NT<font color="#000080">=</font>CODEBIT<font color="#000080">+</font><font color="#800000">3</font><font color="#000080">;
+  </font>PBIT<font color="#000080">=</font><font color="#800000">4</font><font color="#000080">; </font><font color="#008000"><i>{Log2(NP)}
+  </i></font>TBIT<font color="#000080">=</font><font color="#800000">5</font><font color="#000080">; </font><font color="#008000"><i>{Log2(NT)}
+  </i></font>NPT<font color="#000080">=</font>NT<font color="#000080">; </font><font color="#008000"><i>{Greater from NP and NT}
+
+  </i></font>NUL<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+  </font>MAXHASHVAL<font color="#000080">=(</font><font color="#800000">3</font><font color="#000080">*</font>DICSIZ<font color="#000080">+(</font>DICSIZ <font color="#FF0000"><b>SHR </b></font><font color="#800000">9</font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)*</font>UCHARMAX<font color="#000080">);
+
+  </font>WINBIT<font color="#000080">=</font><font color="#800000">14</font><font color="#000080">;
+  </font>WINDOWSIZE<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>WINBIT<font color="#000080">;
+
+  </font>BUFBIT<font color="#000080">=</font><font color="#800000">13</font><font color="#000080">;
+  </font>BUFSIZE<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>BUFBIT<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>OrigSize<font color="#000080">,</font>CompSize<font color="#000080">:</font>Longint<font color="#000080">;
+  </font>InFile<font color="#000080">,</font>OutFile<font color="#000080">:</font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+
+  </font>BitBuf<font color="#000080">:</font>Word<font color="#000080">;
+  </font>n<font color="#000080">,</font>HeapSize<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>SubBitBuf<font color="#000080">,</font>BitCount<font color="#000080">:</font>Word<font color="#000080">;
+
+  </font>Buffer<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>PRED<font color="#000080">(</font>BUFSIZE<font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+  </font>BufPtr<font color="#000080">:</font>Word<font color="#000080">;
+
+  </font>Left<font color="#000080">,</font>Right<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">*(</font>NC<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+
+  </font>PtTable<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>PtLen<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>PRED<font color="#000080">(</font>NPT<font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+  </font>CTable<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4095</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>CLen<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>PRED<font color="#000080">(</font>NC<font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+
+  </font>BlockSize<font color="#000080">:</font>Word<font color="#000080">;
+
+  </font><font color="#008000"><i>{ The following variables are used by the compression engine only }
+
+  </i></font>Heap<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>NC<font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>LenCnt<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+
+  </font>Freq<font color="#000080">,</font>SortPtr<font color="#000080">:</font>PWord<font color="#000080">;
+  </font>Len<font color="#000080">:</font>PByte<font color="#000080">;
+  </font>Depth<font color="#000080">:</font>Word<font color="#000080">;
+
+  </font>Buf<font color="#000080">:</font>PByte<font color="#000080">;
+
+  </font>CFreq<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">*(</font>NC<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>PFreq<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">*(</font>NP<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>TFreq<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">*(</font>NT<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+
+  </font>CCode<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>PRED<font color="#000080">(</font>NC<font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>PtCode<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>PRED<font color="#000080">(</font>NPT<font color="#000080">)]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+
+  </font>CPos<font color="#000080">,</font>OutputPos<font color="#000080">,</font>OutputMask<font color="#000080">:</font>Word<font color="#000080">;
+  </font>Text<font color="#000080">,</font>ChildCount<font color="#000080">:</font>PByte<font color="#000080">;
+
+  </font>Pos<font color="#000080">,</font>MatchPos<font color="#000080">,</font>Avail<font color="#000080">:</font>Word<font color="#000080">;
+  </font>Position<font color="#000080">,</font>Parent<font color="#000080">,</font>Prev<font color="#000080">,</font>Next<font color="#000080">:</font>PWord<font color="#000080">;
+
+  </font>Remainder<font color="#000080">,</font>MatchLen<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>Level<font color="#000080">:</font>PByte<font color="#000080">;
+
+</font><font color="#008000"><i>{********************************** File I/O **********************************}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>GetC<font color="#000080">:</font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>BufPtr<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    </b></font>BlockRead<font color="#000080">(</font>InFile<font color="#000080">,</font>Buffer<font color="#000080">,</font>BUFSIZE<font color="#000080">);
+  </font>GetC<font color="#000080">:=</font>Buffer<font color="#000080">[</font>BufPtr<font color="#000080">];</font>BufPtr<font color="#000080">:=</font>SUCC<font color="#000080">(</font>BufPtr<font color="#000080">)</font><font color="#FF0000"><b>AND </b></font>PRED<font color="#000080">(</font>BUFSIZE<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>PutC<font color="#000080">(</font>c<font color="#000080">:</font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>BufPtr<font color="#000080">=</font>BUFSIZE <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">,</font>Buffer<font color="#000080">,</font>BUFSIZE<font color="#000080">);</font>BufPtr<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Buffer<font color="#000080">[</font>BufPtr<font color="#000080">]:=</font>C<font color="#000080">;</font>INC<font color="#000080">(</font>BufPtr<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>BRead<font color="#000080">(</font>p<font color="#000080">:</font>POINTER<font color="#000080">;</font>n<font color="#000080">:</font>Integer<font color="#000080">):</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>BlockRead<font color="#000080">(</font>InFile<font color="#000080">,</font>p<font color="#000080">^,</font>n<font color="#000080">,</font>n<font color="#000080">);
+  </font>BRead<font color="#000080">:=</font>n<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>BWrite<font color="#000080">(</font>p<font color="#000080">:</font>POINTER<font color="#000080">;</font>n<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">,</font>p<font color="#000080">^,</font>n<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{**************************** Bit handling routines ***************************}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>FillBuf<font color="#000080">(</font>n<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>BitBuf<font color="#000080">:=(</font>BitBuf <font color="#FF0000"><b>SHL </b></font>n<font color="#000080">);
+  </font><font color="#FF0000"><b>WHILE </b></font>n<font color="#000080">&gt;</font>BitCount <font color="#FF0000"><b>DO BEGIN
+    </b></font>DEC<font color="#000080">(</font>n<font color="#000080">,</font>BitCount<font color="#000080">);
+    </font>BitBuf<font color="#000080">:=</font>BitBuf <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>SubBitBuf <font color="#FF0000"><b>SHL </b></font>n<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>CompSize<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>DEC<font color="#000080">(</font>CompSize<font color="#000080">);</font>SubBitBuf<font color="#000080">:=</font>GetC<font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE
+        </b></font>SubBitBuf<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font>BitCount<font color="#000080">:=</font><font color="#800000">8</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>DEC<font color="#000080">(</font>BitCount<font color="#000080">,</font>n<font color="#000080">);
+  </font>BitBuf<font color="#000080">:=</font>BitBuf <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>SubBitBuf <font color="#FF0000"><b>SHR </b></font>BitCount<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>GetBits<font color="#000080">(</font>n<font color="#000080">:</font>Integer<font color="#000080">):</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>GetBits<font color="#000080">:=</font>BitBuf <font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font>n<font color="#000080">);
+  </font>FillBuf<font color="#000080">(</font>n<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>PutBits<font color="#000080">(</font>n<font color="#000080">:</font>Integer<font color="#000080">;</font>x<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>n<font color="#000080">&lt;</font>BitCount <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>DEC<font color="#000080">(</font>BitCount<font color="#000080">,</font>n<font color="#000080">);
+      </font>SubBitBuf<font color="#000080">:=</font>SubBitBuf <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>x <font color="#FF0000"><b>SHL </b></font>BitCount<font color="#000080">);
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>DEC<font color="#000080">(</font>n<font color="#000080">,</font>BitCount<font color="#000080">);
+      </font>PutC<font color="#000080">(</font>SubBitBuf <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>x <font color="#FF0000"><b>SHR </b></font>n<font color="#000080">));</font>INC<font color="#000080">(</font>CompSize<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>n<font color="#000080">&lt;</font><font color="#800000">8 </font><font color="#FF0000"><b>THEN
+        BEGIN
+          </b></font>BitCount<font color="#000080">:=</font><font color="#800000">8</font><font color="#000080">-</font>n<font color="#000080">;</font>SubBitBuf<font color="#000080">:=</font>x <font color="#FF0000"><b>SHL </b></font>BitCount<font color="#000080">;
+        </font><font color="#FF0000"><b>END ELSE BEGIN
+          </b></font>PutC<font color="#000080">(</font>x <font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font>n<font color="#000080">-</font><font color="#800000">8</font><font color="#000080">));</font>INC<font color="#000080">(</font>CompSize<font color="#000080">);
+          </font>BitCount<font color="#000080">:=</font><font color="#800000">16</font><font color="#000080">-</font>n<font color="#000080">;</font>SubBitBuf<font color="#000080">:=</font>x <font color="#FF0000"><b>SHL </b></font>BitCount<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>InitGetBits<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>BitBuf<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>SubBitBuf<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>BitCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>FillBuf<font color="#000080">(</font>BITBUFSIZ<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>InitPutBits<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>BitCount<font color="#000080">:=</font><font color="#800000">8</font><font color="#000080">;</font>SubBitBuf<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{******************************** Decompression *******************************}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>MakeTable<font color="#000080">(</font>nchar<font color="#000080">:</font>Integer<font color="#000080">;</font>BitLen<font color="#000080">:</font>PByte<font color="#000080">;</font>TableBits<font color="#000080">:</font>Integer<font color="#000080">;</font>Table<font color="#000080">:</font>PWord<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>count<font color="#000080">,</font>weight<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>start<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">17</font><font color="#000080">]</font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+  </font>p<font color="#000080">:</font>PWord<font color="#000080">;
+  </font>i<font color="#000080">,</font>k<font color="#000080">,</font>Len<font color="#000080">,</font>ch<font color="#000080">,</font>jutbits<font color="#000080">,</font>Avail<font color="#000080">,</font>nextCode<font color="#000080">,</font>mask<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">16 </font><font color="#FF0000"><b>DO
+    </b></font>count<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>nchar<font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>INC<font color="#000080">(</font>count<font color="#000080">[</font>BitLen<font color="#000080">^[</font>i<font color="#000080">]]);
+  </font>start<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">16 </font><font color="#FF0000"><b>DO
+    </b></font>start<font color="#000080">[</font>SUCC<font color="#000080">(</font>i<font color="#000080">)]:=</font>start<font color="#000080">[</font>i<font color="#000080">]+(</font>count<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font><font color="#800000">16</font><font color="#000080">-</font>i<font color="#000080">));
+  </font><font color="#FF0000"><b>IF </b></font>start<font color="#000080">[</font><font color="#800000">17</font><font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    </b></font>HALT<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font>jutbits<font color="#000080">:=</font><font color="#800000">16</font><font color="#000080">-</font>TableBits<font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>TableBits <font color="#FF0000"><b>DO
+    BEGIN
+      </b></font>start<font color="#000080">[</font>i<font color="#000080">]:=</font>start<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>SHR </b></font>jutbits<font color="#000080">;</font>weight<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>TableBits<font color="#000080">-</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>i<font color="#000080">:=</font>SUCC<font color="#000080">(</font>TableBits<font color="#000080">);
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;=</font><font color="#800000">16</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>weight<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font><font color="#800000">16</font><font color="#000080">-</font>i<font color="#000080">);</font>INC<font color="#000080">(</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>i<font color="#000080">:=</font>start<font color="#000080">[</font>SUCC<font color="#000080">(</font>TableBits<font color="#000080">)] </font><font color="#FF0000"><b>SHR </b></font>jutbits<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>i<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>k<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>TableBits<font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font>i<font color="#000080">&lt;&gt;</font>k <font color="#FF0000"><b>DO BEGIN
+        </b></font>Table<font color="#000080">^[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Avail<font color="#000080">:=</font>nchar<font color="#000080">;</font>mask<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font><font color="#800000">15</font><font color="#000080">-</font>TableBits<font color="#000080">);
+  </font><font color="#FF0000"><b>FOR </b></font>ch<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>nchar<font color="#000080">) </font><font color="#FF0000"><b>DO
+    BEGIN
+      </b></font>Len<font color="#000080">:=</font>BitLen<font color="#000080">^[</font>ch<font color="#000080">];
+      </font><font color="#FF0000"><b>IF </b></font>Len<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+        </b></font>CONTINUE<font color="#000080">;
+      </font>k<font color="#000080">:=</font>start<font color="#000080">[</font>Len<font color="#000080">];
+      </font>nextCode<font color="#000080">:=</font>k<font color="#000080">+</font>weight<font color="#000080">[</font>Len<font color="#000080">];
+      </font><font color="#FF0000"><b>IF </b></font>Len<font color="#000080">&lt;=</font>TableBits <font color="#FF0000"><b>THEN
+        BEGIN
+          FOR </b></font>i<font color="#000080">:=</font>k <font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>nextCode<font color="#000080">) </font><font color="#FF0000"><b>DO
+            </b></font>Table<font color="#000080">^[</font>i<font color="#000080">]:=</font>ch<font color="#000080">;
+        </font><font color="#FF0000"><b>END ELSE BEGIN
+          </b></font>p<font color="#000080">:=</font>Addr<font color="#000080">(</font>Table<font color="#000080">^[</font>k <font color="#FF0000"><b>SHR </b></font>jutbits<font color="#000080">]);</font>i<font color="#000080">:=</font>Len<font color="#000080">-</font>TableBits<font color="#000080">;
+          </font><font color="#FF0000"><b>WHILE </b></font>i<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+            IF </b></font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+              BEGIN
+                </b></font>right<font color="#000080">[</font>Avail<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>left<font color="#000080">[</font>Avail<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>Avail<font color="#000080">;</font>INC<font color="#000080">(</font>Avail<font color="#000080">);
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>k <font color="#FF0000"><b>AND </b></font>mask<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+              </b></font>p<font color="#000080">:=</font>addr<font color="#000080">(</font>right<font color="#000080">[</font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]])
+            </font><font color="#FF0000"><b>ELSE
+              </b></font>p<font color="#000080">:=</font>addr<font color="#000080">(</font>left<font color="#000080">[</font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]]);
+            </font>k<font color="#000080">:=</font>k <font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">;</font>DEC<font color="#000080">(</font>i<font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>ch<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>start<font color="#000080">[</font>Len<font color="#000080">]:=</font>nextCode<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ReadPtLen<font color="#000080">(</font>nn<font color="#000080">,</font>nBit<font color="#000080">,</font>ispecial<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>c<font color="#000080">,</font>n<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>mask<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>n<font color="#000080">:=</font>GetBits<font color="#000080">(</font>nBit<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>n<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>c<font color="#000080">:=</font>GetBits<font color="#000080">(</font>nBit<font color="#000080">);
+      </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>nn<font color="#000080">) </font><font color="#FF0000"><b>DO
+        </b></font>PtLen<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">255 </font><font color="#FF0000"><b>DO
+        </b></font>PtTable<font color="#000080">[</font>i<font color="#000080">]:=</font>c<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+        </b></font>c<font color="#000080">:=</font>BitBuf <font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">);
+        </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">=</font><font color="#800000">7 </font><font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>mask<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">4</font><font color="#000080">);
+            </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>mask <font color="#FF0000"><b>AND </b></font>BitBuf<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+              </b></font>mask<font color="#000080">:=</font>mask <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;</font>INC<font color="#000080">(</font>c<font color="#000080">);
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">&lt;</font><font color="#800000">7 </font><font color="#FF0000"><b>THEN
+          </b></font>FillBuf<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">)
+        </font><font color="#FF0000"><b>ELSE
+          </b></font>FillBuf<font color="#000080">(</font>c<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">);
+        </font>PtLen<font color="#000080">[</font>i<font color="#000080">]:=</font>c<font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);
+        </font><font color="#FF0000"><b>IF </b></font>i<font color="#000080">=</font>ispecial <font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>c<font color="#000080">:=</font>PRED<font color="#000080">(</font>GetBits<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));
+            </font><font color="#FF0000"><b>WHILE </b></font>c<font color="#000080">&gt;=</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+              </b></font>PtLen<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);</font>DEC<font color="#000080">(</font>c<font color="#000080">);
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font>i<font color="#000080">&lt;</font>nn <font color="#FF0000"><b>DO BEGIN
+        </b></font>PtLen<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>MakeTable<font color="#000080">(</font>nn<font color="#000080">,@</font>PtLen<font color="#000080">,</font><font color="#800000">8</font><font color="#000080">,@</font>PtTable<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ReadCLen<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>c<font color="#000080">,</font>n<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>mask<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>n<font color="#000080">:=</font>GetBits<font color="#000080">(</font>CBIT<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>n<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>c<font color="#000080">:=</font>GetBits<font color="#000080">(</font>CBIT<font color="#000080">);
+      </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>NC<font color="#000080">) </font><font color="#FF0000"><b>DO
+        </b></font>CLen<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">4095 </font><font color="#FF0000"><b>DO
+        </b></font>CTable<font color="#000080">[</font>i<font color="#000080">]:=</font>c<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font>i<font color="#000080">&lt;</font>n <font color="#FF0000"><b>DO BEGIN
+        </b></font>c<font color="#000080">:=</font>PtTable<font color="#000080">[</font>BitBuf <font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">8</font><font color="#000080">)];
+        </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">&gt;=</font>NT <font color="#FF0000"><b>THEN
+          BEGIN
+            </b></font>mask<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">9</font><font color="#000080">);
+            </font><font color="#FF0000"><b>REPEAT
+              IF </b></font><font color="#000080">(</font>BitBuf <font color="#FF0000"><b>AND </b></font>mask<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+                </b></font>c<font color="#000080">:=</font>right<font color="#000080">[</font>c<font color="#000080">]
+              </font><font color="#FF0000"><b>ELSE
+                </b></font>c<font color="#000080">:=</font>left<font color="#000080">[</font>c<font color="#000080">];
+              </font>mask<font color="#000080">:=</font>mask <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;
+            </font><font color="#FF0000"><b>UNTIL </b></font>c<font color="#000080">&lt;</font>NT<font color="#000080">;
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font>FillBuf<font color="#000080">(</font>PtLen<font color="#000080">[</font>c<font color="#000080">]);
+        </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">&lt;=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+          BEGIN
+            IF </b></font>c<font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>THEN
+              </b></font>c<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">+</font>GetBits<font color="#000080">(</font><font color="#800000">4</font><font color="#000080">)
+            </font><font color="#FF0000"><b>ELSE
+              IF </b></font>c<font color="#000080">=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+                </b></font>c<font color="#000080">:=</font><font color="#800000">19</font><font color="#000080">+</font>GetBits<font color="#000080">(</font>CBIT<font color="#000080">);
+            </font><font color="#FF0000"><b>WHILE </b></font>c<font color="#000080">&gt;=</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+              </b></font>CLen<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);</font>DEC<font color="#000080">(</font>c<font color="#000080">);
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>END ELSE BEGIN
+            </b></font>CLen<font color="#000080">[</font>i<font color="#000080">]:=</font>c<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font>i<font color="#000080">&lt;</font>NC <font color="#FF0000"><b>DO BEGIN
+        </b></font>CLen<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>INC<font color="#000080">(</font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>MakeTable<font color="#000080">(</font>NC<font color="#000080">,@</font>CLen<font color="#000080">,</font><font color="#800000">12</font><font color="#000080">,@</font>CTable<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>DecodeC<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>j<font color="#000080">,</font>mask<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>BlockSize<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>BlockSize<font color="#000080">:=</font>GetBits<font color="#000080">(</font><font color="#800000">16</font><font color="#000080">);
+      </font>ReadPtLen<font color="#000080">(</font>NT<font color="#000080">,</font>TBIT<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">);
+      </font>ReadCLen<font color="#000080">;
+      </font>ReadPtLen<font color="#000080">(</font>NP<font color="#000080">,</font>PBIT<font color="#000080">,-</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>DEC<font color="#000080">(</font>BlockSize<font color="#000080">);
+  </font>j<font color="#000080">:=</font>CTable<font color="#000080">[</font>BitBuf <font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">12</font><font color="#000080">)];
+  </font><font color="#FF0000"><b>IF </b></font>j<font color="#000080">&gt;=</font>NC <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>mask<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">13</font><font color="#000080">);
+      </font><font color="#FF0000"><b>REPEAT
+        IF </b></font><font color="#000080">(</font>BitBuf <font color="#FF0000"><b>AND </b></font>mask<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+          </b></font>j<font color="#000080">:=</font>right<font color="#000080">[</font>j<font color="#000080">]
+        </font><font color="#FF0000"><b>ELSE
+          </b></font>j<font color="#000080">:=</font>left<font color="#000080">[</font>j<font color="#000080">];
+        </font>mask<font color="#000080">:=</font>mask <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>UNTIL </b></font>j<font color="#000080">&lt;</font>NC<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>FillBuf<font color="#000080">(</font>CLen<font color="#000080">[</font>j<font color="#000080">]);
+  </font>DecodeC<font color="#000080">:=</font>j<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>DecodeP<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>j<font color="#000080">,</font>mask<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>j<font color="#000080">:=</font>PtTable<font color="#000080">[</font>BitBuf <font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">8</font><font color="#000080">)];
+  </font><font color="#FF0000"><b>IF </b></font>j<font color="#000080">&gt;=</font>NP <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>mask<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>BITBUFSIZ<font color="#000080">-</font><font color="#800000">9</font><font color="#000080">);
+      </font><font color="#FF0000"><b>REPEAT
+        IF </b></font><font color="#000080">(</font>BitBuf <font color="#FF0000"><b>AND </b></font>mask<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+          </b></font>j<font color="#000080">:=</font>right<font color="#000080">[</font>j<font color="#000080">]
+        </font><font color="#FF0000"><b>ELSE
+          </b></font>j<font color="#000080">:=</font>left<font color="#000080">[</font>j<font color="#000080">];
+        </font>mask<font color="#000080">:=</font>mask <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>UNTIL </b></font>j<font color="#000080">&lt;</font>NP<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>FillBuf<font color="#000080">(</font>PtLen<font color="#000080">[</font>j<font color="#000080">]);
+  </font><font color="#FF0000"><b>IF </b></font>j<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>DEC<font color="#000080">(</font>j<font color="#000080">);</font>j<font color="#000080">:=(</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>j<font color="#000080">)+</font>GetBits<font color="#000080">(</font>j<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>DecodeP<font color="#000080">:=</font>j<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{declared as static vars}
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>decode_i<font color="#000080">:</font>Word<font color="#000080">;
+  </font>decode_j<font color="#000080">:</font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DecodeBuffer<font color="#000080">(</font>count<font color="#000080">:</font>Word<font color="#000080">;</font>Buffer<font color="#000080">:</font>PByte<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>c<font color="#000080">,</font>r<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>r<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>DEC<font color="#000080">(</font>decode_j<font color="#000080">);
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>decode_j<font color="#000080">&gt;=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Buffer<font color="#000080">^[</font>r<font color="#000080">]:=</font>Buffer<font color="#000080">^[</font>decode_i<font color="#000080">];</font>decode_i<font color="#000080">:=</font>SUCC<font color="#000080">(</font>decode_i<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font>PRED<font color="#000080">(</font>DICSIZ<font color="#000080">);
+    </font>INC<font color="#000080">(</font>r<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">=</font>count <font color="#FF0000"><b>THEN
+      </b></font>EXIT<font color="#000080">;
+    </font>DEC<font color="#000080">(</font>decode_j<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>TRUE <font color="#FF0000"><b>DO BEGIN
+    </b></font>c<font color="#000080">:=</font>DecodeC<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">&lt;=</font>UCHARMAX <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Buffer<font color="#000080">^[</font>r<font color="#000080">]:=</font>c<font color="#000080">;</font>INC<font color="#000080">(</font>r<font color="#000080">);
+        </font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">=</font>count <font color="#FF0000"><b>THEN
+          </b></font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE BEGIN
+        </b></font>decode_j<font color="#000080">:=</font>c<font color="#000080">-(</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">-</font>THRESHOLD<font color="#000080">);
+        </font>decode_i<font color="#000080">:=(</font>r<font color="#000080">-</font>DecodeP<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>AND </b></font>PRED<font color="#000080">(</font>DICSIZ<font color="#000080">);
+        </font>DEC<font color="#000080">(</font>decode_j<font color="#000080">);
+        </font><font color="#FF0000"><b>WHILE </b></font>decode_j<font color="#000080">&gt;=</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+          </b></font>Buffer<font color="#000080">^[</font>r<font color="#000080">]:=</font>Buffer<font color="#000080">^[</font>decode_i<font color="#000080">];
+          </font>decode_i<font color="#000080">:=</font>SUCC<font color="#000080">(</font>decode_i<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font>PRED<font color="#000080">(</font>DICSIZ<font color="#000080">);
+          </font>INC<font color="#000080">(</font>r<font color="#000080">);
+          </font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">=</font>count <font color="#FF0000"><b>THEN
+            </b></font>EXIT<font color="#000080">;
+          </font>DEC<font color="#000080">(</font>decode_j<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Decode<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>p<font color="#000080">:</font>PByte<font color="#000080">;
+  </font>l<font color="#000080">:</font>Longint<font color="#000080">;
+  </font>a<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font><font color="#008000"><i>{Initialize decoder variables}
+  </i></font>GetMem<font color="#000080">(</font>p<font color="#000080">,</font>DICSIZ<font color="#000080">);
+  </font>InitGetBits<font color="#000080">;</font>BlockSize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>decode_j<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#008000"><i>{skip file size}
+  </i></font>l<font color="#000080">:=</font>OrigSize<font color="#000080">;</font>DEC<font color="#000080">(</font>compSize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+  </font><font color="#008000"><i>{unpacks the file}
+  </i></font><font color="#FF0000"><b>WHILE </b></font>l<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+    IF </b></font>l<font color="#000080">&gt;</font>DICSIZ <font color="#FF0000"><b>THEN
+      </b></font>a<font color="#000080">:=</font>DICSIZ
+    <font color="#FF0000"><b>ELSE
+      </b></font>a<font color="#000080">:=</font>l<font color="#000080">;
+    </font>DecodeBuffer<font color="#000080">(</font>a<font color="#000080">,</font>p<font color="#000080">);
+    </font>BWrite<font color="#000080">(</font>p<font color="#000080">,</font>a<font color="#000080">);</font>DEC<font color="#000080">(</font>l<font color="#000080">,</font>a<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>FreeMem<font color="#000080">(</font>p<font color="#000080">,</font>DICSIZ<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{********************************* Compression ********************************}
+
+{-------------------------------- Huffman part --------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>CountLen<font color="#000080">(</font>i<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>i<font color="#000080">&lt;</font>n <font color="#FF0000"><b>THEN
+    BEGIN
+      IF </b></font>Depth<font color="#000080">&lt;</font><font color="#800000">16 </font><font color="#FF0000"><b>THEN
+        </b></font>INC<font color="#000080">(</font>LenCnt<font color="#000080">[</font>Depth<font color="#000080">])
+      </font><font color="#FF0000"><b>ELSE
+        </b></font>INC<font color="#000080">(</font>LenCnt<font color="#000080">[</font><font color="#800000">16</font><font color="#000080">]);
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>INC<font color="#000080">(</font>Depth<font color="#000080">);
+      </font>CountLen<font color="#000080">(</font>Left<font color="#000080">[</font>i<font color="#000080">]);</font>CountLen<font color="#000080">(</font>Right<font color="#000080">[</font>i<font color="#000080">]);
+      </font>DEC<font color="#000080">(</font>Depth<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MakeLen<font color="#000080">(</font>root<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>k<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>cum<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">16 </font><font color="#FF0000"><b>DO
+    </b></font>LenCnt<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>CountLen<font color="#000080">(</font>root<font color="#000080">);</font>cum<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">16 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO
+    </b></font>INC<font color="#000080">(</font>cum<font color="#000080">,</font>LenCnt<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font><font color="#800000">16</font><font color="#000080">-</font>i<font color="#000080">));
+  </font><font color="#FF0000"><b>WHILE </b></font>cum<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>DEC<font color="#000080">(</font>LenCnt<font color="#000080">[</font><font color="#800000">16</font><font color="#000080">]);
+    </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">15 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO
+      IF </b></font>LenCnt<font color="#000080">[</font>i<font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+        BEGIN
+          </b></font>DEC<font color="#000080">(</font>LenCnt<font color="#000080">[</font>i<font color="#000080">]);</font>INC<font color="#000080">(</font>LenCnt<font color="#000080">[</font>SUCC<font color="#000080">(</font>i<font color="#000080">)],</font><font color="#800000">2</font><font color="#000080">);
+          </font>BREAK<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>DEC<font color="#000080">(</font>cum<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">16 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>k<font color="#000080">:=</font>PRED<font color="#000080">(</font>LenCnt<font color="#000080">[</font>i<font color="#000080">]);
+    </font><font color="#FF0000"><b>WHILE </b></font>k<font color="#000080">&gt;=</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>DEC<font color="#000080">(</font>k<font color="#000080">);</font>Len<font color="#000080">^[</font>SortPtr<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]]:=</font>i<font color="#000080">;
+      </font><font color="#FF0000"><b>ASM
+        </b></font><font color="#FF00FF">ADD WORD PTR SortPtr,2; </font><font color="#008000"><i>{SortPtr:=addr(SortPtr^[1]);}
+      </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DownHeap<font color="#000080">(</font>i<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>j<font color="#000080">,</font>k<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>k<font color="#000080">:=</font>Heap<font color="#000080">[</font>i<font color="#000080">];</font>j<font color="#000080">:=</font>i <font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>j<font color="#000080">&lt;=</font>HeapSize<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    IF </b></font><font color="#000080">(</font>j<font color="#000080">&lt;</font>HeapSize<font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>Freq<font color="#000080">^[</font>Heap<font color="#000080">[</font>j<font color="#000080">]]&gt;</font>Freq<font color="#000080">^[</font>Heap<font color="#000080">[</font>SUCC<font color="#000080">(</font>j<font color="#000080">)]]) </font><font color="#FF0000"><b>THEN </b></font>INC<font color="#000080">(</font>j<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>Freq<font color="#000080">^[</font>k<font color="#000080">]&lt;=</font>Freq<font color="#000080">^[</font>Heap<font color="#000080">[</font>j<font color="#000080">]] </font><font color="#FF0000"><b>THEN </b></font>break<font color="#000080">;
+    </font>Heap<font color="#000080">[</font>i<font color="#000080">]:=</font>Heap<font color="#000080">[</font>j<font color="#000080">];</font>i<font color="#000080">:=</font>j<font color="#000080">;</font>j<font color="#000080">:=</font>i <font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Heap<font color="#000080">[</font>i<font color="#000080">]:=</font>k<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MakeCode<font color="#000080">(</font>n<font color="#000080">:</font>Integer<font color="#000080">;</font>Len<font color="#000080">:</font>PByte<font color="#000080">;</font>Code<font color="#000080">:</font>PWord<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>k<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>start<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">17</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>start<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">16 </font><font color="#FF0000"><b>DO
+    </b></font>start<font color="#000080">[</font>SUCC<font color="#000080">(</font>i<font color="#000080">)]:=(</font>start<font color="#000080">[</font>i<font color="#000080">]+</font>LenCnt<font color="#000080">[</font>i<font color="#000080">])</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>k<font color="#000080">:=</font>Len<font color="#000080">^[</font>i<font color="#000080">];
+    </font>Code<font color="#000080">^[</font>i<font color="#000080">]:=</font>start<font color="#000080">[</font>k<font color="#000080">];
+    </font>INC<font color="#000080">(</font>start<font color="#000080">[</font>k<font color="#000080">]);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>MakeTree<font color="#000080">(</font>NParm<font color="#000080">:</font>Integer<font color="#000080">;</font>Freqparm<font color="#000080">:</font>PWord<font color="#000080">;</font>LenParm<font color="#000080">:</font>PByte<font color="#000080">;</font>Codeparm<font color="#000080">:</font>PWord<font color="#000080">):</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>j<font color="#000080">,</font>k<font color="#000080">,</font>Avail<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>n<font color="#000080">:=</font>NParm<font color="#000080">;</font>Freq<font color="#000080">:=</font>Freqparm<font color="#000080">;</font>Len<font color="#000080">:=</font>LenParm<font color="#000080">;</font>Avail<font color="#000080">:=</font>n<font color="#000080">;</font>HeapSize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Len<font color="#000080">^[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>Freq<font color="#000080">^[</font>i<font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>INC<font color="#000080">(</font>HeapSize<font color="#000080">);</font>Heap<font color="#000080">[</font>HeapSize<font color="#000080">]:=</font>i<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>HeapSize<font color="#000080">&lt;</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>Codeparm<font color="#000080">^[</font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]]:=</font><font color="#800000">0</font><font color="#000080">;</font>MakeTree<font color="#000080">:=</font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+      </font>EXIT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=(</font>HeapSize <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO </b></font>DownHeap<font color="#000080">(</font>i<font color="#000080">);
+  </font>SortPtr<font color="#000080">:=</font>Codeparm<font color="#000080">;
+  </font><font color="#FF0000"><b>REPEAT
+    </b></font>i<font color="#000080">:=</font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+    </font><font color="#FF0000"><b>IF </b></font>i<font color="#000080">&lt;</font>n <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>SortPtr<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>i<font color="#000080">;
+        </font><font color="#FF0000"><b>ASM
+          </b></font><font color="#FF00FF">ADD WORD PTR SortPtr,2; </font><font color="#008000"><i>{SortPtr:=addr(SortPtr^[1]);}
+        </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font>Heap<font color="#000080">[</font>HeapSize<font color="#000080">];</font>DEC<font color="#000080">(</font>HeapSize<font color="#000080">);</font>DownHeap<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+    </font>j<font color="#000080">:=</font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+    </font><font color="#FF0000"><b>IF </b></font>j<font color="#000080">&lt;</font>n <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>SortPtr<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font>j<font color="#000080">;
+        </font><font color="#FF0000"><b>ASM
+          </b></font><font color="#FF00FF">ADD WORD PTR SortPtr,2; </font><font color="#008000"><i>{SortPtr:=addr(SortPtr^[1]);}
+        </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>k<font color="#000080">:=</font>Avail<font color="#000080">;</font>INC<font color="#000080">(</font>Avail<font color="#000080">);
+    </font>Freq<font color="#000080">^[</font>k<font color="#000080">]:=</font>Freq<font color="#000080">^[</font>i<font color="#000080">]+</font>Freq<font color="#000080">^[</font>j<font color="#000080">];</font>Heap<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font>k<font color="#000080">;</font>DownHeap<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+    </font>Left<font color="#000080">[</font>k<font color="#000080">]:=</font>i<font color="#000080">;</font>Right<font color="#000080">[</font>k<font color="#000080">]:=</font>j<font color="#000080">;
+  </font><font color="#FF0000"><b>UNTIL </b></font>HeapSize<font color="#000080">&lt;=</font><font color="#800000">1</font><font color="#000080">;
+  </font>SortPtr<font color="#000080">:=</font>Codeparm<font color="#000080">;
+  </font>MakeLen<font color="#000080">(</font>k<font color="#000080">);</font>MakeCode<font color="#000080">(</font>NParm<font color="#000080">,</font>LenParm<font color="#000080">,</font>Codeparm<font color="#000080">);
+  </font>MakeTree<font color="#000080">:=</font>k<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CountTFreq<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>k<font color="#000080">,</font>n<font color="#000080">,</font>Count<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>NT<font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>TFreq<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;</font>n<font color="#000080">:=</font>NC<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>n<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>CLen<font color="#000080">[</font>PRED<font color="#000080">(</font>n<font color="#000080">)]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>DEC<font color="#000080">(</font>n<font color="#000080">);
+  </font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>i<font color="#000080">&lt;</font>n <font color="#FF0000"><b>DO BEGIN
+    </b></font>k<font color="#000080">:=</font>CLen<font color="#000080">[</font>i<font color="#000080">];</font>INC<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>k<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Count<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+        </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font>n<font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>CLen<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+          </b></font>INC<font color="#000080">(</font>i<font color="#000080">);</font>INC<font color="#000080">(</font>Count<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font>Count<font color="#000080">&lt;=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+          </b></font>INC<font color="#000080">(</font>TFreq<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">],</font>Count<font color="#000080">)
+        </font><font color="#FF0000"><b>ELSE
+          IF </b></font>Count<font color="#000080">&lt;=</font><font color="#800000">18 </font><font color="#FF0000"><b>THEN
+            </b></font>INC<font color="#000080">(</font>TFreq<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])
+          </font><font color="#FF0000"><b>ELSE
+            IF </b></font>Count<font color="#000080">=</font><font color="#800000">19 </font><font color="#FF0000"><b>THEN
+              BEGIN
+                </b></font>INC<font color="#000080">(</font>TFreq<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]);</font>INC<font color="#000080">(</font>TFreq<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+              </font><font color="#FF0000"><b>END ELSE
+                </b></font>INC<font color="#000080">(</font>TFreq<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>END ELSE
+        </b></font>INC<font color="#000080">(</font>TFreq<font color="#000080">[</font>k<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>WritePtLen<font color="#000080">(</font>n<font color="#000080">,</font>nBit<font color="#000080">,</font>ispecial<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>k<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  WHILE </b></font><font color="#000080">(</font>n<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>PtLen<font color="#000080">[</font>PRED<font color="#000080">(</font>n<font color="#000080">)]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>DEC<font color="#000080">(</font>n<font color="#000080">);
+  </font>PutBits<font color="#000080">(</font>nBit<font color="#000080">,</font>n<font color="#000080">);</font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>k<font color="#000080">:=</font>PtLen<font color="#000080">[</font>i<font color="#000080">];</font>INC<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>k<font color="#000080">&lt;=</font><font color="#800000">6 </font><font color="#FF0000"><b>THEN
+      </b></font>PutBits<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">,</font>k<font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE
+      BEGIN
+        </b></font>DEC<font color="#000080">(</font>k<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">);
+        </font>PutBits<font color="#000080">(</font>k<font color="#000080">,(</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font>k<font color="#000080">)-</font><font color="#800000">2</font><font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>i<font color="#000080">=</font>ispecial <font color="#FF0000"><b>THEN
+      BEGIN
+        WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font><font color="#800000">6</font><font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>PtLen<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+          </b></font>INC<font color="#000080">(</font>i<font color="#000080">);
+        </font>PutBits<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">,(</font>i<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">)</font><font color="#FF0000"><b>AND </b></font><font color="#800000">3</font><font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>WriteCLen<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>k<font color="#000080">,</font>n<font color="#000080">,</font>Count<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>n<font color="#000080">:=</font>NC<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>n<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>CLen<font color="#000080">[</font>PRED<font color="#000080">(</font>n<font color="#000080">)]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>DEC<font color="#000080">(</font>n<font color="#000080">);
+  </font>PutBits<font color="#000080">(</font>CBIT<font color="#000080">,</font>n<font color="#000080">);</font>i<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font>n<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>k<font color="#000080">:=</font>CLen<font color="#000080">[</font>i<font color="#000080">];</font>INC<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>k<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Count<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+        </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>i<font color="#000080">&lt;</font>n<font color="#000080">)</font><font color="#FF0000"><b>AND</b></font><font color="#000080">(</font>CLen<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+          </b></font>INC<font color="#000080">(</font>i<font color="#000080">);</font>INC<font color="#000080">(</font>Count<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font>Count<font color="#000080">&lt;=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+          FOR </b></font>k<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>Count<font color="#000080">) </font><font color="#FF0000"><b>DO
+            </b></font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">],</font>PtCode<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">])
+        </font><font color="#FF0000"><b>ELSE
+          IF </b></font>Count<font color="#000080">&lt;=</font><font color="#800000">18 </font><font color="#FF0000"><b>THEN
+            BEGIN
+              </b></font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>PtCode<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+              </font>PutBits<font color="#000080">(</font><font color="#800000">4</font><font color="#000080">,</font>Count<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">);
+            </font><font color="#FF0000"><b>END ELSE
+              IF </b></font>Count<font color="#000080">=</font><font color="#800000">19 </font><font color="#FF0000"><b>THEN
+                BEGIN
+                  </b></font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">],</font>PtCode<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]);
+                  </font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>PtCode<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+                  </font>PutBits<font color="#000080">(</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">15</font><font color="#000080">);
+                </font><font color="#FF0000"><b>END ELSE BEGIN
+                  </b></font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">],</font>PtCode<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]);
+                  </font>PutBits<font color="#000080">(</font>CBIT<font color="#000080">,</font>Count<font color="#000080">-</font><font color="#800000">20</font><font color="#000080">);
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE
+        </b></font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font>k<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">],</font>PtCode<font color="#000080">[</font>k<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>EncodeC<font color="#000080">(</font>c<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>PutBits<font color="#000080">(</font>CLen<font color="#000080">[</font>c<font color="#000080">],</font>CCode<font color="#000080">[</font>c<font color="#000080">]);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>EncodeP<font color="#000080">(</font>p<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>c<font color="#000080">,</font>q<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>c<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>q<font color="#000080">:=</font>p<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>q<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>q<font color="#000080">:=</font>q <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;</font>INC<font color="#000080">(</font>c<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>PutBits<font color="#000080">(</font>PtLen<font color="#000080">[</font>c<font color="#000080">],</font>PtCode<font color="#000080">[</font>c<font color="#000080">]);
+  </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>THEN
+    </b></font>PutBits<font color="#000080">(</font>PRED<font color="#000080">(</font>c<font color="#000080">),</font>p <font color="#FF0000"><b>AND </b></font><font color="#000080">(</font><font color="#800000">$ffff </font><font color="#FF0000"><b>SHR </b></font><font color="#000080">(</font><font color="#800000">17</font><font color="#000080">-</font>c<font color="#000080">)));
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SendBlock<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">,</font>k<font color="#000080">,</font>flags<font color="#000080">,</font>root<font color="#000080">,</font>Pos<font color="#000080">,</font>Size<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>root<font color="#000080">:=</font>MakeTree<font color="#000080">(</font>NC<font color="#000080">,@</font>CFreq<font color="#000080">,@</font>CLen<font color="#000080">,@</font>CCode<font color="#000080">);
+  </font>Size<font color="#000080">:=</font>CFreq<font color="#000080">[</font>root<font color="#000080">];
+  </font>PutBits<font color="#000080">(</font><font color="#800000">16</font><font color="#000080">,</font>Size<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>root<font color="#000080">&gt;=</font>NC <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>CountTFreq<font color="#000080">;
+      </font>root<font color="#000080">:=</font>MakeTree<font color="#000080">(</font>NT<font color="#000080">,@</font>TFreq<font color="#000080">,@</font>PtLen<font color="#000080">,@</font>PtCode<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>root<font color="#000080">&gt;=</font>NT <font color="#FF0000"><b>THEN
+        </b></font>WritePtLen<font color="#000080">(</font>NT<font color="#000080">,</font>TBIT<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">)
+      </font><font color="#FF0000"><b>ELSE
+        BEGIN
+          </b></font>PutBits<font color="#000080">(</font>TBIT<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+          </font>PutBits<font color="#000080">(</font>TBIT<font color="#000080">,</font>root<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>WriteCLen<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>PutBits<font color="#000080">(</font>TBIT<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font>PutBits<font color="#000080">(</font>TBIT<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font>PutBits<font color="#000080">(</font>CBIT<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font>PutBits<font color="#000080">(</font>CBIT<font color="#000080">,</font>root<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>root<font color="#000080">:=</font>MakeTree<font color="#000080">(</font>NP<font color="#000080">,@</font>PFreq<font color="#000080">,@</font>PtLen<font color="#000080">,@</font>PtCode<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>root<font color="#000080">&gt;=</font>NP <font color="#FF0000"><b>THEN
+    </b></font>WritePtLen<font color="#000080">(</font>NP<font color="#000080">,</font>PBIT<font color="#000080">,-</font><font color="#800000">1</font><font color="#000080">)
+  </font><font color="#FF0000"><b>ELSE
+    BEGIN
+      </b></font>PutBits<font color="#000080">(</font>PBIT<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font>PutBits<font color="#000080">(</font>PBIT<font color="#000080">,</font>root<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Pos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>Size<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    IF </b></font><font color="#000080">(</font>i <font color="#FF0000"><b>AND </b></font><font color="#800000">7</font><font color="#000080">)=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>flags<font color="#000080">:=</font>Buf<font color="#000080">^[</font>Pos<font color="#000080">];</font>INC<font color="#000080">(</font>Pos<font color="#000080">);
+      </font><font color="#FF0000"><b>END ELSE
+        </b></font>flags<font color="#000080">:=</font>flags <font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>flags <font color="#FF0000"><b>AND </b></font><font color="#000080">(</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">7</font><font color="#000080">))&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>k<font color="#000080">:=</font>Buf<font color="#000080">^[</font>Pos<font color="#000080">]+(</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">8</font><font color="#000080">);</font>INC<font color="#000080">(</font>Pos<font color="#000080">);</font>EncodeC<font color="#000080">(</font>k<font color="#000080">);
+        </font>k<font color="#000080">:=</font>Buf<font color="#000080">^[</font>Pos<font color="#000080">]</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">8</font><font color="#000080">;</font>INC<font color="#000080">(</font>Pos<font color="#000080">);</font>INC<font color="#000080">(</font>k<font color="#000080">,</font>Buf<font color="#000080">^[</font>Pos<font color="#000080">]);</font>INC<font color="#000080">(</font>Pos<font color="#000080">);</font>EncodeP<font color="#000080">(</font>k<font color="#000080">);
+      </font><font color="#FF0000"><b>END ELSE BEGIN
+        </b></font>k<font color="#000080">:=</font>Buf<font color="#000080">^[</font>Pos<font color="#000080">];</font>INC<font color="#000080">(</font>Pos<font color="#000080">);</font>EncodeC<font color="#000080">(</font>k<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>NC<font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>CFreq<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font>NP<font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>PFreq<font color="#000080">[</font>i<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Output<font color="#000080">(</font>c<font color="#000080">,</font>p<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>OutputMask<font color="#000080">:=</font>OutputMask <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>OutputMask<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>OutputMask<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">7</font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>OutputPos<font color="#000080">&gt;=</font>WINDOWSIZE<font color="#000080">-</font><font color="#800000">24</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+        BEGIN
+          </b></font>SendBlock<font color="#000080">;</font>OutputPos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>CPos<font color="#000080">:=</font>OutputPos<font color="#000080">;</font>INC<font color="#000080">(</font>OutputPos<font color="#000080">);</font>Buf<font color="#000080">^[</font>CPos<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Buf<font color="#000080">^[</font>OutputPos<font color="#000080">]:=</font>c<font color="#000080">;</font>INC<font color="#000080">(</font>OutputPos<font color="#000080">);</font>INC<font color="#000080">(</font>CFreq<font color="#000080">[</font>c<font color="#000080">]);
+  </font><font color="#FF0000"><b>IF </b></font>c<font color="#000080">&gt;=(</font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>Buf<font color="#000080">^[</font>CPos<font color="#000080">]:=</font>Buf<font color="#000080">^[</font>CPos<font color="#000080">] </font><font color="#FF0000"><b>OR </b></font>OutputMask<font color="#000080">;
+      </font>Buf<font color="#000080">^[</font>OutputPos<font color="#000080">]:=(</font>p <font color="#FF0000"><b>SHR </b></font><font color="#800000">8</font><font color="#000080">);</font>INC<font color="#000080">(</font>OutputPos<font color="#000080">);
+      </font>Buf<font color="#000080">^[</font>OutputPos<font color="#000080">]:=</font>p<font color="#000080">;</font>INC<font color="#000080">(</font>OutputPos<font color="#000080">);</font>c<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font>p<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+        </b></font>p<font color="#000080">:=</font>p <font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;</font>INC<font color="#000080">(</font>c<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>INC<font color="#000080">(</font>PFreq<font color="#000080">[</font>c<font color="#000080">]);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------- Lempel-Ziv part ------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>InitSlide<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>i<font color="#000080">:=</font>DICSIZ <font color="#FF0000"><b>TO </b></font><font color="#000080">(</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Level<font color="#000080">^[</font>i<font color="#000080">]:=</font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+    </i></font>Position<font color="#000080">^[</font>i<font color="#000080">]:=</font>NUL<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font>DICSIZ <font color="#FF0000"><b>TO </b></font>PRED<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">*</font>DICSIZ<font color="#000080">) </font><font color="#FF0000"><b>DO
+    </b></font>Parent<font color="#000080">^[</font>i<font color="#000080">]:=</font>NUL<font color="#000080">;
+  </font>Avail<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>DICSIZ<font color="#000080">-</font><font color="#800000">2 </font><font color="#FF0000"><b>DO
+    </b></font>Next<font color="#000080">^[</font>i<font color="#000080">]:=</font>SUCC<font color="#000080">(</font>i<font color="#000080">);
+  </font>Next<font color="#000080">^[</font>PRED<font color="#000080">(</font>DICSIZ<font color="#000080">)]:=</font>NUL<font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=(</font><font color="#800000">2</font><font color="#000080">*</font>DICSIZ<font color="#000080">) </font><font color="#FF0000"><b>TO </b></font>MAXHASHVAL <font color="#FF0000"><b>DO
+    </b></font>Next<font color="#000080">^[</font>i<font color="#000080">]:=</font>NUL<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Hash function }
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Hash<font color="#000080">(</font>p<font color="#000080">:</font>Integer<font color="#000080">;</font>c<font color="#000080">:</font>Byte<font color="#000080">):</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Hash<font color="#000080">:=</font>p<font color="#000080">+(</font>c <font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>DICBIT<font color="#000080">-</font><font color="#800000">9</font><font color="#000080">))+</font><font color="#800000">2</font><font color="#000080">*</font>DICSIZ<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Child<font color="#000080">(</font>q<font color="#000080">:</font>Integer<font color="#000080">;</font>c<font color="#000080">:</font>Byte<font color="#000080">):</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>r<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>r<font color="#000080">:=</font>Next<font color="#000080">^[</font>Hash<font color="#000080">(</font>q<font color="#000080">,</font>c<font color="#000080">)];</font>Parent<font color="#000080">^[</font>NUL<font color="#000080">]:=</font>q<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>Parent<font color="#000080">^[</font>r<font color="#000080">]&lt;&gt;</font>q <font color="#FF0000"><b>DO
+    </b></font>r<font color="#000080">:=</font>Next<font color="#000080">^[</font>r<font color="#000080">];
+  </font>Child<font color="#000080">:=</font>r<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MakeChild<font color="#000080">(</font>q<font color="#000080">:</font>Integer<font color="#000080">;</font>c<font color="#000080">:</font>Byte<font color="#000080">;</font>r<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>h<font color="#000080">,</font>t<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>h<font color="#000080">:=</font>Hash<font color="#000080">(</font>q<font color="#000080">,</font>c<font color="#000080">);
+  </font>t<font color="#000080">:=</font>Next<font color="#000080">^[</font>h<font color="#000080">];</font>Next<font color="#000080">^[</font>h<font color="#000080">]:=</font>r<font color="#000080">;</font>Next<font color="#000080">^[</font>r<font color="#000080">]:=</font>t<font color="#000080">;
+  </font>Prev<font color="#000080">^[</font>t<font color="#000080">]:=</font>r<font color="#000080">;</font>Prev<font color="#000080">^[</font>r<font color="#000080">]:=</font>h<font color="#000080">;</font>Parent<font color="#000080">^[</font>r<font color="#000080">]:=</font>q<font color="#000080">;
+  </font>INC<font color="#000080">(</font>ChildCount<font color="#000080">^[</font>q<font color="#000080">]);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Split<font color="#000080">(</font>old<font color="#000080">:</font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>new<font color="#000080">,</font>t<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>new<font color="#000080">:=</font>Avail<font color="#000080">;</font>Avail<font color="#000080">:=</font>Next<font color="#000080">^[</font>new<font color="#000080">];
+  </font>ChildCount<font color="#000080">^[</font>new<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>t<font color="#000080">:=</font>Prev<font color="#000080">^[</font>old<font color="#000080">];</font>Prev<font color="#000080">^[</font>new<font color="#000080">]:=</font>t<font color="#000080">;
+  </font>Next<font color="#000080">^[</font>t<font color="#000080">]:=</font>new<font color="#000080">;
+  </font>t<font color="#000080">:=</font>Next<font color="#000080">^[</font>old<font color="#000080">];</font>Next<font color="#000080">^[</font>new<font color="#000080">]:=</font>t<font color="#000080">;
+  </font>Prev<font color="#000080">^[</font>t<font color="#000080">]:=</font>new<font color="#000080">;
+  </font>Parent<font color="#000080">^[</font>new<font color="#000080">]:=</font>Parent<font color="#000080">^[</font>old<font color="#000080">];
+  </font>Level<font color="#000080">^[</font>new<font color="#000080">]:=</font>MatchLen<font color="#000080">;
+  </font>Position<font color="#000080">^[</font>new<font color="#000080">]:=</font>Pos<font color="#000080">;
+  </font>MakeChild<font color="#000080">(</font>new<font color="#000080">,</font>Text<font color="#000080">^[</font>MatchPos<font color="#000080">+</font>MatchLen<font color="#000080">],</font>old<font color="#000080">);
+  </font>MakeChild<font color="#000080">(</font>new<font color="#000080">,</font>Text<font color="#000080">^[</font>Pos<font color="#000080">+</font>MatchLen<font color="#000080">],</font>Pos<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>InsertNode<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>q<font color="#000080">,</font>r<font color="#000080">,</font>j<font color="#000080">,</font>t<font color="#000080">:</font>Integer<font color="#000080">;
+  </font>c<font color="#000080">:</font>Byte<font color="#000080">;
+  </font>t1<font color="#000080">,</font>t2<font color="#000080">:</font>PChar<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>MatchLen<font color="#000080">&gt;=</font><font color="#800000">4 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>DEC<font color="#000080">(</font>MatchLen<font color="#000080">);
+      </font>r<font color="#000080">:=</font>SUCC<font color="#000080">(</font>MatchPos<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font>DICSIZ<font color="#000080">;
+      </font>q<font color="#000080">:=</font>Parent<font color="#000080">^[</font>r<font color="#000080">];
+      </font><font color="#FF0000"><b>WHILE </b></font>q<font color="#000080">=</font>NUL <font color="#FF0000"><b>DO BEGIN
+        </b></font>r<font color="#000080">:=</font>Next<font color="#000080">^[</font>r<font color="#000080">];</font>q<font color="#000080">:=</font>Parent<font color="#000080">^[</font>r<font color="#000080">];
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font>Level<font color="#000080">^[</font>q<font color="#000080">]&gt;=</font>MatchLen <font color="#FF0000"><b>DO BEGIN
+        </b></font>r<font color="#000080">:=</font>q<font color="#000080">;</font>q<font color="#000080">:=</font>Parent<font color="#000080">^[</font>q<font color="#000080">];
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>t<font color="#000080">:=</font>q<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+      </i></font><font color="#FF0000"><b>WHILE </b></font>Position<font color="#000080">^[</font>t<font color="#000080">]&lt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+        </b></font>Position<font color="#000080">^[</font>t<font color="#000080">]:=</font>Pos<font color="#000080">;</font>t<font color="#000080">:=</font>Parent<font color="#000080">^[</font>t<font color="#000080">];
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font>t<font color="#000080">&lt;</font>DICSIZ <font color="#FF0000"><b>THEN
+        </b></font>Position<font color="#000080">^[</font>t<font color="#000080">]:=</font>Pos <font color="#FF0000"><b>OR </b></font>PERCFLAG<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+      </i></font><font color="#FF0000"><b>WHILE </b></font>t<font color="#000080">&lt;</font>DICSIZ <font color="#FF0000"><b>DO BEGIN
+        </b></font>Position<font color="#000080">^[</font>t<font color="#000080">]:=</font>Pos<font color="#000080">;</font>t<font color="#000080">:=</font>Parent<font color="#000080">^[</font>t<font color="#000080">];
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+    </i></font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>q<font color="#000080">:=</font>Text<font color="#000080">^[</font>Pos<font color="#000080">]+</font>DICSIZ<font color="#000080">;</font>c<font color="#000080">:=</font>Text<font color="#000080">^[</font>SUCC<font color="#000080">(</font>Pos<font color="#000080">)];</font>r<font color="#000080">:=</font>Child<font color="#000080">(</font>q<font color="#000080">,</font>c<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">=</font>NUL <font color="#FF0000"><b>THEN
+        BEGIN
+          </b></font>MakeChild<font color="#000080">(</font>q<font color="#000080">,</font>c<font color="#000080">,</font>Pos<font color="#000080">);</font>MatchLen<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+          </font>EXIT<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>MatchLen<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>true <font color="#FF0000"><b>DO BEGIN
+    IF </b></font>r<font color="#000080">&gt;=</font>DICSIZ <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>j<font color="#000080">:=</font>MAXMATCH<font color="#000080">;</font>MatchPos<font color="#000080">:=</font>r<font color="#000080">;
+      </font><font color="#FF0000"><b>END ELSE BEGIN
+        </b></font>j<font color="#000080">:=</font>Level<font color="#000080">^[</font>r<font color="#000080">];</font>MatchPos<font color="#000080">:=</font>Position<font color="#000080">^[</font>r<font color="#000080">] </font><font color="#FF0000"><b>AND NOT </b></font>PERCFLAG<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>MatchPos<font color="#000080">&gt;=</font>Pos <font color="#FF0000"><b>THEN
+      </b></font>DEC<font color="#000080">(</font>MatchPos<font color="#000080">,</font>DICSIZ<font color="#000080">);
+    </font>t1<font color="#000080">:=</font>addr<font color="#000080">(</font>Text<font color="#000080">^[</font>Pos<font color="#000080">+</font>MatchLen<font color="#000080">]);</font>t2<font color="#000080">:=</font>addr<font color="#000080">(</font>Text<font color="#000080">^[</font>MatchPos<font color="#000080">+</font>MatchLen<font color="#000080">]);
+    </font><font color="#FF0000"><b>WHILE </b></font>MatchLen<font color="#000080">&lt;</font>j <font color="#FF0000"><b>DO BEGIN
+      IF </b></font>t1<font color="#000080">^&lt;&gt;</font>t2<font color="#000080">^ </font><font color="#FF0000"><b>THEN
+        BEGIN
+          </b></font>Split<font color="#000080">(</font>r<font color="#000080">);
+          </font>EXIT<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>INC<font color="#000080">(</font>MatchLen<font color="#000080">);</font>INC<font color="#000080">(</font>t1<font color="#000080">);</font>INC<font color="#000080">(</font>t2<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>MatchLen<font color="#000080">&gt;=</font>MAXMATCH <font color="#FF0000"><b>THEN
+      </b></font>BREAK<font color="#000080">;
+    </font>Position<font color="#000080">^[</font>r<font color="#000080">]:=</font>Pos<font color="#000080">;</font>q<font color="#000080">:=</font>r<font color="#000080">;
+    </font>r<font color="#000080">:=</font>Child<font color="#000080">(</font>q<font color="#000080">,</font>ORD<font color="#000080">(</font>t1<font color="#000080">^));
+    </font><font color="#FF0000"><b>IF </b></font>r<font color="#000080">=</font>NUL <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>MakeChild<font color="#000080">(</font>q<font color="#000080">,</font>ORD<font color="#000080">(</font>t1<font color="#000080">^),</font>Pos<font color="#000080">);
+        </font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>INC<font color="#000080">(</font>MatchLen<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>t<font color="#000080">:=</font>Prev<font color="#000080">^[</font>r<font color="#000080">];</font>Prev<font color="#000080">^[</font>Pos<font color="#000080">]:=</font>t<font color="#000080">;</font>Next<font color="#000080">^[</font>t<font color="#000080">]:=</font>Pos<font color="#000080">;
+  </font>t<font color="#000080">:=</font>Next<font color="#000080">^[</font>r<font color="#000080">];</font>Next<font color="#000080">^[</font>Pos<font color="#000080">]:=</font>t<font color="#000080">;</font>Prev<font color="#000080">^[</font>t<font color="#000080">]:=</font>Pos<font color="#000080">;
+  </font>Parent<font color="#000080">^[</font>Pos<font color="#000080">]:=</font>q<font color="#000080">;</font>Parent<font color="#000080">^[</font>r<font color="#000080">]:=</font>NUL<font color="#000080">;</font>Next<font color="#000080">^[</font>r<font color="#000080">]:=</font>Pos<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DeleteNode<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>r<font color="#000080">,</font>s<font color="#000080">,</font>t<font color="#000080">,</font>u<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+  </i></font>q<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>BEGIN
+  IF </b></font>Parent<font color="#000080">^[</font>Pos<font color="#000080">]=</font>NUL <font color="#FF0000"><b>THEN
+    </b></font>EXIT<font color="#000080">;
+  </font>r<font color="#000080">:=</font>Prev<font color="#000080">^[</font>Pos<font color="#000080">];</font>s<font color="#000080">:=</font>Next<font color="#000080">^[</font>Pos<font color="#000080">];</font>Next<font color="#000080">^[</font>r<font color="#000080">]:=</font>s<font color="#000080">;</font>Prev<font color="#000080">^[</font>s<font color="#000080">]:=</font>r<font color="#000080">;
+  </font>r<font color="#000080">:=</font>Parent<font color="#000080">^[</font>Pos<font color="#000080">];</font>Parent<font color="#000080">^[</font>Pos<font color="#000080">]:=</font>NUL<font color="#000080">;</font>DEC<font color="#000080">(</font>ChildCount<font color="#000080">^[</font>r<font color="#000080">]);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>r<font color="#000080">&gt;=</font>DICSIZ<font color="#000080">)</font><font color="#FF0000"><b>OR</b></font><font color="#000080">(</font>ChildCount<font color="#000080">^[</font>r<font color="#000080">]&gt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+    </b></font>EXIT<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+  </i></font>t<font color="#000080">:=</font>Position<font color="#000080">^[</font>r<font color="#000080">] </font><font color="#FF0000"><b>AND NOT </b></font>PERCFLAG<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>t<font color="#000080">:=</font>Position<font color="#000080">^[</font>r<font color="#000080">];
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>IF </b></font>t<font color="#000080">&gt;=</font>Pos <font color="#FF0000"><b>THEN
+    </b></font>DEC<font color="#000080">(</font>t<font color="#000080">,</font>DICSIZ<font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+  </i></font>s<font color="#000080">:=</font>t<font color="#000080">;</font>q<font color="#000080">:=</font>Parent<font color="#000080">^[</font>r<font color="#000080">];</font>u<font color="#000080">:=</font>Position<font color="#000080">^[</font>q<font color="#000080">];
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>u <font color="#FF0000"><b>AND </b></font>PERCFLAG<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>u<font color="#000080">:=</font>u <font color="#FF0000"><b>AND NOT </b></font>PERCFLAG<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>u<font color="#000080">&gt;=</font>Pos <font color="#FF0000"><b>THEN
+      </b></font>DEC<font color="#000080">(</font>u<font color="#000080">,</font>DICSIZ<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>u<font color="#000080">&gt;</font>s <font color="#FF0000"><b>THEN
+      </b></font>s<font color="#000080">:=</font>u<font color="#000080">;
+    </font>Position<font color="#000080">^[</font>q<font color="#000080">]:=</font>s <font color="#FF0000"><b>OR </b></font>DICSIZ<font color="#000080">;</font>q<font color="#000080">:=</font>Parent<font color="#000080">^[</font>q<font color="#000080">];</font>u<font color="#000080">:=</font>Position<font color="#000080">^[</font>q<font color="#000080">];
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>q<font color="#000080">&lt;</font>DICSIZ <font color="#FF0000"><b>THEN
+    BEGIN
+      IF </b></font>u<font color="#000080">&gt;=</font>Pos <font color="#FF0000"><b>THEN
+        </b></font>DEC<font color="#000080">(</font>u<font color="#000080">,</font>DICSIZ<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>u<font color="#000080">&gt;</font>s <font color="#FF0000"><b>THEN
+        </b></font>s<font color="#000080">:=</font>u<font color="#000080">;
+      </font>Position<font color="#000080">^[</font>q<font color="#000080">]:=</font>s <font color="#FF0000"><b>OR </b></font>DICSIZ <font color="#FF0000"><b>OR </b></font>PERCFLAG<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font>s<font color="#000080">:=</font>Child<font color="#000080">(</font>r<font color="#000080">,</font>Text<font color="#000080">^[</font>t<font color="#000080">+</font>Level<font color="#000080">^[</font>r<font color="#000080">]]);
+  </font>t<font color="#000080">:=</font>Prev<font color="#000080">^[</font>s<font color="#000080">];</font>u<font color="#000080">:=</font>Next<font color="#000080">^[</font>s<font color="#000080">];</font>Next<font color="#000080">^[</font>t<font color="#000080">]:=</font>u<font color="#000080">;</font>Prev<font color="#000080">^[</font>u<font color="#000080">]:=</font>t<font color="#000080">;
+  </font>t<font color="#000080">:=</font>Prev<font color="#000080">^[</font>r<font color="#000080">];</font>Next<font color="#000080">^[</font>t<font color="#000080">]:=</font>s<font color="#000080">;</font>Prev<font color="#000080">^[</font>s<font color="#000080">]:=</font>t<font color="#000080">;
+  </font>t<font color="#000080">:=</font>Next<font color="#000080">^[</font>r<font color="#000080">];</font>Prev<font color="#000080">^[</font>t<font color="#000080">]:=</font>s<font color="#000080">;</font>Next<font color="#000080">^[</font>s<font color="#000080">]:=</font>t<font color="#000080">;
+  </font>Parent<font color="#000080">^[</font>s<font color="#000080">]:=</font>Parent<font color="#000080">^[</font>r<font color="#000080">];</font>Parent<font color="#000080">^[</font>r<font color="#000080">]:=</font>NUL<font color="#000080">;
+  </font>Next<font color="#000080">^[</font>r<font color="#000080">]:=</font>Avail<font color="#000080">;</font>Avail<font color="#000080">:=</font>r<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>GetNextMatch<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>n<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>DEC<font color="#000080">(</font>Remainder<font color="#000080">);</font>INC<font color="#000080">(</font>Pos<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>Pos<font color="#000080">=</font><font color="#800000">2</font><font color="#000080">*</font>DICSIZ <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>move<font color="#000080">(</font>Text<font color="#000080">^[</font>DICSIZ<font color="#000080">],</font>Text<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">],</font>DICSIZ<font color="#000080">+</font>MAXMATCH<font color="#000080">);
+      </font>n<font color="#000080">:=</font>BRead<font color="#000080">(</font>Addr<font color="#000080">(</font>Text<font color="#000080">^[</font>DICSIZ<font color="#000080">+</font>MAXMATCH<font color="#000080">]),</font>DICSIZ<font color="#000080">);
+      </font>INC<font color="#000080">(</font>Remainder<font color="#000080">,</font>n<font color="#000080">);</font>Pos<font color="#000080">:=</font>DICSIZ<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>DeleteNode<font color="#000080">;</font>InsertNode<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Encode<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>LastMatchLen<font color="#000080">,</font>LastMatchPos<font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font><font color="#008000"><i>{ initialize encoder variables }
+  </i></font>GetMem<font color="#000080">(</font>Text<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">*</font>DICSIZ<font color="#000080">+</font>MAXMATCH<font color="#000080">);
+  </font>GetMem<font color="#000080">(</font>Level<font color="#000080">,</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+  </font>GetMem<font color="#000080">(</font>ChildCount<font color="#000080">,</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+  </i></font>GetMem<font color="#000080">(</font>Position<font color="#000080">,(</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>GetMem<font color="#000080">(</font>Position<font color="#000080">,(</font>DICSIZ<font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font>GetMem<font color="#000080">(</font>Parent<font color="#000080">,(</font>DICSIZ<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>GetMem<font color="#000080">(</font>Prev<font color="#000080">,(</font>DICSIZ<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>GetMem<font color="#000080">(</font>Next<font color="#000080">,(</font>MAXHASHVAL<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+
+  </font>Depth<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>InitSlide<font color="#000080">;
+  </font>GetMem<font color="#000080">(</font>Buf<font color="#000080">,</font>WINDOWSIZE<font color="#000080">);
+  </font>Buf<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>FillChar<font color="#000080">(</font>CFreq<font color="#000080">,</font>sizeof<font color="#000080">(</font>CFreq<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>FillChar<font color="#000080">(</font>PFreq<font color="#000080">,</font>sizeof<font color="#000080">(</font>PFreq<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>OutputPos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>OutputMask<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>InitPutBits<font color="#000080">;
+  </font>Remainder<font color="#000080">:=</font>BRead<font color="#000080">(</font>Addr<font color="#000080">(</font>Text<font color="#000080">^[</font>DICSIZ<font color="#000080">]),</font>DICSIZ<font color="#000080">+</font>MAXMATCH<font color="#000080">);
+  </font>MatchLen<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>Pos<font color="#000080">:=</font>DICSIZ<font color="#000080">;</font>InsertNode<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>MatchLen<font color="#000080">&gt;</font>Remainder <font color="#FF0000"><b>THEN
+    </b></font>MatchLen<font color="#000080">:=</font>Remainder<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>Remainder<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>LastMatchLen<font color="#000080">:=</font>MatchLen<font color="#000080">;</font>LastMatchPos<font color="#000080">:=</font>MatchPos<font color="#000080">;</font>GetNextMatch<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>MatchLen<font color="#000080">&gt;</font>Remainder <font color="#FF0000"><b>THEN
+      </b></font>MatchLen<font color="#000080">:=</font>Remainder<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>MatchLen<font color="#000080">&gt;</font>LastMatchLen<font color="#000080">)</font><font color="#FF0000"><b>OR</b></font><font color="#000080">(</font>LastMatchLen<font color="#000080">&lt;</font>THRESHOLD<font color="#000080">) </font><font color="#FF0000"><b>THEN
+      </b></font>Output<font color="#000080">(</font>Text<font color="#000080">^[</font>PRED<font color="#000080">(</font>Pos<font color="#000080">)],</font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE
+      BEGIN
+        </b></font>Output<font color="#000080">(</font>LastMatchLen<font color="#000080">+(</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">-</font>THRESHOLD<font color="#000080">),(</font>Pos<font color="#000080">-</font>LastMatchPos<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>AND </b></font>PRED<font color="#000080">(</font>DICSIZ<font color="#000080">));
+        </font>DEC<font color="#000080">(</font>LastMatchLen<font color="#000080">);
+        </font><font color="#FF0000"><b>WHILE </b></font>LastMatchLen<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO BEGIN
+          </b></font>GetNextMatch<font color="#000080">;</font>DEC<font color="#000080">(</font>LastMatchLen<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font>MatchLen<font color="#000080">&gt;</font>Remainder <font color="#FF0000"><b>THEN
+          </b></font>MatchLen<font color="#000080">:=</font>Remainder<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{flush buffers}
+  </i></font>SendBlock<font color="#000080">;</font>PutBits<font color="#000080">(</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>BufPtr<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+    </b></font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">,</font>Buffer<font color="#000080">,</font>BufPtr<font color="#000080">);
+
+  </font>FreeMem<font color="#000080">(</font>Buf<font color="#000080">,</font>WINDOWSIZE<font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>Next<font color="#000080">,(</font>MAXHASHVAL<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>Prev<font color="#000080">,(</font>DICSIZ<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>Parent<font color="#000080">,(</font>DICSIZ<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF PERCOLATE}
+  </i></font>FreeMem<font color="#000080">(</font>Position<font color="#000080">,(</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>FreeMem<font color="#000080">(</font>Position<font color="#000080">,(</font>DICSIZ<font color="#000080">)</font><font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font>FreeMem<font color="#000080">(</font>ChildCount<font color="#000080">,</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>Level<font color="#000080">,</font>DICSIZ<font color="#000080">+</font>UCHARMAX<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+  </font>FreeMem<font color="#000080">(</font>Text<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">*</font>DICSIZ<font color="#000080">+</font>MAXMATCH<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{******************************** Main program ********************************}
+
+</i></font><font color="#FF0000"><b>BEGIN
+  IF NOT </b></font><font color="#000080">(</font>ParamCount <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">]) </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Usage :'</font><font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'To compress infile into outfile : LH5 infile outfile'</font><font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'To expand infile into outfile :   LH5 infile outfile E'</font><font color="#000080">);
+      </font>HALT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>BufPtr<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>Assign<font color="#000080">(</font>InFile<font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));</font>Reset<font color="#000080">(</font>InFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font>Assign<font color="#000080">(</font>OutFile<font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));</font>Rewrite<font color="#000080">(</font>OutFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>ParamCount<font color="#000080">=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>OrigSize<font color="#000080">:=</font>FileSize<font color="#000080">(</font>InFile<font color="#000080">);
+      </font>CompSize<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">,</font>OrigSize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+      </font>Encode<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>CompSize<font color="#000080">:=</font>FileSize<font color="#000080">(</font>InFile<font color="#000080">);
+      </font>BlockRead<font color="#000080">(</font>InFile<font color="#000080">,</font>OrigSize<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+      </font>Decode<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Close<font color="#000080">(</font>InFile<font color="#000080">);</font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0040.PAS">Original</a><b>]</b></p></body>
+</html>

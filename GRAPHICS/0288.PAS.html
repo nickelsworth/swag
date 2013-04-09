@@ -1,0 +1,1736 @@
+<html>
+<head><title> "File Indexer" by MIGUEL_ANGEL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0288.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{ Demo at the end of this unit }
+
+{
+  Program by         Miguel Angel Cand&cent;n
+  Last revision date 09-01-93
+  miguel_angel@jet
+}
+(*
+
+   First, excuse me, I don't speak english.
+
+
+  1024 bytes per page,
+     Max keys in page = 1014 div (4+LenKey)
+     Min keys in page = Max keys in page div 2
+     Every key (if not level 0), have another key page
+     One page reserved for swaps.
+
+  if (LenKey = 10) and (PagesInMemory = 16) the index file can
+  have 36^14 keys up to 72^14.
+
+  MaxPagesInMemory : 4..63 = 16;  { Levels per index file }
+
+   Return:
+     RecIndex : LongInt  ==&gt; rec number in data file
+     ErrIndex : word     ==&gt; if &lt;&gt; 0 =&gt; errors ...
+
+procedure OpenIndex( var CualIndex:PtrIndex; const NomFile:PathStr );
+procedure CreateIndex( var CualIndex:PtrIndex; const NomFile:PathStr;
+CualKeyLength:byte );
+procedure FindKey( CualIndex:PtrIndex; Clave:string );
+procedure FindKeyRecNo( CualIndex:PtrIndex; const Clave:string;
+RecNo:LongInt );
+procedure NextKey( CualIndex:PtrIndex; SearchNextNotFound:boolean );
+procedure PrevKey( CualIndex:PtrIndex; SearchNextNotFound:boolean );
+procedure InsKey( CualIndex:PtrIndex; Clave:string; RecNo:LongInt );
+procedure CloseIndex( var CualIndex:PtrIndex );
+procedure DelKey( CualIndex:PtrIndex; Clave:string; RecNo:LongInt );
+procedure ReplaceKey( CualIndex:PtrIndex; const OldClave,NewClave:string;
+RecNo:LongInt );
+procedure FindFirstKey(CualIndex:PtrIndex);
+procedure FindLastKey(CualIndex:PtrIndex);
+
+procedure ShortIntToKey( valor:ShortInt ; var Salida:Char );
+procedure ByteToKey( valor:byte ; var Salida:Char );
+procedure IntegerToKey( valor:integer ; var Salida:Char2 );
+procedure WordToKey( valor:word ; var Salida:Char2 );
+procedure LongIntToKey( valor:LongInt ; var Salida:Char4 );
+
+*)
+
+{$A+,B-,D-,E-,F-,G+,I+,L-,N-,O-,P+,Q-,R-,S-,T-,V-,X+,Y-}
+
+</i></font><font color="#FF0000"><b>unit
+  </b></font>SwagIdx<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+uses
+  </b></font>memory<font color="#000080">,</font>dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>Version <font color="#000080">= </font><font color="#800000">$0202</font><font color="#000080">;
+
+  </font>MaxPagesInMemory <font color="#000080">: </font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">63 </font><font color="#000080">= </font><font color="#800000">16</font><font color="#000080">;  </font><font color="#008000"><i>{ Leves per index file }
+  </i></font>MaxKeyLength <font color="#000080">= </font><font color="#800000">100</font><font color="#000080">;
+
+  </font>IndexRetryCount <font color="#000080">: </font>word <font color="#000080">= </font><font color="#800000">10</font><font color="#000080">;   </font><font color="#008000"><i>{ Shared retry }
+{  IndexRetryDelay : word = 1;    }
+
+  </i></font>ErrIndex <font color="#000080">: </font>word<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+  </font>RecIndex <font color="#000080">: </font>LongInt<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+
+  </font>ErrIndexFound       <font color="#000080">= </font><font color="#800000">$0000</font><font color="#000080">;
+  </font>ErrIndexNotFound    <font color="#000080">= </font><font color="#800000">$0001</font><font color="#000080">;
+  </font>ErrIndexBig         <font color="#000080">= </font><font color="#800000">$0002</font><font color="#000080">;
+  </font>ErrIndexEOF         <font color="#000080">= </font><font color="#800000">$0010</font><font color="#000080">;
+  </font>ErrIndexBOF         <font color="#000080">= </font><font color="#800000">$0011</font><font color="#000080">;
+  </font>ErrIndexOtherKey    <font color="#000080">= </font><font color="#800000">$0004</font><font color="#000080">;
+  </font>ErrIndexNoKeys      <font color="#000080">= </font><font color="#800000">$00FF</font><font color="#000080">;
+
+  </font>ErrIndexShared      <font color="#000080">= </font><font color="#800000">$1000</font><font color="#000080">;
+  </font>ErrIndexRead        <font color="#000080">= </font><font color="#800000">$1100</font><font color="#000080">;
+  </font>ErrIndexWrite       <font color="#000080">= </font><font color="#800000">$1200</font><font color="#000080">;
+  </font>ErrIndexFileNoOpen  <font color="#000080">= </font><font color="#800000">$1300</font><font color="#000080">;
+  </font>ErrIndexNoMemory    <font color="#000080">= </font><font color="#800000">$FFFF</font><font color="#000080">;
+  </font>ErrIndexTooManyKeys <font color="#000080">= </font><font color="#800000">$FEFE</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>char2   <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>char4   <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>Char255 <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>SizeOfResto <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">-</font><font color="#800000">10</font><font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>RegPageIndex <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Nivel<font color="#000080">:</font>byte<font color="#000080">;
+    </font>RecActual<font color="#000080">:</font>byte<font color="#000080">;
+    </font>OfsResto<font color="#000080">:</font>word<font color="#000080">;
+    </font>NPage<font color="#000080">:</font>LongInt<font color="#000080">; </font><font color="#008000"><i>{ Rec number in FIndex }
+    </i></font>KeysInPage<font color="#000080">:</font>word<font color="#000080">;
+    </font>resto<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>SizeOfResto<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+          </font><font color="#008000"><i>{ RecNo + clave | RecNo + clave ... }
+          { if RecNo = -1 =&gt; deleted }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>RegAuxBufIndexHead <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>NumKeys<font color="#000080">,
+    </font>NumDelKeys<font color="#000080">,
+    </font>FirstPage<font color="#000080">,
+    </font>LastPage<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>RegBufIndex<font color="#000080">=</font><font color="#FF0000"><b>record
+    </b></font>NumKeys<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>NumDelKeys<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>FirstPage<font color="#000080">,
+    </font>LastPage<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>KeyLength<font color="#000080">:</font>word<font color="#000080">;
+    </font>CualVersion<font color="#000080">:</font>word<font color="#000080">;
+    </font>FIndex<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+    </font>MaxKeysInPage<font color="#000080">:</font>word<font color="#000080">;
+    </font>TotKeyLength<font color="#000080">:</font>word<font color="#000080">;
+    </font>PageActual<font color="#000080">:</font>byte<font color="#000080">;     </font><font color="#008000"><i>{ from 1 to PagesInMemory }
+    </i></font>SeBloquea<font color="#000080">:</font>boolean<font color="#000080">;
+    </font>PtrClave<font color="#000080">:</font>pointer<font color="#000080">;
+    </font>SizeCualIndex<font color="#000080">:</font>word<font color="#000080">;
+    </font>PagesInMemory <font color="#000080">: </font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">;
+    </font>ModPages<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>boolean<font color="#000080">;
+    </font>Pages<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>RegPageIndex<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>PtrIndex <font color="#000080">= ^</font>RegBufIndex<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>OpenIndex<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>NomFile<font color="#000080">:</font>PathStr <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>CreateIndex<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>NomFile<font color="#000080">:</font>PathStr<font color="#000080">;
+</font>CualKeyLength<font color="#000080">:</font>byte <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>FindKey<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>FindKeyRecNo<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font>RecNo<font color="#000080">:</font>LongInt <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>NextKey<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>SearchNextNotFound<font color="#000080">:</font>boolean <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>PrevKey<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>SearchNextNotFound<font color="#000080">:</font>boolean <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>InsKey<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>RecNo<font color="#000080">:</font>LongInt <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>CloseIndex<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>DelKey<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>RecNo<font color="#000080">:</font>LongInt <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>ReplaceKey<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>OldClave<font color="#000080">,</font>NewClave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font>RecNo<font color="#000080">:</font>LongInt <font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>FindFirstKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>FindLastKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>ShortIntToKey<font color="#000080">( </font>valor<font color="#000080">:</font>ShortInt <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>ByteToKey<font color="#000080">( </font>valor<font color="#000080">:</font>byte <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>IntegerToKey<font color="#000080">( </font>valor<font color="#000080">:</font>integer <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char2 <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>WordToKey<font color="#000080">( </font>valor<font color="#000080">:</font>word <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char2 <font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>LongIntToKey<font color="#000080">( </font>valor<font color="#000080">:</font>LongInt <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char4 <font color="#000080">);
+
+
+</font><font color="#FF0000"><b>procedure </b></font>UnLockFileIndex<font color="#000080">( </font>CualHandle<font color="#000080">:</font>word <font color="#000080">);
+</font><font color="#FF0000"><b>function </b></font>LockFileIndex<font color="#000080">(</font>CualHandle<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyGetMem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>puntero<font color="#000080">:</font>pointer<font color="#000080">; </font>Tamano<font color="#000080">:</font>word<font color="#000080">; </font>ValorRelleno<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>MyFreeMem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>puntero<font color="#000080">:</font>pointer<font color="#000080">; </font>Tamano<font color="#000080">:</font>word<font color="#000080">);
+</font><font color="#FF0000"><b>function </b></font>Equal<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Comparando1<font color="#000080">,</font>Comparando2<font color="#000080">; </font>Tamano<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+const
+  </b></font>IsLockFileIndex <font color="#000080">: </font>boolean <font color="#000080">= </font>false<font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>MaskPtr <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>xOffset<font color="#000080">,</font>xSegment<font color="#000080">:</font>word
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>MaskLong <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>LoWord<font color="#000080">, </font>HiWord <font color="#000080">: </font>word
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>MaskWord <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>LoByte<font color="#000080">, </font>HiByte <font color="#000080">: </font>byte
+  <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyGetMem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>puntero<font color="#000080">:</font>pointer<font color="#000080">; </font>Tamano<font color="#000080">:</font>word<font color="#000080">; </font>ValorRelleno<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>Lo<font color="#000080">(</font>Tamano<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$0F</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>Tamano <font color="#000080">:= (</font>Tamano <font color="#FF0000"><b>and </b></font><font color="#800000">$FFF0</font><font color="#000080">) + </font><font color="#800000">$10</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>LongInt<font color="#000080">(</font>Tamano<font color="#000080">) &gt; </font>MaxAvail <font color="#FF0000"><b>then
+    </b></font>RunError<font color="#000080">(</font><font color="#800000">203</font><font color="#000080">)   </font><font color="#008000"><i>{ Heap Overflow Error }
+  </i></font><font color="#FF0000"><b>else
+    begin
+      if </b></font>Tamano <font color="#000080">&gt; </font><font color="#800000">65528 </font><font color="#FF0000"><b>then
+        </b></font>RunError<font color="#000080">(</font><font color="#800000">203</font><font color="#000080">);  </font><font color="#008000"><i>{ Heap Overflow Error }
+      </i></font>Puntero <font color="#000080">:= </font>MemAllocSeg<font color="#000080">(</font>Tamano<font color="#000080">); </font><font color="#008000"><i>{ GetMem(Puntero,Tamano); }
+      </i></font>fillchar<font color="#000080">( </font>Puntero<font color="#000080">^, </font>Tamano<font color="#000080">, </font>ValorRelleno <font color="#000080">)
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyFreeMem<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>puntero<font color="#000080">:</font>pointer<font color="#000080">; </font>Tamano<font color="#000080">:</font>word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>puntero <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then
+    begin
+      if </b></font>MaskWord<font color="#000080">(</font>Tamano<font color="#000080">).</font>LoByte <font color="#FF0000"><b>and </b></font><font color="#800000">$0F</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        </b></font>Tamano <font color="#000080">:= (</font>Tamano <font color="#FF0000"><b>and </b></font><font color="#800000">$FFF0</font><font color="#000080">) + </font><font color="#800000">$10</font><font color="#000080">;
+      </font>FreeMem<font color="#000080">(</font>Puntero<font color="#000080">,</font>Tamano<font color="#000080">);
+      </font>Puntero<font color="#000080">:=</font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ShortIntToKey<font color="#000080">( </font>valor<font color="#000080">:</font>ShortInt <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char <font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  al,valor
+  cmp  al,80h
+  jb   @@ShortIntToKeyPositivo
+  not  ax
+  inc  al
+  jmp @@EndShortIntToKey
+@@ShortIntToKeyPositivo:
+  or  al,80h
+@@EndShortIntToKey:
+  les  di,Salida
+  stosb
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ByteToKey<font color="#000080">( </font>valor<font color="#000080">:</font>byte <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char <font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  al,valor
+  les  di,Salida
+  stosb
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>IntegerToKey<font color="#000080">( </font>valor<font color="#000080">:</font>integer <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char2 <font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  ax,valor
+  cmp  ah,80h
+  jb   @@IntegerToKeyPositivo
+  not  ax
+  inc  ax
+  jmp @@EndIntegerToKey
+@@IntegerToKeyPositivo:
+  or  ah,80h
+@@EndIntegerToKey:
+  xchg al,ah
+  les  di,Salida
+  stosw
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>WordToKey<font color="#000080">( </font>valor<font color="#000080">:</font>word <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char2 <font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  ax,valor
+  xchg al,ah
+  les  di,Salida
+  stosw
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>LongIntToKey<font color="#000080">( </font>valor<font color="#000080">:</font>LongInt <font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Salida<font color="#000080">:</font>Char4 <font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  ax,MaskLong(valor).HiWord
+  mov  dx,MaskLong(valor).LoWord
+  cmp  ah,80h
+  jb   @@LongIntToKeyPositivo
+  not  ax
+  not  dx
+  inc  dx
+  jnc  @@EndLongIntToKey
+  inc  ax
+  jmp @@EndLongIntToKey
+@@LongIntToKeyPositivo:
+  or  ah,80h
+@@EndLongIntToKey:
+  xchg al,ah
+  xchg dl,dh
+  les  di,Salida
+  cld
+  stosw
+  mov  es:[di],dx
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>Equal<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Comparando1<font color="#000080">,</font>Comparando2<font color="#000080">; </font>Tamano<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  al,false
+  push ds
+  cld
+  mov  cx,Tamano
+  les  di,Comparando1
+  lds  si,Comparando2
+  repe cmpsb
+  jne  @@NoEqual
+  mov  al,True
+@@NoEqual:
+  pop  ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>WritePage<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>CualPage<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    if </b></font>Pages<font color="#000080">[</font>CualPage<font color="#000080">].</font>NPage<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      begin
+        </b></font>seek<font color="#000080">(</font>FIndex<font color="#000080">,</font>Pages<font color="#000080">[</font>CualPage<font color="#000080">].</font>NPage<font color="#000080">);
+        </font>BlockWrite<font color="#000080">(</font>FIndex<font color="#000080">,</font>Pages<font color="#000080">[</font>CualPage<font color="#000080">],</font><font color="#800000">1</font><font color="#000080">);
+        </font>ModPages<font color="#000080">[</font>CualPage<font color="#000080">]:=</font>false
+      <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>GetEmptyPage<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>DondeLeer<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxBucle<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>inc<font color="#000080">(</font>LastPage<font color="#000080">);
+      </font>Pages<font color="#000080">[</font>DondeLeer<font color="#000080">].</font>NPage<font color="#000080">:=</font>LastPage
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>LockFileIndex<font color="#000080">(</font>CualHandle<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Intentos<font color="#000080">:</font>word<font color="#000080">;
+  </font>HayError<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Intentos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    </b></font>HayError<font color="#000080">:=</font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ax,5C00h
+      mov  bx,CualHandle
+      xor  cx,cx
+      mov  dx,cx
+      mov  si,cx
+      mov  di,16
+      int  21h
+      jnc  @@LockFileIndexOk
+      mov  HayError,True     </font><font color="#008000"><i>{ If AL=1 =&gt; Invalid function code, =6 Invalid
+handle, 33 File-Locking violation }
+</i></font><font color="#FF00FF">@@LockFileIndexOk:
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>HayError <font color="#FF0000"><b>then
+      if </b></font>IndexRetryCount <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>intentos<font color="#000080">)
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>HayError<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>intentos <font color="#000080">&gt;= </font>IndexRetryCount<font color="#000080">);
+  </font>IsLockFileIndex <font color="#000080">:= </font><font color="#FF0000"><b>not </b></font>HayError<font color="#000080">;
+  </font>LockFileIndex <font color="#000080">:= ( </font><font color="#FF0000"><b>not </b></font>HayError <font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>UnLockFileIndex<font color="#000080">( </font>CualHandle<font color="#000080">:</font>word <font color="#000080">);
+</font><font color="#008000"><i>{var                  }
+{  Intentos:word;     }
+{  HayError:boolean;  }
+</i></font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{ Intentos:=0;
+  repeat
+    HayError:=false;  }
+    </i></font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ah,68h         </font><font color="#008000"><i>{ Commit file }
+      </i></font><font color="#FF00FF">mov  bx,CualHandle
+      int  21h
+      mov  ax,5C01h
+      mov  bx,CualHandle
+      xor  cx,cx
+      mov  dx,cx
+      mov  si,cx
+      mov  di,16
+      int  21h
+</font><font color="#008000"><i>(*
+      jnc  @@UnLockFileIndexOk
+      mov  HayError,True     { if AL=1 =&gt; Invalid function code, =6 Invalid
+handle, 33 File-Locking violation }
+@@UnLockFileIndexOk:
+*)
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>(*
+    if HayError then
+      if IndexRetryCount&lt;&gt;0 then inc(intentos)
+  until (not HayError) or (intentos=IndexRetryCount);
+*)
+  </i></font>IsLockFileIndex<font color="#000080">:=</font>false
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>LoadPage<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>PageToLeer<font color="#000080">:</font>LongInt<font color="#000080">;
+</font>DondeLeer<font color="#000080">:</font>byte <font color="#000080">);
+</font><font color="#FF0000"><b>label
+  </b></font>LeePage<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>leidos<font color="#000080">:</font>word<font color="#000080">;
+  </font>LowLevel<font color="#000080">:</font>byte<font color="#000080">;
+  </font>PageLowLevel<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>ChangePage<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxPage<font color="#000080">:</font>RegPageIndex<font color="#000080">;
+  </font>AuxModPage<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>AuxPage<font color="#000080">:=</font>Pages<font color="#000080">[</font>DondeLeer<font color="#000080">];
+      </font>Pages<font color="#000080">[</font>DondeLeer<font color="#000080">]:=</font>Pages<font color="#000080">[</font>leidos<font color="#000080">];
+      </font>Pages<font color="#000080">[</font>leidos<font color="#000080">]:=</font>AuxPage<font color="#000080">;
+      </font>AuxModPage<font color="#000080">:=</font>ModPages<font color="#000080">[</font>DondeLeer<font color="#000080">];
+      </font>ModPages<font color="#000080">[</font>DondeLeer<font color="#000080">]:=</font>ModPages<font color="#000080">[</font>leidos<font color="#000080">];
+      </font>ModPages<font color="#000080">[</font>Leidos<font color="#000080">]:=</font>AuxModPage
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin   </b></font><font color="#008000"><i>{ LoadPage }
+  </i></font><font color="#FF0000"><b>with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      if </b></font>DondeLeer<font color="#000080">&gt;</font>PagesInMemory <font color="#FF0000"><b>then
+        begin
+          </b></font>ErrIndex<font color="#000080">:=</font>ErrIndexTooManyKeys<font color="#000080">;
+          </font>exit
+        <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>for </b></font>leidos<font color="#000080">:=</font><font color="#800000">2 </font><font color="#FF0000"><b>to </b></font>PagesInMemory <font color="#FF0000"><b>do
+        if </b></font>PageToLeer <font color="#000080">= </font>Pages<font color="#000080">[</font>leidos<font color="#000080">].</font>NPage <font color="#FF0000"><b>then
+          begin
+            if </b></font>leidos<font color="#000080">&lt;&gt;</font>DondeLeer <font color="#FF0000"><b>then
+              </b></font>ChangePage<font color="#000080">;
+            </font>exit
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>for </b></font>leidos<font color="#000080">:=</font><font color="#800000">2 </font><font color="#FF0000"><b>to </b></font>PagesInMemory <font color="#FF0000"><b>do   </b></font><font color="#008000"><i>{ find empty page ... }
+        </i></font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>leidos<font color="#000080">].</font>NPage <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          begin
+            </b></font>ChangePage<font color="#000080">;
+            </font><font color="#FF0000"><b>goto </b></font>LeePage
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>DondeLeer <font color="#000080">&lt; </font>PagesInMemory <font color="#FF0000"><b>then
+        begin
+          </b></font>LowLevel <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;
+          </font>PageLowLevel <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>for </b></font>leidos <font color="#000080">:= </font>DondeLeer<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>PagesInMemory <font color="#FF0000"><b>do
+            begin
+              if </b></font>Pages<font color="#000080">[</font>leidos<font color="#000080">].</font>Nivel <font color="#000080">&lt; </font>LowLevel <font color="#FF0000"><b>then
+                begin
+                  </b></font>LowLevel <font color="#000080">:= </font>Pages<font color="#000080">[</font>leidos<font color="#000080">].</font>Nivel<font color="#000080">;
+                  </font>PageLowLevel <font color="#000080">:= </font>leidos
+                <font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>leidos<font color="#000080">].</font>Nivel <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>ModPages<font color="#000080">[</font>leidos<font color="#000080">]) </font><font color="#FF0000"><b>then
+                begin
+                  </b></font>LowLevel <font color="#000080">:= </font>Pages<font color="#000080">[</font>leidos<font color="#000080">].</font>Nivel<font color="#000080">;
+                  </font>PageLowLevel <font color="#000080">:= </font>leidos
+                <font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>LowLevel <font color="#000080">&lt;&gt; </font><font color="#800000">$FF </font><font color="#FF0000"><b>then
+            begin
+              </b></font>leidos <font color="#000080">:= </font>PageLowLevel<font color="#000080">;
+              </font>ChangePage
+            <font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>LeePage<font color="#000080">:
+      </font><font color="#FF0000"><b>if </b></font>ModPages<font color="#000080">[</font>DondeLeer<font color="#000080">] </font><font color="#FF0000"><b>then
+        </b></font>WritePage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>DondeLeer <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>PageToLeer <font color="#000080">&gt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        begin
+          </b></font>seek<font color="#000080">( </font>FIndex<font color="#000080">, </font>PageToLeer <font color="#000080">);
+          </font>BlockRead<font color="#000080">( </font>FIndex<font color="#000080">, </font>Pages<font color="#000080">[</font>DondeLeer<font color="#000080">], </font><font color="#800000">1 </font><font color="#000080">)
+        </font><font color="#FF0000"><b>end
+      else
+        </b></font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font>DondeLeer<font color="#000080">], </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">)
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;    </font><font color="#008000"><i>{ LoadPage }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>ChkModFile<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxHead  <font color="#000080">: </font>RegAuxBufIndexHead<font color="#000080">; </font><font color="#008000"><i>{ NumKeys , NumDelKeys , FirstPage,
+LastPage }
+  </i></font>OfsAuxHead<font color="#000080">:</font>word<font color="#000080">;
+  </font>Handle<font color="#000080">:</font>word<font color="#000080">;
+  </font>HayError<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    if </b></font>LockFileIndex<font color="#000080">(</font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>HayError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>Handle<font color="#000080">:=</font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle<font color="#000080">;
+        </font>OfsAuxHead<font color="#000080">:=</font>ofs<font color="#000080">(</font>AuxHead<font color="#000080">);
+
+        </font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font>seek<font color="#000080">( </font>FIndex<font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+        </font>BlockRead<font color="#000080">( </font>FIndex<font color="#000080">, </font>AuxHead<font color="#000080">, </font>SizeOf<font color="#000080">(</font>RegAuxBufIndexHead<font color="#000080">) );
+        </font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>RegPageIndex <font color="#000080">);
+
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>AuxHead<font color="#000080">.</font>NumKeys<font color="#000080">&lt;&gt;</font>NumKeys<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>AuxHead<font color="#000080">.</font>NumDelKeys<font color="#000080">&lt;&gt;</font>NumDelKeys<font color="#000080">)
+</font><font color="#FF0000"><b>then
+          begin
+            </b></font>move<font color="#000080">( </font>AuxHead<font color="#000080">, </font>CualIndex<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>RegAuxBufIndexHead<font color="#000080">) );
+           
+</font>fillchar<font color="#000080">(</font>CualIndex<font color="#000080">^.</font>Pages<font color="#000080">,</font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">)*</font>PagesInMemory<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+            </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>FirstPage<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+            </font>PageActual<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+            </font>IsLockFileIndex <font color="#000080">:= </font>true
+          <font color="#FF0000"><b>end
+      end
+    else
+      </b></font>ErrIndex<font color="#000080">:=</font>Lo<font color="#000080">(</font>ErrIndex<font color="#000080">) + </font>ErrIndexShared
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>IniciaIndex<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>ErrIndex <font color="#000080">:= </font>Lo<font color="#000080">(</font>ErrIndex<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>CualIndex<font color="#000080">^.</font>SeBloquea <font color="#FF0000"><b>then
+    begin
+      </b></font>SeDesbloquea<font color="#000080">:=</font><font color="#FF0000"><b>not </b></font>IsLockFileIndex<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>SeDesbloquea <font color="#FF0000"><b>then
+        </b></font>ChkModFile<font color="#000080">(</font>CualIndex<font color="#000080">)
+    </font><font color="#FF0000"><b>end
+  else
+    </b></font>SeDesbloquea<font color="#000080">:=</font>false
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>FinalizaIndex<font color="#000080">( </font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>SeDesbloquea<font color="#000080">:</font>boolean <font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>Handle<font color="#000080">:</font>word<font color="#000080">;
+  </font>AuxBucle<font color="#000080">:</font>byte<font color="#000080">;
+  </font>HayError<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>CualIndex<font color="#000080">^.</font>SeBloquea <font color="#FF0000"><b>then
+    with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+        for </b></font>AuxBucle<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>PagesInMemory <font color="#FF0000"><b>do
+          if </b></font>ModPages<font color="#000080">[</font>AuxBucle<font color="#000080">] </font><font color="#FF0000"><b>then
+            </b></font>WritePage<font color="#000080">(</font>CualIndex<font color="#000080">,</font>AuxBucle<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>then
+          begin
+            </b></font>HayError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+            </font>Handle<font color="#000080">:=</font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle<font color="#000080">;
+
+            </font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+            </font>seek<font color="#000080">( </font>FIndex<font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+            </font>BlockWrite<font color="#000080">( </font>FIndex<font color="#000080">, </font>CualIndex<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>RegAuxBufIndexHead<font color="#000080">) );
+            </font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>RegPageIndex <font color="#000080">);
+            </font>ErrIndex <font color="#000080">:= </font>Lo<font color="#000080">(</font>ErrIndex<font color="#000080">);
+            </font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font>false
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>SeDesbloquea <font color="#FF0000"><b>then
+        </b></font>UnLockFileIndex<font color="#000080">(</font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle<font color="#000080">)
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CreateIndex<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>NomFile<font color="#000080">:</font>PathStr<font color="#000080">;
+</font>CualKeyLength<font color="#000080">:</font>byte <font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxWord<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>AuxWord <font color="#000080">:=
+</font>SizeOf<font color="#000080">(</font>RegBufIndex<font color="#000080">)-(</font><font color="#800000">63</font><font color="#000080">-</font>MaxPagesInMemory<font color="#000080">)*</font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">);
+  </font>MyGetMem<font color="#000080">( </font>pointer<font color="#000080">(</font>CualIndex<font color="#000080">), </font>AuxWord<font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>CualIndex <font color="#000080">= </font><font color="#FF0000"><b>nil then
+    </b></font>ErrIndex<font color="#000080">:=</font>ErrIndexNoMemory
+  <font color="#FF0000"><b>else
+    begin
+      with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+        begin
+          </b></font>SizeCualIndex <font color="#000080">:= </font>AuxWord<font color="#000080">;
+          </font>PagesInMemory <font color="#000080">:= </font>MaxPagesInMemory<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>FileMode <font color="#FF0000"><b>and </b></font><font color="#800000">112</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            </b></font>SeBloquea <font color="#000080">:= </font>false
+          <font color="#FF0000"><b>else
+            </b></font>SeBloquea <font color="#000080">:= ( </font>FileMode <font color="#FF0000"><b>and </b></font><font color="#800000">112 </font><font color="#000080">) &lt;&gt; </font><font color="#800000">16 </font><font color="#000080">;  </font><font color="#008000"><i>{ if shared }
+          </i></font>CualVersion <font color="#000080">:= </font>Version<font color="#000080">;
+          </font>KeyLength <font color="#000080">:= </font>CualKeyLength<font color="#000080">;
+          </font>FirstPage <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font>LastPage <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font>System<font color="#000080">.</font>assign<font color="#000080">(</font>FIndex<font color="#000080">,</font>NomFile<font color="#000080">);
+
+          </font>rewrite<font color="#000080">( </font>FIndex<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+</font><font color="#008000"><i>{$I-}
+          </i></font><font color="#FF0000"><b>if </b></font>IOResult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            begin
+              </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFileNoOpen<font color="#000080">;
+              </font>MyFreeMem<font color="#000080">(</font>pointer<font color="#000080">(</font>CualIndex<font color="#000080">),</font>SizeOf<font color="#000080">(</font>RegBufIndex<font color="#000080">));
+              </font>exit
+            <font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$I+}
+          </i></font><font color="#FF0000"><b>if </b></font>SeBloquea <font color="#FF0000"><b>then
+            </b></font>LockFileIndex<font color="#000080">( </font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle <font color="#000080">);
+
+          </font>Pages<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>NPage<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+
+          </font>BlockWrite<font color="#000080">( </font>FIndex<font color="#000080">, </font>CualIndex<font color="#000080">^.</font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">)*</font><font color="#800000">2
+</font><font color="#000080">);
+          </font>seek<font color="#000080">( </font>FIndex<font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+          </font>BlockWrite<font color="#000080">( </font>FIndex<font color="#000080">, </font>CualIndex<font color="#000080">^, </font><font color="#800000">20 </font><font color="#000080">);
+
+          </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>NPage <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font>Pages<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>NPage <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+          </font>TotKeyLength <font color="#000080">:= </font>KeyLength<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">;
+          </font>MaxKeysInPage <font color="#000080">:= </font>SizeOfResto <font color="#FF0000"><b>div </b></font>TotKeyLength<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>SeBloquea <font color="#FF0000"><b>then
+            </b></font>UnLockFileIndex<font color="#000080">( </font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle <font color="#000080">);
+          </font>close<font color="#000080">( </font>FIndex <font color="#000080">);
+          </font>reset<font color="#000080">( </font>FIndex<font color="#000080">, </font>SizeOf<font color="#000080">(</font>RegPageIndex <font color="#000080">) )
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>OpenIndex<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>NomFile<font color="#000080">:</font>PathStr <font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>SaveFileMode<font color="#000080">:</font>byte<font color="#000080">;
+  </font>AuxWord<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>AuxWord <font color="#000080">:=
+</font>SizeOf<font color="#000080">(</font>RegBufIndex<font color="#000080">)-(</font><font color="#800000">63</font><font color="#000080">-</font>MaxPagesInMemory<font color="#000080">)*</font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">);
+  </font>MyGetMem<font color="#000080">( </font>pointer<font color="#000080">(</font>CualIndex<font color="#000080">), </font>AuxWord <font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>CualIndex<font color="#000080">=</font><font color="#FF0000"><b>nil then
+    </b></font>ErrIndex<font color="#000080">:=</font>ErrIndexNoMemory
+  <font color="#FF0000"><b>else
+    with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+        </b></font>SizeCualIndex <font color="#000080">:= </font>AuxWord<font color="#000080">;
+        </font>PagesInMemory <font color="#000080">:= </font>MaxPagesInMemory<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>FileMode <font color="#FF0000"><b>and </b></font><font color="#800000">112</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          </b></font>SeBloquea <font color="#000080">:= </font>false
+        <font color="#FF0000"><b>else
+          </b></font>SeBloquea <font color="#000080">:= ( </font>FileMode <font color="#FF0000"><b>and </b></font><font color="#800000">112 </font><font color="#000080">&lt;&gt; </font><font color="#800000">16 </font><font color="#000080">); </font><font color="#008000"><i>{ if shared }
+        </i></font>System<font color="#000080">.</font>assign<font color="#000080">(</font>FIndex<font color="#000080">,</font>NomFile<font color="#000080">);
+</font><font color="#008000"><i>{$I-}
+        </i></font>reset<font color="#000080">( </font>FIndex<font color="#000080">, </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">) );
+        </font><font color="#FF0000"><b>if </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          begin
+            </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFileNoOpen<font color="#000080">;
+            </font>MyFreeMem<font color="#000080">( </font>pointer<font color="#000080">(</font>CualIndex<font color="#000080">), </font>CualIndex<font color="#000080">^.</font>SizeCualIndex <font color="#000080">);
+            </font>exit
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$I+}
+        </i></font><font color="#FF0000"><b>if </b></font>SeBloquea <font color="#FF0000"><b>then
+          </b></font>LockFileIndex<font color="#000080">( </font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle <font color="#000080">);
+
+        </font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font>BlockRead<font color="#000080">( </font>FIndex<font color="#000080">, </font>CualIndex<font color="#000080">^, </font><font color="#800000">20 </font><font color="#000080">);  </font><font color="#008000"><i>{ file tail }
+        </i></font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font>SizeOf<font color="#000080">( </font>RegPageIndex <font color="#000080">);
+
+        </font>TotKeyLength <font color="#000080">:= </font>KeyLength <font color="#000080">+ </font><font color="#800000">4</font><font color="#000080">;
+        </font>MaxKeysInPage <font color="#000080">:= </font>SizeOfResto <font color="#FF0000"><b>div </b></font>TotKeyLength<font color="#000080">;
+
+        </font>seek<font color="#000080">( </font>FIndex<font color="#000080">, </font>FirstPage <font color="#000080">);
+        </font>BlockRead<font color="#000080">( </font>FIndex<font color="#000080">, </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">1 </font><font color="#000080">);
+        </font>LastPage <font color="#000080">:= </font>FileSize<font color="#000080">(</font>FIndex<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>SeBloquea <font color="#FF0000"><b>then
+          </b></font>UnLockFileIndex<font color="#000080">( </font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle <font color="#000080">)
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CloseIndex<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxBucle<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>FileRec<font color="#000080">(</font>CualIndex<font color="#000080">^.</font>FIndex<font color="#000080">).</font>Mode <font color="#000080">= </font>fmInOut <font color="#FF0000"><b>then
+    begin
+      with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+        begin
+          for </b></font>AuxBucle<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>PagesInMemory <font color="#FF0000"><b>do
+            if </b></font>ModPages<font color="#000080">[</font>AuxBucle<font color="#000080">] </font><font color="#FF0000"><b>then
+              </b></font>WritePage<font color="#000080">(</font>CualIndex<font color="#000080">,</font>AuxBucle<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>CualIndex<font color="#000080">^.</font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>then
+            begin
+              </b></font>FileRec<font color="#000080">( </font>FIndex <font color="#000080">).</font>RecSize <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+              </font>seek<font color="#000080">( </font>FIndex<font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+              </font>BlockWrite<font color="#000080">( </font>Findex<font color="#000080">, </font>NumKeys<font color="#000080">, </font>SizeOf<font color="#000080">(</font>RegAuxBufIndexHead<font color="#000080">) );
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>close<font color="#000080">( </font>FIndex <font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>MyFreeMem<font color="#000080">( </font>pointer<font color="#000080">(</font>CualIndex<font color="#000080">), </font>CualIndex<font color="#000080">^.</font>SizeCualIndex <font color="#000080">);
+      </font>CualIndex<font color="#000080">:=</font><font color="#FF0000"><b>nil
+    end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>InsKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>RecNo<font color="#000080">:</font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxWord<font color="#000080">,</font>AuxBucle<font color="#000080">:</font>word<font color="#000080">;
+  </font>AuxRecNo<font color="#000080">,</font>AuxRecPage<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>MeteKey<font color="#000080">(</font>CualPagina<font color="#000080">:</font>word<font color="#000080">; </font>Donde<font color="#000080">:</font>word<font color="#000080">; </font>Replace<font color="#000080">:</font>boolean<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Clave<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxWord<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>ModifyPagesBefore<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>BuscaPage<font color="#000080">,</font>AuxLong<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>SaveDonde<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>SaveDonde<font color="#000080">:=</font>Donde<font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      while </b></font><font color="#000080">(</font>donde <font color="#000080">= </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CualPagina <font color="#000080">&gt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do 
+</b></font><font color="#008000"><i>{ modificar p gina(s) anterior(es) }
+        </i></font><font color="#FF0000"><b>begin        </b></font><font color="#008000"><i>(***************************)
+          </i></font>BuscaPage <font color="#000080">:= </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>NPage<font color="#000080">;
+          </font>dec<font color="#000080">( </font>CualPagina <font color="#000080">);
+          </font>donde <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font>AuxWord <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>repeat
+            </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[</font>AuxWord<font color="#000080">], </font>AuxLong<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+            </font>inc<font color="#000080">( </font>donde <font color="#000080">);
+            </font>AuxWord <font color="#000080">:= </font>AuxWord <font color="#000080">+ </font>TotKeyLength
+          <font color="#FF0000"><b>until </b></font><font color="#000080">(</font>Donde <font color="#000080">&gt; </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>AuxLong <font color="#000080">=
+</font>BuscaPage<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>AuxLong <font color="#000080">= </font>BuscaPage <font color="#FF0000"><b>then
+            begin
+              </b></font>AuxWord <font color="#000080">:= </font>AuxWord<font color="#000080">-</font>TotKeyLength<font color="#000080">;
+              </font>move<font color="#000080">( </font>clave<font color="#000080">, </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[</font>AuxWord<font color="#000080">], </font>TotKeyLength
+<font color="#000080">);
+              </font>move<font color="#000080">( </font>AuxLong<font color="#000080">, </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[</font>AuxWord<font color="#000080">], </font><font color="#800000">4 </font><font color="#000080">);
+              </font>ModPages<font color="#000080">[</font>CualPagina<font color="#000080">] := </font>true
+            <font color="#FF0000"><b>end
+        end
+    end</b></font><font color="#000080">;
+  </font>Donde<font color="#000080">:=</font>SaveDonde
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>PartePage<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxBucle<font color="#000080">:</font>word<font color="#000080">;
+  </font>AuxClave<font color="#000080">:</font>Char255<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, -</font><font color="#800000">1</font><font color="#000080">, </font>PagesInMemory <font color="#000080">);  </font><font color="#008000"><i>(* // *)
+(*  //
+      if ModPages[PagesInMemory] then
+        WritePage( CualIndex, PagesInMemory );
+      fillchar( Pages[PagesInMemory], SizeOf(RegPageIndex), 0 );
+//  *)
+      </i></font>AuxWord <font color="#000080">:= </font>TotKeyLength <font color="#000080">* ( </font>MaxKeysInPage <font color="#FF0000"><b>div </b></font><font color="#800000">2 </font><font color="#000080">);
+      </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">], </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">], </font><font color="#800000">10 </font><font color="#000080">+ </font>AuxWord <font color="#000080">);
+      </font>ModPages<font color="#000080">[</font>PagesInMemory<font color="#000080">] := </font>true<font color="#000080">;
+      </font>ModPages<font color="#000080">[</font>CualPagina<font color="#000080">] := </font>true<font color="#000080">;
+      </font>GetEmptyPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>PagesInMemory <font color="#000080">);
+      </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage <font color="#000080">:= </font>MaxKeysInPage <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">;
+      </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage <font color="#000080">:= </font>MaxKeysInPage <font color="#000080">-
+</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">;
+      </font>AuxWord <font color="#000080">:= </font>TotKeyLength <font color="#000080">* </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage<font color="#000080">;
+      </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[ (</font>MaxKeysInPage <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">)*</font>TotKeyLength <font color="#000080">],
+</font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">], </font>AuxWord <font color="#000080">);
+      </font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[</font>AuxWord<font color="#000080">], </font>SizeOfResto <font color="#000080">- </font>AuxWord<font color="#000080">, </font><font color="#800000">0
+</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>donde <font color="#000080">&gt; </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage <font color="#FF0000"><b>then
+        begin
+          </b></font>PageActual <font color="#000080">:= </font>CualPagina<font color="#000080">;
+          </font>donde <font color="#000080">:= </font>donde <font color="#000080">- </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      else
+        </b></font>PageActual <font color="#000080">:= </font>PagesInMemory<font color="#000080">;
+      </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:= (</font>donde<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) * </font>TotKeyLength<font color="#000080">;
+      </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:= </font>donde<font color="#000080">;
+      </font><font color="#FF0000"><b>if not </b></font>Replace <font color="#FF0000"><b>then
+        begin
+          </b></font>inc<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage <font color="#000080">);
+          </font>inc<font color="#000080">( </font>NumKeys <font color="#000080">);
+          </font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>true<font color="#000080">;
+          </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+                </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">+
+</font>TotKeyLength<font color="#000080">],
+                </font>TotKeyLength<font color="#000080">*(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage <font color="#000080">- </font>donde<font color="#000080">));
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>move<font color="#000080">( </font>clave<font color="#000080">, </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+</font>TotKeyLength <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>CualPagina <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ make another first key page }
+        </i></font><font color="#FF0000"><b>begin
+          if </b></font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>Nivel<font color="#000080">+</font><font color="#800000">1 </font><font color="#000080">= </font>PagesInMemory <font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ too many keys }
+            </i></font><font color="#FF0000"><b>begin
+              </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexTooManyKeys<font color="#000080">;
+              </font>exit
+            <font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, -</font><font color="#800000">1</font><font color="#000080">, </font>PagesInMemory<font color="#000080">-</font><font color="#800000">1 </font><font color="#000080">);  </font><font color="#008000"><i>(* // *)
+(* //
+          WritePage( CualIndex, PagesInMemory );
+          if ModPages[ PagesInMemory-1 ] then
+            WritePage( CualIndex, PagesInMemory-1 );
+// *)
+          </i></font><font color="#FF0000"><b>for </b></font>AuxBucle <font color="#000080">:= </font>PagesInMemory<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>downto </b></font><font color="#800000">2 </font><font color="#FF0000"><b>do
+            begin
+              </b></font>Pages<font color="#000080">[</font>AuxBucle<font color="#000080">] := </font>Pages<font color="#000080">[</font>AuxBucle<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">];
+              </font>ModPages<font color="#000080">[</font>AuxBucle<font color="#000080">] := </font>ModPages<font color="#000080">[</font>AuxBucle<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">];
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+
+          </font>ModPages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>true<font color="#000080">;
+          </font>GetEmptyPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+          </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+          </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>Nivel <font color="#000080">:= </font>Pages<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>Nivel<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+          </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>NPage<font color="#000080">, </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">], </font><font color="#800000">4 </font><font color="#000080">);
+          </font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>resto<font color="#000080">[(</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">+
+</font><font color="#800000">4</font><font color="#000080">],
+            </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">], </font>KeyLength <font color="#000080">);
+          </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>NPage<font color="#000080">, </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>TotKeyLength<font color="#000080">], </font><font color="#800000">4 </font><font color="#000080">);
+          </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>resto<font color="#000080">[(</font>Pages<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>KeysInPage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">],
+</font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>TotKeyLength<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">], </font>KeyLength <font color="#000080">);
+          </font>FirstPage <font color="#000080">:= </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>NPage<font color="#000080">;
+          </font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>true
+        <font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>resto<font color="#000080">[(</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">]
+,
+                </font>AuxClave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>TotKeyLength <font color="#000080">);
+          </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>NPage<font color="#000080">, </font>AuxClave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">4 </font><font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>PageActual <font color="#000080">= </font>PagesInMemory <font color="#FF0000"><b>then
+            begin
+              </b></font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, -</font><font color="#800000">1</font><font color="#000080">, </font>CualPagina <font color="#000080">);  </font><font color="#008000"><i>(* // *)
+(*  //
+              if ModPages[CualPagina] then
+                WritePage( CualIndex, CualPagina );
+// *)
+              </i></font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">] := </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">];
+              </font>ModPages<font color="#000080">[</font>CualPagina<font color="#000080">] := </font>true<font color="#000080">;
+            </font><font color="#FF0000"><b>end
+          else
+            begin
+              </b></font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, -</font><font color="#800000">1</font><font color="#000080">, </font>PagesInMemory <font color="#000080">)  </font><font color="#008000"><i>(* // *)
+(* //
+              WritePage( CualIndex, PagesInMemory );
+// *)
+            </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">], </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+          </font>ModPages<font color="#000080">[</font>PagesInMemory<font color="#000080">] := </font>false<font color="#000080">;
+          </font>PageActual <font color="#000080">:= </font>CualPagina<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexNotFound <font color="#FF0000"><b>then
+            </b></font>MeteKey<font color="#000080">( </font>CualPagina<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">, </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">, </font>false<font color="#000080">,
+</font>AuxClave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] )
+          </font><font color="#FF0000"><b>else
+            </b></font>MeteKey<font color="#000080">( </font>CualPagina<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">, </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual<font color="#000080">, </font>false<font color="#000080">,
+</font>AuxClave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] );
+          </font>PageActual <font color="#000080">:= </font>CualPagina<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>ErrIndex<font color="#000080">=</font>ErrIndexTooManyKeys <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+          </font>ModifyPagesBefore
+        <font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin   </b></font><font color="#008000"><i>{ MeteKey }
+  </i></font><font color="#FF0000"><b>with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      if </b></font><font color="#000080">(</font>donde <font color="#000080">&gt; </font>MaxKeysInPage<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font><font color="#FF0000"><b>not </b></font>Replace<font color="#000080">) </font><font color="#FF0000"><b>and
+</b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage <font color="#000080">= </font>MaxKeysInPage<font color="#000080">)) </font><font color="#FF0000"><b>then
+        if </b></font>CualPagina <font color="#000080">&lt; </font>PagesInMemory <font color="#FF0000"><b>then
+          </b></font>PartePage
+        <font color="#FF0000"><b>else
+          </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexTooManyKeys
+      <font color="#FF0000"><b>else
+        begin
+          </b></font>AuxWord <font color="#000080">:= (</font>donde<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">;
+          </font><font color="#FF0000"><b>if not </b></font>Replace <font color="#FF0000"><b>then
+            </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>Resto<font color="#000080">[</font>AuxWord<font color="#000080">],
+</font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>Resto<font color="#000080">[</font>AuxWord<font color="#000080">+</font>TotKeyLength<font color="#000080">],
+              (</font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">-</font>donde<font color="#000080">)*</font>TotKeyLength<font color="#000080">);
+          </font>move<font color="#000080">( </font>clave<font color="#000080">, </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>resto<font color="#000080">[</font>AuxWord<font color="#000080">], </font>TotKeyLength <font color="#000080">);
+          </font><font color="#FF0000"><b>if not </b></font>Replace <font color="#FF0000"><b>then
+            begin
+              </b></font>inc<font color="#000080">( </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>KeysInPage <font color="#000080">);
+              </font>inc<font color="#000080">( </font>NumKeys <font color="#000080">);
+              </font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>true<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>RecActual <font color="#000080">:= </font>donde<font color="#000080">;
+          </font>Pages<font color="#000080">[</font>CualPagina<font color="#000080">].</font>OfsResto <font color="#000080">:= (</font>donde<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">;
+          </font>ModPages<font color="#000080">[</font>CualPagina<font color="#000080">] := </font>true<font color="#000080">;
+          </font>ModifyPagesBefore
+        <font color="#FF0000"><b>end
+    end
+end</b></font><font color="#000080">;    </font><font color="#008000"><i>{ MeteKey }
+
+</i></font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ InsKey }
+  </i></font>IniciaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Hi<font color="#000080">(</font>ErrIndex<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>length<font color="#000080">(</font>Clave<font color="#000080">) &lt; </font>CualIndex<font color="#000080">^.</font>KeyLength <font color="#FF0000"><b>do </b></font>Clave<font color="#000080">:=</font>Clave<font color="#000080">+</font><font color="#800000">#0</font><font color="#000080">;
+  </font>FindKey<font color="#000080">( </font>CualIndex<font color="#000080">, </font>Clave <font color="#000080">);
+  </font>move<font color="#000080">( </font>Clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>Clave<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">], </font>CualIndex<font color="#000080">^.</font>KeyLength <font color="#000080">);
+  </font>move<font color="#000080">( </font>RecNo<font color="#000080">, </font>Clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">4 </font><font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexNotFound <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ clave mayor que todas las
+claves }
+        </i></font><font color="#FF0000"><b>begin
+          </b></font>PageActual <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>while </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Nivel <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+            begin
+              </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:=
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+              </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:=
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">*</font>TotKeyLength<font color="#000080">;
+              </font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>TotKeyLength<font color="#000080">*(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)],
+</font>AuxRecPage<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+              </font>inc<font color="#000080">( </font>PageActual <font color="#000080">);
+              </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxRecPage<font color="#000080">, </font>PageActual <font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexTooManyKeys <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:= </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+          </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:=
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">*</font>TotKeyLength<font color="#000080">;
+          </font>MeteKey<font color="#000080">( </font>PageActual<font color="#000080">,</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>false<font color="#000080">,
+</font>Clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] )
+        </font><font color="#FF0000"><b>end
+      else </b></font><font color="#008000"><i>{ if ErrIndex=ErrIndexNotFound then key more big that last key
+in file }
+        </i></font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{ find key greather equal }
+          </i></font>MeteKey<font color="#000080">( </font>PageActual<font color="#000080">,</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual<font color="#000080">, </font>false<font color="#000080">, </font>Clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]
+)
+        </font><font color="#FF0000"><b>end
+    end</b></font><font color="#000080">;
+  </font>FinalizaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ InsKey }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>NextKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>SearchNextNotFound<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>label
+  </b></font>Label01<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxRecPage<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>AuxWord<font color="#000080">,</font>WordBusca<font color="#000080">:</font>word<font color="#000080">;
+  </font>AuxClave<font color="#000080">:</font>Char255<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">], </font>AuxClave<font color="#000080">,
+</font>TotKeyLength <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">&lt; </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage <font color="#FF0000"><b>then
+        begin
+          </b></font>inc<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">);
+          </font>inc<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">,</font>TotKeyLength <font color="#000080">)
+        </font><font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>AuxWord <font color="#000080">:= </font>PageActual<font color="#000080">;
+</font><font color="#008000"><i>{ $R-}
+          </i></font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">=
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>PageActual <font color="#000080">&gt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do
+            </b></font>dec<font color="#000080">( </font>PageActual <font color="#000080">);
+</font><font color="#008000"><i>{ $R+}
+          </i></font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">= </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage
+<font color="#FF0000"><b>then
+            begin
+              </b></font>PageActual <font color="#000080">:= </font>AuxWord<font color="#000080">;
+              </font>ErrIndex <font color="#000080">:= </font>ErrIndexEOF<font color="#000080">;
+              </font>exit
+            <font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>inc<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">, </font>TotKeyLength <font color="#000080">);
+          </font>inc<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">);
+          </font><font color="#FF0000"><b>while </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Nivel <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+            begin
+              </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+</font>AuxRecPage<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+              </font>inc<font color="#000080">( </font>PageActual <font color="#000080">);
+              </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxRecPage<font color="#000080">, </font>PageActual <font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexTooManyKeys <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+              </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+              </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+            </font><font color="#FF0000"><b>end
+        end</b></font><font color="#000080">;
+      </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">], </font>RecIndex<font color="#000080">,
+</font><font color="#800000">4 </font><font color="#000080">);
+      </font>PtrClave <font color="#000080">:=
+</font>addr<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>if </b></font>Equal<font color="#000080">( </font>AuxClave<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">],
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">], </font>KeyLength<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+      <font color="#FF0000"><b>else
+        if </b></font>SearchNextNotFound <font color="#FF0000"><b>then
+          </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+        <font color="#FF0000"><b>else
+          </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexOtherKey
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>PrevKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>SearchNextNotFound<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>label
+  </b></font>Label01<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxRecPage<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>AuxWord<font color="#000080">,</font>WordBusca<font color="#000080">:</font>word<font color="#000080">;
+  </font>AuxClave<font color="#000080">:</font>Char255<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">], </font>AuxClave<font color="#000080">,
+</font>TotKeyLength <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+        begin
+          </b></font>dec<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">);
+          </font>dec<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">, </font>TotKeyLength <font color="#000080">)
+        </font><font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>AuxWord <font color="#000080">:= </font>PageActual<font color="#000080">;
+</font><font color="#008000"><i>{ $R-}
+          </i></font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>PageActual <font color="#000080">&gt; </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do
+            </b></font>dec<font color="#000080">( </font>PageActual <font color="#000080">);
+</font><font color="#008000"><i>{ $R+}
+          </i></font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+            begin
+              </b></font>PageActual <font color="#000080">:= </font>AuxWord<font color="#000080">;
+              </font>ErrIndex <font color="#000080">:= </font>ErrIndexBOF<font color="#000080">;
+              </font>exit
+            <font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>dec<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">, </font>TotKeyLength <font color="#000080">);
+          </font>dec<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">);
+          </font><font color="#FF0000"><b>while </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Nivel <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+            begin
+              </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+</font>AuxRecPage<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+              </font>inc<font color="#000080">( </font>PageActual <font color="#000080">);
+              </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxRecPage<font color="#000080">, </font>PageActual <font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexTooManyKeys <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+              </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:= </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">;
+              </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:=
+(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) * </font>TotKeyLength
+            <font color="#FF0000"><b>end
+        end</b></font><font color="#000080">;
+      </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">], </font>RecIndex<font color="#000080">,
+</font><font color="#800000">4 </font><font color="#000080">);
+      </font>PtrClave <font color="#000080">:= </font>addr<font color="#000080">(
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">] );
+      </font><font color="#FF0000"><b>if </b></font>Equal<font color="#000080">( </font>AuxClave<font color="#000080">,
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">], </font>KeyLength <font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+      <font color="#FF0000"><b>else
+        if </b></font>SearchNextNotFound <font color="#FF0000"><b>then
+          </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+        <font color="#FF0000"><b>else
+          </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexOtherKey
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>FindKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>label
+  </b></font>H1<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxRecPage<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>AuxCont<font color="#000080">:</font>word<font color="#000080">;
+  </font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>BuscaMayorIgual<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Clave<font color="#000080">, </font>Resto<font color="#000080">; </font>KeyLength<font color="#000080">,
+</font>KeysInPage<font color="#000080">:</font>word<font color="#000080">):</font>byte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov  cx,KeyLength
+  mov  dx,cx
+  add  dx,4            </font><font color="#008000"><i>{ dx = TotKeyLength }
+
+  </i></font><font color="#FF00FF">mov  ax,1
+  mov  bx,KeysInPage
+
+  cld
+  push ds
+  les  di,Clave
+  lds  si,Resto
+  add  si,4
+@@Bucle:
+  cmp  ax,bx
+  ja   @@EndXX
+  push si
+  push di
+  push cx
+  repe cmpsb
+  pop  cx
+  pop  di
+  pop  si
+  jae  @@EndXX
+  add  si,dx
+  inc  ax
+  jmp  @@Bucle
+@@EndXX:
+  pop  ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IniciaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Hi<font color="#000080">(</font>ErrIndex<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>length<font color="#000080">(</font>Clave<font color="#000080">) &lt; </font>CualIndex<font color="#000080">^.</font>KeyLength <font color="#FF0000"><b>do
+    </b></font>Clave <font color="#000080">:= </font>Clave<font color="#000080">+</font><font color="#800000">#0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>PageActual <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+</font>H1<font color="#000080">:
+      </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:=
+</font>BuscaMayorIgual<font color="#000080">(</font>Clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">,</font>KeyLength<font color="#000080">,</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">]
+.</font>KeysInPage<font color="#000080">);
+      </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:= (</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) *
+</font>TotKeyLength<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">&gt; </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage <font color="#FF0000"><b>then
+        </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexNotFound
+      <font color="#FF0000"><b>else
+        begin
+          if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Nivel <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            begin
+              </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+</font>AuxRecPage<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+              </font>inc<font color="#000080">( </font>PageActual <font color="#000080">);
+              </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxRecPage<font color="#000080">, </font>PageActual <font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexTooManyKeys <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+              </font><font color="#FF0000"><b>goto </b></font>H1
+            <font color="#FF0000"><b>end
+          else
+            begin
+              if
+</b></font>Equal<font color="#000080">(</font>clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">],</font>KeyLength<font color="#000080">)
+              </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">&lt;=
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">) </font><font color="#FF0000"><b>then
+                </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+              <font color="#FF0000"><b>else
+                </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexBig<font color="#000080">;
+              </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+</font>RecIndex<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+              </font>PtrClave <font color="#000080">:= </font>addr<font color="#000080">(
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">] )
+            </font><font color="#FF0000"><b>end
+        end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>SeBloquea <font color="#FF0000"><b>and </b></font>SeDesbloquea <font color="#FF0000"><b>then
+        </b></font>UnLockFileIndex<font color="#000080">( </font>FileRec<font color="#000080">(</font>FIndex<font color="#000080">).</font>Handle <font color="#000080">)
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{  FinalizaIndex( CualIndex, SeDesbloquea ); }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>FindKeyRecNo<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font>RecNo<font color="#000080">:</font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IniciaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Hi<font color="#000080">(</font>ErrIndex<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font>FindKey<font color="#000080">( </font>CualIndex<font color="#000080">, </font>Clave <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexFound <font color="#FF0000"><b>then
+    with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+        repeat
+          </b></font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],
+</font>RecIndex<font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>RecIndex <font color="#000080">&lt;&gt; </font>RecNo <font color="#FF0000"><b>then
+            </b></font>NextKey<font color="#000080">( </font>CualIndex<font color="#000080">, </font>false <font color="#000080">);
+        </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">= </font>ErrIndexOtherKey<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">= </font>ErrIndexEOF<font color="#000080">) </font><font color="#FF0000"><b>or
+</b></font><font color="#000080">(</font>RecIndex <font color="#000080">= </font>RecNo<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>RecIndex <font color="#000080">&lt;&gt; </font>RecNo<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">= </font>ErrIndexEOF<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">=
+</font>ErrIndexOtherKey<font color="#000080">) </font><font color="#FF0000"><b>then
+          </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexNotFound
+      <font color="#FF0000"><b>end
+  else
+    </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexNotFound<font color="#000080">;
+  </font>FinalizaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DelKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font>Clave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>RecNo<font color="#000080">:</font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>label
+  </b></font>Label01<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxLong<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>BuclePage<font color="#000080">:</font>word<font color="#000080">;
+  </font>SavePage<font color="#000080">:</font>word<font color="#000080">;
+  </font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>MiraFirstPage<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxBuclePage<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    if </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>Nivel <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>Resto<font color="#000080">, </font>SizeOfResto<font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+        </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>RecActual <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>Nivel <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>WritePage<font color="#000080">( </font>CualIndex<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+        </font><font color="#FF0000"><b>for </b></font>AuxBuclePage <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>PagesInMemory<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+          begin
+            </b></font>Pages<font color="#000080">[</font>AuxBuclePage<font color="#000080">] := </font>Pages<font color="#000080">[</font>AuxBuclePage<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">];
+            </font>ModPages<font color="#000080">[</font>AuxBuclePage<font color="#000080">] := </font>ModPages<font color="#000080">[</font>AuxBuclePage<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">];
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>ModPages<font color="#000080">[</font>PagesInMemory<font color="#000080">] := </font>false<font color="#000080">;
+        </font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">], </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+        </font>FirstPage <font color="#000080">:= </font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>NPage<font color="#000080">;
+        </font>dec<font color="#000080">( </font>SavePage <font color="#000080">)
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>JuntaPages<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>sw<font color="#000080">:</font>boolean<font color="#000080">;
+  </font>AuxPage<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>sw<font color="#000080">:=</font>true<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        begin
+          if </b></font>ModPages<font color="#000080">[</font>PagesInMemory<font color="#000080">] </font><font color="#FF0000"><b>then
+            </b></font>WritePage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>PagesInMemory <font color="#000080">);
+          </font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">-</font>TotKeyLength<font color="#000080">],</font>AuxLong<font color="#000080">,</font><font color="#800000">4
+</font><font color="#000080">);
+          </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxLong<font color="#000080">, </font>PagesInMemory <font color="#000080">);
+          </font><font color="#FF0000"><b>if
+</b></font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage<font color="#000080">&lt;</font>MaxKeysInPage
+<font color="#FF0000"><b>then
+            begin
+              </b></font>sw<font color="#000080">:=</font>false<font color="#000080">;
+              </font>move<font color="#000080">( </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>Resto<font color="#000080">, </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>resto<font color="#000080">[
+</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">*</font>TotKeyLength <font color="#000080">],
+                </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage <font color="#000080">* </font>TotKeyLength <font color="#000080">);
+              </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>RecActual <font color="#000080">:= </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage
+<font color="#000080">+ </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>RecActual<font color="#000080">;
+              </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>OfsResto <font color="#000080">:=
+(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>RecActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">;
+              </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage <font color="#000080">:=
+</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage <font color="#000080">+
+                </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage<font color="#000080">;
+
+              </font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>Resto <font color="#000080">:= </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>Resto<font color="#000080">;
+              </font>move<font color="#000080">(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">],
+               
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">-</font>TotKeyLength<font color="#000080">],
+              
+(</font>MaxKeysInPage<font color="#000080">-</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">);
+            </font><font color="#FF0000"><b>end
+        end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>if </b></font>sw <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual<font color="#000080">&lt;</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage<font color="#000080">)
+</font><font color="#FF0000"><b>then
+        begin
+          if </b></font>ModPages<font color="#000080">[</font>PagesInMemory<font color="#000080">] </font><font color="#FF0000"><b>then
+            </b></font>WritePage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>PagesInMemory <font color="#000080">);
+          </font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">+</font>TotKeyLength<font color="#000080">],</font>AuxLong<font color="#000080">,</font><font color="#800000">4
+</font><font color="#000080">);
+          </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxLong<font color="#000080">, </font>PagesInMemory <font color="#000080">);
+          </font><font color="#FF0000"><b>if
+</b></font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage<font color="#000080">&lt;</font>MaxKeysInPage
+<font color="#FF0000"><b>then
+            begin
+              </b></font>sw<font color="#000080">:=</font>false<font color="#000080">;
+              </font>move<font color="#000080">(</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>resto<font color="#000080">,
+               
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage<font color="#000080">*</font>TotKeyLength<font color="#000080">],
+                </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">*</font>TotKeyLength<font color="#000080">);
+</font><font color="#008000"><i>{              Pages[BuclePage].RecActual := Pages[BuclePage].KeysInPage +
+Pages[PagesInMemory].RecActual; }
+{              Pages[BuclePage].OfsResto  :=
+Pages[BuclePage].RecActual*TotKeyLength;                      }
+             
+</i></font>inc<font color="#000080">(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage<font color="#000080">,</font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">].</font>KeysInPage<font color="#000080">);
+              </font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">+</font>TotKeyLength<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">],
+                   
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">],
+                   
+(</font>MaxKeysInPage<font color="#000080">-</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">);
+              </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>RecActual<font color="#000080">+</font><font color="#800000">1 </font><font color="#000080">=
+</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>BuclePage <font color="#000080">&gt; </font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>then
+                begin
+                  </b></font>AuxPage <font color="#000080">:= </font>BuclePage<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">;
+                  </font><font color="#FF0000"><b>while </b></font>AuxPage <font color="#000080">&gt;= </font><font color="#800000">1 </font><font color="#FF0000"><b>do
+                    begin
+                      with </b></font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>do
+                        </b></font>move<font color="#000080">( </font>Resto<font color="#000080">[</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">],
+</font>Pages<font color="#000080">[</font>AuxPage<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>AuxPage<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">], </font>KeyLength <font color="#000080">);
+                      </font>dec<font color="#000080">( </font>AuxPage <font color="#000080">)
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end
+            end
+        end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if not </b></font>sw <font color="#FF0000"><b>then
+        begin
+          </b></font>fillchar<font color="#000080">( </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">], </font>SizeOf<font color="#000080">(</font>RegPageIndex<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+          </font>Pages<font color="#000080">[</font>PagesInMemory<font color="#000080">]. </font>NPage <font color="#000080">:= </font>AuxLong<font color="#000080">;
+          </font>ModPages<font color="#000080">[</font>PagesInMemory<font color="#000080">]:=</font>true<font color="#000080">;
+          </font>ModPages<font color="#000080">[</font>BuclePage<font color="#000080">]:=</font>true<font color="#000080">;
+          </font>dec<font color="#000080">(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage<font color="#000080">);
+          </font>ModPages<font color="#000080">[</font>BuclePage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>true
+        <font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ DelKey }
+  </i></font>IniciaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Hi<font color="#000080">(</font>ErrIndex<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font>FindKeyRecNo<font color="#000080">(</font>CualIndex<font color="#000080">,</font>Clave<font color="#000080">,</font>RecNo<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ErrIndex<font color="#000080">=</font>ErrIndexFound <font color="#FF0000"><b>then
+    with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+      begin
+        </b></font>SavePage<font color="#000080">:=</font>PageActual<font color="#000080">;
+</font>Label01<font color="#000080">:
+        </font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">=</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#FF0000"><b>then
+          begin
+            </b></font>dec<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">);
+           
+</font>fillchar<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],</font>TotKeyLength<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)
+;
+            </font>dec<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">,</font>TotKeyLength<font color="#000080">);
+            </font>dec<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual<font color="#000080">);
+            </font>ModPages<font color="#000080">[</font>PageActual<font color="#000080">]:=</font>true<font color="#000080">;
+            </font><font color="#008000"><i>{ change previous pages }
+            </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>PageActual<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+              begin
+                </b></font>dec<font color="#000080">(</font>PageActual<font color="#000080">);
+                </font><font color="#FF0000"><b>goto </b></font>Label01
+              <font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+              begin
+               
+</b></font>move<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],</font>Clave<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>TotKeyLength<font color="#000080">);
+                </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>PageActual<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and
+</b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">=</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual<font color="#000080">) </font><font color="#FF0000"><b>do
+                  begin
+                   
+</b></font>move<font color="#000080">(</font>Clave<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">],</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">],</font>KeyLength<font color="#000080">);
+                    </font>ModPages<font color="#000080">[</font>PageActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]:=</font>true<font color="#000080">;
+                    </font>dec<font color="#000080">(</font>PageActual<font color="#000080">)
+                  </font><font color="#FF0000"><b>end
+              end
+          end
+        else
+          begin
+            with </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">] </font><font color="#FF0000"><b>do
+              </b></font>move<font color="#000080">( </font>resto<font color="#000080">[ </font>OfsResto <font color="#000080">+ </font>TotKeyLength <font color="#000080">], </font>resto<font color="#000080">[ </font>OfsResto <font color="#000080">],
+                ( </font>MaxKeysInPage <font color="#000080">- </font>RecActual <font color="#000080">) * </font>TotKeyLength <font color="#000080">);
+            </font>dec<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">);
+            </font>ModPages<font color="#000080">[</font>PageActual<font color="#000080">]:=</font>true
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>inc<font color="#000080">(</font>NumDelKeys<font color="#000080">);
+        </font>dec<font color="#000080">(</font>NumKeys<font color="#000080">);
+        </font>ModPages<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font>true<font color="#000080">;
+        </font>MiraFirstPage<font color="#000080">;
+        </font>PageActual<font color="#000080">:=</font>SavePage<font color="#000080">;
+</font><font color="#008000"><i>{ Comprobaci&cent;n de que las p ginas se puedan juntar con la anterior o
+siguiente
+  siempre y cuando KeysInPage &lt;= MaxKeysInPage div 3 }
+        </i></font><font color="#FF0000"><b>for </b></font>BuclePage <font color="#000080">:= </font>SavePage <font color="#FF0000"><b>downto </b></font><font color="#800000">2 </font><font color="#FF0000"><b>do
+          if </b></font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            begin
+              if </b></font><font color="#000080">(</font>Pages<font color="#000080">[</font>BuclePage<font color="#000080">].</font>KeysInPage<font color="#000080">&lt;=(</font>MaxKeysInPage <font color="#FF0000"><b>div </b></font><font color="#800000">3</font><font color="#000080">)) </font><font color="#FF0000"><b>then
+                </b></font>JuntaPages
+            <font color="#FF0000"><b>end
+          else
+            begin
+</b></font><font color="#008000"><i>{ P gina vac&iexcl;a }
+            </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>MiraFirstPage
+      <font color="#FF0000"><b>end
+  else
+    </b></font>ErrIndex<font color="#000080">:=</font>ErrIndexNotFound<font color="#000080">;
+  </font>FinalizaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ DelKey }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>ReplaceKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>OldClave<font color="#000080">,</font>NewClave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font>RecNo<font color="#000080">:</font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IniciaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Hi<font color="#000080">(</font>ErrIndex<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font>DelKey<font color="#000080">(</font>CualIndex<font color="#000080">,</font>OldClave<font color="#000080">,</font>RecNo<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ErrIndex<font color="#000080">=</font>ErrIndexFound <font color="#FF0000"><b>then
+    </b></font>InsKey<font color="#000080">(</font>CualIndex<font color="#000080">,</font>NewClave<font color="#000080">,</font>RecNo<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>ErrIndex<font color="#000080">:=</font>ErrIndexNotFound<font color="#000080">;
+  </font>FinalizaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>FindFirstKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxClave<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>fillchar<font color="#000080">(</font>AuxClave<font color="#000080">,</font>SizeOf<font color="#000080">(</font>AuxClave<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>AuxClave<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:=</font>char<font color="#000080">(</font>CualIndex<font color="#000080">^.</font>KeyLength<font color="#000080">);
+  </font>FindKey<font color="#000080">(</font>CualIndex<font color="#000080">,</font>AuxClave<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Lo<font color="#000080">(</font>ErrIndex<font color="#000080">)=</font>ErrIndexBig<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+  <font color="#FF0000"><b>else
+    </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexNoKeys
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>FindLastKey<font color="#000080">(</font>CualIndex<font color="#000080">:</font>PtrIndex<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxLong<font color="#000080">:</font>LongInt<font color="#000080">;
+  </font>SeDesbloquea<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IniciaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Hi<font color="#000080">(</font>ErrIndex<font color="#000080">)&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>CualIndex<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      if </b></font>Pages<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>KeysInPage <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        begin
+          </b></font>PageActual <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>while </b></font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>Nivel <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+            begin
+              </b></font>move<font color="#000080">(
+</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">],</font>AuxLong<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+              </font>inc<font color="#000080">( </font>PageActual <font color="#000080">);
+              </font>LoadPage<font color="#000080">( </font>CualIndex<font color="#000080">, </font>AuxLong<font color="#000080">, </font>PageActual <font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual <font color="#000080">:= </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>KeysInPage<font color="#000080">;
+          </font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto <font color="#000080">:=
+(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>RecActual<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font>TotKeyLength<font color="#000080">;
+         
+</font>move<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">],</font>RecIndex<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">);
+         
+</font>PtrClave<font color="#000080">:=</font>addr<font color="#000080">(</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>resto<font color="#000080">[</font>Pages<font color="#000080">[</font>PageActual<font color="#000080">].</font>OfsResto<font color="#000080">+</font><font color="#800000">4</font><font color="#000080">]);
+          </font>ErrIndex <font color="#000080">:= </font>ErrIndexFound
+        <font color="#FF0000"><b>end
+      else
+        </b></font>ErrIndex <font color="#000080">:= </font>ErrIndexNoKeys
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>FinalizaIndex<font color="#000080">( </font>CualIndex<font color="#000080">, </font>SeDesbloquea <font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{ ----------------------------  DEMO -------------------- }
+{ CUT }
+
+{
+   SwagIndex Demo.
+
+   First, excuse me, I don't speak english.
+
+   There are two index file for one file data
+     -The first index is the field Numero (one data rec =&gt; one key)
+     -The second index is the field Nombre1 and Nombre2 if not empty
+      (one data rec =&gt; one or two keys).
+
+}
+</i></font><font color="#FF0000"><b>uses
+  </b></font>crt<font color="#000080">,</font>dos<font color="#000080">,</font>SwagIdx<font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>RegData <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Numero<font color="#000080">:</font>integer<font color="#000080">;
+    </font>Nombre1<font color="#000080">,</font>Nombre2<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">25</font><font color="#000080">];
+    </font>telefono<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">]
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>FData<font color="#000080">:</font><font color="#FF0000"><b>file of </b></font>RegData<font color="#000080">;
+  </font>RData<font color="#000080">:</font>RegData<font color="#000080">;
+  </font>IndexDataNumero<font color="#000080">,</font>IndexDataNombre<font color="#000080">,</font>AuxIndex<font color="#000080">:</font>PtrIndex<font color="#000080">;
+  </font>ch<font color="#000080">,</font>CualClave<font color="#000080">,</font>CualOrden<font color="#000080">:</font>char<font color="#000080">;
+  </font>CadBusca<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>swWriteCab<font color="#000080">:</font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>WriteError<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  case </b></font>ErrIndex <font color="#FF0000"><b>and </b></font><font color="#800000">$00FF </font><font color="#FF0000"><b>of
+    </b></font>ErrIndexNotFound  <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Key not found' </font><font color="#000080">);
+    </font>ErrIndexBig       <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Key not found, big exist'</font><font color="#000080">);
+    </font>ErrIndexEOF       <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'End of index file, no more keys' </font><font color="#000080">);
+    </font>ErrIndexBOF       <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Begin of index file' </font><font color="#000080">);
+    </font>ErrIndexOtherKey  <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'It''s another key' </font><font color="#000080">);
+    </font>ErrIndexNoKeys    <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'No keys in index file' </font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font><font color="#000080">(</font>ErrIndex <font color="#FF0000"><b>and </b></font><font color="#800000">$FF00</font><font color="#000080">) </font><font color="#FF0000"><b>of
+    </b></font>ErrIndexShared     <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Sharing mode error'</font><font color="#000080">);
+    </font>ErrIndexRead       <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Read error'</font><font color="#000080">);
+    </font>ErrIndexWrite      <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Write error'</font><font color="#000080">);
+    </font>ErrIndexFileNoOpen <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Index file not open' </font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>ErrIndex <font color="#FF0000"><b>of
+    </b></font>ErrIndexNoMemory    <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Not enaught memory' </font><font color="#000080">);
+    </font>ErrIndexTooManyKeys <font color="#000080">: </font>writeln<font color="#000080">( </font><font color="#800000">'Too many keys in file' </font><font color="#000080">)
+  </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>InsRec<font color="#000080">( </font>Numero<font color="#000080">:</font>integer<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>Nombre1<font color="#000080">,</font>Nombre2<font color="#000080">,</font>Telefono<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>AuxClave <font color="#000080">: </font>char2<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>IntegerToKey<font color="#000080">( </font>Numero<font color="#000080">, </font>AuxClave <font color="#000080">);
+  </font>InsKey<font color="#000080">( </font>IndexDataNombre<font color="#000080">, </font>Nombre1 <font color="#000080">, </font>FileSize<font color="#000080">(</font>FData<font color="#000080">) );
+  </font><font color="#FF0000"><b>if </b></font>Nombre2 <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ if there is a second name ... }
+    </i></font>InsKey<font color="#000080">( </font>IndexDataNombre<font color="#000080">, </font>Nombre2 <font color="#000080">, </font>FileSize<font color="#000080">(</font>FData<font color="#000080">) );
+  </font>InsKey<font color="#000080">( </font>IndexDataNumero<font color="#000080">, </font>AuxClave<font color="#000080">, </font>FileSize<font color="#000080">(</font>FData<font color="#000080">) );
+  </font>RData<font color="#000080">.</font>Numero <font color="#000080">:= </font>Numero<font color="#000080">;
+  </font>RData<font color="#000080">.</font>Nombre1 <font color="#000080">:= </font>Nombre1<font color="#000080">;
+  </font>RData<font color="#000080">.</font>Nombre2 <font color="#000080">:= </font>Nombre2<font color="#000080">;
+  </font>RData<font color="#000080">.</font>Telefono <font color="#000080">:= </font>Telefono<font color="#000080">;
+  </font>seek<font color="#000080">(</font>FData<font color="#000080">,</font>FileSize<font color="#000080">(</font>FData<font color="#000080">));
+  </font>write<font color="#000080">(</font>FData<font color="#000080">,</font>RData<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ShowRec<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>WriteCab<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>swWriteCab<font color="#000080">:=</font>true<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">' Rec   Num.          Name 1                    Name 2           
+   </font>Telephon<font color="#800000">');
+  </font>writeln<font color="#000080">(</font><font color="#800000">'----- ----- --------------------------
+</font><font color="#000080">-------------------------- ------------</font><font color="#800000">')
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin   </b></font><font color="#008000"><i>{ ShowRec }
+  </i></font><font color="#FF0000"><b>if not </b></font>swWriteCab <font color="#FF0000"><b>then </b></font>WriteCab<font color="#000080">;
+  </font>seek<font color="#000080">(</font>FData<font color="#000080">,</font>RecIndex<font color="#000080">);
+  </font>read<font color="#000080">(</font>FData<font color="#000080">,</font>RData<font color="#000080">);
+  </font>writeln<font color="#000080">( </font>RecIndex<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">, </font>RData<font color="#000080">.</font>Numero<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">'
+',RData.Nombre1,'':27-length(RData.Nombre1),RData.Nombre2,'':27-length(RData
+</font><font color="#000080">.</font>Nombre2<font color="#000080">),
+    </font>RData<font color="#000080">.</font>Telefono<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;    </font><font color="#008000"><i>{ ShowRec }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>MakeFile<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>FileRec<font color="#000080">(</font>FData<font color="#000080">).</font>Mode <font color="#000080">= </font>fmInOut <font color="#FF0000"><b>then
+    begin
+      </b></font>writeln<font color="#000080">( </font><font color="#800000">'File already open'</font><font color="#000080">);
+      </font>exit
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>rewrite<font color="#000080">(</font>FData<font color="#000080">);
+  </font>CreateIndex<font color="#000080">( </font>IndexDataNombre<font color="#000080">, </font><font color="#800000">'SWAGNDC.NOM'</font><font color="#000080">,</font><font color="#800000">30 </font><font color="#000080">);
+  </font>CreateIndex<font color="#000080">( </font>IndexDataNumero<font color="#000080">, </font><font color="#800000">'SWAGNDC.NUM'</font><font color="#000080">, </font><font color="#800000">2 </font><font color="#000080">);
+  </font>InsRec<font color="#000080">( </font><font color="#800000">1245</font><font color="#000080">,</font><font color="#800000">'PEPITO PEREZ'</font><font color="#000080">,</font><font color="#800000">'JOSEFA PEREZ'</font><font color="#000080">,</font><font color="#800000">'12354'  </font><font color="#000080">);
+  </font>InsRec<font color="#000080">( </font><font color="#800000">1313</font><font color="#000080">,</font><font color="#800000">'PEPITO LOPEZ'</font><font color="#000080">,</font><font color="#800000">''</font><font color="#000080">,</font><font color="#800000">'91-13123123' </font><font color="#000080">);
+  </font>InsRec<font color="#000080">(  </font><font color="#800000">245</font><font color="#000080">,</font><font color="#800000">'OTRO PEPITO'</font><font color="#000080">,</font><font color="#800000">''</font><font color="#000080">,</font><font color="#800000">'959-12354' </font><font color="#000080">);
+  </font>InsRec<font color="#000080">(  </font><font color="#800000">145</font><font color="#000080">,</font><font color="#800000">'FULANITO DE TAL'</font><font color="#000080">,</font><font color="#800000">'MENGANITA'</font><font color="#000080">,</font><font color="#800000">'9912354' </font><font color="#000080">);
+  </font>InsRec<font color="#000080">(  -</font><font color="#800000">12</font><font color="#000080">,</font><font color="#800000">'TAL Y TAL'</font><font color="#000080">,</font><font color="#800000">'GIL'</font><font color="#000080">,</font><font color="#800000">'1544254' </font><font color="#000080">);
+  </font>InsRec<font color="#000080">( </font><font color="#800000">1435</font><font color="#000080">,</font><font color="#800000">'TAL Y PASCUAL'</font><font color="#000080">,</font><font color="#800000">'MARAGALL'</font><font color="#000080">,</font><font color="#800000">'07505505505' </font><font color="#000080">);
+
+</font><font color="#008000"><i>{ y ya me he cansado }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>LeeFile<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>FileRec<font color="#000080">(</font>FData<font color="#000080">).</font>Mode <font color="#000080">= </font>fmInOut <font color="#FF0000"><b>then
+    begin
+      </b></font>writeln<font color="#000080">( </font><font color="#800000">'File already open'</font><font color="#000080">);
+      </font>exit
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$I-}
+  </i></font>reset<font color="#000080">(</font>FData<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+</b></font><font color="#008000"><i>{$I+}
+    </i></font><font color="#FF0000"><b>begin
+      </b></font>writeln<font color="#000080">( </font><font color="#800000">'Open data file error'</font><font color="#000080">);
+      </font>exit
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>OpenIndex<font color="#000080">( </font>IndexDataNombre<font color="#000080">, </font><font color="#800000">'SWAGNDC.NOM' </font><font color="#000080">);
+  </font>OpenIndex<font color="#000080">( </font>IndexDataNumero<font color="#000080">, </font><font color="#800000">'SWAGNDC.NUM' </font><font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Informa<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">( </font>FileSize<font color="#000080">(</font>FData<font color="#000080">):</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">' recs. in file data' </font><font color="#000080">);
+  </font>writeln<font color="#000080">( </font>IndexDataNumero<font color="#000080">^.</font>NumKeys<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">' keys in number''s index file and '</font><font color="#000080">,
+    </font>IndexDataNumero<font color="#000080">^.</font>NumDelKeys<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">' deleted keys'</font><font color="#000080">);
+  </font>writeln<font color="#000080">( </font>IndexDataNombre<font color="#000080">^.</font>NumKeys<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">' keys in name''s index file and   '</font><font color="#000080">,
+    </font>IndexDataNombre<font color="#000080">^.</font>NumDelKeys<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">' deleted keys'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MuestraRecs<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>CualOrden <font color="#000080">= </font><font color="#800000">'A' </font><font color="#FF0000"><b>then
+    begin
+      </b></font>FindFirstKey<font color="#000080">( </font>AuxIndex <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ErrIndex<font color="#000080">=</font>ErrIndexNoKeys <font color="#FF0000"><b>then
+        </b></font>WriteError
+      <font color="#FF0000"><b>else
+        while </b></font>ErrIndex <font color="#000080">&lt;&gt; </font>ErrIndexEOF <font color="#FF0000"><b>do
+          begin
+            </b></font>ShowRec<font color="#000080">;
+            </font>NextKey<font color="#000080">( </font>AuxIndex<font color="#000080">, </font>true <font color="#000080">)
+         </font><font color="#FF0000"><b>end
+    end
+  else
+    begin
+      </b></font>FindLastKey<font color="#000080">( </font>AuxIndex <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ErrIndex<font color="#000080">=</font>ErrIndexNoKeys <font color="#FF0000"><b>then
+        </b></font>WriteError
+      <font color="#FF0000"><b>else
+        while </b></font>ErrIndex <font color="#000080">&lt;&gt; </font>ErrIndexBOF <font color="#FF0000"><b>do
+          begin
+            </b></font>ShowRec<font color="#000080">;
+            </font>PrevKey<font color="#000080">( </font>AuxIndex<font color="#000080">, </font>true <font color="#000080">)
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>BuscaClave<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxInt<font color="#000080">:</font>integer<font color="#000080">;
+  </font>AuxChar2<font color="#000080">:</font>char2<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>write<font color="#000080">(</font><font color="#800000">'Key to find: '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>CualClave <font color="#000080">= </font><font color="#800000">'2' </font><font color="#FF0000"><b>then
+    </b></font>readln<font color="#000080">(</font>CadBusca<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    begin
+      </b></font>readln<font color="#000080">(</font>AuxInt<font color="#000080">);
+      </font>IntegerToKey<font color="#000080">( </font>AuxInt<font color="#000080">, </font>AuxChar2 <font color="#000080">);
+      </font>CadBusca <font color="#000080">:= </font>AuxChar2
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>FindKey<font color="#000080">( </font>AuxIndex<font color="#000080">, </font>CadBusca <font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexFound <font color="#FF0000"><b>then
+    </b></font>ShowRec
+  <font color="#FF0000"><b>else
+    </b></font>WriteError
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>BuscaGenerica<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxChar2<font color="#000080">:</font>char2<font color="#000080">;
+  </font>AuxInt<font color="#000080">:</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>write<font color="#000080">(</font><font color="#800000">'Key to find: '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>CualClave <font color="#000080">= </font><font color="#800000">'2' </font><font color="#FF0000"><b>then
+    </b></font>readln<font color="#000080">(</font>CadBusca<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    begin
+      </b></font>readln<font color="#000080">(</font>AuxInt<font color="#000080">);
+      </font>IntegerToKey<font color="#000080">( </font>AuxInt<font color="#000080">, </font>AuxChar2 <font color="#000080">);
+      </font>CadBusca <font color="#000080">:= </font>AuxChar2
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>FindKey<font color="#000080">( </font>IndexDataNombre<font color="#000080">, </font>CadBusca <font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">= </font>ErrIndexFound<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex<font color="#000080">=</font>ErrIndexBig<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin
+      if </b></font>Equal<font color="#000080">( </font>IndexDataNombre<font color="#000080">^.</font>PtrClave<font color="#000080">^, </font>CadBusca<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>length<font color="#000080">(</font>CadBusca<font color="#000080">) )
+</font><font color="#FF0000"><b>then
+        begin
+          </b></font>ShowRec<font color="#000080">;
+          </font>NextKey<font color="#000080">( </font>IndexDataNombre<font color="#000080">, </font>true <font color="#000080">)
+        </font><font color="#FF0000"><b>end
+      else
+        </b></font>break
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>BorraClave<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">= </font>ErrIndexBig<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ErrIndex <font color="#000080">=
+</font>ErrIndexOtherKey<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>CadBusca<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>char<font color="#000080">(</font>AuxIndex<font color="#000080">^.</font>KeyLength<font color="#000080">);
+      </font>move<font color="#000080">( </font>AuxIndex<font color="#000080">^.</font>PtrClave<font color="#000080">^, </font>CadBusca<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>byte<font color="#000080">(</font>CadBusca<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]) );
+      </font>DelKey<font color="#000080">( </font>AuxIndex<font color="#000080">, </font>CadBusca<font color="#000080">, </font>RecIndex <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>WriteError
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MeteRec<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>AuxInt<font color="#000080">:</font>integer<font color="#000080">;
+  </font>AuxNombre1<font color="#000080">,</font>AuxNombre2<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">25</font><font color="#000080">];
+  </font>AuxTelefono<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+</font><font color="#FF0000"><b>begin
+  </b></font>write<font color="#000080">(</font><font color="#800000">'Number: '</font><font color="#000080">); </font>readln<font color="#000080">(</font>AuxInt<font color="#000080">);
+  </font>write<font color="#000080">(</font><font color="#800000">'Name 1 : '</font><font color="#000080">); </font>readln<font color="#000080">(</font>AuxNombre1<font color="#000080">);
+  </font>write<font color="#000080">(</font><font color="#800000">'Name 2 : '</font><font color="#000080">); </font>readln<font color="#000080">(</font>AuxNombre2<font color="#000080">);
+  </font>write<font color="#000080">(</font><font color="#800000">'Telephon: '</font><font color="#000080">); </font>readln<font color="#000080">(</font>AuxTelefono<font color="#000080">);
+  </font>InsRec<font color="#000080">( </font>AuxInt<font color="#000080">, </font>AuxNombre1<font color="#000080">, </font>AuxNombre2<font color="#000080">, </font>AuxTelefono <font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">( </font>FData<font color="#000080">,</font><font color="#800000">'SWAGNDC.D'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>repeat
+    </b></font>swWriteCab<font color="#000080">:=</font>false<font color="#000080">;
+    </font>ClrScr<font color="#000080">;
+    </font>writeln<font color="#000080">( </font><font color="#800000">'0.- Create file' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'1.- Read file' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'A.- About files' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'B.- Show recs' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'C.- Find Key' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'D.- Find generic key (only names)' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'E.- Delete last found key' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'F.- Find next' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'G.- Find prev' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'H.- Find smallest key' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'I.- Find biggest key' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'J.- Add rec' </font><font color="#000080">);
+    </font>writeln<font color="#000080">( </font><font color="#800000">'Z.- End' </font><font color="#000080">);
+    </font>writeln<font color="#000080">;
+    </font>write<font color="#000080">( </font><font color="#800000">'Option 0,A-I,Z: ' </font><font color="#000080">);
+    </font>ch <font color="#000080">:= </font>UpCase<font color="#000080">(</font>ReadKey<font color="#000080">);
+    </font>writeln<font color="#000080">( </font>ch <font color="#000080">);
+    </font>writeln<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ch <font color="#000080">= </font><font color="#800000">'Z' </font><font color="#FF0000"><b>then </b></font>break<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ch <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'J'</font><font color="#000080">]) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>FileRec<font color="#000080">(</font>FData<font color="#000080">).</font>Mode <font color="#000080">&lt;&gt; </font>fmInOut<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>writeln<font color="#000080">( </font><font color="#800000">'Must read o create index file first' </font><font color="#000080">);
+        </font>ch <font color="#000080">:= </font><font color="#800000">#0
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ch <font color="#000080">&gt;=</font><font color="#800000">'B'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>ch <font color="#000080">&lt;= </font><font color="#800000">'I'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        if </b></font><font color="#000080">(</font>ch <font color="#000080">&lt;&gt; </font><font color="#800000">'D'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>ch <font color="#000080">&lt;&gt; </font><font color="#800000">'E'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            </b></font>write<font color="#000080">( </font><font color="#800000">'Key (1=Numbers, 2=Names) : '</font><font color="#000080">);
+            </font>CualClave <font color="#000080">:= </font>ReadKey<font color="#000080">;
+            </font>writeln<font color="#000080">( </font>CualClave <font color="#000080">)
+          </font><font color="#FF0000"><b>end
+        else
+          if </b></font>ch <font color="#000080">= </font><font color="#800000">'D' </font><font color="#FF0000"><b>then
+            </b></font>CualClave <font color="#000080">:= </font><font color="#800000">'2'</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>CualClave <font color="#000080">&lt;&gt; </font><font color="#800000">'1'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>CualClave <font color="#000080">&lt;&gt; </font><font color="#800000">'2'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>	  ch <font color="#000080">:= </font><font color="#800000">#0
+        </font><font color="#FF0000"><b>else
+          begin
+            if </b></font>CualClave <font color="#000080">= </font><font color="#800000">'1' </font><font color="#FF0000"><b>then
+</b></font>	      AuxIndex <font color="#000080">:= </font>IndexDataNumero
+	    <font color="#FF0000"><b>else
+</b></font>	      AuxIndex <font color="#000080">:= </font>IndexDataNombre<font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font>ch <font color="#000080">= </font><font color="#800000">'B' </font><font color="#FF0000"><b>then
+              begin
+                </b></font>write<font color="#000080">(</font><font color="#800000">'Orden Ascendente o Descendente (A/D): '</font><font color="#000080">);
+                </font>CualOrden <font color="#000080">:= </font>UpCase<font color="#000080">(</font>ReadKey<font color="#000080">);
+                </font>writeln<font color="#000080">(</font>CualOrden<font color="#000080">)
+              </font><font color="#FF0000"><b>end
+          end
+      end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+      </b></font><font color="#800000">'0'</font><font color="#000080">:</font>MakeFile<font color="#000080">;
+      </font><font color="#800000">'1'</font><font color="#000080">:</font>LeeFile<font color="#000080">;
+      </font><font color="#800000">'A'</font><font color="#000080">:</font>Informa<font color="#000080">;
+      </font><font color="#800000">'B'</font><font color="#000080">:</font>MuestraRecs<font color="#000080">;
+      </font><font color="#800000">'C'</font><font color="#000080">:</font>BuscaClave<font color="#000080">;
+      </font><font color="#800000">'D'</font><font color="#000080">:</font>BuscaGenerica<font color="#000080">;
+      </font><font color="#800000">'E'</font><font color="#000080">:</font>BorraClave<font color="#000080">;
+      </font><font color="#800000">'F'</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+            </b></font>NextKey<font color="#000080">( </font>AuxIndex<font color="#000080">, </font>true <font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>ShowRec <font color="#FF0000"><b>else </b></font>WriteError
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#800000">'G'</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+            </b></font>PrevKey<font color="#000080">( </font>AuxIndex<font color="#000080">, </font>true <font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>ShowRec <font color="#FF0000"><b>else </b></font>WriteError
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#800000">'H'</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+            </b></font>FindFirstKey<font color="#000080">( </font>AuxIndex <font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexFound <font color="#FF0000"><b>then
+              </b></font>ShowRec
+            <font color="#FF0000"><b>else
+              </b></font>WriteError
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#800000">'I'</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+            </b></font>FindLastKey<font color="#000080">( </font>AuxIndex <font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>ErrIndex <font color="#000080">= </font>ErrIndexFound <font color="#FF0000"><b>then
+              </b></font>ShowRec
+            <font color="#FF0000"><b>else
+              </b></font>WriteError
+          <font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#800000">'J'</font><font color="#000080">:</font>MeteRec
+    <font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>writeln<font color="#000080">;
+    </font>write<font color="#000080">(</font><font color="#800000">'Press Enter ...'</font><font color="#000080">); </font>readln<font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>FileRec<font color="#000080">(</font>FData<font color="#000080">).</font>Mode <font color="#000080">= </font>fmInOut <font color="#FF0000"><b>then
+    begin
+      </b></font>close<font color="#000080">(</font>FData<font color="#000080">);
+      </font>CloseIndex<font color="#000080">( </font>IndexDataNumero <font color="#000080">);
+      </font>CloseIndex<font color="#000080">( </font>IndexDataNombre <font color="#000080">)
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">.
+
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0288.PAS">Original</a><b>]</b></p></body>
+</html>

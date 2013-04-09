@@ -1,0 +1,105 @@
+<html>
+<head><title> "Mode-X Raw Image Put" by BAS VAN GAALEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0145.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; I need to put a 64k Raw Image onto Page 0 in 320x200 X-Mode.
+
+Well, that wasn't too hard. Faster then the following one doesn't seem
+possible. Don't try to make the f_bufsize too large: it'll probably hang your
+computer and it won't speed up the picture display. You could, however, set the
+palette to all black when displaying the picture, and when it's ready, set the
+colors of the picture correctly.
+
+You can alter the offsets of the palette and the picture as you like. The
+defaults are for the ColoRIX/EGA Paint format, converted with VPic.
+}
+{$a+,b-,d+,e+,f-,g+,i+,l+,n-,o-,p-,q-,r-,s+,t-,v+,x+} { tp7.0 directives }
+{$m 16384,0,655360}
+
+</i></font><font color="#FF0000"><b>program </b></font>putmodexpicture<font color="#000080">;
+</font><font color="#008000"><i>{ Display raw picture in mode-x (320x200x256x4), by Bas van Gaalen,
+  fido 2:285/213.8, email bas.van.gaalen@schotman.nl, Aug. '94 }
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>crt<font color="#000080">,</font>dos<font color="#000080">;                   </font><font color="#008000"><i>{ crt for keypressed, dos for pathstr }
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>pal_offset<font color="#000080">=</font><font color="#800000">$000a</font><font color="#000080">;          </font><font color="#008000"><i>{ offset of palette in pic-file }
+  </i></font>pic_offset<font color="#000080">=</font><font color="#800000">$030a</font><font color="#000080">;          </font><font color="#008000"><i>{ offset of picture in pic-file }
+  </i></font>f_bufsize<font color="#000080">=</font><font color="#800000">4096</font><font color="#000080">;            </font><font color="#008000"><i>{ file-buffer size }
+  </i></font>vidseg<font color="#000080">:</font>word<font color="#000080">=</font><font color="#800000">$a000</font><font color="#000080">;         </font><font color="#008000"><i>{ VGA graphics segment }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>errmsg<font color="#000080">=</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+  </font>f_buf<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>f_bufsize<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font>pal_buf<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">$2ff</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>p_file<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>error<font color="#000080">(</font>err<font color="#000080">:</font>errmsg<font color="#000080">); </font><font color="#FF0000"><b>begin </b></font>writeln<font color="#000080">; </font>writeln<font color="#000080">(</font>err<font color="#000080">); </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">); </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>setpal<font color="#000080">(</font>c<font color="#000080">,</font>r<font color="#000080">,</font>g<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov dx,3c8h; mov al,[c]; out dx,al; inc dx; mov al,[r]
+  out dx,al; mov al,[g]; out dx,al; mov al,[b]; out dx,al; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>setmodex<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax,13h; int 10h; mov dx,3c4h; mov ax,0604h; out dx,ax; mov ax,0f02h
+  out dx,ax; mov cx,320*200; mov es,vidseg; xor ax,ax; mov di,ax; rep stosw
+  mov dx,3d4h; mov ax,0014h; out dx,ax; mov ax,0e317h; out dx,ax; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>putpixel<font color="#000080">(</font>offs<font color="#000080">:</font>word<font color="#000080">; </font>col<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov dx,03c4h; mov al,2; mov cx,[offs]; and cx,3; mov ah,1; shl ah,cl
+  out dx,ax; mov es,vidseg; mov ax,[offs]; shr ax,2; mov di,ax
+  mov al,[col]; mov [es:di],al; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>retrace<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov dx,3dah; @vert1: in al,dx; test al,8; jz @vert1
+  @vert2: in al,dx; test al,8; jnz @vert2; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>initfile<font color="#000080">(</font>filename<font color="#000080">:</font>pathstr<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>filename<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>error<font color="#000080">(</font><font color="#800000">'Enter raw-picture filename on commandline.'</font><font color="#000080">);
+  </font>assign<font color="#000080">(</font>p_file<font color="#000080">,</font>filename<font color="#000080">);
+  </font><font color="#008000"><i>{$i-} </i></font>reset<font color="#000080">(</font>p_file<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">); </font><font color="#008000"><i>{$i+}
+  </i></font><font color="#FF0000"><b>if </b></font>ioresult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>error<font color="#000080">(</font>fexpand<font color="#000080">(</font>filename<font color="#000080">)+</font><font color="#800000">' not found.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>initpal<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>buf<font color="#000080">:</font>pal_buf<font color="#000080">; </font>c<font color="#000080">:</font>word<font color="#000080">; </font>i<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>seek<font color="#000080">(</font>p_file<font color="#000080">,</font>pal_offset<font color="#000080">);
+  </font>blockread<font color="#000080">(</font>p_file<font color="#000080">,</font>buf<font color="#000080">,</font><font color="#800000">$300</font><font color="#000080">);
+  </font>setmodex<font color="#000080">;
+  </font>c<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do begin
+    </b></font>setpal<font color="#000080">(</font>i<font color="#000080">,</font>buf<font color="#000080">[</font>c<font color="#000080">],</font>buf<font color="#000080">[</font>c<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">],</font>buf<font color="#000080">[</font>c<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">]);
+    </font>inc<font color="#000080">(</font>c<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>displaypic<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>buf<font color="#000080">:</font>f_buf<font color="#000080">; </font>i<font color="#000080">,</font>bufidx<font color="#000080">:</font>word<font color="#000080">; </font>nofread<font color="#000080">:</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>bufidx<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    </b></font>blockread<font color="#000080">(</font>p_file<font color="#000080">,</font>buf<font color="#000080">,</font>f_bufsize<font color="#000080">,</font>nofread<font color="#000080">);
+    </font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>nofread <font color="#FF0000"><b>do </b></font>putpixel<font color="#000080">(</font>bufidx<font color="#000080">+</font>i<font color="#000080">,</font>buf<font color="#000080">[</font>i<font color="#000080">]);
+    </font>inc<font color="#000080">(</font>bufidx<font color="#000080">,</font>nofread<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font>nofread<font color="#000080">&lt;&gt;</font>f_bufsize<font color="#000080">;
+  </font>close<font color="#000080">(</font>p_file<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>dummy<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>initfile<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+  </font>initpal<font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$03c0</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ screen blanck }
+  </i></font>displaypic<font color="#000080">;
+  </font>retrace<font color="#000080">; </font>dummy<font color="#000080">:=</font>port<font color="#000080">[</font><font color="#800000">$03da</font><font color="#000080">]; </font>port<font color="#000080">[</font><font color="#800000">$03c0</font><font color="#000080">]:=</font><font color="#800000">32</font><font color="#000080">; </font><font color="#008000"><i>{ show screen }
+  </i></font><font color="#FF0000"><b>repeat until </b></font>keypressed<font color="#000080">;
+  </font><font color="#FF0000"><b>asm </b></font><font color="#FF00FF">mov ax,3; int 10h; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0145.PAS">Original</a><b>]</b></p></body>
+</html>

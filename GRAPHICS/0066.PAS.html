@@ -1,0 +1,421 @@
+<html>
+<head><title> "PCX Writing" by WILLIAM PLANKE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0066.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+As I follow this forum, many requests are made for PCX graphics
+file routines. Those that are looking for Read_PCX info can
+find it on the ZSoft BBS in a wonderful Pascal example: ShowPCX.
+
+On the other hand, there is next to zilch out there on how to
+Write_PCX files. I know.... I searched and searched and couldn't
+find a thing! So with a little brute force  and a few ZSoft
+C language snippets &lt;groan&gt;, I got this together:
+
+PCX_W.Write_PCX (Name:Str80);
+given to the public domain and commonweal.
+pseudocode:
+           set 640x480x16 VGAhi graphics mode only for now
+           getimage 1 row at a time
+           reorganize the BGI color planes into PCX format order
+           encode the raw PCX line into a run length limited
+             compressed PCX line
+           blockwrite the compressed PCX line to your.PCX file
+}
+
+{$R-}    {Range checking, turn off when debugged}
+
+</i></font><font color="#FF0000"><b>unit </b></font>PCX_W<font color="#000080">;
+
+</font><font color="#008000"><i>{ --------------------- Interface ----------------- }
+
+</i></font><font color="#FF0000"><b>interface
+
+type
+    </b></font>Str80 <font color="#000080">= </font><font color="#FF0000"><b>string </b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>procedure </b></font>Write_PCX  <font color="#000080">(</font>Name<font color="#000080">:</font>Str80<font color="#000080">);
+
+
+</font><font color="#008000"><i>{ ===================== Implementation ============ }
+
+</i></font><font color="#FF0000"><b>implementation
+
+uses
+    </b></font>Graph<font color="#000080">;
+
+
+</font><font color="#008000"><i>{-------------- Write_PCX --------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Write_PCX <font color="#000080">(</font>Name<font color="#000080">:</font>Str80<font color="#000080">);
+
+</font><font color="#FF0000"><b>const
+     </b></font>RED1   <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+     </font>GREEN1 <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+     </font>BLUE1  <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+    </b></font>ArrayPal   <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">, </font>RED1<font color="#000080">..</font>BLUE1<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+     </b></font>MAX_WIDTH  <font color="#000080">= </font><font color="#800000">4000</font><font color="#000080">;    </font><font color="#008000"><i>{ arbitrary - maximum width (in bytes) of
+                             a PCX image }
+     </i></font>INTENSTART <font color="#000080">=   </font><font color="#800000">$5</font><font color="#000080">;
+     </font>BLUESTART  <font color="#000080">=  </font><font color="#800000">$55</font><font color="#000080">;
+     </font>GREENSTART <font color="#000080">=  </font><font color="#800000">$A5</font><font color="#000080">;
+     </font>REDSTART   <font color="#000080">=  </font><font color="#800000">$F5</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+    </b></font>Pcx_Header <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font><font color="#008000"><i>{comments from ZSoft ShowPCX pascal example}
+
+        </i></font>Manufacturer<font color="#000080">: </font>byte<font color="#000080">;     </font><font color="#008000"><i>{ Always 10 for PCX file }
+
+        </i></font>Version<font color="#000080">: </font>byte<font color="#000080">;          </font><font color="#008000"><i>{ 2 - old PCX - no palette (not used
+                                      anymore),
+                                  3 - no palette,
+                                  4 - Microsoft Windows - no palette
+                                      (only in old files, new Windows
+                                      version uses 3),
+                                  5 - with palette }
+
+        </i></font>Encoding<font color="#000080">: </font>byte<font color="#000080">;         </font><font color="#008000"><i>{ 1 is PCX, it is possible that we may
+                                  add additional encoding methods in the
+                                  future }
+
+        </i></font>Bits_per_pixel<font color="#000080">: </font>byte<font color="#000080">;   </font><font color="#008000"><i>{ Number of bits to represent a pixel
+                                  (per plane) - 1, 2, 4, or 8 }
+
+        </i></font>Xmin<font color="#000080">: </font>integer<font color="#000080">;          </font><font color="#008000"><i>{ Image window dimensions (inclusive) }
+        </i></font>Ymin<font color="#000080">: </font>integer<font color="#000080">;          </font><font color="#008000"><i>{ Xmin, Ymin are usually zero (not always)}
+        </i></font>Xmax<font color="#000080">: </font>integer<font color="#000080">;
+        </font>Ymax<font color="#000080">: </font>integer<font color="#000080">;
+
+        </font>Hdpi<font color="#000080">: </font>integer<font color="#000080">;          </font><font color="#008000"><i>{ Resolution of image (dots per inch) }
+        </i></font>Vdpi<font color="#000080">: </font>integer<font color="#000080">;          </font><font color="#008000"><i>{ Set to scanner resolution - 300 is
+                                  default }
+
+        </i></font>ColorMap<font color="#000080">: </font>ArrayPal<font color="#000080">;
+                                </font><font color="#008000"><i>{ RGB palette data (16 colors or less)
+                                  256 color palette is appended to end
+                                  of file }
+
+        </i></font>Reserved<font color="#000080">: </font>byte<font color="#000080">;         </font><font color="#008000"><i>{ (used to contain video mode)
+                                  now it is ignored - just set to zero }
+
+        </i></font>Nplanes<font color="#000080">: </font>byte<font color="#000080">;          </font><font color="#008000"><i>{ Number of planes }
+
+        </i></font>Bytes_per_line_per_plane<font color="#000080">: </font>integer<font color="#000080">;   </font><font color="#008000"><i>{ Number of bytes to
+                                               allocate for a scanline
+                                               plane. MUST be an an EVEN
+                                               number! Do NOT calculate
+                                               from Xmax-Xmin! }
+
+        </i></font>PaletteInfo<font color="#000080">: </font>integer<font color="#000080">;   </font><font color="#008000"><i>{ 1 = black &amp; white or color image,
+                                  2 = grayscale image - ignored in PB4,
+                                      PB4+ palette must also be set to
+                                      shades of gray! }
+
+        </i></font>HscreenSize<font color="#000080">: </font>integer<font color="#000080">;   </font><font color="#008000"><i>{ added for PC Paintbrush IV Plus
+                                  ver 1.0,  }
+        </i></font>VscreenSize<font color="#000080">: </font>integer<font color="#000080">;   </font><font color="#008000"><i>{ PC Paintbrush IV ver 1.02 (and later)}
+                                { I know it is tempting to use these
+                                  fields to determine what video mode
+                                  should be used to display the image
+                                  - but it is NOT recommended since the
+                                  fields will probably just contain
+                                  garbage. It is better to have the
+                                  user install for the graphics mode he
+                                  wants to use... }
+
+        </i></font>Filler<font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">74</font><font color="#000080">..</font><font color="#800000">127</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;     </font><font color="#008000"><i>{ Just set to zeros }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>Array80    <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">80</font><font color="#000080">]        </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>ArrayLnImg <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">326</font><font color="#000080">]       </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ 6 extra bytes at
+     beginng of line that BGI uses for size info}
+    </i></font>Line_Array <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MAX_WIDTH<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>ArrayLnPCX <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">]         </font><font color="#FF0000"><b>of </b></font>Array80<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+   </b></font>PCXName   <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+   </font>Header    <font color="#000080">: </font>Pcx_Header<font color="#000080">;                 </font><font color="#008000"><i>{ PCX file header }
+   </i></font>ImgLn     <font color="#000080">: </font>ArrayLnImg<font color="#000080">;
+   </font>PCXLn     <font color="#000080">: </font>ArrayLnPCX<font color="#000080">;
+   </font>RedLn<font color="#000080">,
+   </font>BlueLn<font color="#000080">,
+   </font>GreenLn<font color="#000080">,
+   </font>IntenLn   <font color="#000080">: </font>Array80<font color="#000080">;
+   </font>Img       <font color="#000080">: </font>pointer<font color="#000080">;
+
+
+</font><font color="#008000"><i>{-------------- BuildHeader- -----------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>BuildHeader<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+     </b></font>PALETTEMAP<font color="#000080">: </font>ArrayPal<font color="#000080">=
+                 </font><font color="#008000"><i>{  R    G    B                    }
+                </i></font><font color="#000080">((</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">),  </font><font color="#008000"><i>{  black        }
+                 </i></font><font color="#000080">(</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">),  </font><font color="#008000"><i>{  blue         }
+                 </i></font><font color="#000080">(</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">),  </font><font color="#008000"><i>{  green        }
+                 </i></font><font color="#000080">(</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">),  </font><font color="#008000"><i>{  cyan         }
+                 </i></font><font color="#000080">(</font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">),  </font><font color="#008000"><i>{  red          }
+                 </i></font><font color="#000080">(</font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">),  </font><font color="#008000"><i>{  magenta      }
+                 </i></font><font color="#000080">(</font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">),  </font><font color="#008000"><i>{  brown        }
+                 </i></font><font color="#000080">(</font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">, </font><font color="#800000">$AA</font><font color="#000080">),  </font><font color="#008000"><i>{  lightgray    }
+                 </i></font><font color="#000080">(</font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">),  </font><font color="#008000"><i>{  darkgray     }
+                 </i></font><font color="#000080">(</font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">),  </font><font color="#008000"><i>{  lightblue    }
+                 </i></font><font color="#000080">(</font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">),  </font><font color="#008000"><i>{  lightgreen   }
+                 </i></font><font color="#000080">(</font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">),  </font><font color="#008000"><i>{  lightcyan    }
+                 </i></font><font color="#000080">(</font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">),  </font><font color="#008000"><i>{  lightred     }
+                 </i></font><font color="#000080">(</font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">),  </font><font color="#008000"><i>{  lightmagenta }
+                 </i></font><font color="#000080">(</font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$55</font><font color="#000080">),  </font><font color="#008000"><i>{  yellow       }
+                 </i></font><font color="#000080">(</font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">) );</font><font color="#008000"><i>{  white        }
+
+</i></font><font color="#FF0000"><b>var
+   </b></font>i <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     with </b></font>Header <font color="#FF0000"><b>do
+          begin
+               </b></font>Manufacturer  <font color="#000080">:= </font><font color="#800000">10</font><font color="#000080">;
+               </font>Version  <font color="#000080">:= </font><font color="#800000">5</font><font color="#000080">;
+               </font>Encoding <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+               </font>Bits_per_pixel <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+               </font>Xmin <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+               </font>Ymin <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+               </font>Xmax <font color="#000080">:= </font><font color="#800000">639</font><font color="#000080">;
+               </font>Ymax <font color="#000080">:= </font><font color="#800000">479</font><font color="#000080">;
+               </font>Hdpi <font color="#000080">:= </font><font color="#800000">640</font><font color="#000080">;
+               </font>Vdpi <font color="#000080">:= </font><font color="#800000">480</font><font color="#000080">;
+               </font>ColorMap <font color="#000080">:= </font>PALETTEMAP<font color="#000080">;
+               </font>Reserved <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+               </font>Nplanes  <font color="#000080">:= </font><font color="#800000">4</font><font color="#000080">; </font><font color="#008000"><i>{ Red, Green, Blue, Intensity }
+               </i></font>Bytes_per_line_per_plane <font color="#000080">:= </font><font color="#800000">80</font><font color="#000080">;
+               </font>PaletteInfo <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+               </font>HscreenSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+               </font>VscreenSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+               </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">74 </font><font color="#FF0000"><b>to </b></font><font color="#800000">127 </font><font color="#FF0000"><b>do
+                   </b></font>Filler <font color="#000080">[</font>i<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{-------------- GetBGIPlane ------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>GetBGIPlane <font color="#000080">(</font>Start<font color="#000080">:</font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Plane<font color="#000080">:</font>Array80<font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+   </b></font>i <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     for </b></font>i<font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Header<font color="#000080">.</font>Bytes_per_line_per_plane <font color="#FF0000"><b>do
+         </b></font>Plane <font color="#000080">[</font>i<font color="#000080">] := </font>ImgLn <font color="#000080">[</font>Start <font color="#000080">+</font>i <font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-------------- BuildPCXPlane ----------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>BuildPCXPlane <font color="#000080">(</font>Start<font color="#000080">:</font>word<font color="#000080">; </font>Plane<font color="#000080">:</font>Array80<font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+   </b></font>i <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Header<font color="#000080">.</font>Bytes_per_line_per_plane <font color="#FF0000"><b>do
+         </b></font>PCXLn <font color="#000080">[</font>Start<font color="#000080">] [</font>i<font color="#000080">] := </font>Plane <font color="#000080">[</font>i<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{-------------- EncPCXLine -------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>EncPCXLine <font color="#000080">(</font>PlaneLine <font color="#000080">: </font>word<font color="#000080">); </font><font color="#008000"><i>{ Encode a PCX line }
+
+</i></font><font color="#FF0000"><b>var
+   </b></font>This<font color="#000080">,
+   </font>Last<font color="#000080">,
+   </font>RunCount <font color="#000080">: </font>byte<font color="#000080">;
+   </font>i<font color="#000080">,
+   </font>j        <font color="#000080">: </font>word<font color="#000080">;
+
+
+  </font><font color="#008000"><i>{-------------- EncPut -----------------}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>EncPut <font color="#000080">(</font>Byt<font color="#000080">, </font>Cnt <font color="#000080">:</font>byte<font color="#000080">);
+
+  </font><font color="#FF0000"><b>const
+       </b></font>COMPRESS_NUM <font color="#000080">= </font><font color="#800000">$C0</font><font color="#000080">;  </font><font color="#008000"><i>{ this is the upper two bits that
+                              indicate a count }
+
+  </i></font><font color="#FF0000"><b>var
+     </b></font>Holder <font color="#000080">: </font>byte<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{$I-}
+       </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Cnt <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>COMPRESS_NUM <font color="#000080">&lt;&gt; (</font>COMPRESS_NUM <font color="#FF0000"><b>and </b></font>Byt<font color="#000080">)) </font><font color="#FF0000"><b>then
+          </b></font>blockwrite <font color="#000080">(</font>PCXName<font color="#000080">, </font>Byt<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">)          </font><font color="#008000"><i>{ single occurance }
+          {good place for file error handler!}
+       </i></font><font color="#FF0000"><b>else
+           begin
+                </b></font>Holder <font color="#000080">:= (</font>COMPRESS_NUM <font color="#FF0000"><b>or </b></font>Cnt<font color="#000080">);
+                </font>blockwrite <font color="#000080">(</font>PCXName<font color="#000080">, </font>Holder<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">); </font><font color="#008000"><i>{ number of times the
+                                                   following color
+                                                   occurs }
+                </i></font>blockwrite <font color="#000080">(</font>PCXName<font color="#000080">, </font>Byt<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+     </b></font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;         </font><font color="#008000"><i>{ used in PCXLn }
+     </i></font>RunCount <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+     </font>Last <font color="#000080">:= </font>PCXLn <font color="#000080">[</font>PlaneLine<font color="#000080">][</font>i<font color="#000080">];
+     </font><font color="#FF0000"><b>for </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Header<font color="#000080">.</font>Bytes_per_line_per_plane <font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+         begin
+              </b></font>inc <font color="#000080">(</font>i<font color="#000080">);
+              </font>This <font color="#000080">:= </font>PCXLn <font color="#000080">[</font>PlaneLine<font color="#000080">][</font>i<font color="#000080">];
+              </font><font color="#FF0000"><b>if </b></font>This <font color="#000080">= </font>Last <font color="#FF0000"><b>then
+                 begin
+                      </b></font>inc <font color="#000080">(</font>RunCount<font color="#000080">);
+                      </font><font color="#FF0000"><b>if </b></font>RunCount <font color="#000080">= </font><font color="#800000">63 </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ reached PCX run length
+                                                limited max yet? }
+                         </i></font><font color="#FF0000"><b>begin
+                              </b></font>EncPut <font color="#000080">(</font>Last<font color="#000080">, </font>RunCount<font color="#000080">);
+                              </font>RunCount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                 </font><font color="#FF0000"><b>end
+              else
+                  begin
+                       if </b></font>RunCount <font color="#000080">&gt;= </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+                          </b></font>Encput <font color="#000080">(</font>Last<font color="#000080">, </font>RunCount<font color="#000080">);
+                       </font>Last <font color="#000080">:= </font>This<font color="#000080">;
+                       </font>RunCount <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>if </b></font>RunCount <font color="#000080">&gt;= </font><font color="#800000">1 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ any left over ? }
+        </i></font>Encput <font color="#000080">(</font>Last<font color="#000080">, </font>RunCount<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font><font color="#008000"><i>{ - - -W-R-I-T-E-_-P-C-X- - - - - - - - }
+
+</i></font><font color="#FF0000"><b>const
+     </b></font>XMAX <font color="#000080">= </font><font color="#800000">639</font><font color="#000080">;
+     </font>YMAX <font color="#000080">= </font><font color="#800000">479</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+   </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>Size <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     </b></font>BuildHeader<font color="#000080">;
+     </font>assign     <font color="#000080">(</font>PCXName<font color="#000080">,</font>Name<font color="#000080">);
+</font><font color="#008000"><i>{$I-}
+     </i></font>rewrite    <font color="#000080">(</font>PCXName<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+     </font>blockwrite <font color="#000080">(</font>PCXName<font color="#000080">,</font>Header<font color="#000080">,</font>sizeof <font color="#000080">(</font>Header<font color="#000080">));
+     </font><font color="#008000"><i>{good place for file error handler!}
+{$I+}
+     </i></font>setviewport <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font>XMAX<font color="#000080">,</font>YMAX<font color="#000080">, </font>ClipOn<font color="#000080">);
+     </font>Size <font color="#000080">:= </font>imagesize <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font>XMAX<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">); </font><font color="#008000"><i>{ size of a single row }
+     </i></font>getmem <font color="#000080">(</font>Img<font color="#000080">,</font>Size<font color="#000080">);
+
+     </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>YMAX <font color="#FF0000"><b>do
+         begin
+              </b></font>getimage <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>i<font color="#000080">,</font>XMAX<font color="#000080">,</font>i<font color="#000080">,</font>Img<font color="#000080">^);  </font><font color="#008000"><i>{ Grab 1 line from the
+                                             screen store in Img
+                                             buffer  }
+              </i></font>move <font color="#000080">(</font>Img<font color="#000080">^,</font>ImgLn<font color="#000080">,</font>Size <font color="#008000"><i>{326}</i></font><font color="#000080">);
+
+              </font>GetBGIPlane <font color="#000080">(</font>INTENSTART<font color="#000080">, </font>IntenLn<font color="#000080">);
+              </font>GetBGIPlane <font color="#000080">(</font>BLUESTART<font color="#000080">,  </font>BlueLn <font color="#000080">);
+              </font>GetBGIPlane <font color="#000080">(</font>GREENSTART<font color="#000080">, </font>GreenLn<font color="#000080">);
+              </font>GetBGIPlane <font color="#000080">(</font>REDSTART<font color="#000080">,   </font>RedLn  <font color="#000080">);
+              </font>BuildPCXPlane <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font>RedLn  <font color="#000080">);
+              </font>BuildPCXPlane <font color="#000080">(</font><font color="#800000">2</font><font color="#000080">, </font>GreenLn<font color="#000080">);
+              </font>BuildPCXPlane <font color="#000080">(</font><font color="#800000">3</font><font color="#000080">, </font>BlueLn <font color="#000080">);
+              </font>BuildPCXPlane <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font>IntenLn<font color="#000080">); </font><font color="#008000"><i>{ 320 bytes/line
+                                            uncompressed }
+              </i></font><font color="#FF0000"><b>for </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Header<font color="#000080">.</font>NPlanes <font color="#FF0000"><b>do
+
+                  </b></font>EncPCXLine <font color="#000080">(</font>j<font color="#000080">);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>freemem <font color="#000080">(</font>Img<font color="#000080">,</font>Size<font color="#000080">);           </font><font color="#008000"><i>(* Release the memory        *)
+{$I-}
+     </i></font>close <font color="#000080">(</font>PCXName<font color="#000080">);              </font><font color="#008000"><i>(* Save the Image            *)
+{$I+}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end </b></font><font color="#008000"><i>{PCX.TPU} </i></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{ -----------------------Test Program -------------------------- }
+
+</i></font><font color="#FF0000"><b>program </b></font>WritePCX<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses
+    </b></font>Graph<font color="#000080">, </font>PCX_W<font color="#000080">;
+
+</font><font color="#008000"><i>{-------------- DrawHorizBars ----------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DrawHorizBars<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+   </b></font>i<font color="#000080">, </font>Color <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     </b></font>cleardevice<font color="#000080">;
+     </font>Color <font color="#000080">:= </font><font color="#800000">15</font><font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">15 </font><font color="#FF0000"><b>do
+         begin
+              </b></font>setfillstyle <font color="#000080">(</font>solidfill<font color="#000080">,</font>Color<font color="#000080">);
+              </font>bar <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>i<font color="#000080">*</font><font color="#800000">30</font><font color="#000080">,</font><font color="#800000">639</font><font color="#000080">,</font>i<font color="#000080">*</font><font color="#800000">30</font><font color="#000080">+</font><font color="#800000">30</font><font color="#000080">);       </font><font color="#008000"><i>{ 16*30 = 480 }
+              </i></font>dec <font color="#000080">(</font>Color<font color="#000080">);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-------------- Main -------------------}
+
+</i></font><font color="#FF0000"><b>var
+   </b></font>NameW <font color="#000080">: </font>Str80<font color="#000080">;
+   </font>Gd<font color="#000080">,
+   </font>Gm    <font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     </b></font>writeln<font color="#000080">;
+     </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ParamCount <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then           </b></font><font color="#008000"><i>{ no DOS command line
+                                          parameters }
+        </i></font><font color="#FF0000"><b>begin
+             </b></font>write <font color="#000080">(</font><font color="#800000">'Enter name of PCX picture file to write: '</font><font color="#000080">);
+             </font>readln <font color="#000080">(</font>NameW<font color="#000080">);
+             </font>writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+     else
+         begin
+              </b></font>NameW <font color="#000080">:= </font>paramstr <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{ get filename from DOS
+                                        command line }
+         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Pos <font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>NameW<font color="#000080">) = </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ make sure the filename
+                                        has PCX extension }
+        </i></font>NameW <font color="#000080">:= </font>Concat <font color="#000080">(</font>NameW<font color="#000080">, </font><font color="#800000">'.pcx'</font><font color="#000080">);
+
+     </font>Gd<font color="#000080">:=</font>VGA<font color="#000080">;
+     </font>Gm<font color="#000080">:=</font>VGAhi<font color="#000080">; </font><font color="#008000"><i>{640x480, 16 colors}
+     </i></font>initgraph <font color="#000080">(</font>Gd<font color="#000080">,</font>Gm<font color="#000080">,</font><font color="#800000">'..\bgi'</font><font color="#000080">);  </font><font color="#008000"><i>{ path to your EGAVGA.BGI }
+
+     </i></font>DrawHorizBars<font color="#000080">;
+
+     </font>readln<font color="#000080">;
+     </font>Write_PCX <font color="#000080">(</font>NameW<font color="#000080">); </font><font color="#008000"><i>{ PCX_W.TPU }
+     </i></font>closegraph<font color="#000080">;                    </font><font color="#008000"><i>{ Close graphics    }
+     </i></font>textmode <font color="#000080">(</font>co80<font color="#000080">);               </font><font color="#008000"><i>{ back to text mode }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.  </font><font color="#008000"><i>{ Write_PCX }
+
+{
+OK, everybody, I hope this gets you started. I had a lot of
+fun setting it up. There are some obvious places that need
+optimization... especially the disk intensive blockwrites. If
+someone could please figure out holding about 4k or so in pointers
+of the encoded PCX file before writing, I'd sure appreciate it!.
+(please post for everyone, if you do.)
+
+}</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0066.PAS">Original</a><b>]</b></p></body>
+</html>

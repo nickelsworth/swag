@@ -1,0 +1,921 @@
+<html>
+<head><title> "Drive Types" by P. BELOW</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0101.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{+------------------------------------------------------------
+ | Unit Drives
+ |
+ | Version: 2.0  Last modified: 02/27/95, 21:49:56
+ | Author : P. Below  CIS [100113,1101]
+ | Project: Common utilities
+ | Units required (only for the Implementation section):
+ |   DOS: Dos (Borland)
+ |	 Windows: Win31 (Borland), WinDOS (Borland), Wintypes (Borland),
+ |            WinProcs (Borland), DMPI (own);
+ | Description:
+ |   This Unit collects routines to gather information about
+ |	 the disk drives on a system in both DOS and Windows. You can
+ |	 build a drive map with a single procedure call. In addition
+ |	 to drive type checking the volume name, serial number, and
+ |	 FAT type for local fixed disks or the netshare name for 
+ |	 networked drives are also retrieved.
+ |	 Low-level routines for all the subfunctions involved in 
+ |	 building the drive map are exported, too. You can thus get
+ |	 the media info or disk paramter block for floppy disk or other
+ |	 removable media drives &quot;by hand&quot;, if necessary. 
+ |	 Most of the low level stuff uses DOS IOCTL functions, even
+ |	 for the Windows version ( GetDriveType is just to limited ).
+ |	 CD-ROM identification uses the MSCDEX int 2Fh interface.
+ |
+ |	 This Unit has been checked under real mode DOS and Windows
+ |	 (Win 3.1, WfWg 3.11, Win NT 3.5 ) but _not_ under protected
+ |		mode DOS (DPMI)!
+ | Copyright (C) 1994,1995 by Peter Below 
+ |   This code is released to the public domain, use it as you see fit
+ |	 in your own programs (at your own risk, of course) but you should
+ |	 include a note of the origin of this code in your program.
+ +------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Unit </b></font>Drives<font color="#000080">;
+
+</font><font color="#FF0000"><b>Interface
+
+Const
+  </b></font>DRIVE_CDROM <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font>DRIVE_RAM   <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+
+  </font>Min_DriveNums <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>(* drive a: *)
+  </i></font>Max_DriveNums <font color="#000080">= </font><font color="#800000">26</font><font color="#000080">; </font><font color="#008000"><i>(* drive z: *) 
+</i></font><font color="#FF0000"><b>Type
+  </b></font>TDriveTypes <font color="#000080">= ( </font>FLOPPY<font color="#000080">, </font>HARDDISK<font color="#000080">, </font>REMAPPED<font color="#000080">, </font>REMOTE<font color="#000080">, </font>CD_ROM<font color="#000080">,
+                  </font>RAMDISK<font color="#000080">, </font>INVALID <font color="#000080">);
+  </font>TDTypeSet   <font color="#000080">= </font><font color="#FF0000"><b>SET OF </b></font>TDriveTypes<font color="#000080">;
+  </font>TDriveNums  <font color="#000080">= </font>Min_DriveNums<font color="#000080">..</font>Max_DriveNums<font color="#000080">;
+                </font><font color="#008000"><i>(* range A: To Z: of drive letters *)
+  </i></font>TDriveSet   <font color="#000080">= </font><font color="#FF0000"><b>SET OF </b></font>TDriveNums<font color="#000080">; 
+  </font>TDeviceName <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">127</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+  </font>TDiskInfo   <font color="#000080">= </font><font color="#FF0000"><b>Record </b></font><font color="#008000"><i>(* this is a DOS structure used by GetMediaID
+                          but modified to allow for asciiz strings *)
+                  </i></font>InfoLevel<font color="#000080">: </font>WORD<font color="#000080">;
+                  </font>serialNo<font color="#000080">: </font>LongInt<font color="#000080">;
+                  </font>volName <font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">11</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+                  </font>FATType <font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+                </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>TDriveInfo  <font color="#000080">= </font><font color="#FF0000"><b>Record
+                  </b></font>Flags<font color="#000080">: </font>TDTypeSet<font color="#000080">;
+                  </font><font color="#FF0000"><b>Case </b></font>Boolean <font color="#FF0000"><b>OF
+                    </b></font>TRUE<font color="#000080">:  </font><font color="#008000"><i>(* For network drives *)
+                      </i></font><font color="#000080">(</font>DevName<font color="#000080">: </font>TDeviceName<font color="#000080">);
+                    </font>FALSE<font color="#000080">: </font><font color="#008000"><i>(* For all other drives *)
+                      </i></font><font color="#000080">(</font>Info<font color="#000080">: </font>TDiskInfo<font color="#000080">);
+                </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>TDriveMap   <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font>TDriveNums<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>TDriveInfo<font color="#000080">;
+  </font>PDriveMap   <font color="#000080">= ^</font>TDriveMap<font color="#000080">;
+
+  </font>LP_DPB <font color="#000080">= ^</font>DPB<font color="#000080">;  
+  </font>DPB <font color="#000080">= </font><font color="#FF0000"><b>Record  </b></font><font color="#008000"><i>(* Disk Parameter Block as per MSDOS Programmer's Reference *)
+    </i></font>dpbDrive       <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbUnit        <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbSectorSize  <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbClusterMask <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbClusterShift<font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbFirstFAT    <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbFATCount    <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbRootEntries <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbFirstSector <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbMaxCluster  <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbFATSize     <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbDirSector   <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbDriverAddr  <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>dpbMedia       <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbFirstAccess <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>dpbNextDPB     <font color="#000080">: </font>LP_DPB<font color="#000080">;
+    </font>dpbNextFree    <font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dpbFreeCnt     <font color="#000080">: </font>WORD<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>MyGetDriveType<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>f<font color="#000080">: </font>TDTypeSet <font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>GetDriveInfo<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>di<font color="#000080">: </font>TDriveInfo <font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>BuildDriveMap<font color="#000080">( </font><font color="#FF0000"><b>Var </b></font>DMap<font color="#000080">: </font>TDriveMap    <font color="#000080">);
+
+</font><font color="#FF0000"><b>Function </b></font>MSCDexIsloaded<font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>DriveIsCDROM<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>DriveIsRamdisk<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>GetDiskParameterBlock<font color="#000080">( </font>drive<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>LP_DPB<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>GetLastdrive<font color="#000080">: </font>TDriveNums<font color="#000080">;
+
+</font><font color="#008000"><i>{ the following functions map directly to DOS IOCTL calls }
+</i></font><font color="#FF0000"><b>Function </b></font>MediumIsRemovable<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>TDriveTypes<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>DriveIsRemote<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>DriveIsRemapped<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>GetMediaID <font color="#000080">( </font>Drive<font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>info<font color="#000080">: </font>TDiskInfo <font color="#000080">): </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function </b></font>GetDriveMapping<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>TDriveNums<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>MapLogicalDrive<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">);
+
+</font><font color="#FF0000"><b>Implementation
+
+Uses </b></font>Strings<font color="#000080">,
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+ </i></font>Win31<font color="#000080">, </font>WinDOS<font color="#000080">, </font>Wintypes<font color="#000080">, </font>WinProcs<font color="#000080">, </font>DMPI<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+ </i></font>DOS<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+{************************************************************
+ * Function MediumIsRemovable
+ *
+ * Parameters:
+ *	n: the drive number to check, 1= A:, 2=B: etc.
+ * Returns:
+ *	one of the three drive types INVALID, FLOPPY or HARDDISK
+ * Description:
+ *	This function uses DOS IOCTL function $4408 to check a drive
+ *	for removable media. It can also be used to check for a drives
+ *	existance.
+ *	Should work for DOS, Windows, and DPMI.
+ *
+ *Created: 02/26/95 20:49:03 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>MediumIsRemovable<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>TDriveTypes<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+</b></font>  	res<font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+</b></font>  	<font color="#FF0000"><b>asm
+</b></font>		  <font color="#FF00FF">mov ax, $4408</font>  	<font color="#008000"><i>(* IOCTL is drive changeable function *)
+</i></font>			<font color="#FF00FF">mov bl, n
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font><font color="#FF00FF">call Dos3Call
+</font><font color="#008000"><i>{$ELSE}
+      </i></font><font color="#FF00FF">int $21
+</font><font color="#008000"><i>{$ENDIF}
+</i></font>			<font color="#FF00FF">mov res, ax
+</font>			<font color="#008000"><i>{ Our handling of the result makes the following asumptions here:
+			  If the function succeeds (carry flag clear), the return in ax
+				will be 0 for removable and 1 for fixed medium.
+				If the function fails (carry flag set), the error code in ax
+				will be 1, if the device driver does not know how to handle the
+				function (in which case we assume a fixed disk, also ax=1, safe bet 
+				according to MS docs) or it will be $F, if the drive is invalid. 
+			 }
+</i></font>		<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ asm }
+</i></font>		<font color="#FF0000"><b>Case </b></font>res <font color="#FF0000"><b>Of
+</b></font>			<font color="#800000">0</font><font color="#000080">: </font>MediumIsRemovable <font color="#000080">:= </font>FLOPPY<font color="#000080">;
+</font>			<font color="#800000">1</font><font color="#000080">: </font>MediumIsRemovable <font color="#000080">:= </font>HARDDISK
+		<font color="#FF0000"><b>Else
+</b></font>		  MediumIsRemovable <font color="#000080">:= </font>INVALID<font color="#000080">;
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Case }
+  </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>(* BasicDriveType *)
+
+{************************************************************
+ * Function DriveIsRemote
+ *
+ * Parameters:
+ *	n: the drive number to check, 1= A:, 2=B: etc.
+ * Returns:
+ *	TRUE, if the drive is remote, FALSE if it is local or invalid.
+ * Description:
+ *	This function uses DOS IOCTL function $4409 to check whether 
+ *	a drive is remote or local.
+ *	Should work for DOS, Windows, and DPMI.
+ *
+ *Created: 02/26/95 21:12:32 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>DriveIsRemote<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font> 	<font color="#FF0000"><b>Asm
+</b></font>	  <font color="#FF00FF">mov ax, $4409</font>  	<font color="#008000"><i>(* IOCTL is drive remote function *)
+</i></font>		<font color="#FF00FF">mov bl, n
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font><font color="#FF00FF">call Dos3Call
+</font><font color="#008000"><i>{$ELSE}
+    </i></font><font color="#FF00FF">int $21
+</font><font color="#008000"><i>{$ENDIF}
+</i></font>		<font color="#FF00FF">mov ax, False   </font><font color="#008000"><i>(* assume error, in which case we return false *) 
+</i></font>		<font color="#FF00FF">jc @error
+</font>		<font color="#FF00FF">and dx, $1000  </font><font color="#008000"><i>(* remote drives have bit 12 set *)
+</i></font>		<font color="#FF00FF">jz @error
+</font>		<font color="#FF00FF">inc ax
+</font>	<font color="#FF00FF">@error:
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>(* DriveIsRemote *)
+
+{************************************************************
+ * Function DriveIsRemapped
+ *
+ * Parameters:
+ *	n: the drive number to check, 1= A:, 2=B: etc.
+ * Returns:
+ *	TRUE, if the drive can be remapped, FALSE if not or if it is invalid.
+ * Description:
+ *	This function uses DOS IOCTL function $440E to check whether 
+ *	a drive can be remapped.
+ *	Should work for DOS, Windows, and DPMI.
+ *
+ *Created: 02/26/95 21:21:46 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>DriveIsRemapped<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+</b></font>	  <font color="#FF00FF">mov ax, $440E</font>  	<font color="#008000"><i>(* IOCTL get logical drive mapping function *)
+</i></font>		<font color="#FF00FF">mov bl, n
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font><font color="#FF00FF">call Dos3Call
+</font><font color="#008000"><i>{$ELSE}
+    </i></font><font color="#FF00FF">int $21
+</font><font color="#008000"><i>{$ENDIF}
+</i></font>		<font color="#FF00FF">jc @error
+</font>		<font color="#FF00FF">cmp al, 0       </font><font color="#008000"><i>(* if carry not set, ax returns last drive number *)
+</i></font>		<font color="#FF00FF">je @error       </font><font color="#008000"><i>(* of the mapped drive, or 0, if the block device has *)
+</i></font>		<font color="#FF00FF">mov ax, True    </font><font color="#008000"><i>(* only one drive assigned to it.  *)
+</i></font>		<font color="#FF00FF">jmp @done
+</font>	<font color="#FF00FF">@error:
+</font>	  <font color="#FF00FF">mov ax, false
+</font>	<font color="#FF00FF">@done:
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>(* DriveIsRemapped *)
+
+{************************************************************
+ * Function GetDriveMapping
+ *
+ * Parameters:
+ *	n: the drive number to check, 1= A:, 2=B: etc.
+ * Returns:
+ *	The logical drive number the drive is mapped to, or the number
+ *	passed in n, if the drive is not mapped or is invalid.
+ * Description:
+ *	This function uses DOS IOCTL function $440E to check whether 
+ *	a drive is remapped.
+ *	Should work for DOS, Windows, and DPMI.
+ * Error Conditions:
+ *	none
+ *Created: 02/26/95 21:21:46 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>GetDriveMapping<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+</b></font>	  <font color="#FF00FF">mov ax, $440E</font>  	<font color="#008000"><i>(* IOCTL get logical drive mapping function *)
+</i></font>		<font color="#FF00FF">mov bl, n
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font><font color="#FF00FF">call Dos3Call
+</font><font color="#008000"><i>{$ELSE}
+    </i></font><font color="#FF00FF">int $21
+</font><font color="#008000"><i>{$ENDIF}
+</i></font>		<font color="#FF00FF">jc @error</font>				<font color="#008000"><i>(* if no error *)
+</i></font>		<font color="#FF00FF">or  al, al      </font><font color="#008000"><i>(* check return, 0 means not remapped *)
+</i></font>		<font color="#FF00FF">jnz @done       </font><font color="#008000"><i>(* if remapped, return mapped drive number *)
+</i></font>	<font color="#FF00FF">@error:
+</font>	  <font color="#FF00FF">mov al, n       </font><font color="#008000"><i>(* else return original drive number *)
+    </i></font><font color="#FF00FF">xor ah, ah
+</font>	<font color="#FF00FF">@done:
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>(* GetDriveMapping *)
+
+{************************************************************
+ * Procedure MapLogicalDrive
+ *
+ * Parameters:
+ *	n: the physical drive number to map, 1= A:, 2=B: etc.
+ * Description:
+ *	Uses DOS IOCTL function $440F to map the physical drive
+ *	passed to the next logical drive number the block device
+ *	driver supports. Does nothing for drives that are not
+ *	mappable or invalid.
+ *	Use it with n=1 to map the floppy drive on a single floppy
+ *	system between A: and B:, use GetDriveMapping to check the
+ *	current mapping.
+ *	Should work for DOS, Windows, and DPMI.
+ *
+ *Created: 02/26/95 21:51:34 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>MapLogicalDrive<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+     </b></font><font color="#FF00FF">mov AX, $440F
+     mov BL, n
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+     </i></font><font color="#FF00FF">call Dos3Call
+</font><font color="#008000"><i>{$ELSE}
+     </i></font><font color="#FF00FF">int $21
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>TMediaID <font color="#000080">= </font><font color="#FF0000"><b>Record  </b></font><font color="#008000"><i>(* This is the MS-DOS original MediaID structure *)
+    </i></font>wInfoLevel<font color="#000080">: </font>WORD<font color="#000080">;
+    </font>dwSerialNumber<font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>VolLabel<font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>FileSysType<font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>PMediaID <font color="#000080">= ^</font>TMediaID<font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Function GetMediaID 
+ *
+ * Parameters:
+ *	Drive: 0 = default drive, 1 =A: etc.
+ *	Info : Record to receive the media id info, filled with 0
+ *	       if function fails.
+ * Returns:
+ *	True if successful, False if error. 
+ * Description:
+ *	This function uses DOS IOCTL function $440D, subfunction $0866
+ *	to read the media ID record from the disks bootsector. For 
+ *	Windows, this requires use of DPMI.
+ *	Works for DOS and Windows, not tested for DPMI!
+ *
+ *Created: 02/26/95 21:44:02 by P. Below
+ ************************************************************}
+{$IFDEF WINDOWS}
+ (*************************************************************************
+ / GetMediaID() - Windows version
+ /
+ / Get Media ID by simulating an Int 21h, AX=440Dh, CX=0866h in real mode.
+ / Setup RealModeReg To contain a real mode pointer To a MediaID structure
+ /************************************************************************)
+</i></font><font color="#FF0000"><b>Function </b></font>GetMediaID <font color="#000080">( </font>Drive<font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>info<font color="#000080">: </font>TDiskInfo <font color="#000080">): </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>RealModeReg<font color="#000080">: </font>TRealModeReg<font color="#000080">;
+    </font>dwGlobalDosBuffer<font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>lpRMMediaID<font color="#000080">: </font>PMediaID<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>GetMediaID <font color="#000080">:= </font>FALSE<font color="#000080">;
+    </font>FillChar<font color="#000080">( </font>info<font color="#000080">, </font>Sizeof<font color="#000080">( </font>info <font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+    </font><font color="#008000"><i>{ Get a real mode addressable buffer For the MediaID structure }
+
+    </i></font>dwGlobalDosBuffer <font color="#000080">:= </font>GlobalDosAlloc<font color="#000080">(</font>sizeof<font color="#000080">(</font>TMediaID<font color="#000080">));
+    </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>dwGlobalDosBuffer <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>Then Begin
+
+      </b></font><font color="#008000"><i>{ Now initialize the real mode register structure }
+      </i></font>FillChar<font color="#000080">(</font>RealModeReg<font color="#000080">, </font>sizeof<font color="#000080">(</font>RealModeReg<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+      </font>RealModeReg<font color="#000080">.</font>rmEAX <font color="#000080">:= </font><font color="#800000">$440D</font><font color="#000080">;           </font><font color="#008000"><i>{ IOCTL For Block Device }
+      </i></font>RealModeReg<font color="#000080">.</font>rmEBX <font color="#000080">:= </font>LongInt<font color="#000080">(</font>Drive<font color="#000080">);  </font><font color="#008000"><i>{ 0 = default, 1 = A, 2 = B, etc. }
+      </i></font>RealModeReg<font color="#000080">.</font>rmECX <font color="#000080">:= </font><font color="#800000">$0866</font><font color="#000080">;           </font><font color="#008000"><i>{ Get Media ID }
+      </i></font>RealModeReg<font color="#000080">.</font>rmDS  <font color="#000080">:= </font>HIWORD<font color="#000080">(</font>dwGlobalDosBuffer<font color="#000080">);  </font><font color="#008000"><i>{ *real mode segment* }
+
+      { Now simulate the real mode interrupt }
+      </i></font><font color="#FF0000"><b>If </b></font>RealInt<font color="#000080">(</font><font color="#800000">$21</font><font color="#000080">, </font>RealModeReg<font color="#000080">) </font><font color="#FF0000"><b>and        </b></font><font color="#008000"><i>{ int simulation ok?}
+         </i></font><font color="#000080">((</font>RealModeReg<font color="#000080">.</font>rmCPUFlags <font color="#FF0000"><b>and </b></font><font color="#800000">$0001</font><font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#008000"><i>{ carry clear? }
+      </i></font><font color="#FF0000"><b>Then Begin
+         </b></font>lpRMMediaID <font color="#000080">:= </font>PMEDIAID<font color="#000080">( </font>MakeLong<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>LOWORD<font color="#000080">(</font>dwGlobalDosBuffer<font color="#000080">)));
+         </font>info<font color="#000080">.</font>InfoLevel <font color="#000080">:= </font>lpRMMediaID<font color="#000080">^.</font>wInfoLevel<font color="#000080">;
+         </font>info<font color="#000080">.</font>serialNo  <font color="#000080">:= </font>lpRMMediaID<font color="#000080">^.</font>dwSerialNumber<font color="#000080">;
+         </font>StrMove<font color="#000080">( </font>info<font color="#000080">.</font>volName<font color="#000080">, </font>lpRMMediaID<font color="#000080">^.</font>VolLabel<font color="#000080">, </font><font color="#800000">11 </font><font color="#000080">);
+         </font>StrMove<font color="#000080">( </font>info<font color="#000080">.</font>FATType<font color="#000080">, </font>lpRMMediaID<font color="#000080">^.</font>FileSysType<font color="#000080">, </font><font color="#800000">8 </font><font color="#000080">);
+         </font>GetMediaID <font color="#000080">:= </font>TRUE<font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font>GlobalDosFree<font color="#000080">(</font>LOWORD<font color="#000080">(</font>dwGlobalDosBuffer<font color="#000080">));
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+ (*************************************************************************
+  | GetMediaID() - DOS version
+  |
+  |Get Media ID using Int 21h, AX=440Dh, CX=0866h in real mode.
+  |WARNING! Assumes DOS-Version &gt; 4.0!
+  ************************************************************************)
+</i></font><font color="#FF0000"><b>Function </b></font>GetMediaID <font color="#000080">( </font>Drive<font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>info<font color="#000080">: </font>TDiskInfo <font color="#000080">): </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>Label </b></font>error<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>MediaID<font color="#000080">: </font>TMediaID<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>GetMediaID <font color="#000080">:= </font>FALSE<font color="#000080">;
+    </font>FillChar<font color="#000080">( </font>info<font color="#000080">, </font>Sizeof<font color="#000080">( </font>info <font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+</font>		<font color="#FF0000"><b>asm
+</b></font>		  <font color="#FF00FF">push ds
+</font>		  <font color="#FF00FF">mov ax, $440D;  </font><font color="#008000"><i>{ IOCTL For Block Device }
+</i></font>			<font color="#FF00FF">mov bx, Drive;  </font><font color="#008000"><i>{ 0 = default, 1 = A, 2 = B, etc. }
+      </i></font><font color="#FF00FF">mov cx, $0866;  </font><font color="#008000"><i>{ Get Media ID }
+</i></font>			<font color="#FF00FF">mov dx, ss      </font><font color="#008000"><i>{ point ds:dx at MediaID }
+</i></font>			<font color="#FF00FF">mov ds, dx
+</font>			<font color="#FF00FF">lea dx, MediaID
+</font>			<font color="#FF00FF">int $21
+</font>			<font color="#FF00FF">pop ds
+</font>			<font color="#FF00FF">jc  error
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font>info<font color="#000080">.</font>InfoLevel <font color="#000080">:= </font>MediaID<font color="#000080">.</font>wInfoLevel<font color="#000080">;
+    </font>info<font color="#000080">.</font>serialNo  <font color="#000080">:= </font>MediaID<font color="#000080">.</font>dwSerialNumber<font color="#000080">;
+    </font>StrMove<font color="#000080">( @</font>info<font color="#000080">.</font>volName<font color="#000080">, @</font>MediaID<font color="#000080">.</font>VolLabel<font color="#000080">, </font><font color="#800000">11 </font><font color="#000080">);
+    </font>StrMove<font color="#000080">( @</font>info<font color="#000080">.</font>FATType<font color="#000080">, @</font>MediaID<font color="#000080">.</font>FileSysType<font color="#000080">, </font><font color="#800000">8 </font><font color="#000080">);
+    </font>GetMediaID <font color="#000080">:= </font>TRUE<font color="#000080">;
+</font>	error<font color="#000080">:
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+
+{************************************************************
+ * Function MSCDExIsLoaded
+ *
+ * Parameters:
+ *	none
+ * Returns:
+ *	True, if MSCDEX is loaded, False otherwise
+ * Description:
+ *	Uses the MSCDEX Int $2F interface, function $00.
+ *	Should work for DOS, Windows, and DPMI.
+ *
+ *Created: 02/26/95 21:55:17 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>MSCDExIsLoaded<font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">mov AX, $1500   </font><font color="#008000"><i>(* MSCDEX installed check *)
+    </i></font><font color="#FF00FF">xor BX, BX
+    int $2F
+    xor ax, ax      </font><font color="#008000"><i>(* set default return value To false *)
+    </i></font><font color="#FF00FF">or  BX, BX      </font><font color="#008000"><i>(* returns bx &lt;&gt; 0 If MSCDEX installed *)
+    </i></font><font color="#FF00FF">jz  @no_mscdex
+    mov al, TRUE
+  @no_mscdex:
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Function DriveIsCDROM
+ *
+ * Parameters:
+ *	n: the drive number to check, 1= A:, 2=B: etc.
+ * Returns:
+ *	True, if the drive is a CD-ROM, False otherwise.
+ * Description:
+ *	Uses the MSCDEX Int $2F interface, function $0B.
+ *	It is not necessary to check for the presence of
+ *	MSCDEX first.
+ *	Should work for DOS, Windows, and DPMI.
+ *
+ *Created: 02/26/95 21:57:06 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>DriveIsCDROM<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">mov ax, $150B </font><font color="#008000"><i>(* MSCDEX check drive Function *)
+    </i></font><font color="#FF00FF">mov cl, n
+    xor ch, ch
+    dec cx        </font><font color="#008000"><i>(* 0 = A: etc.*)
+</i></font>		<font color="#FF00FF">xor bx, bx
+    int $2F
+</font>		<font color="#FF00FF">cmp bx, $ADAD </font><font color="#008000"><i>(* is MSCDEX present? *) 
+</i></font>		<font color="#FF00FF">jne @no_cdrom
+    or  ax, ax
+    jz  @no_cdrom
+    mov ax, True
+</font>		<font color="#FF00FF">jmp @done
+  @no_cdrom:
+</font>	  <font color="#FF00FF">mov ax, False
+</font>	<font color="#FF00FF">@done:
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+</i></font><font color="#FF0000"><b>Procedure </b></font>Beautify<font color="#000080">( </font>s<font color="#000080">: </font>PChar <font color="#000080">);
+  </font><font color="#008000"><i>(* internal procedure, remove a dot from the volume name,
+     padd to 11 chars with blanks *)
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>p<font color="#000080">: </font>PChar<font color="#000080">;
+    </font>i<font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>p <font color="#000080">:= </font>StrScan<font color="#000080">( </font>s<font color="#000080">, </font><font color="#800000">'.' </font><font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font>p <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil Then
+      </b></font>StrMove<font color="#000080">( </font>p<font color="#000080">, </font>p<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">);
+
+    </font><font color="#008000"><i>(* padd To 11 chars with blanks *)
+    </i></font>i <font color="#000080">:= </font>StrLen<font color="#000080">( </font>s <font color="#000080">);
+    </font><font color="#FF0000"><b>While </b></font>i <font color="#000080">&lt; </font><font color="#800000">11 </font><font color="#FF0000"><b>Do Begin
+      </b></font>StrCat<font color="#000080">( </font>s<font color="#000080">, </font><font color="#800000">' ' </font><font color="#000080">);
+      </font>INC<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+</i></font><font color="#FF0000"><b>Procedure </b></font>Beautify<font color="#000080">( </font><font color="#FF0000"><b>Var </b></font>s<font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+  </font><font color="#008000"><i>(* internal procedure, remove a dot from the volume name,
+     padd to 11 chars with blanks *)
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>i<font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>i <font color="#000080">:= </font>Pos<font color="#000080">( </font><font color="#800000">'.'</font><font color="#000080">, </font>s <font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font>i <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+      </b></font>Delete<font color="#000080">( </font>s<font color="#000080">, </font>i<font color="#000080">, </font><font color="#800000">1 </font><font color="#000080">);
+
+    </font><font color="#008000"><i>(* padd To 11 chars with blanks *)
+
+    </i></font><font color="#FF0000"><b>While </b></font>Length<font color="#000080">(</font>s<font color="#000080">) &lt; </font><font color="#800000">11 </font><font color="#FF0000"><b>Do
+      </b></font>s<font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' '</font><font color="#000080">;
+  </font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+{************************************************************
+ * Procedure GetNetworkShareName  [ NOT EXPORTED! ]
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc.,  should be a network drive!
+ *	name: array of char to take the device name
+ * Description:
+ *	This is a internal helper procedure, it does not check its 
+ *  parameters. name will return an empty string, if the drive is
+ *	not a network drive.
+ *
+ *Created: 02/26/95 22:07:49 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetNetworkShareName<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>name<font color="#000080">: </font>TDeviceName <font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>Param<font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+</font><font color="#008000"><i>{$IFNDEF WINDOWS}
+    </i></font>Buf  <font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+    </i></font>i    <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>Param<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>Chr<font color="#000080">( </font>n <font color="#000080">- </font><font color="#800000">1 </font><font color="#000080">+ </font>Ord<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">));
+    </font>Param<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">':'</font><font color="#000080">;
+    </font>Param<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">#0</font><font color="#000080">;
+    </font>name <font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">#0</font><font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>i <font color="#000080">:= </font>Sizeof<font color="#000080">( </font>name <font color="#000080">);
+    </font>WNetGetConnection<font color="#000080">( @</font>Param<font color="#000080">, @</font>name<font color="#000080">, @</font>i <font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+    { for plain DOS we need a bit of work, using int 21h, function 5F02h,
+      &quot;Get Assign-List Entry&quot;. This entails a search thru the list of all
+      entries. }
+</i></font>		<font color="#FF0000"><b>asm
+</b></font>			<font color="#FF00FF">push ds
+</font>			<font color="#FF00FF">push es
+</font>			<font color="#FF00FF">push si
+</font>			<font color="#FF00FF">push di
+</font>		  <font color="#FF00FF">sub bx, bx</font>   		<font color="#008000"><i>{ bx holds the list index, starts with 0 }
+</i></font>			<font color="#FF00FF">mov ax, ss</font>	 		<font color="#008000"><i>{ point ds:si at Buf }
+</i></font>			<font color="#FF00FF">mov ds, ax
+</font>			<font color="#FF00FF">lea si, Buf
+</font>			<font color="#FF00FF">les di, name</font> 		<font color="#008000"><i>{ point es:di at name }
+</i></font>		<font color="#FF00FF">@next:
+</font>		  <font color="#FF00FF">sub cx, cx
+</font>		  <font color="#FF00FF">mov ax, $5F02</font>  	<font color="#008000"><i>{ dos get redirection list entry function }
+</i></font>			<font color="#FF00FF">push bx</font>        	<font color="#008000"><i>{ save current index }
+</i></font>			<font color="#FF00FF">push bp</font>        	<font color="#008000"><i>{ Network Interrupts sez: dx,bp destroyed! }
+</i></font>			<font color="#FF00FF">int $21
+</font>			<font color="#FF00FF">pop bp
+</font>			<font color="#FF00FF">jc  @error
+</font>			<font color="#008000"><i>{ we have an entry, compare its local name in Buf with the drive 
+			  name in Param, but only if the type returned in bl is 4 (disk drive)}
+</i></font>			<font color="#FF00FF">cmp bl, 4
+</font>			<font color="#FF00FF">pop bx</font>					<font color="#008000"><i>{ restore index }
+</i></font>			<font color="#FF00FF">jne @next_bx</font>  	<font color="#008000"><i>{ try next if no disk drive }
+</i></font>			<font color="#FF00FF">mov ax, [ si ]</font>	<font color="#008000"><i>{ else get drive letter + colon from Buf }
+</i></font>			<font color="#FF00FF">cmp ax, word ptr Param  </font><font color="#008000"><i>{ and compare to Param }
+</i></font>			<font color="#FF00FF">je  @done       </font><font color="#008000"><i>{ if equal, exit }
+</i></font>		<font color="#FF00FF">@next_bx:</font>					<font color="#008000"><i>{ else try next index }
+</i></font>			<font color="#FF00FF">inc bx
+</font>			<font color="#FF00FF">jmp @next
+</font>		<font color="#FF00FF">@error:
+</font>		  <font color="#FF00FF">pop bx         </font><font color="#008000"><i>{ no match found or network not installed, clean  }
+</i></font>		  <font color="#FF00FF">mov byte ptr es:[di], 0  </font><font color="#008000"><i>{ saved index from stack and return name='' }
+</i></font>		<font color="#FF00FF">@done:
+</font>		  <font color="#FF00FF">pop di</font>				 <font color="#008000"><i>{ restore all saved registers }
+</i></font>			<font color="#FF00FF">pop si
+</font>			<font color="#FF00FF">pop es
+</font>			<font color="#FF00FF">pop ds
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">;  </font><font color="#008000"><i>{ Asm }
+{$ENDIF}
+  </i></font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Procedure GetDiskInfo
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc.
+ *	info: record to take the drive info
+ * Description:
+ *	Calls GetMediaID to read the info block from the disk boot
+ *	sector, then searches for the volume name. Will return with
+ *	a serial number of 0, if GetMediaID is not supported or the
+ *	drive is invalid or contains no disk.
+ *
+ *Created: 02/26/95 22:11:35 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetDiskInfo<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>info<font color="#000080">: </font>TDiskInfo <font color="#000080">);
+  </font><font color="#FF0000"><b>Var </b></font>fake<font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font>oldsettings<font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>Procedure </b></font>DoItOldStyle<font color="#000080">;
+    </font><font color="#FF0000"><b>Var
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font>dinfo<font color="#000080">: </font>TSearchRec<font color="#000080">;
+      </font>s<font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>fsFilename<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+      </i></font>dinfo<font color="#000080">: </font>SearchRec<font color="#000080">;
+      </font>s<font color="#000080">: </font>PathStr<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+    </i></font><font color="#FF0000"><b>Begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font>StrCopy<font color="#000080">(</font>s<font color="#000080">, </font><font color="#800000">'@:\*.*' </font><font color="#000080">);
+      </font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>CHR<font color="#000080">( </font>Ord<font color="#000080">( </font>s<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] ) + </font>n <font color="#000080">);
+      </font>FindFirst<font color="#000080">( </font>s<font color="#000080">, </font>faVolumeID <font color="#000080">, </font>dinfo <font color="#000080">);
+      </font><font color="#FF0000"><b>If </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>Then Begin
+        </b></font>Beautify<font color="#000080">( </font>dinfo<font color="#000080">.</font>Name <font color="#000080">);
+        </font>StrCopy<font color="#000080">( </font>info<font color="#000080">.</font>volName<font color="#000080">, </font>dinfo<font color="#000080">.</font>Name <font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>If </b></font>fake <font color="#FF0000"><b>Then Begin
+        </b></font>StrCopy<font color="#000080">( </font>info<font color="#000080">.</font>FATType<font color="#000080">, </font><font color="#800000">'FAT12   '</font><font color="#000080">);
+        </font>info<font color="#000080">.</font>serialNo <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+      </i></font>s <font color="#000080">:= </font><font color="#800000">'@:\*.*'</font><font color="#000080">;
+      </font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>CHR<font color="#000080">( </font>Ord<font color="#000080">( </font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] ) + </font>n <font color="#000080">);
+      </font>FindFirst<font color="#000080">( </font>s<font color="#000080">, </font>VolumeID <font color="#000080">, </font>dinfo <font color="#000080">);
+      </font><font color="#FF0000"><b>If </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>Then Begin
+        </b></font>Beautify<font color="#000080">( </font>dinfo<font color="#000080">.</font>Name <font color="#000080">);
+        </font>StrPCopy<font color="#000080">( </font>info<font color="#000080">.</font>volName<font color="#000080">, </font>dinfo<font color="#000080">.</font>Name <font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>If </b></font>fake <font color="#FF0000"><b>Then Begin
+        </b></font>StrPCopy<font color="#000080">( </font>info<font color="#000080">.</font>FATType<font color="#000080">, </font><font color="#800000">'FAT12   '</font><font color="#000080">);
+        </font>info<font color="#000080">.</font>serialNo <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+    </i></font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+</b></font>		FillChar<font color="#000080">( </font>info<font color="#000080">, </font>Sizeof<font color="#000080">( </font>info <font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>oldsettings <font color="#000080">:= </font>SetErrorMode<font color="#000080">( </font>SEM_FAILCRITICALERRORS <font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+    (* check the DOS version  *)
+    </i></font><font color="#FF0000"><b>If </b></font>Lo<font color="#000080">( </font>DosVersion <font color="#000080">) &gt;= </font><font color="#800000">4 </font><font color="#FF0000"><b>Then
+      </b></font>fake <font color="#000080">:= </font><font color="#FF0000"><b>NOT </b></font>GetMediaID<font color="#000080">( </font>n<font color="#000080">, </font>info <font color="#000080">)
+    </font><font color="#FF0000"><b>Else
+      </b></font>fake <font color="#000080">:= </font>TRUE<font color="#000080">;
+    </font><font color="#008000"><i>(* we get the volume label thru the old-style method of directory
+       search because pre-DOS 5.x may not have it in the boot sector
+       and even later versions may either not have it (If the disk was
+       formatted by something other than DOS Format) or it may have been
+       changed with LABEL, which does not change the boot sector entry!
+    *)
+    </i></font>DoItOldStyle<font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+    </i></font>SetErrorMode<font color="#000080">( </font>oldsettings <font color="#000080">);
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Procedure GetDriveName
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc.
+ *	di: a drive info record that MUST have its flags field 
+ *	    already filled by MyGetDriveType!
+ * Description:
+ *	Tries to obtain the volume info or netshare name for the
+ *	passed drive. Default names are used of the info cannot be
+ *	safely obtained because the drive handles removable media.
+ *
+ *Created: 02/26/95 22:22:28 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetDriveName<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>di<font color="#000080">: </font>TDriveInfo <font color="#000080">);
+  </font><font color="#FF0000"><b>Begin
+    </b></font>FillChar<font color="#000080">( </font>di<font color="#000080">.</font>Info<font color="#000080">, </font>SIZEOF<font color="#000080">( </font>di<font color="#000080">.</font>Info <font color="#000080">), </font><font color="#800000">0 </font><font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font>INVALID <font color="#FF0000"><b>IN </b></font>di<font color="#000080">.</font>Flags <font color="#FF0000"><b>Then
+      </b></font>di<font color="#000080">.</font>DevName<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">#0
+    </font><font color="#FF0000"><b>Else
+      If </b></font><font color="#000080">(</font>FLOPPY <font color="#FF0000"><b>IN </b></font>di<font color="#000080">.</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>CD_ROM <font color="#FF0000"><b>IN </b></font>di<font color="#000080">.</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>Then
+      </b></font><font color="#008000"><i>(* don't try To get the volume name For removable media *)
+        </i></font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>REMOTE <font color="#FF0000"><b>IN </b></font>di<font color="#000080">.</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>Then
+          </b></font>StrCopy<font color="#000080">(</font>di<font color="#000080">.</font>DevName<font color="#000080">, </font><font color="#800000">' -UNKNOWN- '</font><font color="#000080">)
+        </font><font color="#FF0000"><b>Else
+          </b></font>StrCopy<font color="#000080">(</font>di<font color="#000080">.</font>Info<font color="#000080">.</font>volName<font color="#000080">,</font><font color="#800000">' -UNKNOWN- '</font><font color="#000080">)
+
+      </font><font color="#FF0000"><b>Else
+       If </b></font><font color="#000080">(</font>REMOTE <font color="#FF0000"><b>IN </b></font>di<font color="#000080">.</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>Then Begin
+         </b></font>GetNetworkShareName<font color="#000080">( </font>n<font color="#000080">, </font>di<font color="#000080">.</font>DevName <font color="#000080">);
+         </font><font color="#FF0000"><b>If </b></font>di<font color="#000080">.</font>DevName<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] = </font><font color="#800000">#0 </font><font color="#FF0000"><b>Then
+           </b></font>StrCopy<font color="#000080">(</font>di<font color="#000080">.</font>DevName<font color="#000080">, </font><font color="#800000">' -NETWORK- '</font><font color="#000080">)
+
+       </font><font color="#FF0000"><b>End
+       Else
+         </b></font>GetDiskInfo<font color="#000080">( </font>n<font color="#000080">, </font>di<font color="#000080">.</font>Info <font color="#000080">)
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Function GetDiskParameterBlock
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc.
+ * Returns:
+ *	a pointer to the disk parameter bloc, or Nil, if the function
+ *	fails.
+ * Description:
+ *	Uses DOS int $21, function $32. This function fails in network
+ *	drives and it tries to actually read the disk. So If you try to
+ *	use it on drive that handles removable media, make preparations
+ *	to trap critical errors! 
+ *
+ *Created: 02/26/95 22:33:14 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>GetDiskParameterBlock<font color="#000080">( </font>drive<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>LP_DPB<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+  </font><font color="#008000"><i>(* return a far pointer to the requested drives disk parameter block.
+     This call is appearendly supported by the windows dos extender,
+     we get a valid selector back in ds. *)
+  </i></font><font color="#FF0000"><b>Asm
+      </b></font><font color="#FF00FF">push ds
+      mov DL, drive
+      mov AH, $32
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+      </i></font><font color="#FF00FF">call Dos3Call
+</font><font color="#008000"><i>{$ELSE}
+      </i></font><font color="#FF00FF">int $21
+</font><font color="#008000"><i>{$ENDIF}
+      </i></font><font color="#FF00FF">cmp AL, $0FF
+      jne @valid
+      </font><font color="#008000"><i>(* run into an error somewhere, return nil *)
+      </i></font><font color="#FF00FF">xor ax, ax
+</font>			<font color="#FF00FF">mov dx, ax
+      jmp @done
+    @valid:
+      mov ax, bx
+      mov dx, ds
+    @done:
+      pop ds
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Function DriveIsRamdisk
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc. MUST be a fixed disk!
+ * Returns:
+ *	True, if the disk in question has only one FAT copy, False
+ *	otherwise.
+ * Description:
+ *	Tries to read the disks parameter block and checks the number
+ *	of FATs present. One FAT is taken to be a sign for a RAM disk.
+ *	This check is not bomb-proof! 
+ * Error Conditions:
+ *	If you call this function for a drive handling removable media,
+ *	be prepared to trap critical errors!
+ *
+ *Created: 02/26/95 22:35:42 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>DriveIsRamdisk<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums <font color="#000080">): </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>pDPB<font color="#000080">: </font>LP_DPB<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>DriveIsRamdisk <font color="#000080">:= </font>FALSE<font color="#000080">;
+    </font>pDPB <font color="#000080">:= </font>GetDiskParameterBlock<font color="#000080">( </font>n <font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font>pDPB <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL Then
+      If </b></font>pDPB<font color="#000080">^.</font>dpbFATCount <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>Then
+        </b></font>DriveIsRamdisk <font color="#000080">:= </font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Procedure MyGetDriveType
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc. 
+ *	f: set of flags that describes the drive filled by this procedure
+ * Description:
+ *	Tries to determine for the specified drive, whether it is valid,
+ *	holds removable media, is remote, remapped, a CD-ROM or RAM-disk.
+ *
+ *Created: 02/26/95 22:48:32 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>MyGetDriveType<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>f<font color="#000080">: </font>TDTypeSet <font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>dt<font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>f <font color="#000080">:= [];
+    </font>Include<font color="#000080">( </font>f<font color="#000080">, </font>MediumIsRemovable<font color="#000080">( </font>n <font color="#000080">));
+</font>		<font color="#FF0000"><b>If </b></font><font color="#000080">( </font>n<font color="#000080">=</font><font color="#800000">2 </font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>DriveIsRemapped<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">) </font><font color="#FF0000"><b>Then Begin
+</b></font>		  Include<font color="#000080">( </font>f<font color="#000080">, </font>REMAPPED <font color="#000080">);
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ If }
+</i></font>		<font color="#FF0000"><b>If not </b></font><font color="#000080">( </font>INVALID <font color="#FF0000"><b>In </b></font>f <font color="#000080">) </font><font color="#FF0000"><b>Then Begin
+</b></font>		  <font color="#FF0000"><b>If </b></font>DriveIsRemote<font color="#000080">( </font>n <font color="#000080">) </font><font color="#FF0000"><b>Then
+</b></font>			  Include<font color="#000080">( </font>f<font color="#000080">, </font>REMOTE <font color="#000080">);
+</font>	    <font color="#FF0000"><b>If </b></font><font color="#000080">(</font>REMOTE <font color="#FF0000"><b>IN </b></font>f<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>DriveIsCDROM<font color="#000080">( </font>n <font color="#000080">) </font><font color="#FF0000"><b>Then
+</b></font>	      Include<font color="#000080">( </font>f<font color="#000080">, </font>CD_ROM <font color="#000080">);
+</font>	    <font color="#FF0000"><b>If </b></font><font color="#000080">([</font>HARDDISK<font color="#000080">, </font>CD_ROM<font color="#000080">, </font>REMOTE<font color="#000080">] * </font>f<font color="#000080">)= [</font>HARDDISK<font color="#000080">] </font><font color="#FF0000"><b>Then
+</b></font>	      <font color="#FF0000"><b>If </b></font>DriveIsRamdisk<font color="#000080">( </font>n <font color="#000080">) </font><font color="#FF0000"><b>Then
+          </b></font>Include<font color="#000080">( </font>f<font color="#000080">, </font>RAMDISK <font color="#000080">);
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ If }
+  </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Procedure GetDriveInfo
+ *
+ * Parameters:
+ *	n: the drive number, 1= A:, 2=B: etc. 
+ *	di: record to take the drive type and volume/netshare info
+ * Description:
+ *	Uses other routines in this Unit do obtain info on the drive
+ *	in question. 
+ *
+ *Created: 02/26/95 22:53:43 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>GetDriveInfo<font color="#000080">( </font>n<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>di<font color="#000080">: </font>TDriveInfo <font color="#000080">);
+  </font><font color="#FF0000"><b>Begin
+    </b></font>MyGetDriveType<font color="#000080">( </font>n<font color="#000080">, </font>di<font color="#000080">.</font>Flags <font color="#000080">);
+    </font>GetDriveName<font color="#000080">( </font>n<font color="#000080">, </font>di <font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Procedure BuildDriveMap
+ *
+ * Parameters:
+ *	DMap: array of TDriveInfo records to take the info on all
+ *	      drives on the system.
+ * Description:
+ *	Uses other routines from this Unit to build a map of all
+ *	drives on the system with drive letters in the range 
+ *	A..Z ( logical drives 1..26 ). The map contains for each
+ *	drive a set of flags describing the drive type and also,
+ *  if the drive is valid and does not handle removable media,
+ *	the media id info ( volume name, serial number, FAT type ) or
+ *	netshare name.
+ *
+ *Created: 02/26/95 22:55:50 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Procedure </b></font>BuildDriveMap<font color="#000080">( </font><font color="#FF0000"><b>Var </b></font>DMap<font color="#000080">: </font>TDriveMap <font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>n <font color="#000080">: </font>TDriveNums<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font><font color="#008000"><i>(* build a drive properties map For all possible drives.
+       CAVEAT! DR-DOS 6.x has a bug that will fail IOCTL calls For
+               drive letters &gt; P:! (Thank's To Ray Tackett [76416,276]
+               For this info) *)
+    </i></font><font color="#FF0000"><b>For </b></font>n <font color="#000080">:= </font>Min_DriveNums <font color="#FF0000"><b>To </b></font>Max_DriveNums <font color="#FF0000"><b>Do Begin
+      </b></font>MyGetDriveType<font color="#000080">( </font>n<font color="#000080">, </font>DMap<font color="#000080">[</font>n<font color="#000080">].</font>Flags <font color="#000080">);
+      </font>GetDriveName<font color="#000080">( </font>n<font color="#000080">, </font>DMap<font color="#000080">[</font>n<font color="#000080">] );
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End </b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{************************************************************
+ * Function GetLastdrive
+ *
+ * Parameters:
+ *	none
+ * Returns:
+ *	the logical drive number ( 1=A: etc. ) for the last valid
+ *	drive on the system.
+ * Description:
+ *	Uses DOS int $21, function $0E. On some systems this may just
+ *	return the LASTDRIVE setting in CONFIG.SYS!
+ *
+ *Created: 02/26/95 22:59:12 by P. Below
+ ************************************************************}
+</i></font><font color="#FF0000"><b>Function </b></font>GetLastdrive<font color="#000080">: </font>TDriveNums<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font>	<font color="#FF0000"><b>asm
+</b></font>	  <font color="#FF00FF">mov ah, $19   </font><font color="#008000"><i>(* get current drive *)
+</i></font>		<font color="#FF00FF">int $21
+</font>	  <font color="#FF00FF">mov ah, $E    </font><font color="#008000"><i>(* set current To same *)
+</i></font>		<font color="#FF00FF">mov dl, al
+</font>		<font color="#FF00FF">int $21       </font><font color="#008000"><i>(* al returns highest valid drivenumber, 1=A: etc. *)
+</i></font>		<font color="#FF00FF">sub ah, ah
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ -------------------------   DEMO PROGRAM  ------------------- }
+
+</i></font><font color="#FF0000"><b>Program </b></font>DTest<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF WINDOWS}
+</i></font><font color="#FF0000"><b>Uses </b></font>Drives<font color="#000080">, </font>WinCRT<font color="#000080">, </font>Strings<font color="#000080">;
+</font><font color="#008000"><i>{$ELSE}
+</i></font><font color="#FF0000"><b>Uses </b></font>Drives<font color="#000080">, </font>Strings<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>Type
+</b></font>	TypesArray <font color="#000080">= </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font>TDriveTypes<font color="#000080">] </font><font color="#FF0000"><b>Of String</b></font><font color="#000080">[ </font><font color="#800000">8 </font><font color="#000080">];
+</font><font color="#FF0000"><b>Const
+</b></font>	TypeNames<font color="#000080">: </font>TypesArray <font color="#000080">=
+</font>	  <font color="#000080">( </font><font color="#800000">'FLOPPY'</font><font color="#000080">, </font><font color="#800000">'HARDDISK'</font><font color="#000080">,</font><font color="#800000">'REMAPPED'</font><font color="#000080">,</font><font color="#800000">'REMOTE'</font><font color="#000080">,</font><font color="#800000">'CD_ROM'</font><font color="#000080">,
+      </font><font color="#800000">'RAMDISK'</font><font color="#000080">,</font><font color="#800000">'INVALID' </font><font color="#000080">);
+</font><font color="#FF0000"><b>Var
+</b></font>	n<font color="#000080">: </font>TDriveNums<font color="#000080">;
+</font>	Map<font color="#000080">: </font>TDriveMap<font color="#000080">;
+</font>	first<font color="#000080">: </font>Boolean<font color="#000080">;
+</font>	f<font color="#000080">: </font>TDriveTypes<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>WriteInfo<font color="#000080">( </font><font color="#FF0000"><b>Const </b></font>di<font color="#000080">: </font>TDriveInfo <font color="#000080">);
+</font>	<font color="#FF0000"><b>Begin
+</b></font>		<font color="#FF0000"><b>If </b></font><font color="#000080">([ </font>INVALID<font color="#000080">, </font>CD_ROM<font color="#000080">, </font>FLOPPY <font color="#000080">] * </font>di<font color="#000080">.</font>Flags <font color="#000080">) = [] </font><font color="#FF0000"><b>Then Begin
+</b></font>		  Write<font color="#000080">( </font><font color="#800000">'  ' </font><font color="#000080">);
+</font>			<font color="#FF0000"><b>If not</b></font><font color="#000080">(</font>REMOTE <font color="#FF0000"><b>In </b></font>di<font color="#000080">.</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>Then Begin
+</b></font>			  WriteLn<font color="#000080">( </font><font color="#800000">'Volumen Name: '</font><font color="#000080">, </font>StrPas<font color="#000080">(@</font>di<font color="#000080">.</font>Info<font color="#000080">.</font>VolName<font color="#000080">),
+</font>			           <font color="#800000">', Serial-No.: '</font><font color="#000080">, </font>di<font color="#000080">.</font>Info<font color="#000080">.</font>SerialNo<font color="#000080">,
+</font>			           <font color="#800000">', FAT-TYpe: '</font><font color="#000080">, </font>StrPas<font color="#000080">(@</font>di<font color="#000080">.</font>Info<font color="#000080">.</font>FATType<font color="#000080">) );
+</font>			<font color="#FF0000"><b>End </b></font><font color="#008000"><i>{ If }
+</i></font>			<font color="#FF0000"><b>Else
+</b></font>			  WriteLn<font color="#000080">( </font><font color="#800000">'Netshare: '</font><font color="#000080">, </font>StrPas<font color="#000080">(@</font>di<font color="#000080">.</font>DevName<font color="#000080">));
+</font>		<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ If }
+</i></font>	<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ WriteInfo }
+
+</i></font><font color="#FF0000"><b>Begin
+</b></font><font color="#008000"><i>{$IFDEF WINDOWS}
+  </i></font>ScreenSize<font color="#000080">.</font>Y <font color="#000080">:= </font><font color="#800000">80</font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+  </i></font>BuildDriveMap<font color="#000080">( </font>Map <font color="#000080">);
+</font>	<font color="#FF0000"><b>For </b></font>n <font color="#000080">:= </font>Min_DriveNums <font color="#FF0000"><b>To </b></font>Max_DriveNums <font color="#FF0000"><b>Do Begin
+</b></font>	  first <font color="#000080">:= </font>True<font color="#000080">;
+</font>		Write<font color="#000080">( </font><font color="#800000">'Drive '</font><font color="#000080">,</font>Chr<font color="#000080">( </font>n<font color="#000080">+</font>Ord<font color="#000080">( </font><font color="#800000">'@' </font><font color="#000080">) ),</font><font color="#800000">': [' </font><font color="#000080">);
+</font>		<font color="#FF0000"><b>For </b></font>f <font color="#000080">:= </font>Low<font color="#000080">( </font>TDriveTypes <font color="#000080">) </font><font color="#FF0000"><b>To </b></font>High<font color="#000080">( </font>TDriveTypes <font color="#000080">)  </font><font color="#FF0000"><b>Do Begin
+</b></font>		  <font color="#FF0000"><b>If </b></font>f <font color="#FF0000"><b>in </b></font>Map<font color="#000080">[ </font>n <font color="#000080">].</font>Flags <font color="#FF0000"><b>Then Begin
+</b></font>			  <font color="#FF0000"><b>If </b></font>first <font color="#FF0000"><b>Then 
+</b></font>				  first <font color="#000080">:= </font>false
+				<font color="#FF0000"><b>Else
+</b></font>				  Write<font color="#000080">( </font><font color="#800000">', ' </font><font color="#000080">);
+</font>				Write<font color="#000080">( </font>TypeNames<font color="#000080">[ </font>f <font color="#000080">] );
+</font>		  <font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ If }
+</i></font>		<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ For }
+</i></font>		WriteLn<font color="#000080">(</font><font color="#800000">']'</font><font color="#000080">);
+</font>		WriteInfo<font color="#000080">( </font>Map<font color="#000080">[ </font>n <font color="#000080">] );
+</font>	<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ For }
+</i></font>	
+<font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0101.PAS">Original</a><b>]</b></p></body>
+</html>

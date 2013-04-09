@@ -1,0 +1,825 @@
+<html>
+<head><title> "Gather files into an archive" by BRUNO OLSEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to FILES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0105.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{
+Hello Gayle!
+
+As I was working on an installation program and needed build-in
+compression/decompression I found out the sources available in SWAG only
+handled one file at a time thus couldn't create archives. So I created a
+little utility to gather several file into one with the ability to
+seperate them again.
+
+It can be used for several other things. Just a few weeks ago I presented
+this as a solution to a guy who wanted to create one resource file from
+several datafiles. So I think this might be usefull enough for SWAG :))
+
+..SWG to include it in: FILES.SWG
+Subject proposal: Gather several file into one
+
+The .pas files:
+--------------------------------------------------------- }
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>Gather<font color="#000080">;  </font><font color="#008000"><i>{ program to extract files at the end !! }
+
+{Gather v. 1.2
+
+Archive several file in one, still being able to restore the original
+files.
+
+Copyright 1996-97 Centennial Innovations by Bruno Olsen,
+All rights reserved.
+
+LICENCE:
+
+1. You can distribute this program as long as no fee is charged. 2. You
+can use this source free of charge as long as you agree to 3-5. 3. If
+using this source, you must notify the auther. This will incurrage
+   the auther to update the source, and the auther will know if his
+effords
+   was worth while.
+4. If modifying this source, you must notify the original auther about the
+   modifications, and send the full modified source. NOTE: Send ONLY the
+source
+   for THIS program, NOT the source of the program in which this source is
+used. 5. This source may be used in either freeware, shareware or
+commercial 
+   applications, as long as the author is familiar with the use, see 3-4.
+
+Author can be contacted through these sources:
+
+Bulletin Board: Mountain Online Services
+                +45 58841025, +45 58841024
+
+FidoNet: 2:236/42, 2:236/49
+
+Internet: bo@vestnet.dk
+
+Homepage: http://home.vest.net/bo
+
+Snail mail: Centennial Innovations
+            Bruno Olsen
+            Fugleveanget 30
+            DK-4270 Hoeng
+            Denmark
+
+History:
+Version 1.0    First usable version. Only files with the Archive attribute
+               set is archived.
+Version 1.2    Extended header to hold attribute information. Directories
+are
+               now stored and the files within are too. Limitation of
+Archive
+               files eliminated. Changes in header: Attrib added, DirNum
+               added and Numbers changed from Byte to Integer. Rewritten
+               most of the code to recursive rutines.}
+
+</i></font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">, </font>CRT<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE </b></font>HeaderType<font color="#000080">=</font><font color="#FF0000"><b>RECORD
+                 </b></font>Str<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+                                </font><font color="#008000"><i>{Record 0: Identifying string='GTH_2'
+                                 Record 1 and above: File/directory name}
+                 </i></font>Attrib<font color="#000080">:</font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">5</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean<font color="#000080">;
+                                </font><font color="#008000"><i>{Attrib: 1   true if   System
+                                         2   true if   Hidden
+                                         3   true if   Archive
+                                         4   true if   ReadOnly
+                                         5   true if   Directory}
+                 </i></font>Numbers<font color="#000080">:</font>Integer<font color="#000080">;
+                                </font><font color="#008000"><i>{Numbers:
+                                 Record 0: Amount of files stored.
+                                 Record 1 and above: The number of the
+                                                     directory.
+                                                     The root gather
+                                                     directory is 0.
+                                 NOT used for files.}
+                 </i></font>DirNum<font color="#000080">:</font>Integer<font color="#000080">;
+                                </font><font color="#008000"><i>{DirNum:
+                                 Record 0: Amount of directories stored.
+                                 Record 1 and above: The number of the
+                                                     directory the files/
+                                                     directories reside
+in.
+                                                     The root gather
+                                                     directory is 0.}
+                 </i></font>Offsets<font color="#000080">:</font>LongInt<font color="#000080">;
+                                </font><font color="#008000"><i>{Offsets:
+                                 Record 0: Where the header ends.
+                                 Record 1 and above: Where the current
+file
+                                                     processed ends.
+Previous
+                                                     + 1 marks file
+start.}
+                </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>RecordSize<font color="#000080">=</font><font color="#800000">26</font><font color="#000080">;  </font><font color="#008000"><i>{The size of header type. Edit this when modifying
+header}
+      </i></font>HeaderName<font color="#000080">=</font><font color="#800000">'GTH_2'</font><font color="#000080">;
+      </font>VersionNumber<font color="#000080">=</font><font color="#800000">'1.2'</font><font color="#000080">;
+      </font>CYear<font color="#000080">=</font><font color="#800000">'1996-97'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>InFiles<font color="#000080">,
+    </font>OutFile<font color="#000080">:</font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+    </font>MainFile<font color="#000080">:</font><font color="#FF0000"><b>File of </b></font>HeaderType<font color="#000080">;
+    </font>Main<font color="#000080">:</font>HeaderType<font color="#000080">;
+    </font>MaxFiles<font color="#000080">:</font>Byte<font color="#000080">;
+    </font>Last<font color="#000080">:</font>Byte<font color="#000080">;
+    </font>NumRead<font color="#000080">, </font>NumWritten<font color="#000080">: </font>Word<font color="#000080">;
+    </font>Buf<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4000</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>FSize<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>Error<font color="#000080">:</font>Word<font color="#000080">;
+    </font>TempSize<font color="#000080">,
+    </font>SizeCount<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>FileCount<font color="#000080">,
+    </font>DirCount<font color="#000080">:</font>Integer<font color="#000080">;
+    </font>DirInfo<font color="#000080">:</font>SearchRec<font color="#000080">;
+    </font>CurrentDir<font color="#000080">,
+    </font>LastDir<font color="#000080">,
+    </font>DirNum<font color="#000080">,
+    </font>InDirNum<font color="#000080">:</font>Integer<font color="#000080">;
+    </font>StartDir<font color="#000080">,
+    </font>GatherDir<font color="#000080">,
+    </font>GatherFiles<font color="#000080">,
+    </font>GatherTo<font color="#000080">,
+    </font>ConvStr<font color="#000080">,
+    </font>EnvTemp<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>ProcDir<font color="#000080">:</font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Get_File_Size<font color="#000080">(</font>FName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>var </b></font>FSize <font color="#000080">: </font>longint<font color="#000080">;
+                    </font><font color="#FF0000"><b>var </b></font>Error <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>SR    <font color="#000080">: </font>SearchRec<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN 
+  </b></font><font color="#008000"><i>{$I-}
+  </i></font>FindFirst<font color="#000080">(</font>FName<font color="#000080">,</font>Archive<font color="#000080">,</font>SR<font color="#000080">);
+  </font>Error <font color="#000080">:= </font>DosError<font color="#000080">;
+  </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>if </b></font>Error <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>FSize <font color="#000080">:= </font>SR<font color="#000080">.</font>Size
+  <font color="#FF0000"><b>else
+    </b></font>FSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CountFiles<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>DirCount<font color="#000080">, </font>FileCount<font color="#000080">:</font>Integer<font color="#000080">;</font><font color="#FF0000"><b>VAR
+</b></font>SizeCount<font color="#000080">:</font>LongInt<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>LastDir<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>BEGIN
+  </b></font>FindFirst<font color="#000080">(</font>GatherFiles<font color="#000080">, </font>AnyFile<font color="#000080">-</font>VolumeID<font color="#000080">, </font>DirInfo<font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+   begin
+    IF </b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Attr<font color="#000080">=</font>Directory<font color="#000080">) </font><font color="#FF0000"><b>AND NOT</b></font><font color="#000080">((</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>OR
+</b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">=</font><font color="#800000">'..'</font><font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     BEGIN
+      </b></font>DirCount<font color="#000080">:=</font>DirCount<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+      </font>ChDir<font color="#000080">(</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">);
+      </font>LastDir<font color="#000080">:=</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">;
+      </font>CountFiles<font color="#000080">(</font>DirCount<font color="#000080">,</font>FileCount<font color="#000080">,</font>SizeCount<font color="#000080">);
+      </font>ChDir<font color="#000080">(</font><font color="#800000">'..'</font><font color="#000080">);
+      </font>FindFirst<font color="#000080">(</font><font color="#800000">'*.*'</font><font color="#000080">, </font>AnyFile<font color="#000080">-</font>VolumeID<font color="#000080">, </font>DirInfo<font color="#000080">); </font><font color="#008000"><i>{ Same as DIR *.PAS }
+      </i></font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND NOT</b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">=</font>LastDir<font color="#000080">) </font><font color="#FF0000"><b>do
+       begin
+        </b></font>FindNext<font color="#000080">(</font>DirInfo<font color="#000080">);
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>END
+     ELSE
+      IF </b></font>DirInfo<font color="#000080">.</font>Attr <font color="#FF0000"><b>IN</b></font><font color="#000080">[</font>Archive<font color="#000080">,</font>ReadOnly<font color="#000080">,</font>Hidden<font color="#000080">,</font>SysFile<font color="#000080">] </font><font color="#FF0000"><b>THEN
+       BEGIN
+        </b></font>FileCount<font color="#000080">:=</font>FileCount<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+        </font>SizeCount<font color="#000080">:=</font>SizeCount<font color="#000080">+</font>DirInfo<font color="#000080">.</font>Size<font color="#000080">;
+       </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>FindNext<font color="#000080">(</font>DirInfo<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ResetAttrib<font color="#000080">;
+
+ </font><font color="#FF0000"><b>VAR </b></font>Counter<font color="#000080">:</font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ FOR </b></font>Counter<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">5 </font><font color="#FF0000"><b>DO
+  </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font>Counter<font color="#000080">]:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SetAttrib<font color="#000080">;
+
+ </font><font color="#FF0000"><b>VAR </b></font>Check<font color="#000080">:</font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>ResetAttrib<font color="#000080">;
+ </font>Check<font color="#000080">:=</font>DirInfo<font color="#000080">.</font>Attr<font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Check<font color="#000080">-</font><font color="#800000">32</font><font color="#000080">) </font><font color="#FF0000"><b>IN</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+  BEGIN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">-</font><font color="#800000">32</font><font color="#000080">;
+   </font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Check<font color="#000080">-</font><font color="#800000">16</font><font color="#000080">) </font><font color="#FF0000"><b>IN</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+  BEGIN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">-</font><font color="#800000">16</font><font color="#000080">;
+   </font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">]:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Check<font color="#000080">-</font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>IN</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+  BEGIN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">-</font><font color="#800000">8</font><font color="#000080">;    </font><font color="#008000"><i>{VolumeID is not used}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Check<font color="#000080">-</font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>IN</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+  BEGIN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">-</font><font color="#800000">4</font><font color="#000080">;
+   </font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Check<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>IN</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+  BEGIN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">;
+   </font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>Check<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+  BEGIN
+   </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>AddFile<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>Assign<font color="#000080">(</font>InFiles<font color="#000080">,</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>InFiles<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font><font color="#FF0000"><b>repeat
+  </b></font>BlockRead<font color="#000080">(</font>InFiles<font color="#000080">, </font>Buf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Buf<font color="#000080">), </font>NumRead<font color="#000080">);
+  </font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">, </font>Buf<font color="#000080">, </font>NumRead<font color="#000080">, </font>NumWritten<font color="#000080">);
+ </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>NumRead <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>NumWritten <font color="#000080">&lt;&gt; </font>NumRead<font color="#000080">);
+ </font>Close<font color="#000080">(</font>InFiles<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MakeHeader<font color="#000080">(</font>LastDir<font color="#000080">:</font>Integer<font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>CurrentDir<font color="#000080">:</font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>LastDirName<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>BEGIN
+  </b></font>FindFirst<font color="#000080">(</font>GatherFiles<font color="#000080">, </font>AnyFile<font color="#000080">-</font>VolumeID<font color="#000080">, </font>DirInfo<font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+   begin
+    IF </b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Attr<font color="#000080">=</font>Directory<font color="#000080">) </font><font color="#FF0000"><b>AND NOT</b></font><font color="#000080">((</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">=</font><font color="#800000">'.'</font><font color="#000080">) </font><font color="#FF0000"><b>OR
+</b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">=</font><font color="#800000">'..'</font><font color="#000080">)) </font><font color="#FF0000"><b>THEN
+     BEGIN
+      </b></font>CurrentDir<font color="#000080">:=</font>CurrentDir<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+      </font>DirNum<font color="#000080">:=</font>CurrentDir<font color="#000080">;
+      </font>InDirNum<font color="#000080">:=</font>LastDir<font color="#000080">;
+      </font>ChDir<font color="#000080">(</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">);
+      </font>LastDirName<font color="#000080">:=</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">;
+      </font>Main<font color="#000080">.</font>Str<font color="#000080">:=</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">;
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'Storing directory: '</font><font color="#000080">+</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">);
+      </font>SetAttrib<font color="#000080">;
+      </font>Main<font color="#000080">.</font>Numbers<font color="#000080">:=</font>DirNum<font color="#000080">;
+      </font>Main<font color="#000080">.</font>DirNum<font color="#000080">:=</font>InDirNum<font color="#000080">;
+      </font>Main<font color="#000080">.</font>Offsets<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font>Write<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+      </font>MakeHeader<font color="#000080">(</font>CurrentDir<font color="#000080">,</font>CurrentDir<font color="#000080">);
+      </font>ChDir<font color="#000080">(</font><font color="#800000">'..'</font><font color="#000080">);
+      </font>FindFirst<font color="#000080">(</font><font color="#800000">'*.*'</font><font color="#000080">, </font>AnyFile<font color="#000080">-</font>VolumeID<font color="#000080">, </font>DirInfo<font color="#000080">);
+      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND NOT</b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">=</font>LastDirName<font color="#000080">) </font><font color="#FF0000"><b>do
+       begin
+        </b></font>FindNext<font color="#000080">(</font>DirInfo<font color="#000080">);
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>END
+     ELSE IF </b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Attr<font color="#000080">&lt;&gt;</font>Directory<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>DirInfo<font color="#000080">.</font>Attr<font color="#000080">&lt;&gt;</font>VolumeID<font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+       </b></font>Main<font color="#000080">.</font>Str<font color="#000080">:=</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">;
+       </font>WriteLn<font color="#000080">(</font><font color="#800000">'Storing file: '</font><font color="#000080">+</font>DirInfo<font color="#000080">.</font>Name<font color="#000080">);
+       </font>SetAttrib<font color="#000080">;
+       </font>Main<font color="#000080">.</font>Numbers<font color="#000080">:=</font>DirNum<font color="#000080">;
+       </font>Main<font color="#000080">.</font>DirNum<font color="#000080">:=</font>InDirNum<font color="#000080">;
+       </font>Main<font color="#000080">.</font>Offsets<font color="#000080">:=</font>TempSize<font color="#000080">+</font>DirInfo<font color="#000080">.</font>Size<font color="#000080">;
+       </font>TempSize<font color="#000080">:=</font>Main<font color="#000080">.</font>Offsets<font color="#000080">;
+       </font>AddFile<font color="#000080">;
+       </font>Write<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>FindNext<font color="#000080">(</font>DirInfo<font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>GetParams<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>Counter<font color="#000080">:</font>Integer<font color="#000080">;
+
+ </font><font color="#FF0000"><b>BEGIN
+  </b></font>ProcDir<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>ParamCount<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+   BEGIN
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Usage:'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'GATHER [ -d | -D ] [DirectoryName] InFiles OutFile'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'-d or -D     : Gather files and directory structure'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'DirectoryName: Starting directory'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'InFiles      : Files to gather'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'OutFile      : File to gather the files into'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Examples:'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'GATHER *.PAS PASFILES.GTH    Gather all .PAS-files into the file PASFILES.GTH'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'GATHER -D c:\dos *.* DOSDIR.GTH  GATHER all files in c:\dos and all directories'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                 and all files in them into the file DOSDIR.GTH'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+   </font><font color="#FF0000"><b>END
+   ELSE
+    BEGIN
+     </b></font>Counter<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)=</font><font color="#800000">'-d'</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)=</font><font color="#800000">'-D'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+       </b></font>ProcDir<font color="#000080">:=</font>TRUE<font color="#000080">;
+       </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>ParamCount<font color="#000080">-</font>Counter<font color="#000080">)=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+      BEGIN
+       </b></font>GatherDir<font color="#000080">:=</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">);
+       </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>END
+      ELSE
+       </b></font>GatherDir<font color="#000080">:=</font>StartDir<font color="#000080">;
+     </font>GatherFiles<font color="#000080">:=</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">);
+     </font>GatherTo<font color="#000080">:=</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>CLRSCR<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Gather version '</font><font color="#000080">+</font>VersionNumber<font color="#000080">+</font><font color="#800000">' (C) '</font><font color="#000080">+</font>CYear<font color="#000080">+</font><font color="#800000">' Centennial Innovations by Bruno Olsen'</font><font color="#000080">);
+ </font>WriteLn<font color="#000080">;
+ </font>GetDir<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>StartDir<font color="#000080">); </font><font color="#008000"><i>{ 0 = Current drive }
+ </i></font>EnvTemp<font color="#000080">:=</font>GetEnv<font color="#000080">(</font><font color="#800000">'TEMP'</font><font color="#000080">);
+ </font>EnvTemp<font color="#000080">:=</font>EnvTemp<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">;
+ </font>DirCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>FileCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>SizeCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>GetParams<font color="#000080">;
+ </font>ChDir<font color="#000080">(</font>GatherDir<font color="#000080">);
+ </font>Write<font color="#000080">(</font><font color="#800000">'Analizing... '</font><font color="#000080">);
+ </font>CountFiles<font color="#000080">(</font>DirCount<font color="#000080">,</font>FileCount<font color="#000080">,</font>SizeCount<font color="#000080">);
+ </font>Str<font color="#000080">(</font>DirCount<font color="#000080">,</font>ConvStr<font color="#000080">);
+ </font>Write<font color="#000080">(</font><font color="#800000">'Directories: '</font><font color="#000080">+</font>ConvStr<font color="#000080">);
+ </font>Str<font color="#000080">(</font>FileCount<font color="#000080">,</font>ConvStr<font color="#000080">);
+ </font>Write<font color="#000080">(</font><font color="#800000">' Files: '</font><font color="#000080">+</font>ConvStr<font color="#000080">);
+ </font>Str<font color="#000080">(</font>SizeCount<font color="#000080">,</font>ConvStr<font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">' Bytes: '</font><font color="#000080">+</font>ConvStr<font color="#000080">);
+ </font>WriteLn<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Processing...'</font><font color="#000080">);
+ </font>ChDir<font color="#000080">(</font>StartDir<font color="#000080">);
+ </font>MaxFiles<font color="#000080">:=</font>DirCount<font color="#000080">+</font>FileCount<font color="#000080">;
+ </font>ResetAttrib<font color="#000080">;
+ </font>Main<font color="#000080">.</font>Str<font color="#000080">:=</font>HeaderName<font color="#000080">;
+ </font>Main<font color="#000080">.</font>Numbers<font color="#000080">:=</font>FileCount<font color="#000080">;
+ </font>Main<font color="#000080">.</font>DirNum<font color="#000080">:=</font>DirCount<font color="#000080">;
+ </font>Main<font color="#000080">.</font>Offsets<font color="#000080">:=</font>RecordSize<font color="#000080">*(</font>MaxFiles<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+ </font>TempSize<font color="#000080">:=</font>Main<font color="#000080">.</font>Offsets<font color="#000080">;
+ </font>Assign<font color="#000080">(</font>MainFile<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tmp'</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>OutFile<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'main.tmp'</font><font color="#000080">);
+ </font>ReWrite<font color="#000080">(</font>MainFile<font color="#000080">);
+ </font>ReWrite<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>OutFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font>Write<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+ </font>CurrentDir<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>LastDir<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>ChDir<font color="#000080">(</font>GatherDir<font color="#000080">);
+ </font>MakeHeader<font color="#000080">(</font>LastDir<font color="#000080">,</font>CurrentDir<font color="#000080">);
+ </font>ChDir<font color="#000080">(</font>StartDir<font color="#000080">);
+ </font>Close<font color="#000080">(</font>MainFile<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>WriteLn<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Cleaning up...'</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>InFiles<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tmp'</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>OutFile<font color="#000080">,</font>GatherTo<font color="#000080">);
+ </font>ReWrite<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>InFiles<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font>Reset<font color="#000080">(</font>OutFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font><font color="#FF0000"><b>repeat
+   </b></font>BlockRead<font color="#000080">(</font>InFiles<font color="#000080">, </font>Buf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Buf<font color="#000080">), </font>NumRead<font color="#000080">);
+   </font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">, </font>Buf<font color="#000080">, </font>NumRead<font color="#000080">, </font>NumWritten<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>NumRead <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>NumWritten <font color="#000080">&lt;&gt; </font>NumRead<font color="#000080">);
+ </font>Close<font color="#000080">(</font>InFiles<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Assign<font color="#000080">(</font>InFiles<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'main.tmp'</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>OutFile<font color="#000080">,</font>GatherTo<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>InFiles<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font>Reset<font color="#000080">(</font>OutFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font>Seek<font color="#000080">(</font>OutFile<font color="#000080">,</font>FileSize<font color="#000080">(</font>OutFile<font color="#000080">));
+ </font><font color="#FF0000"><b>repeat
+   </b></font>BlockRead<font color="#000080">(</font>InFiles<font color="#000080">, </font>Buf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Buf<font color="#000080">), </font>NumRead<font color="#000080">);
+   </font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">, </font>Buf<font color="#000080">, </font>NumRead<font color="#000080">, </font>NumWritten<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>NumRead <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>NumWritten <font color="#000080">&lt;&gt; </font>NumRead<font color="#000080">);
+ </font>Close<font color="#000080">(</font>InFiles<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Erase<font color="#000080">(</font>InFiles<font color="#000080">);
+ </font>Assign<font color="#000080">(</font>Infiles<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tmp'</font><font color="#000080">);
+ </font>Erase<font color="#000080">(</font>Infiles<font color="#000080">);
+ </font>ChDir<font color="#000080">(</font>StartDir<font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Done.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+---------------------------------------------------------
+</font><font color="#FF0000"><b>PROGRAM </b></font>XTract<font color="#000080">;
+
+</font><font color="#008000"><i>{Xtract v. 1.2
+
+Restore files Gathered with Gather v. 1.2.
+
+Copyright 1996-97 Centennial Innovations by Bruno Olsen,
+All rights reserved.
+
+LICENCE:
+
+1. You can distribute this program as long as no fee is charged. 2. You
+can use this source free of charge as long as you agree to 3-5. 3. If
+using this source, you must notify the auther. This will incurrage
+   the auther to update the source, and the auther will know if his
+effords
+   was worth while.
+4. If modifying this source, you must notify the original auther about the
+   modifications, and send the full modified source. NOTE: Send ONLY the
+source
+   for THIS program, NOT the source of the program in which this source is
+used. 5. This source may be used in either freeware, shareware or
+commercial 
+   applications, as long as the author is familiar with the use, see 3-4.
+
+Author can be contacted through these sources:
+
+Bulletin Board: Mountain Online Services
+                +45 58841025, +45 58841024
+
+FidoNet: 2:236/42, 2:236/49
+
+Internet: bo@vestnet.dk
+
+Homepage: http://home.vest.net/bo
+
+Snail mail: Centennial Innovations
+            Bruno Olsen
+            Fugleveanget 30
+            DK-4270 Hoeng
+            Denmark
+
+History:
+Version 1.0    First usable version. Only files with the Archive attribute
+               set is archived.
+Version 1.2    Extended header to hold attribute information. Directories
+are
+               now stored and the files within are too. Limitation of
+Archive
+               files eliminated. Changes in header: Attrib added, DirNum
+               added and Numbers changed from Byte to Integer. Rewritten
+               most of the code.}
+
+</i></font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">, </font>CRT<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE </b></font>HeaderType<font color="#000080">=</font><font color="#FF0000"><b>RECORD
+                 </b></font>Str<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+                                </font><font color="#008000"><i>{Record 0: Identifying string='GTH_2'
+                                 Record 1 and above: File/directory name}
+                 </i></font>Attrib<font color="#000080">:</font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">5</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean<font color="#000080">;
+                                </font><font color="#008000"><i>{Attrib: 1   true if   System
+                                         2   true if   Hidden
+                                         3   true if   Archive
+                                         4   true if   ReadOnly
+                                         5   true if   Directory}
+                 </i></font>Numbers<font color="#000080">:</font>Integer<font color="#000080">;
+                                </font><font color="#008000"><i>{Numbers:
+                                 Record 0: Amount of files stored.
+                                 Record 1 and above: The number of the
+                                                     directory.
+                                                     The root gather
+                                                     directory is 0.
+                                 NOT used for files.}
+                 </i></font>DirNum<font color="#000080">:</font>Integer<font color="#000080">;
+                                </font><font color="#008000"><i>{DirNum:
+                                 Record 0: Amount of directories stored.
+                                 Record 1 and above: The number of the
+                                                     directory the files/
+                                                     directories reside
+in.
+                                                     The root gather
+                                                     directory is 0.}
+                 </i></font>Offsets<font color="#000080">:</font>LongInt<font color="#000080">;
+                                </font><font color="#008000"><i>{Offsets:
+                                 Record 0: Where the header ends.
+                                 Record 1 and above: Where the current
+file
+                                                     processed ends.
+Previous
+                                                     + 1 marks file
+start.} {                 Compressed:Boolean;}
+                                {Compressed:
+                                 TRUE if the file was compressed,
+                                 FALSE if the file was stored.}
+                </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>RecordSize<font color="#000080">=</font><font color="#800000">26</font><font color="#000080">;
+      </font>HeaderName<font color="#000080">=</font><font color="#800000">'GTH_2'</font><font color="#000080">;
+      </font>VersionNumber<font color="#000080">=</font><font color="#800000">'1.2'</font><font color="#000080">;
+      </font>CYear<font color="#000080">=</font><font color="#800000">'1996-97'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>InFiles<font color="#000080">,
+    </font>OutFile<font color="#000080">:</font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+    </font>MainFile<font color="#000080">,
+    </font>HeadTemp<font color="#000080">:</font><font color="#FF0000"><b>File of </b></font>HeaderType<font color="#000080">;
+    </font>Main<font color="#000080">:</font>HeaderType<font color="#000080">;
+    </font>Head<font color="#000080">:</font>HeaderType<font color="#000080">;
+    </font>MaxFiles<font color="#000080">:</font>Byte<font color="#000080">;
+    </font>Last<font color="#000080">:</font>Byte<font color="#000080">;
+    </font>NumRead<font color="#000080">, </font>NumWritten<font color="#000080">: </font>Word<font color="#000080">;
+    </font>Buf<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2048</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>FSize<font color="#000080">,
+    </font>Missing<font color="#000080">,
+    </font>EndSize<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>Error<font color="#000080">:</font>Word<font color="#000080">;
+    </font>TempSize<font color="#000080">,
+    </font>SizeCount<font color="#000080">:</font>LongInt<font color="#000080">;
+    </font>FileCount<font color="#000080">,
+    </font>DirCount<font color="#000080">:</font>Integer<font color="#000080">;
+    </font>DirInfo<font color="#000080">:</font>SearchRec<font color="#000080">;
+    </font>CurrentDir<font color="#000080">,
+    </font>LastDir<font color="#000080">,
+    </font>DirNum<font color="#000080">,
+    </font>InDirNum<font color="#000080">:</font>Integer<font color="#000080">;
+    </font>StartDir<font color="#000080">,
+    </font>XtractDir<font color="#000080">,
+    </font>XtractFrom<font color="#000080">,
+    </font>XtractFiles<font color="#000080">,
+    </font>ConvStr<font color="#000080">,
+    </font>EnvTemp<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>ProcDir<font color="#000080">:</font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Get_File_Size<font color="#000080">(</font>FName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>var </b></font>FSize <font color="#000080">: </font>longint<font color="#000080">;
+                    </font><font color="#FF0000"><b>var </b></font>Error <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>SR    <font color="#000080">: </font>SearchRec<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font><font color="#008000"><i>{$I-}
+  </i></font>FindFirst<font color="#000080">(</font>FName<font color="#000080">,</font>Archive<font color="#000080">,</font>SR<font color="#000080">);
+  </font>Error <font color="#000080">:= </font>DosError<font color="#000080">;
+  </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>if </b></font>Error <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>FSize <font color="#000080">:= </font>SR<font color="#000080">.</font>Size
+  <font color="#FF0000"><b>else
+    </b></font>FSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; 
+
+</font><font color="#FF0000"><b>Function </b></font>DirExist<font color="#000080">(</font>st_Dir <font color="#000080">: </font>DirStr<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>wo_Fattr <font color="#000080">: </font>Word<font color="#000080">;
+  </font>fi_Temp  <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>fi_Temp<font color="#000080">, (</font>st_Dir <font color="#000080">+ </font><font color="#800000">'.'</font><font color="#000080">));
+  </font>getfattr<font color="#000080">(</font>fi_Temp<font color="#000080">, </font>wo_Fattr<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Doserror <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>DirExist <font color="#000080">:= </font>False
+  <font color="#FF0000"><b>else
+    </b></font>DirExist <font color="#000080">:= ((</font>wo_Fattr <font color="#FF0000"><b>and </b></font>directory<font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; 
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CountFiles<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>DirCount<font color="#000080">, </font>FileCount<font color="#000080">:</font>Integer<font color="#000080">;</font><font color="#FF0000"><b>VAR
+</b></font>SizeCount<font color="#000080">:</font>LongInt<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>LastDir<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>Counter<font color="#000080">:</font>Integer<font color="#000080">;
+
+ </font><font color="#FF0000"><b>BEGIN
+  </b></font>Get_File_Size<font color="#000080">(</font>XtractFrom<font color="#000080">,</font>FSize<font color="#000080">,</font>Error<font color="#000080">);
+  </font>Assign<font color="#000080">(</font>MainFile<font color="#000080">,</font>XtractFrom<font color="#000080">);
+  </font>Reset<font color="#000080">(</font>MainFile<font color="#000080">);
+  </font>Assign<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tmp'</font><font color="#000080">);
+  </font>ReWrite<font color="#000080">(</font>HeadTemp<font color="#000080">);
+  </font>Read<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+  </font>MaxFiles<font color="#000080">:=</font>Main<font color="#000080">.</font>Numbers<font color="#000080">+</font>Main<font color="#000080">.</font>DirNum<font color="#000080">;
+  </font>TempSize<font color="#000080">:=</font>RecordSize<font color="#000080">*(</font>Maxfiles<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+  </font>SizeCount<font color="#000080">:=</font>FSize<font color="#000080">-</font>TempSize<font color="#000080">;
+  </font>DirCount<font color="#000080">:=</font>Main<font color="#000080">.</font>DirNum<font color="#000080">;
+  </font>FileCount<font color="#000080">:=</font>Main<font color="#000080">.</font>Numbers<font color="#000080">;
+  </font>Write<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>Main<font color="#000080">);
+  </font><font color="#FF0000"><b>FOR </b></font>Counter<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>MaxFiles <font color="#FF0000"><b>DO
+   BEGIN
+    </b></font>Read<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+    </font>Write<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>Main<font color="#000080">);
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Close<font color="#000080">(</font>MainFile<font color="#000080">);
+  </font>Close<font color="#000080">(</font>HeadTemp<font color="#000080">);
+  </font>Assign<font color="#000080">(</font>MainFile<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tm2'</font><font color="#000080">);
+  </font>Reset<font color="#000080">(</font>HeadTemp<font color="#000080">);
+  </font>ReWrite<font color="#000080">(</font>MainFile<font color="#000080">);
+  </font><font color="#FF0000"><b>While NOT</b></font><font color="#000080">(</font>EOF<font color="#000080">(</font>HeadTemp<font color="#000080">)) </font><font color="#FF0000"><b>DO
+   BEGIN
+    </b></font>Read<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>Main<font color="#000080">);
+    </font>Write<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ResetAttrib<font color="#000080">;
+
+ </font><font color="#FF0000"><b>VAR </b></font>Counter<font color="#000080">:</font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ FOR </b></font>Counter<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">5 </font><font color="#FF0000"><b>DO
+  </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font>Counter<font color="#000080">]:=</font>False<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SetAttrib<font color="#000080">;
+
+ </font><font color="#FF0000"><b>VAR </b></font>Check<font color="#000080">:</font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>Check<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]=</font>TRUE <font color="#FF0000"><b>THEN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">+</font>Archive<font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font>TRUE <font color="#FF0000"><b>THEN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">+</font>SysFile<font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]=</font>TRUE <font color="#FF0000"><b>THEN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">+</font>Hidden<font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]=</font>TRUE <font color="#FF0000"><b>THEN
+   </b></font>Check<font color="#000080">:=</font>Check<font color="#000080">+</font>ReadOnly<font color="#000080">;
+ </font>SetFAttr<font color="#000080">(</font>OutFile<font color="#000080">,</font>Check<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MakeFile<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>Write<font color="#000080">(</font><font color="#800000">'Xtracting file: '</font><font color="#000080">+</font>Main<font color="#000080">.</font>Str<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>OutFile<font color="#000080">,</font>Main<font color="#000080">.</font>Str<font color="#000080">);
+ </font>ReWrite<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>EndSize<font color="#000080">:=</font>Main<font color="#000080">.</font>Offsets<font color="#000080">-</font>TempSize<font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font>EndSize<font color="#000080">&gt;</font><font color="#800000">2048 </font><font color="#FF0000"><b>THEN
+  BEGIN
+   repeat
+    </b></font>BlockRead<font color="#000080">(</font>InFiles<font color="#000080">, </font>Buf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Buf<font color="#000080">), </font>NumRead<font color="#000080">);
+    </font>Reset<font color="#000080">(</font>OutFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font>Seek<font color="#000080">(</font>OutFile<font color="#000080">,</font>FileSize<font color="#000080">(</font>OutFile<font color="#000080">));
+    </font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">, </font>Buf<font color="#000080">, </font>NumRead<font color="#000080">, </font>NumWritten<font color="#000080">);
+    </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+    </font>Get_File_Size<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">,</font>FSize<font color="#000080">,</font>Error<font color="#000080">);
+   </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>EndSize<font color="#000080">-</font>FSize<font color="#000080">)&lt;</font><font color="#800000">2048</font><font color="#000080">;
+   </font>Missing<font color="#000080">:=</font>EndSize<font color="#000080">-</font>FSize<font color="#000080">;
+  </font><font color="#FF0000"><b>END ELSE </b></font>Missing<font color="#000080">:=</font>EndSize<font color="#000080">;
+ </font>BlockRead<font color="#000080">(</font>InFiles<font color="#000080">,</font>Buf<font color="#000080">,</font>Missing<font color="#000080">,</font>NumRead<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>OutFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font>Seek<font color="#000080">(</font>OutFile<font color="#000080">,</font>FileSize<font color="#000080">(</font>OutFile<font color="#000080">));
+ </font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">,</font>Buf<font color="#000080">,</font>Missing<font color="#000080">,</font>NumWritten<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>SetAttrib<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Ok'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ReadHeader<font color="#000080">(</font>LastDir<font color="#000080">:</font>Integer<font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>CurrentDir<font color="#000080">:</font>Integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR </b></font>LastDirName<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>Counter<font color="#000080">:</font>Integer<font color="#000080">;
+    </font>DoneThis<font color="#000080">:</font>Boolean<font color="#000080">;
+
+ </font><font color="#FF0000"><b>BEGIN
+  </b></font>Assign<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tm2'</font><font color="#000080">);
+  </font>CurrentDir<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>Counter<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>While NOT</b></font><font color="#000080">(</font>EOF<font color="#000080">(</font>MainFile<font color="#000080">)) </font><font color="#FF0000"><b>DO
+   BEGIN
+    </b></font>Read<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>Main<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+     BEGIN
+      </b></font>Write<font color="#000080">(</font><font color="#800000">'Xtracting directory: '</font><font color="#000080">+</font>Main<font color="#000080">.</font>Str<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>Main<font color="#000080">.</font>DirNum<font color="#000080">=</font>CurrentDir <font color="#FF0000"><b>THEN
+       BEGIN
+        IF NOT</b></font><font color="#000080">(</font>DirExist<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">)) </font><font color="#FF0000"><b>THEN </b></font>MkDir<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">);
+        </font>ChDir<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">);
+        </font>CurrentDir<font color="#000080">:=</font>Main<font color="#000080">.</font>Numbers<font color="#000080">;
+        </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+        </font>WriteLn<font color="#000080">(</font><font color="#800000">'Ok'</font><font color="#000080">);
+       </font><font color="#FF0000"><b>END
+        ELSE
+         BEGIN
+          </b></font>Write<font color="#000080">(</font><font color="#800000">'Searching... '</font><font color="#000080">);
+          </font>LastDir<font color="#000080">:=</font>CurrentDir<font color="#000080">;
+          </font><font color="#FF0000"><b>REPEAT
+           </b></font>Reset<font color="#000080">(</font>HeadTemp<font color="#000080">);
+           </font>Read<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>Head<font color="#000080">);
+           </font><font color="#FF0000"><b>While NOT</b></font><font color="#000080">(</font>EOF<font color="#000080">(</font>HeadTemp<font color="#000080">)) </font><font color="#FF0000"><b>DO
+            BEGIN
+             </b></font>Read<font color="#000080">(</font>HeadTemp<font color="#000080">,</font>Head<font color="#000080">);
+             </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Head<font color="#000080">.</font>Numbers<font color="#000080">=</font>LastDir<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>Head<font color="#000080">.</font>Attrib<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">]) </font><font color="#FF0000"><b>THEN
+              BEGIN
+               </b></font>ChDir<font color="#000080">(</font><font color="#800000">'..'</font><font color="#000080">);
+               </font>LastDir<font color="#000080">:=</font>Head<font color="#000080">.</font>DirNum<font color="#000080">;
+               </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>UNTIL </b></font>LastDir<font color="#000080">=</font>Main<font color="#000080">.</font>DirNum<font color="#000080">;
+          </font><font color="#FF0000"><b>IF NOT</b></font><font color="#000080">(</font>DirExist<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">)) </font><font color="#FF0000"><b>THEN </b></font>MkDir<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">);
+          </font>ChDir<font color="#000080">(</font>Main<font color="#000080">.</font>Str<font color="#000080">);
+          </font>CurrentDir<font color="#000080">:=</font>Main<font color="#000080">.</font>Numbers<font color="#000080">;
+          </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+          </font>WriteLn<font color="#000080">(</font><font color="#800000">'Ok'</font><font color="#000080">);
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>END
+     ELSE
+      BEGIN
+       </b></font>MakeFile<font color="#000080">;
+       </font>TempSize<font color="#000080">:=</font>Main<font color="#000080">.</font>Offsets<font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>GetParams<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>Counter<font color="#000080">:</font>Integer<font color="#000080">;
+
+ </font><font color="#FF0000"><b>BEGIN
+  </b></font>ProcDir<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>ParamCount<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+   BEGIN
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Usage:'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'XTRACT [ -d | -D ] [DirectoryName] InFile OutFiles'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'-d or -D     : Gather files and directory structure'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'DirectoryName: Starting directory'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'InFile       : File to restore from'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'OutFiles     : Files to restore'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">;
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Examples:'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'XTRACT PASFILES.GTH *.PAS    Gather all .PAS-files into the
+</font><font color="#FF0000"><b>file </b></font>PASFILES<font color="#000080">.</font>GTH<font color="#800000">');
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'XTRACT -D c:\dos DOSDIR.GTH *.*  GATHER all files in c:\dos
+</font><font color="#FF0000"><b>and </b></font>all directories<font color="#800000">');
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                 and all files in them into
+</font>the <font color="#FF0000"><b>file </b></font>DOSDIR<font color="#000080">.</font>GTH<font color="#800000">');
+    </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+   </font><font color="#FF0000"><b>END
+   ELSE
+    BEGIN
+     </b></font>Counter<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)=</font><font color="#800000">'-d'</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)=</font><font color="#800000">'-D'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+       </b></font>ProcDir<font color="#000080">:=</font>TRUE<font color="#000080">;
+       </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>ParamCount<font color="#000080">-</font>Counter<font color="#000080">)=</font><font color="#800000">2 </font><font color="#FF0000"><b>THEN
+      BEGIN
+       </b></font>XtractDir<font color="#000080">:=</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">);
+       </font>Counter<font color="#000080">:=</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>END
+      ELSE
+       </b></font>XtractDir<font color="#000080">:=</font>StartDir<font color="#000080">;
+     </font>XtractFrom<font color="#000080">:=</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">);
+     </font>XtractFiles<font color="#000080">:=</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>CLRSCR<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Xtract version '</font><font color="#000080">+</font>VersionNumber<font color="#000080">+</font><font color="#800000">' (C) '</font><font color="#000080">+</font>CYear<font color="#000080">+</font><font color="#800000">' Centennial
+</font>Innovations by Bruno Olsen<font color="#800000">');
+ </font>WriteLn<font color="#000080">;
+ </font>GetDir<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>StartDir<font color="#000080">); </font><font color="#008000"><i>{ 0 = Current drive }
+ </i></font>EnvTemp<font color="#000080">:=</font>GetEnv<font color="#000080">(</font><font color="#800000">'TEMP'</font><font color="#000080">);
+ </font>EnvTemp<font color="#000080">:=</font>EnvTemp<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">;
+ </font>DirCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>FileCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>SizeCount<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>GetParams<font color="#000080">;
+ </font>Write<font color="#000080">(</font><font color="#800000">'Analizing... '</font><font color="#000080">);
+ </font>CountFiles<font color="#000080">(</font>DirCount<font color="#000080">,</font>FileCount<font color="#000080">,</font>SizeCount<font color="#000080">);
+ </font>Str<font color="#000080">(</font>DirCount<font color="#000080">,</font>ConvStr<font color="#000080">);
+ </font>Write<font color="#000080">(</font><font color="#800000">'Directories: '</font><font color="#000080">+</font>ConvStr<font color="#000080">);
+ </font>Str<font color="#000080">(</font>FileCount<font color="#000080">,</font>ConvStr<font color="#000080">);
+ </font>Write<font color="#000080">(</font><font color="#800000">' Files: '</font><font color="#000080">+</font>ConvStr<font color="#000080">);
+ </font>Str<font color="#000080">(</font>SizeCount<font color="#000080">,</font>ConvStr<font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">' Bytes: '</font><font color="#000080">+</font>ConvStr<font color="#000080">);
+ </font>WriteLn<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Processing...'</font><font color="#000080">);
+ </font>ResetAttrib<font color="#000080">;
+ </font>Assign<font color="#000080">(</font>MainFile<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tmp'</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>InFiles<font color="#000080">,</font>StartDir<font color="#000080">+</font><font color="#800000">'\'</font><font color="#000080">+</font>XtractFrom<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>MainFile<font color="#000080">);
+ </font>Read<font color="#000080">(</font>MainFile<font color="#000080">,</font>Main<font color="#000080">);
+ </font>Reset<font color="#000080">(</font>InFiles<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+ </font>Seek<font color="#000080">(</font>Infiles<font color="#000080">,</font>TempSize<font color="#000080">);
+ </font>CurrentDir<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>LastDir<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF NOT</b></font><font color="#000080">(</font>DirExist<font color="#000080">(</font>XtractDir<font color="#000080">)) </font><font color="#FF0000"><b>THEN </b></font>MkDir<font color="#000080">(</font>XtractDir<font color="#000080">);
+ </font>ChDir<font color="#000080">(</font>XtractDir<font color="#000080">);
+ </font>ReadHeader<font color="#000080">(</font>LastDir<font color="#000080">,</font>CurrentDir<font color="#000080">);
+ </font>ChDir<font color="#000080">(</font>StartDir<font color="#000080">);
+ </font>Close<font color="#000080">(</font>MainFile<font color="#000080">);
+ </font>Close<font color="#000080">(</font>InFiles<font color="#000080">);
+ </font>WriteLn<font color="#000080">;
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Cleaning up...'</font><font color="#000080">);
+ </font>Assign<font color="#000080">(</font>InFiles<font color="#000080">,</font>EnvTemp<font color="#000080">+</font><font color="#800000">'head.tmp'</font><font color="#000080">);
+ </font>Erase<font color="#000080">(</font>InFiles<font color="#000080">);
+ </font>ChDir<font color="#000080">(</font>StartDir<font color="#000080">);
+ </font>WriteLn<font color="#000080">(</font><font color="#800000">'Done.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+---------------------------------------------------------
+
+</font>Hope you find it a good idea <font color="#000080">:))
+
+---------------------------------------------------------
+</font>Regards<font color="#000080">,
+         </font>Bruno Olsen
+         bo<font color="#000080">@</font>vestnet<font color="#000080">.</font>dk
+         HTTP<font color="#000080">:</font><font color="#008000"><i>//home.vest.net/bo
+</i></font><font color="#000080">---------------------------------------------------------
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to FILES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0105.PAS">Original</a><b>]</b></p></body>
+</html>

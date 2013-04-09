@@ -1,0 +1,107 @@
+<html>
+<head><title> "Simple Multi-Tasker" by SEAN PALMER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0035.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+ by Sean L. Palmer
+ Public Domain
+
+ This is a 'multitasking' Program in the sense that it hooks into
+ the timer interrupt, but what that interrupt ends up actually
+ doing is controlled by the current value in SaveAdr, which
+ changes With each interrupt as the routine passes control back
+ to the tick handler not by Exiting normally, but by an explicit
+ transfer of control.
+ The end result of this is that you can Write a state-driven
+ interrupt handler
+ The included example is RealLY simplistic, and barely tested.
+ I intend to use this to Write a comm port driver that
+ parses the incoming data as it receives it which would
+ be nice in a communications Program that shells to Dos, as
+ the incoming Chars could be saved to disk in the background
+ With buffered ZModem or something...
+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>intTest<font color="#000080">;
+
+</font><font color="#FF0000"><b>Uses
+  </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>saveAdr <font color="#000080">: </font>Word<font color="#000080">;  </font><font color="#008000"><i>{offset in this code segment of where we are now}
+  </i></font>active  <font color="#000080">: </font>Boolean<font color="#000080">;  </font><font color="#008000"><i>{to avoid re-entrancy}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>intHandler<font color="#000080">; </font><font color="#FF0000"><b>Far</b></font><font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">pusha
+  mov  ax, seg @DATA
+  mov  ds, ax
+
+  </font><font color="#008000"><i>{anything you need to do before continuing (reading port data?), do here}
+
+  </i></font><font color="#FF00FF">in   al, $61  </font><font color="#008000"><i>{click speaker as an example}
+  </i></font><font color="#FF00FF">xor  al, 2
+  out  $61, al
+
+  test active, $FF  </font><font color="#008000"><i>{exit now if interrupted ourselves}
+  </i></font><font color="#FF00FF">jz   @OK
+  popa
+  iret
+
+ @OK:
+  inc Byte ptr active
+  sti
+  jmp [saveAdr]  </font><font color="#008000"><i>{near jump to continue where handler last left off}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{call this Procedure from StateHandler to suspend execution Until next time}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>wait<font color="#000080">; </font><font color="#FF0000"><b>near</b></font><font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm </b></font><font color="#008000"><i>{wait For next interrupt}
+  </i></font><font color="#FF00FF">pop Word ptr saveAdr  </font><font color="#008000"><i>{save where to continue next time}
+  </i></font><font color="#FF00FF">dec Byte ptr active
+  popa                  </font><font color="#008000"><i>{restore caller regs}
+  </i></font><font color="#FF00FF">iret
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>c <font color="#000080">: </font>Char <font color="#000080">= </font><font color="#800000">'.'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>stateHandler<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{
+ a stateHandler Procedure should never ever Exit (only by calling 'wait'),
+ shouldn't have any local Variables or parameters, and shouldn't call
+ 'wait' With anything on the stack (like from a subroutine).
+ This routine is using the caller's (interrupted Program's) stack, so be
+ very very careful}
+
+ </i></font><font color="#FF0000"><b>Asm
+   </b></font><font color="#FF00FF">pop bp  </font><font color="#008000"><i>{clean up stack mess left by Turbo's Procedure header}
+ </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#008000"><i>{^ alternative method here is to init saveAdr to offset(proc)+3 and skip
+  the push bp; mov bp,sp altogether}
+
+  </i></font><font color="#FF0000"><b>Repeat  </b></font><font color="#008000"><i>{this is an example only}
+    </i></font>c <font color="#000080">:= </font><font color="#800000">'@'</font><font color="#000080">;
+    </font>wait<font color="#000080">;
+    </font>c <font color="#000080">:= </font><font color="#800000">'.'</font><font color="#000080">;
+    </font>wait<font color="#000080">;
+  </font><font color="#FF0000"><b>Until </b></font>False<font color="#000080">;                </font><font color="#008000"><i>{don't let it return normally!!}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>oldHook <font color="#000080">: </font><font color="#FF0000"><b>Procedure</b></font><font color="#000080">;
+  </font>i       <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>saveAdr <font color="#000080">:= </font>ofs<font color="#000080">(</font>stateHandler<font color="#000080">);
+  </font>getIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">, @</font>oldHook<font color="#000080">);
+  </font>setIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">, @</font>intHandler<font color="#000080">);
+  </font><font color="#FF0000"><b>For </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">1500 </font><font color="#FF0000"><b>do
+    </b></font>Write<font color="#000080">(</font>c<font color="#000080">);
+  </font>setIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">, @</font>oldHook<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0035.PAS">Original</a><b>]</b></p></body>
+</html>

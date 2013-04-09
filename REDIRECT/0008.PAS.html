@@ -1,0 +1,217 @@
+<html>
+<head><title> "EXEC with i/o redirection" by MATTHEW MASTRACCI</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to REDIRECT SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0008.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: Matthew.Mastracci@matrix.cpubbs.cuug.ab.ca (Matthew Mastracci)
+
+ tf&gt; A simple example:
+ tf&gt; SwapVectors;
+ tf&gt; Exec (GetEnv('comspec'), '/c dir *.* &gt; FileName');
+ tf&gt; SwapVectors;
+
+This is a good way to do redirection for directory listings and the like,
+but a better way is to use this unit:  (I wrote it from an idea given to me by
+someone else posting the same sort of this, except this one includes error
+checking and containm much more useful procedures)  From this, you can go:
+
+SwapVectors;
+RedirectOutput('\DIRLIST.TXT');
+Exec(GetEnv('COMSPEC'), '/C DIR *.*');
+StdOutput;
+SwapVectors;
+
+Same thing, but more control...
+
+Here's my REDIR.PAS unit:
+
+  Redirection unit
+
+  - Original author unknown, rewritten by Matthew Mastracci
+  - Added a bit of asm, pipe support, some better file handling ability, more
+     flexibility
+  - If you'd like some information on this program, E-Mail me at:
+     madhacker@matrix.cpubbs.cuug.ab.ca
+  - Feel free to distribute this source anywhere! (Public Domain)
+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>Redir<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+</b></font><font color="#008000"><i>{ Redirects standard input from a textfile/device  ie: command &lt; filename }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectInput<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{ Redirects standard output to a textfile/device  ie: command &gt; filename }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectOutput<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{ Redirects standard error to a textfile/device }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectError<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{ Redirects standard output and error to a textfile/device }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectAllOutput<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{ Redirects all I/O from a textfile  ie: ctty device }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectAll<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+
+</font><font color="#008000"><i>{ Restores STDIN to CON }
+</i></font><font color="#FF0000"><b>procedure </b></font>StdInput<font color="#000080">;
+
+</font><font color="#008000"><i>{ Restores STDOUT to CON }
+</i></font><font color="#FF0000"><b>procedure </b></font>StdOutput<font color="#000080">;
+
+</font><font color="#008000"><i>{ Restores STDERR to CON }
+</i></font><font color="#FF0000"><b>procedure </b></font>StdError<font color="#000080">;
+
+</font><font color="#008000"><i>{ Creates a unique file and returns its name (used for piping) }
+</i></font><font color="#FF0000"><b>function </b></font>UniqueFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>InFile<font color="#000080">, </font>OutFile<font color="#000080">, </font>ErrFile <font color="#000080">: </font>Text<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>STDIN  <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;       </font><font color="#008000"><i>{ Standard Input }
+  </i></font>STDOUT <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;       </font><font color="#008000"><i>{ Standard Output }
+  </i></font>STDERR <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;       </font><font color="#008000"><i>{ Standard Error }
+  </i></font>Redirected <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Boolean <font color="#000080">= (</font>False<font color="#000080">, </font>False<font color="#000080">, </font>False<font color="#000080">);
+
+</font><font color="#008000"><i>{ Duplicates a file handle }
+</i></font><font color="#FF0000"><b>procedure </b></font>ForceDup <font color="#000080">(</font>Existing<font color="#000080">, </font>Second <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>f<font color="#000080">, </font>Error <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">mov ah, $46
+    mov bx, Existing
+    mov cx, Second
+    int $21
+    pushf
+    pop bx
+    mov f, bx
+    mov Error, ax
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>f <font color="#FF0000"><b>and </b></font>FCarry<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>Writeln <font color="#000080">(</font><font color="#800000">'Error '</font><font color="#000080">, </font>Error<font color="#000080">, </font><font color="#800000">' changing handle '</font><font color="#000080">, </font>Second<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Redirects standard input from a textfile/device  ie: command &lt; filename }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectInput<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>Redirected<font color="#000080">[</font>STDIN<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>StdInput<font color="#000080">;
+  </font>Redirected<font color="#000080">[</font>STDIN<font color="#000080">] := </font>True<font color="#000080">;
+  </font>Assign<font color="#000080">(</font>InFile<font color="#000080">, </font>TextFile<font color="#000080">);
+  </font>Reset<font color="#000080">(</font>InFile<font color="#000080">);
+  </font>ForceDup<font color="#000080">(</font>TextRec<font color="#000080">(</font>InFile<font color="#000080">).</font>Handle<font color="#000080">, </font>STDIN<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Redirects standard output to a textfile/device  ie: command &gt; filename }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectOutput<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>Redirected<font color="#000080">[</font>STDOUT<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>StdOutput<font color="#000080">;
+  </font>Redirected<font color="#000080">[</font>STDOUT<font color="#000080">] := </font>True<font color="#000080">;
+  </font>Assign<font color="#000080">(</font>OutFile<font color="#000080">, </font>TextFile<font color="#000080">);
+  </font>Rewrite<font color="#000080">(</font>OutFile<font color="#000080">);
+  </font>ForceDup<font color="#000080">(</font>TextRec<font color="#000080">(</font>OutFile<font color="#000080">).</font>Handle<font color="#000080">, </font>STDOUT<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Redirects standard error to a textfile/device }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectError<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>Redirected<font color="#000080">[</font>STDERR<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>StdError<font color="#000080">;
+  </font>Redirected<font color="#000080">[</font>STDERR<font color="#000080">] := </font>True<font color="#000080">;
+  </font>Assign<font color="#000080">(</font>ErrFile<font color="#000080">, </font>TextFile<font color="#000080">);
+  </font>Rewrite<font color="#000080">(</font>ErrFile<font color="#000080">);
+  </font>ForceDup<font color="#000080">(</font>TextRec<font color="#000080">(</font>ErrFile<font color="#000080">).</font>Handle<font color="#000080">, </font>STDERR<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Redirects standard output and error to a textfile/device }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectAllOutput<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>RedirectOutput<font color="#000080">(</font>TextFile<font color="#000080">);
+  </font>RedirectError<font color="#000080">(</font>TextFile<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Redirects all I/O from a textfile  ie: ctty device }
+</i></font><font color="#FF0000"><b>procedure </b></font>RedirectAll<font color="#000080">(</font>TextFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>RedirectInput<font color="#000080">(</font>TextFile<font color="#000080">);
+  </font>RedirectOutput<font color="#000080">(</font>TextFile<font color="#000080">);
+  </font>RedirectError<font color="#000080">(</font>TextFile<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Restores STDIN to CON }
+</i></font><font color="#FF0000"><b>procedure </b></font>StdInput<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>Redirected<font color="#000080">[</font>STDIN<font color="#000080">] </font><font color="#FF0000"><b>then begin
+    </b></font>Redirected<font color="#000080">[</font>STDIN<font color="#000080">] := </font>False<font color="#000080">;
+    </font>RedirectInput<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">);
+    </font>Close<font color="#000080">(</font>InFile<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Restores STDOUT to CON }
+</i></font><font color="#FF0000"><b>procedure </b></font>StdOutput<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>Redirected<font color="#000080">[</font>STDOUT<font color="#000080">] </font><font color="#FF0000"><b>then begin
+    </b></font>Redirected<font color="#000080">[</font>STDOUT<font color="#000080">] := </font>False<font color="#000080">;
+    </font>RedirectOutput<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">);
+    </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Restores STDERR to CON }
+</i></font><font color="#FF0000"><b>procedure </b></font>StdError<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>Redirected<font color="#000080">[</font>STDERR<font color="#000080">] </font><font color="#FF0000"><b>then begin
+    </b></font>Redirected<font color="#000080">[</font>STDERR<font color="#000080">] := </font>False<font color="#000080">;
+    </font>RedirectOutput<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">);
+    </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>UniqueFile <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>FName <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">20</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char <font color="#000080">= </font><font color="#800000">'\' </font><font color="#000080">+ </font><font color="#800000">#0 </font><font color="#000080">+ </font><font color="#800000">'                  '</font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>FSeg<font color="#000080">, </font>FOfs <font color="#000080">: </font>Word<font color="#000080">;
+    </font>FileName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FSeg <font color="#000080">:= </font>Seg<font color="#000080">(</font>FName<font color="#000080">);
+  </font>FOfs <font color="#000080">:= </font>Ofs<font color="#000080">(</font>FName<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">push ds
+    mov ax, FSeg
+    mov ds, ax
+    mov dx, FOfs
+    mov ah, $5a
+    mov cx, 0
+    int $21
+    pop ds
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Move<font color="#000080">(</font>FName<font color="#000080">, </font>FileName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">9</font><font color="#000080">);
+  </font>FileName<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">#9</font><font color="#000080">;
+  </font>UniqueFile <font color="#000080">:= </font>FileName<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ This is how you can do piping.  It is equivilent to: }
+{ type \autoexec.bat | find &quot;ECHO&quot; | sort /R }
+
+{$M $1000,0,0}
+</i></font><font color="#FF0000"><b>program </b></font>PipeDemo<font color="#000080">;
+</font><font color="#FF0000"><b>uses </b></font>Redir<font color="#000080">, </font>Dos<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>FName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>FName <font color="#000080">:= </font>UniqueFile<font color="#000080">;
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Temporary file: '</font><font color="#000080">, </font>FName<font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Output from pipe:'</font><font color="#000080">);
+  </font>RedirectInput<font color="#000080">(</font><font color="#800000">'\AUTOEXEC.BAT'</font><font color="#000080">);
+  </font>RedirectOutput<font color="#000080">(</font>FName<font color="#000080">);
+  </font>Exec<font color="#000080">(</font><font color="#800000">'C:\DOS\FIND.EXE'</font><font color="#000080">, </font><font color="#800000">'&quot;ECHO&quot;'</font><font color="#000080">);
+  </font>RedirectInput<font color="#000080">(</font>FName<font color="#000080">);
+  </font>RedirectOutput<font color="#000080">(</font><font color="#800000">'CON'</font><font color="#000080">);
+  </font>Exec<font color="#000080">(</font><font color="#800000">'C:\DOS\SORT.EXE'</font><font color="#000080">, </font><font color="#800000">'/R'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to REDIRECT SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0008.PAS">Original</a><b>]</b></p></body>
+</html>

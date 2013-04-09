@@ -1,0 +1,194 @@
+<html>
+<head><title> "Fast File Record Sorting" by PIERRE TOURIGNY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SORTING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0056.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: pierre.tourigny@bbs.synapse.net (Pierre Tourigny)
+
+&gt; I'm looking for an external sort procedure in TP 6 / 7 which allows me
+&gt; to sort a file containing 20,000 records of the following type:
+&gt; RECORD
+&gt;   Phone : String[8];
+&gt;   L_Name : String[27];
+&gt;   F_Name : String[27];
+&gt; END;
+&gt; It must sort on Phone#. I could write it myself but I really need it
+&gt; in a hurry, so if anyone out there has an old sort procedure that I
+&gt; could modify to my own needs, I'd really apriciate it. Speed is of no
+&gt; importance.
+
+Here's a modified merge sort that I used to sort a list of 260,000
+words. It takes little memory and it's a fast O(NlogN) procedure. The
+modification is that it goes external at k=1024 instead of at k=1.
+}
+</i></font><font color="#FF0000"><b>program </b></font>dictri<font color="#000080">;
+</font><font color="#008000"><i>{94-11-10, Pierre Tourigny, pierre.tourigny@bbs.synapse.net}
+</i></font><font color="#FF0000"><b>uses </b></font>strings<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>k1 <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">;
+  </font>strentree <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">= </font><font color="#800000">'c:\bp\bin\pas\diko2.dpt'</font><font color="#000080">;
+  </font>strsortie <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">= </font><font color="#800000">'c:\bp\bin\pas\diko2.new'</font><font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>tmot <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">62</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>source<font color="#000080">,</font>ff1<font color="#000080">,</font>ff2<font color="#000080">,</font>fg1<font color="#000080">,</font>fg2 <font color="#000080">: </font>text<font color="#000080">;
+  </font>sourcebuf<font color="#000080">,</font>ff1buf<font color="#000080">,</font>ff2buf<font color="#000080">,</font>fg1buf<font color="#000080">,</font>fg2buf <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4095</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>k<font color="#000080">,</font>maxmot <font color="#000080">: </font>longint<font color="#000080">;
+  </font>fini <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>init<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>assign<font color="#000080">(</font>source<font color="#000080">,</font>strentree<font color="#000080">); </font>settextbuf<font color="#000080">(</font>source<font color="#000080">,</font>sourcebuf<font color="#000080">); </font>reset<font color="#000080">(</font>source<font color="#000080">);
+</font>assign<font color="#000080">(</font>ff1<font color="#000080">,</font><font color="#800000">'$f1$'</font><font color="#000080">); </font>settextbuf<font color="#000080">(</font>ff1<font color="#000080">,</font>ff1buf<font color="#000080">); </font>rewrite<font color="#000080">(</font>ff1<font color="#000080">);
+</font>assign<font color="#000080">(</font>ff2<font color="#000080">,</font><font color="#800000">'$f2$'</font><font color="#000080">); </font>settextbuf<font color="#000080">(</font>ff2<font color="#000080">,</font>ff2buf<font color="#000080">); </font>rewrite<font color="#000080">(</font>ff2<font color="#000080">);
+</font>assign<font color="#000080">(</font>fg1<font color="#000080">,</font><font color="#800000">'$g1$'</font><font color="#000080">); </font>settextbuf<font color="#000080">(</font>fg1<font color="#000080">,</font>fg1buf<font color="#000080">); </font>rewrite<font color="#000080">(</font>fg1<font color="#000080">);
+</font>assign<font color="#000080">(</font>fg2<font color="#000080">,</font><font color="#800000">'$g2$'</font><font color="#000080">); </font>settextbuf<font color="#000080">(</font>fg2<font color="#000080">,</font>fg2buf<font color="#000080">); </font>rewrite<font color="#000080">(</font>fg2<font color="#000080">);
+</font>maxmot <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font>fini <font color="#000080">:= </font>false<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>passe1<font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>tmots <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>k1<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>tmot<font color="#000080">;
+  </font>pmots <font color="#000080">= ^</font>tmots<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>j <font color="#000080">: </font>integer<font color="#000080">;
+  </font>item <font color="#000080">: </font>pmots<font color="#000080">;
+  </font>switch <font color="#000080">: </font>boolean<font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>inSort<font color="#000080">(</font>item <font color="#000080">: </font>pmots<font color="#000080">; </font>last <font color="#000080">: </font>integer<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>i<font color="#000080">,</font>j<font color="#000080">,</font>span <font color="#000080">: </font>integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+  </b></font>span <font color="#000080">:= </font>last <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>span <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do begin
+    for </b></font>i <font color="#000080">:= </font>span <font color="#FF0000"><b>to </b></font>last<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+      for </b></font>j <font color="#000080">:= (</font>i<font color="#000080">-</font>span<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do
+        if </b></font>strcomp<font color="#000080">(</font>item<font color="#000080">^[</font>j<font color="#000080">],</font>item<font color="#000080">^[</font>j<font color="#000080">+</font>span<font color="#000080">]) &lt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>break
+        <font color="#FF0000"><b>else begin
+          </b></font>strcopy<font color="#000080">(</font>item<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">],</font>item<font color="#000080">^[</font>j<font color="#000080">]);
+          </font>strcopy<font color="#000080">(</font>item<font color="#000080">^[</font>j<font color="#000080">],</font>item<font color="#000080">^[</font>j<font color="#000080">+</font>span<font color="#000080">]);
+          </font>strcopy<font color="#000080">(</font>item<font color="#000080">^[</font>j<font color="#000080">+</font>span<font color="#000080">],</font>item<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">]);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>span <font color="#000080">:= </font>span <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font>new<font color="#000080">(</font>item<font color="#000080">);
+</font>fillchar<font color="#000080">(</font>item<font color="#000080">^,</font>sizeof<font color="#000080">(</font>item<font color="#000080">^),</font><font color="#800000">0</font><font color="#000080">);
+</font>switch <font color="#000080">:= </font>true<font color="#000080">;
+</font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>source<font color="#000080">) </font><font color="#FF0000"><b>do begin
+  </b></font>j <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>k1 <font color="#FF0000"><b>do begin
+    </b></font>inc<font color="#000080">(</font>j<font color="#000080">);
+    </font>readln<font color="#000080">(</font>source<font color="#000080">,</font>item<font color="#000080">^[</font>i<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font>eof<font color="#000080">(</font>source<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>break<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>inc<font color="#000080">(</font>maxmot<font color="#000080">,</font>j<font color="#000080">);
+  </font>insort<font color="#000080">(</font>item<font color="#000080">,</font>j<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>j <font color="#FF0000"><b>do if </b></font>switch <font color="#FF0000"><b>then </b></font>writeln<font color="#000080">(</font>ff1<font color="#000080">,</font>item<font color="#000080">^[</font>i<font color="#000080">])
+    </font><font color="#FF0000"><b>else </b></font>writeln<font color="#000080">(</font>ff2<font color="#000080">,</font>item<font color="#000080">^[</font>i<font color="#000080">]);
+  </font>switch <font color="#000080">:= </font><font color="#FF0000"><b>not </b></font>switch<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>dispose<font color="#000080">(</font>item<font color="#000080">);
+</font>close<font color="#000080">(</font>source<font color="#000080">);
+</font>writeln<font color="#000080">(</font><font color="#800000">'Passe  1 termin,e    Nombre de mots: '</font><font color="#000080">,</font>maxmot<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>merge <font color="#000080">(</font>lek <font color="#000080">: </font>longint<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>f1<font color="#000080">,</font>f2<font color="#000080">,</font>g1<font color="#000080">,</font>g2 <font color="#000080">: </font>text<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>outswitch <font color="#000080">: </font>boolean<font color="#000080">;
+  </font>winner <font color="#000080">: </font>integer<font color="#000080">;
+  </font>used <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>longint<font color="#000080">;
+  </font>fin <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>boolean<font color="#000080">;
+  </font>current <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>tmot<font color="#000080">;
+  </font>numg1<font color="#000080">,</font>numg2 <font color="#000080">: </font>longint<font color="#000080">;
+
+  </font><font color="#FF0000"><b>procedure </b></font>getrecord <font color="#000080">(</font>i <font color="#000080">: </font>integer<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>used<font color="#000080">[</font>i<font color="#000080">] = </font>lek<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font>i <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>eof<font color="#000080">(</font>f1<font color="#000080">)) </font><font color="#FF0000"><b>or
+    </b></font><font color="#000080">((</font>i <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font>eof<font color="#000080">(</font>f2<font color="#000080">)) </font><font color="#FF0000"><b>then </b></font>fin<font color="#000080">[</font>i<font color="#000080">] := </font>true
+  <font color="#FF0000"><b>else begin
+    </b></font>inc<font color="#000080">(</font>used<font color="#000080">[</font>i<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>readln<font color="#000080">(</font>f1<font color="#000080">,</font>current<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])
+    </font><font color="#FF0000"><b>else </b></font>readln<font color="#000080">(</font>f2<font color="#000080">,</font>current<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font>outswitch <font color="#000080">:= </font>true<font color="#000080">;
+</font>flush<font color="#000080">(</font>g1<font color="#000080">); </font>rewrite<font color="#000080">(</font>g1<font color="#000080">);
+</font>flush<font color="#000080">(</font>g2<font color="#000080">); </font>rewrite<font color="#000080">(</font>g2<font color="#000080">);
+</font>flush<font color="#000080">(</font>f1<font color="#000080">); </font>reset<font color="#000080">(</font>f1<font color="#000080">);
+</font>flush<font color="#000080">(</font>f2<font color="#000080">); </font>reset<font color="#000080">(</font>f2<font color="#000080">);
+</font>numg1 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font>numg2 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>f1<font color="#000080">) </font><font color="#FF0000"><b>or not  </b></font>eof<font color="#000080">(</font>f2<font color="#000080">) </font><font color="#FF0000"><b>do begin
+  </b></font>fillchar<font color="#000080">(</font>used<font color="#000080">,</font>sizeof<font color="#000080">(</font>used<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>fillchar<font color="#000080">(</font>fin<font color="#000080">,</font>sizeof<font color="#000080">(</font>fin<font color="#000080">),</font>false<font color="#000080">);
+  </font>fillchar<font color="#000080">(</font>current<font color="#000080">,</font>sizeof<font color="#000080">(</font>current<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+  </font>getrecord<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">); </font>getrecord<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>while not </b></font>fin<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>or not </b></font>fin<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>do begin
+    if </b></font>fin<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>winner <font color="#000080">:= </font><font color="#800000">2
+    </font><font color="#FF0000"><b>else if </b></font>fin<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>winner <font color="#000080">:= </font><font color="#800000">1
+    </font><font color="#FF0000"><b>else if </b></font>strcomp<font color="#000080">(</font>current<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>current<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]) &lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>winner <font color="#000080">:= </font><font color="#800000">1
+    </font><font color="#FF0000"><b>else </b></font>winner <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>outswitch <font color="#FF0000"><b>then begin
+      </b></font>writeln<font color="#000080">(</font>g1<font color="#000080">,</font>current<font color="#000080">[</font>winner<font color="#000080">]);
+      </font>inc<font color="#000080">(</font>numg1<font color="#000080">);
+      </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>writeln<font color="#000080">(</font>g2<font color="#000080">,</font>current<font color="#000080">[</font>winner<font color="#000080">]);
+      </font>inc<font color="#000080">(</font>numg2<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>getrecord<font color="#000080">(</font>winner<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>outswitch <font color="#000080">:= </font><font color="#FF0000"><b>not </b></font>outswitch<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>fini <font color="#000080">:= </font>numg2 <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>externe<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+  </font>switch <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+</font>k <font color="#000080">:= </font>k1<font color="#000080">;
+</font>switch <font color="#000080">:= </font>true<font color="#000080">;
+</font><font color="#FF0000"><b>while not </b></font>fini <font color="#008000"><i>{maxmot &gt; k} </i></font><font color="#FF0000"><b>do begin
+  </b></font>inc<font color="#000080">(</font>i<font color="#000080">);
+  </font>write<font color="#000080">(</font><font color="#800000">'Passe '</font><font color="#000080">,</font>i<font color="#000080">:</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">'  (k = '</font><font color="#000080">,</font>k<font color="#000080">:</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">')'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>switch <font color="#FF0000"><b>then </b></font>merge<font color="#000080">(</font>k<font color="#000080">,</font>ff1<font color="#000080">,</font>ff2<font color="#000080">,</font>fg1<font color="#000080">,</font>fg2<font color="#000080">)
+  </font><font color="#FF0000"><b>else </b></font>merge<font color="#000080">(</font>k<font color="#000080">,</font>fg1<font color="#000080">,</font>fg2<font color="#000080">,</font>ff1<font color="#000080">,</font>ff2<font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">' termin,e'</font><font color="#000080">);
+  </font>switch <font color="#000080">:= </font><font color="#FF0000"><b>not </b></font>switch<font color="#000080">;
+  </font>k <font color="#000080">:= </font>k <font color="#000080">* </font><font color="#800000">2</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>close<font color="#000080">(</font>ff2<font color="#000080">); </font>erase<font color="#000080">(</font>ff2<font color="#000080">);
+</font>close<font color="#000080">(</font>fg2<font color="#000080">); </font>erase<font color="#000080">(</font>fg2<font color="#000080">);
+</font>close<font color="#000080">(</font>ff1<font color="#000080">);
+</font>close<font color="#000080">(</font>fg1<font color="#000080">);
+</font>assign<font color="#000080">(</font>ff2<font color="#000080">,</font>strsortie<font color="#000080">);
+</font><font color="#008000"><i>{$I-}
+</i></font>reset<font color="#000080">(</font>ff2<font color="#000080">);
+</font><font color="#008000"><i>{$I+}
+</i></font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>erase<font color="#000080">(</font>ff2<font color="#000080">);
+</font><font color="#FF0000"><b>if </b></font>switch <font color="#FF0000"><b>then begin
+  </b></font>rename<font color="#000080">(</font>ff1<font color="#000080">,</font>strsortie<font color="#000080">);
+  </font>erase<font color="#000080">(</font>fg1<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+else begin
+  </b></font>rename<font color="#000080">(</font>fg1<font color="#000080">,</font>strsortie<font color="#000080">);
+  </font>erase<font color="#000080">(</font>ff1<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{main}
+</i></font>init<font color="#000080">;
+</font>passe1<font color="#000080">;
+</font>externe<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SORTING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0056.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,356 @@
+<html>
+<head><title> "Send Hayes commands." by NIKO VAN HAGEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0099.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{Here's a unit for sending and receiving async commands }
+
+{ ======================= SERIAL COMMUNICATIONS ============================ }
+
+</i></font><font color="#FF0000"><b>UNIT      </b></font>Async<font color="#000080">;
+
+</font><font color="#008000"><i>{$D-,V-,B-,S-,R-}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+USES      </b></font>Dos<font color="#000080">, </font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+
+  </b></font>BAUD              <font color="#000080">= (</font>B110<font color="#000080">,</font>B150<font color="#000080">,</font>B300<font color="#000080">,</font>B600<font color="#000080">,</font>B1200<font color="#000080">,</font>B2400<font color="#000080">,</font>B4800<font color="#000080">,</font>B9600<font color="#000080">);
+  </font>PARITY            <font color="#000080">= (</font>PNONE<font color="#000080">, </font>PODD<font color="#000080">, </font>PNOTHING<font color="#000080">, </font>PEVEN<font color="#000080">);
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>AsyncInstalled    <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+  </font>AsyncActive       <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>InitAsync<font color="#000080">(</font>Com       <font color="#000080">:</font>BYTE<font color="#000080">;
+                    </font>Speed     <font color="#000080">:</font>BAUD<font color="#000080">;
+                    </font>Par       <font color="#000080">:</font>PARITY<font color="#000080">;
+                    </font>Stop      <font color="#000080">:</font>BYTE<font color="#000080">;
+                    </font>Dbits     <font color="#000080">:</font>BYTE<font color="#000080">);
+</font><font color="#FF0000"><b>PROCEDURE </b></font>TermAsync<font color="#000080">;
+</font><font color="#FF0000"><b>FUNCTION  </b></font>CheckAsync          <font color="#000080">:</font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>PROCEDURE </b></font>HangUp<font color="#000080">;
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Send<font color="#000080">(</font>Buffer         <font color="#000080">:</font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Receive<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Buffer  <font color="#000080">:</font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+CONST
+
+  </b></font>THR               <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>RBR               <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>IER               <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+  </font>IIR               <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+  </font>LCR               <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+  </font>MCR               <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+  </font>LSR               <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font>MSR               <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+  </font>BUFFSIZE          <font color="#000080">= </font><font color="#800000">255</font><font color="#000080">;
+  </font>TIMOUT            <font color="#000080">= </font><font color="#800000">60000</font><font color="#000080">;
+  </font>EOI               <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+  </font>IRQ4low           <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$EF</font><font color="#000080">;
+  </font>IRQ4high          <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$10</font><font color="#000080">;
+  </font>IRQ3low           <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$F7</font><font color="#000080">;
+  </font>IRQ3high          <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;
+  </font>ErrorMask         <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$0E</font><font color="#000080">;
+  </font>DSRready          <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+  </font>OUT2              <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;
+  </font>DTR               <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">;
+  </font>RTS               <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$02</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+
+  </b></font>Regs              <font color="#000080">: </font>REGISTERS<font color="#000080">;
+  </font>OldVector         <font color="#000080">: </font>POINTER<font color="#000080">;
+  </font>AsyncStatus       <font color="#000080">: </font>WORD<font color="#000080">;
+  </font>IntType           <font color="#000080">: </font>BYTE<font color="#000080">;
+  </font>AsyncDisable      <font color="#000080">: </font>BYTE<font color="#000080">;
+  </font>AsyncEnable       <font color="#000080">: </font>BYTE<font color="#000080">;
+  </font>AsyncBuff         <font color="#000080">: </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>BUFFSIZE<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+  </font>Front             <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>Rear              <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>ComPort           <font color="#000080">: </font>BYTE<font color="#000080">;
+  </font>ComBase           <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>ZeroDlab<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- zero divisor latch access bit allowing access to THR, RBR and IER }
+
+</i></font><font color="#FF0000"><b>BEGIN
+          </b></font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>LCR<font color="#000080">]:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>LCR<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$7F</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SetDTR<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- enable interrupts and set DTR }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>MCR<font color="#000080">]:= </font>OUT2 <font color="#000080">+ </font>DTR <font color="#000080">+ </font>RTS<font color="#000080">;
+  </font>DELAY<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">)
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>ReadPorts<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- read UART values }
+
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>Temp              <font color="#000080">: </font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Temp<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">];
+  </font>Temp<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>IIR<font color="#000080">];
+  </font>Temp<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>LSR<font color="#000080">];
+  </font>Temp<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>MSR<font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>HangUp<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- hang up phone }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>ReadPorts<font color="#000080">;
+  </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>MCR<font color="#000080">]:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>DELAY<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>CheckAsync<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- return status MB = Line Status, LB = Modem Status }
+
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>LSReg             <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>LSReg<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>LSR<font color="#000080">];
+  </font>CheckAsync<font color="#000080">:= (</font>LSReg <font color="#FF0000"><b>SHL </b></font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>MSR<font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+{$F+}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>AsyncISR<font color="#000080">;
+
+</font>INTERRUPT<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- serial port interrupt routine }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">]:= </font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>AND </b></font>AsyncDisable<font color="#000080">;
+  </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);        </font><font color="#008000"><i>{ enable interrupts }
+  </i></font>IntType<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>IIR<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">6</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>IntType <font color="#000080">= </font><font color="#800000">4 </font><font color="#FF0000"><b>THEN
+  BEGIN
+    </b></font>ZeroDlab<font color="#000080">;
+    </font>AsyncBuff<font color="#000080">[</font>Rear<font color="#000080">]:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>RBR<font color="#000080">];
+    </font>Rear<font color="#000080">:= </font>SUCC<font color="#000080">(</font>Rear<font color="#000080">) </font><font color="#FF0000"><b>MOD </b></font>BUFFSIZE
+  <font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>AsyncStatus<font color="#000080">:= (</font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>LSR<font color="#000080">] </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">8</font><font color="#000080">) + </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>MSR<font color="#000080">];
+  </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);        </font><font color="#008000"><i>{ disable interrupts }
+  </i></font>PORT<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:= </font>EOI<font color="#000080">;
+  </font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">]:= </font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>AND </b></font>AsyncEnable
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$F-}
+
+{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>InstallAsync<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- replaces interrupt vector by user routine }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  IF NOT</b></font><font color="#000080">(</font>AsyncInstalled<font color="#000080">) </font><font color="#FF0000"><b>THEN
+  BEGIN
+    </b></font>GetIntVec<font color="#000080">(</font><font color="#800000">$0C</font><font color="#000080">-</font>ComPort<font color="#000080">,</font>OldVector<font color="#000080">);
+    </font>SetIntVec<font color="#000080">(</font><font color="#800000">$0C</font><font color="#000080">-</font>ComPort<font color="#000080">,@</font>AsyncISR<font color="#000080">);
+    </font>AsyncInstalled<font color="#000080">:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DeinstallAsync<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- restores interrupt vector }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  IF </b></font>AsyncInstalled <font color="#FF0000"><b>THEN
+  BEGIN
+    </b></font>SetIntVec<font color="#000080">(</font><font color="#800000">$0C</font><font color="#000080">-</font>ComPort<font color="#000080">,</font>OldVector<font color="#000080">);
+    </font>AsyncInstalled<font color="#000080">:=</font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>InitAsync<font color="#000080">(</font>Com       <font color="#000080">: </font>BYTE<font color="#000080">;
+                    </font>Speed     <font color="#000080">: </font>BAUD<font color="#000080">;
+                    </font>Par       <font color="#000080">: </font>PARITY<font color="#000080">;
+                    </font>Stop      <font color="#000080">: </font>BYTE<font color="#000080">;
+                    </font>Dbits     <font color="#000080">: </font>BYTE<font color="#000080">);
+
+</font><font color="#008000"><i>{ -- initialize serial port communications }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  WITH </b></font>Regs <font color="#FF0000"><b>DO
+  BEGIN
+    IF NOT</b></font><font color="#000080">(</font>AsyncActive<font color="#000080">) </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>ComPort       <font color="#000080">:= </font>Com<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+      </font>MEMW<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">:</font><font color="#800000">$400</font><font color="#000080">]  := </font><font color="#800000">$3F8</font><font color="#000080">;             </font><font color="#008000"><i>{ to prevent a BIOS bug }
+      </i></font>MEMW<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">:</font><font color="#800000">$402</font><font color="#000080">]  := </font><font color="#800000">$2F8</font><font color="#000080">;             </font><font color="#008000"><i>{ to prevent a BIOS bug }
+      </i></font><font color="#FF0000"><b>IF </b></font>ComPort    <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>ComBase     <font color="#000080">:= </font><font color="#800000">$3F8</font><font color="#000080">;
+        </font>AsyncEnable <font color="#000080">:= </font>IRQ4low<font color="#000080">;
+        </font>AsyncDisable<font color="#000080">:= </font>IRQ4high<font color="#000080">;
+      </font><font color="#FF0000"><b>END
+      ELSE
+      BEGIN
+        </b></font>ComBase     <font color="#000080">:= </font><font color="#800000">$2F8</font><font color="#000080">;
+        </font>AsyncEnable <font color="#000080">:= </font>IRQ3low<font color="#000080">;
+        </font>AsyncDisable<font color="#000080">:= </font>IRQ3high
+      <font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>Front         <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>Rear          <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>AsyncStatus   <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>InstallAsync<font color="#000080">;
+      </font>DX            <font color="#000080">:=</font>ComPort<font color="#000080">;
+      </font>AX            <font color="#000080">:=</font>ORD<font color="#000080">(</font>Speed<font color="#000080">)*</font><font color="#800000">32 </font><font color="#000080">+ </font>ORD<font color="#000080">(</font>Par<font color="#000080">)*</font><font color="#800000">8 </font><font color="#000080">+ (</font>Stop<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">4 </font><font color="#000080">+ </font>Dbits<font color="#000080">-</font><font color="#800000">5</font><font color="#000080">;
+      </font>INTR<font color="#000080">(</font><font color="#800000">$14</font><font color="#000080">,</font>Regs<font color="#000080">);
+      </font>ReadPorts<font color="#000080">;
+      </font>ZeroDlab<font color="#000080">;
+      </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>IER<font color="#000080">]:= </font><font color="#800000">$05</font><font color="#000080">;
+      </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);                                </font><font color="#008000"><i>{ disable interrupts }
+      </i></font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">]     :=</font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>AND </b></font>AsyncEnable<font color="#000080">;
+      </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);                                </font><font color="#008000"><i>{ enable interrupts }
+      </i></font>SetDTR<font color="#000080">;
+      </font>AsyncActive   <font color="#000080">:= </font>TRUE<font color="#000080">;
+    </font><font color="#FF0000"><b>END
+    ELSE
+    BEGIN
+      </b></font>HangUp<font color="#000080">;
+      </font>SetDTR<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Receive<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- get characters from circular buffer }
+
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>Ch                <font color="#000080">: </font>CHAR<font color="#000080">;
+  </font>NbrChrs           <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>Count             <font color="#000080">: </font>LONGINT<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Buffer  <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>Count   <font color="#000080">:= </font>TIMOUT<font color="#000080">;
+  </font>NbrChrs <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font>Count<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+  BEGIN
+    </b></font>DEC<font color="#000080">(</font>Count<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>Front <font color="#000080">&lt;&gt; </font>Rear <font color="#FF0000"><b>THEN
+    BEGIN
+      REPEAT
+        </b></font>Ch          <font color="#000080">:= </font>CHAR<font color="#000080">(</font>AsyncBuff<font color="#000080">[</font>Front<font color="#000080">]);
+        </font>Front       <font color="#000080">:= </font>SUCC<font color="#000080">(</font>Front<font color="#000080">) </font><font color="#FF0000"><b>MOD </b></font>BUFFSIZE<font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font>Ch <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">#0</font><font color="#000080">..</font><font color="#800000">#31</font><font color="#000080">] </font><font color="#FF0000"><b>THEN </b></font>Ch<font color="#000080">:= </font><font color="#800000">#32</font><font color="#000080">;
+        </font>Buffer      <font color="#000080">:= </font>Buffer <font color="#000080">+ </font>Ch<font color="#000080">;
+        </font>INC<font color="#000080">(</font>NbrChrs<font color="#000080">);
+      </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>Front <font color="#000080">= </font>Rear<font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>NbrChrs <font color="#000080">= </font>BUFFSIZE<font color="#000080">);
+      </font>Count<font color="#000080">:= </font>TIMOUT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Send<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Ptr               <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>TH                <font color="#000080">: </font>BYTE<font color="#000080">;
+  </font>CH                <font color="#000080">: </font>CHAR<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>LENGTH<font color="#000080">(</font>Buffer<font color="#000080">)&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+  BEGIN
+    </b></font>SetDTR<font color="#000080">;
+    </font><font color="#FF0000"><b>FOR </b></font>Ptr<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>LENGTH<font color="#000080">(</font>Buffer<font color="#000080">) </font><font color="#FF0000"><b>DO
+    BEGIN
+      REPEAT
+        </b></font>TH<font color="#000080">:= </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>LSR<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font>DSRready
+      <font color="#FF0000"><b>UNTIL </b></font>TH<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">;
+      </font>CH<font color="#000080">:= </font>Buffer<font color="#000080">[</font>Ptr<font color="#000080">];
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>CH <font color="#000080">= </font><font color="#800000">'%'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>DELAY<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">);
+        </font>EXIT<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>CH <font color="#000080">= </font><font color="#800000">'|'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>CH<font color="#000080">:= </font><font color="#800000">#13</font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>CH <font color="#000080">= </font><font color="#800000">'~'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+        </b></font>DELAY<font color="#000080">(</font><font color="#800000">2000</font><font color="#000080">)
+      </font><font color="#FF0000"><b>ELSE
+        </b></font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>THR<font color="#000080">]:= </font>BYTE<font color="#000080">(</font>CH<font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font>DELAY<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TermAsync<font color="#000080">;
+
+</font><font color="#008000"><i>{ -- terminate communications }
+
+</i></font><font color="#FF0000"><b>BEGIN
+  IF </b></font>AsyncActive <font color="#FF0000"><b>THEN
+  BEGIN
+    </b></font>HangUp<font color="#000080">;
+    </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);                        </font><font color="#008000"><i>{ disable interrupts }
+    </i></font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">]       := </font>PORT<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>IRQ4high <font color="#000080">+ </font>IRQ3high<font color="#000080">);
+    </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);                        </font><font color="#008000"><i>{ enable interrupts }
+    </i></font>ZeroDlab<font color="#000080">;
+    </font>PORT<font color="#000080">[</font>ComBase<font color="#000080">+</font>IER<font color="#000080">]:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>DELAY<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">);
+    </font>DeinstallAsync<font color="#000080">;
+    </font>AsyncActive     <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{//////////////////////////////////////////////////////////////////////////}
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>AsyncInstalled    <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font>AsyncActive       <font color="#000080">:= </font>FALSE<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font>It<font color="#800000">'s a old unit from tp4 but it works well for me. I think it will not
+</font>support the fifo buffers <font color="#FF0000"><b>and </b></font>the specials <font color="#FF0000"><b>of </b></font>the <font color="#800000">16550 </font>uart because
+they wern<font color="#800000">'t available at that time but maybe somebody can modify it
+
+</font>Greetings from<font color="#000080">:
+                     </font>Niko van Hagen
+                     Monday<font color="#000080">, </font><font color="#800000">25 </font>March <font color="#800000">1996</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">:</font><font color="#800000">19.
+                     </font>The Haghe<font color="#000080">, </font>Holland
+                     Fido       <font color="#000080">: </font><font color="#800000">2</font><font color="#000080">:</font><font color="#800000">281</font><font color="#000080">/</font><font color="#800000">909.11
+                     </font>Internet   <font color="#000080">: </font>nvhagen<font color="#000080">@</font>worldonline<font color="#000080">.</font>nl
+                     PGP KEYID  <font color="#000080">: </font><font color="#800000">6</font>CF49689
+
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0099.PAS">Original</a><b>]</b></p></body>
+</html>

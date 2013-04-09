@@ -1,0 +1,184 @@
+<html>
+<head><title> "TSR Clock" by WILBERT VAN LIEJEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0017.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; I would like to include a clock in my current project which will be
+&gt; updated once a minute.  Instead of constantly checking the computer's clock
+&gt; and waiting for it to change, I would like to use an interrupt.
+
+This one has even a hot key handler.  If you want to update it once per
+minute, bump a counter within the interrupt 1Ch handler till it reaches the
+value 60*18.2.  Then refresh the screen.
+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>Clock<font color="#000080">;
+
+</font><font color="#008000"><i>{$G+,R-,S-,M 1024, 0, 0 }
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>x           <font color="#000080">= </font><font color="#800000">71</font><font color="#000080">;                   </font><font color="#008000"><i>{ x location on screen }
+  </i></font>y           <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;                    </font><font color="#008000"><i>{ y location on screen }
+  </i></font>Keyboard    <font color="#000080">= </font><font color="#800000">9</font><font color="#000080">;                    </font><font color="#008000"><i>{ Hardware keyboard interrupt }
+  </i></font>TimerTick   <font color="#000080">= </font><font color="#800000">$1C</font><font color="#000080">;                  </font><font color="#008000"><i>{ Gets called 18.2 / second }
+  </i></font>VideoOffset <font color="#000080">= </font><font color="#800000">160 </font><font color="#000080">* (</font>y <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">) + </font><font color="#800000">2 </font><font color="#000080">* </font>x<font color="#000080">;</font><font color="#008000"><i>{ Offset in display memory }
+  </i></font>yellow      <font color="#000080">= </font><font color="#800000">14</font><font color="#000080">;
+  </font>blue        <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+  </font>attribute   <font color="#000080">= </font>blue <font color="#000080">* </font><font color="#800000">16 </font><font color="#000080">+ </font>yellow<font color="#000080">;   </font><font color="#008000"><i>{ Clock colours }
+  </i></font>VideoBase   <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">$B800</font><font color="#000080">;         </font><font color="#008000"><i>{ Segment of display memory }
+  </i></font>ActiveFlag  <font color="#000080">: </font>ShortInt <font color="#000080">= -</font><font color="#800000">1</font><font color="#000080">;        </font><font color="#008000"><i>{ 0: on, -1: off }
+
+</i></font><font color="#FF0000"><b>Var
+  </b></font>OrgInt9<font color="#000080">,                             </font><font color="#008000"><i>{ Saved interrupt 9 vector }
+  </i></font>OrgInt1Ch <font color="#000080">: </font>Pointer<font color="#000080">;              </font><font color="#008000"><i>{ Saved interrupt 1Ch vector }
+  </i></font>VideoMode <font color="#000080">: </font>Byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$0000</font><font color="#000080">:</font><font color="#800000">$0449</font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Display a string using Dos services (avoid WriteLn, save memory) }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>DisplayString<font color="#000080">(</font>s <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">PUSH   DS
+  XOR    CX, CX
+  LDS    SI, s
+  LODSB
+  MOV    CL, AL
+  JCXZ   @EmptyString
+  CLD
+ @NextChar:
+  LODSB
+  XCHG   AX, DX
+  MOV    AH, 2
+  INT    21h
+  LOOP   @NextChar
+ @EmptyString:
+  POP    DS
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Returns True if a real time clock could be found }
+</i></font><font color="#FF0000"><b>Function </b></font>HasRTClock <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">XOR    AL, AL
+  MOV    AH, 2
+  INT    1Ah
+  JC     @NoRTClock
+  INC    AX
+ @NoRTCLock:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ Release Dos environment }
+</i></font><font color="#FF0000"><b>Procedure </b></font>ReleaseEnvironment<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">MOV    ES, [PrefixSeg]
+  MOV    ES, ES:[002Ch]
+  MOV    AH, 49h
+  INT    21h
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ INT 9 handler intercepting Alt-F11 }
+</i></font><font color="#FF0000"><b>Procedure </b></font>ToggleClock<font color="#000080">; </font>Interrupt<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>F11      <font color="#000080">= </font><font color="#800000">$57</font><font color="#000080">;                  </font><font color="#008000"><i>{ 'F11' make code }
+  </i></font>BiosSeg  <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;                  </font><font color="#008000"><i>{ Segment of BIOS data area }
+  </i></font>AltMask  <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;                  </font><font color="#008000"><i>{ Bitmask of Alt key }
+  </i></font>KbdFlags <font color="#000080">= </font><font color="#800000">$17</font><font color="#000080">;                  </font><font color="#008000"><i>{ Byte showing keyboard status }
+
+</i></font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">STI
+  IN     AL, 60h
+
+ </font><font color="#008000"><i>{ F11 pressed? }
+  </i></font><font color="#FF00FF">CMP    AL, F11
+  JNE    @PassThru
+
+ </font><font color="#008000"><i>{ Alt-key pressed? }
+  </i></font><font color="#FF00FF">PUSH   BiosSeg
+  POP    ES
+  MOV    AL, ES:[KbdFlags]
+  AND    AL, AltMask
+  CMP    AL, AltMask
+  JNE    @PassThru
+
+ </font><font color="#008000"><i>{ Flip status flag, force EOI and leave routine }
+  </i></font><font color="#FF00FF">NOT    [ActiveFlag]
+  IN     AL, 61h
+  MOV    AH, AL
+  OR     AL, 80h
+  OUT    61h, AL
+  MOV    AL, AH
+  OUT    61h, AL
+  CLI
+  MOV    AL, 20h
+  OUT    20h, AL
+  STI
+  JMP    @Exit
+
+ @PassThru:
+  CLI
+  PUSHF
+  CALL   DWord Ptr [OrgInt9]
+ @Exit:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ ToggleClock }
+
+{ Convert a packed BCD byte to ASCII character }
+</i></font><font color="#FF0000"><b>Procedure </b></font>Digit<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">PUSH   AX
+  CALL   @HiNibble
+  POP    AX
+  CALL   @LoNibble
+  RETN
+
+ @HiNibble:
+  SHR    AL, 4
+  JMP    @MakeAscii
+ @LoNibble:
+  AND    AL, 0Fh
+ @MakeAscii:
+  OR     AL, '0'
+  STOSW
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ INT 1Ch handler that displays a clock on the right hand side of the screen }
+</i></font><font color="#FF0000"><b>Procedure </b></font>DisplayClock<font color="#000080">; </font>Interrupt<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">CMP    [ActiveFlag], 0
+  JNE    @Exit
+  CLD
+  MOV    AH, 2
+  INT    1Ah
+  MOV    ES, [VideoBase]
+  MOV    DI, VideoOffset
+  MOV    AH, attribute
+  MOV    AL, CH
+  CALL   Digit
+  MOV    AL, ':'
+  STOSW
+  MOV    AL, CL
+  CALL   Digit
+  MOV    AL, ':'
+  STOSW
+  MOV    AL, DH
+  CALL   Digit
+  PUSHF
+  CALL   DWord Ptr [OrgInt1Ch]
+ @Exit:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  If </b></font>VideoMode <font color="#000080">= </font><font color="#800000">7 </font><font color="#FF0000"><b>Then
+    </b></font>VideoBase <font color="#000080">:= </font><font color="#800000">$B000</font><font color="#000080">;
+  </font>GetIntVec<font color="#000080">(</font>TimerTick<font color="#000080">, </font>OrgInt1Ch<font color="#000080">);
+  </font>SetIntVec<font color="#000080">(</font>TimerTick<font color="#000080">, @</font>DisplayClock<font color="#000080">);
+  </font>GetIntVec<font color="#000080">(</font>Keyboard<font color="#000080">, </font>OrgInt9<font color="#000080">);
+  </font>SetIntVec<font color="#000080">(</font>Keyboard<font color="#000080">, @</font>ToggleClock<font color="#000080">);
+  </font>SwapVectors<font color="#000080">;
+  </font>ReleaseEnvironment<font color="#000080">;
+  </font>DisplayString<font color="#000080">(</font><font color="#800000">'CLOCK installed.  &lt;Alt-F11&gt; toggles on/off'</font><font color="#000080">);
+  </font>Keep<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0017.PAS">Original</a><b>]</b></p></body>
+</html>

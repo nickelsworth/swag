@@ -1,0 +1,192 @@
+<html>
+<head><title> "Trap Runtime Errors" by FRANK HECKENBACH</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0042.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>UNIT </b></font>BPTrap<font color="#000080">;  </font><font color="#008000"><i>{ see DEMO at the bottom !! }
+
+{ Trap runtime errors, Version 1.0
+  Copyright (C) 1991-1996 by Frank Heckenbach, heckenb@mi.uni-erlangen.de
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, version 1, for NON-COMMERCIAL use.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. }
+
+{$IFNDEF VER70}
+</i></font>This <font color="#FF0000"><b>unit </b></font>was tested only <font color="#FF0000"><b>with </b></font>Borland <font color="#FF0000"><b>Pascal </b></font><font color="#800000">7.0. </font>You can use it <font color="#FF0000"><b>with </b></font>other
+versions by commenting these two lines<font color="#000080">, </font>but at your own risk<font color="#000080">!
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+FUNCTION  </b></font>Trap<font color="#000080">:</font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>FAR</b></font><font color="#000080">;
+</font><font color="#008000"><i>{* Returns False on installation.
+ * After trapping a runtime error it jumps back to where the function was
+   called returning True.
+ * The procedure that calls Trap must NOT return as long as Trap is installed
+   (so it is safest to call Trap from the main program, if possible)!
+ * You must call this function AFTER installing all other Exitprocs (if any).
+ * In Real mode: You must NOT call it from an overlayed unit.
+ * In Protected mode and Windoze: You must call it from a code segment with
+   the following attributes: FIXED PRELOAD PERMANENT. (I am not sure if this
+   is really necessary...).}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>UnTrap<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#008000"><i>{Returns True iff Trap could be uninstalled.}
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+TYPE </b></font>ptrrec<font color="#000080">=</font><font color="#FF0000"><b>RECORD </b></font>ofs<font color="#000080">,</font>sgm<font color="#000080">:</font>Word <font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+  </b></font>addrsave<font color="#000080">:</font>Pointer<font color="#000080">=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+  </font>codesave<font color="#000080">:</font>Word<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>exitsave<font color="#000080">,</font>trapaddr<font color="#000080">:</font>Pointer<font color="#000080">;
+  </font>trapsp<font color="#000080">,</font>trapbp<font color="#000080">:</font>Word<font color="#000080">;
+
+</font><font color="#008000"><i>{$S-}
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Trapexit<font color="#000080">; </font><font color="#FF0000"><b>FAR</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>Erroraddr<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL
+    THEN </b></font><font color="#008000"><i>{Trapping runtime error}
+      </i></font><font color="#FF0000"><b>BEGIN
+        </b></font><font color="#008000"><i>{Install Trapexit again (in case another runtime error occurs later)!}
+        </i></font>Exitproc<font color="#000080">:=@</font>Trapexit<font color="#000080">;
+
+        </font><font color="#008000"><i>{Keep error address and exit code and reset these variables}
+        </i></font>addrsave<font color="#000080">:=</font>Erroraddr<font color="#000080">;
+        </font>codesave<font color="#000080">:=</font>Exitcode<font color="#000080">;
+        </font>Erroraddr<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+        </font>Exitcode<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+
+        </font><font color="#008000"><i>{If you want, you can do something here to indicate the user that an
+         error occurred. You could e.g. pop up a message telling the user to
+         quit the program asap and report the error to the programmer.}
+
+        </i></font><font color="#FF0000"><b>ASM
+          </b></font><font color="#008000"><i>{Load the saved SP and BP registers}
+          </i></font><font color="#FF00FF">MOV  SP,trapsp
+          MOV  BP,trapbp
+
+          </font><font color="#008000"><i>{Continue at saved address returning True}
+          </i></font><font color="#FF00FF">MOV  AL,1
+          JMP  [trapaddr]
+        </font><font color="#FF0000"><b>END
+      END
+
+    ELSE </b></font><font color="#008000"><i>{Programm finished without an error}
+      </i></font><font color="#FF0000"><b>BEGIN
+        </b></font><font color="#008000"><i>{Continue with other exit procs}
+        </i></font>Exitproc<font color="#000080">:=</font>exitsave<font color="#000080">;
+
+        </font><font color="#008000"><i>{Restore error address and exit code of the last trapped error, if any}
+        </i></font><font color="#FF0000"><b>IF </b></font>addrsave<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>NIL THEN
+          BEGIN
+            </b></font>Erroraddr<font color="#000080">:=</font>addrsave<font color="#000080">;
+            </font>Exitcode<font color="#000080">:=</font>codesave
+          <font color="#FF0000"><b>END
+      END
+END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Trap<font color="#000080">:</font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+   </b></font><font color="#008000"><i>{Install Trapexit as an Exitproc}
+   </i></font><font color="#FF00FF">MOV  AX,OFFSET Trapexit
+   MOV  DX,SEG Trapexit
+   CMP  Exitproc.ptrrec.ofs,AX
+   JNE  @1
+   CMP  Exitproc.ptrrec.sgm,DX
+   JE   @2
+@1:XCHG Exitproc.ptrrec.ofs,AX
+   XCHG Exitproc.ptrrec.sgm,DX
+   MOV  exitsave.ptrrec.ofs,AX
+   MOV  exitsave.ptrrec.sgm,DX
+
+   </font><font color="#008000"><i>{Save SP and BP registers and the return address}
+</i></font><font color="#FF00FF">@2:MOV  trapbp,BP
+   MOV  SI,SP
+   </font><font color="#008000"><i>{$IFDEF WINDOWS}
+   </i></font><font color="#FF00FF">ADD  SI,4
+   ADD  trapbp,6
+   </font><font color="#008000"><i>{$ENDIF}
+   </i></font><font color="#FF00FF">LES  DI,SS:[SI]
+   MOV  trapaddr.ptrrec.ofs,DI
+   MOV  trapaddr.ptrrec.sgm,ES
+   ADD  SI,4
+   MOV  trapsp,SI
+
+   </font><font color="#008000"><i>{Return False}
+   </i></font><font color="#FF00FF">XOR  AX,AX
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>UnTrap<font color="#000080">:</font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>Exitproc<font color="#000080">=@</font>Trapexit
+    <font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Exitproc<font color="#000080">:=</font>exitsave<font color="#000080">;
+        </font>UnTrap<font color="#000080">:=</font>True
+      <font color="#FF0000"><b>END
+    ELSE </b></font>UnTrap<font color="#000080">:=</font>False
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{ -----------------------  DEMO PROGRAM --------------------- }
+
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>TrapDemo<font color="#000080">;
+</font><font color="#008000"><i>{ Demo program for BPTrap unit, Version 1.0
+  Copyright (C) 1996 by Frank Heckenbach, heckenb@mi.uni-erlangen.de
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, version 1, for NON-COMMERCIAL use.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. }
+
+{$C FIXED PRELOAD PERMANENT} {Not necessary for real mode.}
+
+</i></font><font color="#FF0000"><b>USES </b></font>BPTrap<font color="#008000"><i>{$IFDEF WINDOWS}</i></font><font color="#000080">,</font>Wincrt<font color="#008000"><i>{$ENDIF}</i></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>a<font color="#000080">,</font>b<font color="#000080">:</font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Writeln<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'TrapDemo version 1.0, Copyright (C) 1996 by Frank Heckenbach'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'TrapBP and TrapDemo come with ABSOLUTELY NO WARRANTY.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'This is free software, and you are welcome to redistribute it'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'under certain conditions for NON-COMMERCIAL use.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'For details see the file COPYING.'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Before the trap...'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">;
+  </font>Randomize<font color="#000080">;
+  </font><font color="#FF0000"><b>IF NOT </b></font>Trap <font color="#FF0000"><b>THEN
+    REPEAT
+      </b></font>a<font color="#000080">:=</font>Random<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+      </font>b<font color="#000080">:=</font>Random<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+      </font>Writeln<font color="#000080">(</font>a<font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">,</font>b<font color="#000080">,</font><font color="#800000">'='</font><font color="#000080">,</font>a<font color="#000080">/</font>b<font color="#000080">)
+    </font><font color="#FF0000"><b>UNTIL </b></font>False<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Infinity.'</font><font color="#000080">);
+  </font>Write<font color="#000080">(</font><font color="#800000">'Press Enter.'</font><font color="#000080">);
+  </font>Readln<font color="#000080">;
+  </font>Write<font color="#000080">(</font><font color="#800000">'The program caused a... '</font><font color="#000080">)
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0042.PAS">Original</a><b>]</b></p></body>
+</html>

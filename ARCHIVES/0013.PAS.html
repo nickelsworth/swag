@@ -1,0 +1,410 @@
+<html>
+<head><title> "LZW Compression Unit" by IAN HUNTER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(*
+From: IAN HUNTER
+Subj: LZW Compression Unit
+*)
+
+</i></font><font color="#FF0000"><b>Unit </b></font>IHLZW<font color="#000080">;
+  </font><font color="#008000"><i>{- Unit to handle data compression }
+</i></font><font color="#FF0000"><b>Interface
+Const
+  </b></font>StackOverFlow <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+  </font>DeniedWrite <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+</font><font color="#FF0000"><b>Type
+  </b></font>GetCharFunc <font color="#000080">= </font><font color="#FF0000"><b>Function </b></font><font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Ch <font color="#000080">: </font>Char<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font>PutCharProc <font color="#000080">= </font><font color="#FF0000"><b>Procedure </b></font><font color="#000080">(</font>Ch <font color="#000080">: </font>Char<font color="#000080">);
+  </font>LZW <font color="#000080">= </font><font color="#FF0000"><b>Object
+          </b></font>GetChar <font color="#000080">: </font>GetCharFunc<font color="#000080">;
+          </font>PutChar <font color="#000080">: </font>PutCharProc<font color="#000080">;
+          </font>LastError <font color="#000080">: </font>Word<font color="#000080">;
+          </font><font color="#FF0000"><b>Constructor </b></font>Init<font color="#000080">;
+          </font><font color="#FF0000"><b>Function </b></font>Get_Hash_Code <font color="#000080">(</font>PrevC<font color="#000080">, </font>FollC <font color="#000080">: </font>Integer<font color="#000080">) : </font>Integer<font color="#000080">;
+          </font><font color="#FF0000"><b>Procedure </b></font>Make_Table_Entry <font color="#000080">(</font>PrevC<font color="#000080">, </font>FollC<font color="#000080">: </font>Integer<font color="#000080">);
+          </font><font color="#FF0000"><b>Procedure </b></font>Initialize_String_Table<font color="#000080">;
+          </font><font color="#FF0000"><b>Procedure </b></font>Initialize<font color="#000080">;
+          </font><font color="#FF0000"><b>Function </b></font>Lookup_String <font color="#000080">(</font>PrevC<font color="#000080">, </font>FollC <font color="#000080">: </font>Integer<font color="#000080">) : </font>Integer<font color="#000080">;
+          </font><font color="#FF0000"><b>Procedure </b></font>Get_Char <font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>C <font color="#000080">: </font>Integer<font color="#000080">);
+          </font><font color="#FF0000"><b>Procedure </b></font>Put_Char <font color="#000080">(</font>C <font color="#000080">: </font>Integer<font color="#000080">);
+          </font><font color="#FF0000"><b>Procedure </b></font>Compress<font color="#000080">;
+          </font><font color="#FF0000"><b>Procedure </b></font>Decompress<font color="#000080">;
+          </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+Const
+  </b></font>MaxTab   <font color="#000080">= </font><font color="#800000">4095</font><font color="#000080">;
+  </font>No_Prev  <font color="#000080">= </font><font color="#800000">$7FFF</font><font color="#000080">;
+  </font>EOF_Char <font color="#000080">= -</font><font color="#800000">2</font><font color="#000080">;
+  </font>End_List <font color="#000080">= -</font><font color="#800000">1</font><font color="#000080">;
+  </font>Empty    <font color="#000080">= -</font><font color="#800000">3</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>AnyStr <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>String_Table_Entry <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Used <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>PrevChar <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>FollChar <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Next <font color="#000080">: </font>Integer<font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>String_Table <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MaxTab<font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>String_Table_Entry<font color="#000080">;
+  </font>Table_Used     <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>Output_Code    <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>Input_Code     <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>If_Compressing <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>Constructor </b></font>LZW<font color="#000080">.</font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>LastError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>LZW<font color="#000080">.</font>Get_Hash_Code <font color="#000080">(</font>PrevC<font color="#000080">, </font>FollC <font color="#000080">: </font>Integer<font color="#000080">) : </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>Index  <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>Index2 <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Index <font color="#000080">:= ((</font>PrevC <font color="#FF0000"><b>SHL </b></font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>XOR </b></font>FollC<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font>MaxTab<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>String_Table <font color="#000080">[</font>Index<font color="#000080">].</font>Used<font color="#000080">)
+    </font><font color="#FF0000"><b>Then
+      </b></font>Get_Hash_Code <font color="#000080">:= </font>Index
+    <font color="#FF0000"><b>Else
+      Begin
+        While </b></font><font color="#000080">(</font>String_Table<font color="#000080">[</font>Index<font color="#000080">].</font>Next <font color="#000080">&lt;&gt; </font>End_List<font color="#000080">) </font><font color="#FF0000"><b>Do
+          </b></font>Index <font color="#000080">:= </font>String_Table<font color="#000080">[</font>Index<font color="#000080">].</font>Next<font color="#000080">;
+        </font>Index2 <font color="#000080">:= (</font>Index <font color="#000080">+ </font><font color="#800000">101</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font>MaxTab<font color="#000080">;
+        </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>String_Table<font color="#000080">[</font>Index2<font color="#000080">].</font>Used<font color="#000080">) </font><font color="#FF0000"><b>Do
+          </b></font>Index2 <font color="#000080">:= </font>Succ <font color="#000080">(</font>Index2<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font>MaxTab<font color="#000080">;
+        </font>String_Table<font color="#000080">[</font>Index<font color="#000080">].</font>Next <font color="#000080">:= </font>Index2<font color="#000080">;
+        </font>Get_Hash_Code <font color="#000080">:= </font>Index2<font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Make_Table_Entry <font color="#000080">(</font>PrevC<font color="#000080">, </font>FollC<font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+  If </b></font><font color="#000080">(</font>Table_Used <font color="#000080">&lt;= </font>MaxTab <font color="#000080">)
+    </font><font color="#FF0000"><b>Then
+      Begin
+         With </b></font>String_Table <font color="#000080">[</font>Get_Hash_Code <font color="#000080">(</font>PrevC <font color="#000080">, </font>FollC<font color="#000080">)] </font><font color="#FF0000"><b>Do
+           Begin
+             </b></font>Used     <font color="#000080">:= </font>True<font color="#000080">;
+             </font>Next     <font color="#000080">:= </font>End_List<font color="#000080">;
+             </font>PrevChar <font color="#000080">:= </font>PrevC<font color="#000080">;
+             </font>FollChar <font color="#000080">:= </font>FollC<font color="#000080">;
+           </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+         </font>Inc <font color="#000080">(</font>Table_Used<font color="#000080">);
+</font><font color="#008000"><i>(*
+         IF ( Table_Used &gt; ( MaxTab + 1 ) ) THEN
+            BEGIN
+               WRITELN('Hash table full.');
+            END;
+*)
+      </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Initialize_String_Table<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>I <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Table_Used <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>MaxTab <font color="#FF0000"><b>Do
+    With </b></font>String_Table<font color="#000080">[</font>I<font color="#000080">] </font><font color="#FF0000"><b>Do
+      Begin
+        </b></font>PrevChar <font color="#000080">:= </font>No_Prev<font color="#000080">;
+        </font>FollChar <font color="#000080">:= </font>No_Prev<font color="#000080">;
+        </font>Next <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+        </font>Used <font color="#000080">:= </font>False<font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>Do
+    </b></font>Make_Table_Entry <font color="#000080">(</font>No_Prev<font color="#000080">, </font>I<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Initialize<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Output_Code <font color="#000080">:= </font>Empty<font color="#000080">;
+  </font>Input_Code <font color="#000080">:= </font>Empty<font color="#000080">;
+  </font>Initialize_String_Table<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>LZW<font color="#000080">.</font>Lookup_String <font color="#000080">(</font>PrevC<font color="#000080">, </font>FollC<font color="#000080">: </font>Integer<font color="#000080">) : </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>Index  <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>Index2 <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>Found  <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Index <font color="#000080">:= ((</font>PrevC <font color="#FF0000"><b>Shl </b></font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>Xor </b></font>FollC<font color="#000080">) </font><font color="#FF0000"><b>And </b></font>MaxTab<font color="#000080">;
+  </font>Lookup_String <font color="#000080">:= </font>End_List<font color="#000080">;
+  </font><font color="#FF0000"><b>Repeat
+    </b></font>Found <font color="#000080">:= (</font>String_Table<font color="#000080">[</font>Index<font color="#000080">].</font>PrevChar <font color="#000080">= </font>PrevC<font color="#000080">) </font><font color="#FF0000"><b>And
+             </b></font><font color="#000080">(</font>String_Table<font color="#000080">[</font>Index<font color="#000080">].</font>FollChar <font color="#000080">= </font>FollC<font color="#000080">);
+    </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>Found<font color="#000080">)
+      </font><font color="#FF0000"><b>Then
+        </b></font>Index <font color="#000080">:= </font>String_Table <font color="#000080">[</font>Index<font color="#000080">].</font>Next<font color="#000080">;
+  </font><font color="#FF0000"><b>Until </b></font>Found <font color="#FF0000"><b>Or </b></font><font color="#000080">(</font>Index <font color="#000080">= </font>End_List<font color="#000080">);
+  </font><font color="#FF0000"><b>If </b></font>Found
+    <font color="#FF0000"><b>Then
+      </b></font>Lookup_String <font color="#000080">:= </font>Index<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Get_Char <font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>C <font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>Ch <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  If Not </b></font>GetChar <font color="#000080">(</font>Ch<font color="#000080">)
+    </font><font color="#FF0000"><b>Then
+      </b></font>C <font color="#000080">:= </font>EOF_Char
+    <font color="#FF0000"><b>Else
+      </b></font>C <font color="#000080">:= </font>Ord <font color="#000080">(</font>Ch<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Put_Char <font color="#000080">(</font>C <font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>Ch <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Ch <font color="#000080">:= </font>Chr <font color="#000080">(</font>C<font color="#000080">);
+  </font>PutChar <font color="#000080">(</font>Ch<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Compress<font color="#000080">;
+  </font><font color="#FF0000"><b>Procedure </b></font>Put_Code <font color="#000080">(</font>Hash_Code <font color="#000080">: </font>Integer<font color="#000080">);
+  </font><font color="#FF0000"><b>Begin
+    If </b></font><font color="#000080">(</font>Output_Code <font color="#000080">= </font>Empty<font color="#000080">)
+      </font><font color="#FF0000"><b>Then
+        Begin
+          </b></font>Put_Char <font color="#000080">((</font>Hash_Code <font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$FF</font><font color="#000080">);
+          </font>Output_Code <font color="#000080">:= </font>Hash_Code <font color="#FF0000"><b>And </b></font><font color="#800000">$0F</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End
+      Else
+        Begin
+          </b></font>Put_Char <font color="#000080">(((</font>Output_Code <font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$FF0</font><font color="#000080">) +
+                   ((</font>Hash_Code <font color="#FF0000"><b>Shr </b></font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$00F</font><font color="#000080">));
+          </font>Put_Char <font color="#000080">(</font>Hash_Code <font color="#FF0000"><b>And </b></font><font color="#800000">$FF</font><font color="#000080">);
+          </font>Output_Code <font color="#000080">:= </font>Empty<font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Do_Compression<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>C <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>WC <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>W <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>Get_Char <font color="#000080">(</font>C<font color="#000080">);
+    </font>W <font color="#000080">:= </font>Lookup_String <font color="#000080">(</font>No_Prev<font color="#000080">, </font>C<font color="#000080">);
+    </font>Get_Char <font color="#000080">(</font>C<font color="#000080">);
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>C <font color="#000080">&lt;&gt; </font>EOF_Char<font color="#000080">) </font><font color="#FF0000"><b>Do
+      Begin
+        </b></font>WC <font color="#000080">:= </font>Lookup_String <font color="#000080">(</font>W<font color="#000080">, </font>C<font color="#000080">);
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>WC <font color="#000080">= </font>End_List<font color="#000080">)
+          </font><font color="#FF0000"><b>Then
+            Begin
+              </b></font>Make_Table_Entry <font color="#000080">(</font>W<font color="#000080">, </font>C <font color="#000080">);
+              </font>Put_Code <font color="#000080">(</font>W<font color="#000080">);
+              </font>W <font color="#000080">:= </font>Lookup_String <font color="#000080">(</font>No_Prev<font color="#000080">, </font>C<font color="#000080">);
+            </font><font color="#FF0000"><b>End
+          Else
+            </b></font>W <font color="#000080">:= </font>WC<font color="#000080">;
+        </font>Get_Char<font color="#000080">( </font>C <font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font>Put_Code <font color="#000080">(</font>W<font color="#000080">);
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font>If_Compressing <font color="#000080">:= </font>True<font color="#000080">;
+  </font>Initialize<font color="#000080">;
+  </font>Do_Compression<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZW<font color="#000080">.</font>Decompress<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>MaxStack <font color="#000080">= </font><font color="#800000">4096</font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>Stack <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxStack<font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Integer<font color="#000080">;
+  </font>Stack_Pointer <font color="#000080">: </font>Integer<font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Push <font color="#000080">(</font>C <font color="#000080">: </font>Integer<font color="#000080">);
+  </font><font color="#FF0000"><b>Begin
+    </b></font>Inc <font color="#000080">(</font>Stack_Pointer<font color="#000080">);
+    </font>Stack <font color="#000080">[</font>Stack_Pointer<font color="#000080">] := </font>C<font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Stack_Pointer <font color="#000080">&gt;= </font>MaxStack<font color="#000080">)
+      </font><font color="#FF0000"><b>Then
+        Begin
+          </b></font>LastError <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font>Exit<font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Pop <font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>C <font color="#000080">: </font>Integer<font color="#000080">);
+  </font><font color="#FF0000"><b>Begin</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Stack_Pointer <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>Then
+        Begin
+          </b></font>C <font color="#000080">:= </font>Stack <font color="#000080">[</font>Stack_Pointer<font color="#000080">];
+          </font>Dec <font color="#000080">(</font>Stack_Pointer<font color="#000080">);
+        </font><font color="#FF0000"><b>End
+      Else
+        </b></font>C <font color="#000080">:= </font>Empty<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Get_Code <font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Hash_Code <font color="#000080">: </font>Integer<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>Local_Buf <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    If </b></font><font color="#000080">(</font>Input_Code <font color="#000080">= </font>Empty<font color="#000080">)
+      </font><font color="#FF0000"><b>Then
+        Begin
+          </b></font>Get_Char <font color="#000080">(</font>Local_Buf<font color="#000080">);
+          </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Local_Buf <font color="#000080">= </font>EOF_Char<font color="#000080">)
+            </font><font color="#FF0000"><b>Then
+              Begin
+                </b></font>Hash_Code <font color="#000080">:= </font>EOF_Char<font color="#000080">;
+                </font>Exit<font color="#000080">;
+              </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+          </font>Get_Char <font color="#000080">(</font>Input_Code<font color="#000080">);
+          </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Input_Code <font color="#000080">= </font>EOF_Char<font color="#000080">)
+            </font><font color="#FF0000"><b>Then
+              Begin
+                </b></font>Hash_Code <font color="#000080">:= </font>EOF_Char<font color="#000080">;
+                </font>Exit<font color="#000080">;
+              </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+          </font>Hash_Code <font color="#000080">:= ((</font>Local_Buf <font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$FF0</font><font color="#000080">) +
+                       ((</font>Input_Code <font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$00F</font><font color="#000080">);
+          </font>Input_Code <font color="#000080">:= </font>Input_Code <font color="#FF0000"><b>And </b></font><font color="#800000">$0F</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End
+      Else
+        Begin
+          </b></font>Get_Char <font color="#000080">(</font>Local_Buf<font color="#000080">);
+          </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Local_Buf <font color="#000080">= </font>EOF_Char<font color="#000080">)
+            </font><font color="#FF0000"><b>Then
+              Begin
+                </b></font>Hash_Code <font color="#000080">:= </font>EOF_Char<font color="#000080">;
+                </font>Exit<font color="#000080">;
+              </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+          </font>Hash_Code <font color="#000080">:= </font>Local_Buf <font color="#000080">+ ((</font>Input_Code <font color="#FF0000"><b>Shl </b></font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$F00</font><font color="#000080">);
+          </font>Input_Code <font color="#000080">:= </font>Empty<font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Do_Decompression<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>C <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Code <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Old_Code <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Fin_Char <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>In_Code <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Last_Char <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Unknown <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>Temp_C <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>Stack_Pointer <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>Unknown <font color="#000080">:= </font>False<font color="#000080">;
+    </font>Get_Code <font color="#000080">(</font>Old_Code<font color="#000080">);
+    </font>Code <font color="#000080">:= </font>Old_Code<font color="#000080">;
+    </font>C <font color="#000080">:= </font>String_Table<font color="#000080">[</font>Code<font color="#000080">].</font>FollChar<font color="#000080">;
+    </font>Put_Char <font color="#000080">(</font>C<font color="#000080">);
+    </font>Fin_Char <font color="#000080">:= </font>C<font color="#000080">;
+    </font>Get_Code <font color="#000080">(</font>In_Code<font color="#000080">);
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>In_Code <font color="#000080">&lt;&gt; </font>EOF_Char<font color="#000080">) </font><font color="#FF0000"><b>Do
+      Begin
+        </b></font>Code <font color="#000080">:= </font>In_Code<font color="#000080">;
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font><font color="#FF0000"><b>Not </b></font>String_Table <font color="#000080">[</font>Code<font color="#000080">].</font>Used<font color="#000080">)
+          </font><font color="#FF0000"><b>Then
+            Begin
+              </b></font>Last_Char <font color="#000080">:= </font>Fin_Char<font color="#000080">;
+              </font>Code <font color="#000080">:= </font>Old_Code<font color="#000080">;
+              </font>Unknown <font color="#000080">:= </font>TRUE<font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>String_Table <font color="#000080">[</font>Code<font color="#000080">].</font>PrevChar <font color="#000080">&lt;&gt; </font>No_Prev<font color="#000080">) </font><font color="#FF0000"><b>Do
+          With </b></font>String_Table<font color="#000080">[</font>Code<font color="#000080">] </font><font color="#FF0000"><b>Do
+            Begin
+              </b></font>Push <font color="#000080">(</font>FollChar<font color="#000080">);
+              </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>LastError <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">)
+                </font><font color="#FF0000"><b>Then
+                  </b></font>Exit<font color="#000080">;
+              </font>Code <font color="#000080">:= </font>PrevChar<font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font>Fin_Char <font color="#000080">:= </font>String_Table <font color="#000080">[</font>Code<font color="#000080">].</font>FollChar<font color="#000080">;
+        </font>Put_Char <font color="#000080">(</font>Fin_Char<font color="#000080">);
+        </font>Pop <font color="#000080">(</font>Temp_C<font color="#000080">);
+        </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Temp_C <font color="#000080">&lt;&gt; </font>Empty<font color="#000080">) </font><font color="#FF0000"><b>Do
+          Begin
+            </b></font>Put_Char <font color="#000080">(</font>Temp_C<font color="#000080">);
+            </font>Pop <font color="#000080">(</font>Temp_C<font color="#000080">);
+          </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>If </b></font>Unknown
+          <font color="#FF0000"><b>Then
+            Begin
+              </b></font>Fin_Char <font color="#000080">:= </font>Last_Char<font color="#000080">;
+              </font>Put_Char <font color="#000080">(</font>Fin_Char<font color="#000080">);
+              </font>Unknown <font color="#000080">:= </font>FALSE<font color="#000080">;
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font>Make_Table_Entry <font color="#000080">(</font>Old_Code<font color="#000080">, </font>Fin_Char<font color="#000080">);
+        </font>Old_Code <font color="#000080">:= </font>In_Code<font color="#000080">;
+        </font>Get_Code<font color="#000080">( </font>In_Code <font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font>If_Compressing <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Initialize<font color="#000080">;
+  </font>Do_Decompression<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>(* *****************************     TEST PROGRAM    ****************** *)
+
+</i></font><font color="#FF0000"><b>Program </b></font>LZWTest<font color="#000080">;
+</font><font color="#008000"><i>{ program to demo/test the LZW object }
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>IHLZW<font color="#000080">;  </font><font color="#008000"><i>{ Only needs this }
+</i></font><font color="#FF0000"><b>Var
+  </b></font>C <font color="#000080">: </font>LZW<font color="#000080">; </font><font color="#008000"><i>{ The Star of the Show; the Compression Object }
+
+{$F+} </i></font><font color="#FF0000"><b>Function </b></font>GetTheChar <font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Ch <font color="#000080">: </font>Char<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#008000"><i>{$F-}
+{ Make your GetChar routine's declaration look exactly like this }
+
+</i></font><font color="#FF0000"><b>Begin
+  If Not </b></font>Eof <font color="#000080">(</font>Input<font color="#000080">) </font><font color="#008000"><i>{ End of Input? }
+    </i></font><font color="#FF0000"><b>Then
+      Begin
+        </b></font>Read <font color="#000080">(</font>Input<font color="#000080">, </font>Ch<font color="#000080">); </font><font color="#008000"><i>{ Then read one character into Ch and ... }
+        </i></font>GetTheChar <font color="#000080">:= </font>True<font color="#000080">; </font><font color="#008000"><i>{ ... Return True }
+      </i></font><font color="#FF0000"><b>End
+    Else
+      </b></font>GetTheChar <font color="#000080">:= </font>False<font color="#000080">; </font><font color="#008000"><i>{ Otherwise return False }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$F+} </i></font><font color="#FF0000"><b>Procedure </b></font>PutTheChar <font color="#000080">(</font>Ch <font color="#000080">: </font>Char<font color="#000080">); </font><font color="#008000"><i>{$F-}
+{ Make your PutChar routine's declaration look exactly like this }
+
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>Write <font color="#000080">(</font>Output<font color="#000080">, </font>Ch<font color="#000080">); </font><font color="#008000"><i>{ Write Ch to Output file }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font><font color="#008000"><i>{ Open data files }
+  </i></font>Assign <font color="#000080">(</font>Input<font color="#000080">, </font><font color="#800000">''</font><font color="#000080">); </font><font color="#008000"><i>{ Standard Input; requires redirection to be useful }
+  </i></font>Assign <font color="#000080">(</font>Output<font color="#000080">, </font><font color="#800000">''</font><font color="#000080">); </font><font color="#008000"><i>{ Standard Output; requires redirection to be useful }
+  </i></font>Reset <font color="#000080">(</font>Input<font color="#000080">);
+  </font>Rewrite <font color="#000080">(</font>Output<font color="#000080">);
+  </font><font color="#008000"><i>{ Can't fail yet -- maybe a descendant could, though... }
+  </i></font><font color="#FF0000"><b>If not </b></font>C<font color="#000080">.</font>Init
+    <font color="#FF0000"><b>Then
+      </b></font>Halt<font color="#000080">;
+  </font><font color="#008000"><i>{ Assign I/O routines }
+  </i></font>C<font color="#000080">.</font>GetChar <font color="#000080">:= </font>GetTheChar<font color="#000080">; </font><font color="#008000"><i>{ Set LZW's GetChar to routine GetTheChar }
+  </i></font>C<font color="#000080">.</font>PutChar <font color="#000080">:= </font>PutTheChar<font color="#000080">; </font><font color="#008000"><i>{ Set LZW's PutChar to routine PutTheChar }
+  { are we compressing or decompressing? }
+  </i></font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>ParamCount <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>Then
+      </b></font>C<font color="#000080">.</font>Compress <font color="#008000"><i>{ compress }
+    </i></font><font color="#FF0000"><b>Else
+      </b></font>C<font color="#000080">.</font>Decompress<font color="#000080">; </font><font color="#008000"><i>{ decompress }
+  { All Done! }
+</i></font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p></body>
+</html>

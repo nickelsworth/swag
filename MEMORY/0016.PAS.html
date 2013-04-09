@@ -1,0 +1,285 @@
+<html>
+<head><title> "Extend HEAP to UMB" by GAYLE DAVIS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0016.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A-,B-,D-,E-,F-,G-,I-,L-,N-,O-,R-,S+,V-,X-}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>UMB_Heap<font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>interface
+
+  Procedure </b></font>Extend_Heap<font color="#000080">;        </font><font color="#008000"><i>{ Use Upper Memory Blocks (UMB) to extend    }
+                                { the Turbo Pascal 6.0 heap.  This procedure }
+                                { should be called as soon as possible in    }
+                                { your code.                                 }
+  </i></font><font color="#FF0000"><b>var
+    </b></font>UMB_Heap_Debug <font color="#000080">: </font>Boolean<font color="#000080">;   </font><font color="#008000"><i>{ If true, releases UMBs immediately to make }
+                                { sure they're available for the next run    }
+                                { without rebooting.  Used when debugging in }
+                                { the IDE.  If not used then, the UMBs may   }
+                                { not get freed between executions.          }
+
+{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>implementation
+
+const
+  </b></font>Max_Blocks <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;              </font><font color="#008000"><i>{ It's not likely more than 4 UMBs are needed }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>PFreeRec <font color="#000080">= ^</font>TFreeRec<font color="#000080">;      </font><font color="#008000"><i>{  From pg. 216 of the TP6 programmer's guide.  }
+  </i></font>TFreeRec <font color="#000080">= </font><font color="#FF0000"><b>record          </b></font><font color="#008000"><i>{  It's used for traversing the free blocks of  }
+    </i></font>Next <font color="#000080">: </font>PFreeRec<font color="#000080">;         </font><font color="#008000"><i>{  the heap.                                    }
+    </i></font>Size <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>XMS_Driver <font color="#000080">: </font>Pointer<font color="#000080">;      </font><font color="#008000"><i>{  Pointer to the XMS driver.  }
+  </i></font>Num_Blocks <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Block_Address<font color="#000080">,
+  </font>Block_Size <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>Max_Blocks<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Pointer<font color="#000080">;
+  </font>SaveExitProc <font color="#000080">: </font>Pointer<font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+{  Swap to pointers.  Needed when sorting the UMB addresses.  }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Pointer_Swap<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>A<font color="#000080">,</font>B <font color="#000080">: </font>Pointer<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>Temp <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>Temp <font color="#000080">:= </font>A<font color="#000080">;
+    </font>A <font color="#000080">:= </font>B<font color="#000080">;
+    </font>B <font color="#000080">:= </font>Temp<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Function </b></font>XMS_Driver_Present <font color="#000080">: </font>Boolean<font color="#000080">;  </font><font color="#008000"><i>{ XMS software present? }
+  </i></font><font color="#FF0000"><b>var
+    </b></font>Result <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>Result <font color="#000080">:= </font>False<font color="#000080">;      </font><font color="#008000"><i>{ Assume no XMS driver }
+    </i></font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">@Begin:
+        mov ax,4300h
+        int 2Fh
+        cmp al,80h
+        jne @Fail
+        mov ax,4310h
+        int 2Fh
+        mov word ptr XMS_Driver+2,es       </font><font color="#008000"><i>{ Get the XMS driver entry point }
+        </i></font><font color="#FF00FF">mov word ptr XMS_Driver,bx
+        mov Result,1
+        jmp @</font><font color="#FF0000"><b>End
+      </b></font><font color="#000080">@</font>Fail<font color="#000080">:
+        </font>mov Result<font color="#000080">,</font><font color="#800000">0
+      </font><font color="#000080">@</font><font color="#FF0000"><b>End</b></font><font color="#000080">:
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>XMS_Driver_Present <font color="#000080">:= </font>Result<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Allocate_UMB_Heap<font color="#000080">;         </font><font color="#008000"><i>{ Add the four largest UMBs to the heap }
+  </i></font><font color="#FF0000"><b>var
+    </b></font>i<font color="#000080">,</font>j <font color="#000080">: </font>Word<font color="#000080">;
+    </font>UMB_Strategy<font color="#000080">,
+    </font>DOS_Strategy<font color="#000080">,
+    </font>Segment<font color="#000080">,</font>Size <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Get_Direct <font color="#000080">: </font>Boolean<font color="#000080">;   </font><font color="#008000"><i>{ Get UMB direct from XMS if TRUE, else from DOS }
+  </i></font><font color="#FF0000"><b>Begin
+    </b></font>Num_Blocks <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Max_Blocks <font color="#FF0000"><b>do
+      begin
+        </b></font>Block_Address<font color="#000080">[</font>i<font color="#000080">] := </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+        </font>Block_Size<font color="#000080">[</font>i<font color="#000080">] := </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov ax,5800h
+      int 21h                     </font><font color="#008000"><i>{ Get and save the DOS allocation strategy }
+      </i></font><font color="#FF00FF">mov [DOS_Strategy],ax
+      mov ax,5802h
+      int 21h                     </font><font color="#008000"><i>{ Get and save the UMB allocation strategy }
+      </i></font><font color="#FF00FF">mov [UMB_Strategy],ax
+      mov ax,5801h
+      mov bx,0000h
+      int 21h                      </font><font color="#008000"><i>{ Set the DOS allocation strategy so that }
+      </i></font><font color="#FF00FF">mov ax,5803h                 </font><font color="#008000"><i>{ it uses only high memory                }
+
+                                   { DON'T TRUST THIS FUNCTION.  DOS WILL GO }
+                                   { AHEAD AND TRY TO ALLOCATE LOWER MEMORY  }
+                                   { EVEN AFTER YOU TELL IT NOT TO!          }
+      </i></font><font color="#FF00FF">mov bx,0001h
+      int 21h                      </font><font color="#008000"><i>{ Set the UMB allocation strategy so that }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;                           </font><font color="#008000"><i>{ UMBs are added to the DOS mem chain     }
+
+    </i></font>Get_Direct <font color="#000080">:= </font>True<font color="#000080">;            </font><font color="#008000"><i>{ Try to get UMBs directly from the XMS   }
+                                   { if possible.                            }
+    </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Max_Blocks <font color="#FF0000"><b>do
+      begin
+        </b></font>Segment <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>Size <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>if </b></font>Get_Direct <font color="#FF0000"><b>then         </b></font><font color="#008000"><i>{ Get a UMB direct from the XMS driver.   }
+          </i></font><font color="#FF0000"><b>begin
+            asm
+              </b></font><font color="#FF00FF">@Begin:
+                mov ax,01000h         
+                mov dx,0FFFFh         </font><font color="#008000"><i>{ Ask for the impossible to ...        }
+                </i></font><font color="#FF00FF">push ds               </font><font color="#008000"><i>{ Get the size of the next largest UMB }
+                </i></font><font color="#FF00FF">mov cx,ds
+                mov es,cx
+                call es:[XMS_Driver]
+                cmp dx,100h           </font><font color="#008000"><i>{ Don't bother with anything &lt; 1K      }
+                </i></font><font color="#FF00FF">jl @</font><font color="#FF0000"><b>End
+                </b></font>mov ax<font color="#000080">,</font><font color="#800000">01000</font>h
+                call es<font color="#000080">:[</font>XMS_Driver<font color="#000080">]  </font><font color="#008000"><i>{ Get the next largest UMB }
+                </i></font>cmp ax<font color="#000080">,</font><font color="#800000">1
+                </font>jne <font color="#000080">@</font><font color="#FF0000"><b>End
+                </b></font>cmp bx<font color="#000080">,</font><font color="#800000">0</font>A000h         <font color="#008000"><i>{ It better be above 640K }
+                </i></font>jl <font color="#000080">@</font><font color="#FF0000"><b>End               </b></font><font color="#008000"><i>{ We can't trust DOS 5.00 }
+                </i></font>mov <font color="#000080">[</font>Segment<font color="#000080">],</font>bx
+                mov <font color="#000080">[</font>Size<font color="#000080">],</font>dx
+              <font color="#000080">@</font><font color="#FF0000"><b>End</b></font><font color="#000080">:
+                </font>pop ds
+            <font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>i <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Size <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ if we couldn't get the UMB  }
+              </i></font>Get_Direct <font color="#000080">:= </font>False<font color="#000080">;            </font><font color="#008000"><i>{ from the XMS driver, don't  }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;                                </font><font color="#008000"><i>{ try again the next time.    }
+
+        </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>Get_Direct<font color="#000080">) </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ Get a UMB via DOS }
+          </i></font><font color="#FF0000"><b>begin
+            asm
+              </b></font><font color="#FF00FF">@Begin:
+                mov ax,4800h
+                mov bx,0FFFFh         </font><font color="#008000"><i>{ Ask for the impossible to ...        }
+                </i></font><font color="#FF00FF">int 21h               </font><font color="#008000"><i>{ Get the size of the next largest UMB }
+                </i></font><font color="#FF00FF">cmp bx,100h           </font><font color="#008000"><i>{ Don't bother with anything &lt; 1K      }
+                </i></font><font color="#FF00FF">jl @</font><font color="#FF0000"><b>End
+                </b></font>mov ax<font color="#000080">,</font><font color="#800000">4800</font>h
+                int <font color="#800000">21</font>h               <font color="#008000"><i>{ Get the next largest UMB }
+                </i></font>jc <font color="#000080">@</font><font color="#FF0000"><b>End
+                </b></font>cmp ax<font color="#000080">,</font><font color="#800000">0</font>A000h         <font color="#008000"><i>{ It better be above 640K }
+                </i></font>jl <font color="#000080">@</font><font color="#FF0000"><b>End               </b></font><font color="#008000"><i>{ We can't trust DOS 5.00 }
+                </i></font>mov <font color="#000080">[</font>Segment<font color="#000080">],</font>ax
+                mov <font color="#000080">[</font>Size<font color="#000080">],</font>bx
+              <font color="#000080">@</font><font color="#FF0000"><b>End</b></font><font color="#000080">:
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Segment <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then                      </b></font><font color="#008000"><i>{ Did it work? }
+          </i></font><font color="#FF0000"><b>begin
+            </b></font>Block_Address<font color="#000080">[</font>i<font color="#000080">] := </font>Ptr<font color="#000080">(</font>Segment<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+            </font>Inc<font color="#000080">(</font>Num_Blocks<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>Block_Size<font color="#000080">[</font>i<font color="#000080">] := </font>Ptr<font color="#000080">(</font>Size<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Num_Blocks <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then               </b></font><font color="#008000"><i>{ Sort the UMB addrs in ASC order }
+      </i></font><font color="#FF0000"><b>begin
+        for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Num_Blocks<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+          for </b></font>j <font color="#000080">:= </font>i<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Num_Blocks <font color="#FF0000"><b>do
+            if </b></font><font color="#000080">(</font>Seg<font color="#000080">(</font>Block_Address<font color="#000080">[</font>i<font color="#000080">]^) &gt; </font>Seg<font color="#000080">(</font>Block_Address<font color="#000080">[</font>j<font color="#000080">]^)) </font><font color="#FF0000"><b>then
+              begin
+                </b></font>Pointer_Swap<font color="#000080">(</font>Block_Address<font color="#000080">[</font>i<font color="#000080">],</font>Block_Address<font color="#000080">[</font>j<font color="#000080">]);
+                </font>Pointer_Swap<font color="#000080">(</font>Block_Size<font color="#000080">[</font>i<font color="#000080">],</font>Block_Size<font color="#000080">[</font>j<font color="#000080">]);
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov ax,5803h
+      mov bx,[UMB_Strategy]
+      int 21h                          </font><font color="#008000"><i>{ Restore the UMB allocation strategy }
+      </i></font><font color="#FF00FF">mov ax,5801h
+      mov bx,[DOS_Strategy]
+      int 21h                          </font><font color="#008000"><i>{ Restore the DOS allocation strategy }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Release_UMB<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;                 </font><font color="#008000"><i>{ Exit procedure to release UMBs }
+  </i></font><font color="#FF0000"><b>var
+    </b></font>i <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Segment <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    </b></font>ExitProc <font color="#000080">:= </font>SaveExitProc<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Num_Blocks <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        asm
+          </b></font><font color="#FF00FF">mov ax,5803h
+          mov bx,0000h
+          int 21h                       </font><font color="#008000"><i>{ Set the UMB status to release UMBs }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Num_Blocks <font color="#FF0000"><b>do
+          begin
+            </b></font>Segment <font color="#000080">:= </font>Seg<font color="#000080">(</font>Block_Address<font color="#000080">[</font>i<font color="#000080">]^);
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Segment <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+              asm
+                </b></font><font color="#FF00FF">mov ax,$4901
+                mov bx,[Segment]
+                mov es,bx
+                int 21h                                    </font><font color="#008000"><i>{ Release the UMB }
+              </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Extend_Heap<font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>i <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Temp <font color="#000080">: </font>PFreeRec<font color="#000080">;
+  </font><font color="#FF0000"><b>Begin
+    if </b></font>XMS_Driver_Present <font color="#FF0000"><b>then
+      begin
+        </b></font>Allocate_UMB_Heap<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>UMB_Heap_Debug <font color="#FF0000"><b>then
+          </b></font>Release_UMB<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Num_Blocks <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          begin                             </b></font><font color="#008000"><i>{ Attach UMBs to the FreeList    }
+            </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Num_Blocks <font color="#FF0000"><b>do
+              </b></font>PFreeRec<font color="#000080">(</font>Block_Address<font color="#000080">[</font>i<font color="#000080">])^.</font>Size <font color="#000080">:= </font>Block_Size<font color="#000080">[</font>i<font color="#000080">];
+            </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Num_Blocks <font color="#FF0000"><b>do
+              </b></font>PFreeRec<font color="#000080">(</font>Block_Address<font color="#000080">[</font>i<font color="#000080">])^.</font>Next <font color="#000080">:= </font>Block_Address<font color="#000080">[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">];
+
+            </font>PFreeRec<font color="#000080">(</font>Block_Address<font color="#000080">[</font>Num_Blocks<font color="#000080">])^.</font>Next <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>FreeList <font color="#000080">= </font>HeapPtr<font color="#000080">) </font><font color="#FF0000"><b>then
+              with </b></font>PFreeRec<font color="#000080">(</font>FreeList<font color="#000080">)^ </font><font color="#FF0000"><b>do
+                begin
+                  </b></font>Next <font color="#000080">:= </font>Block_Address<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+                  </font>Size <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>HeapEnd<font color="#000080">^)-</font>Seg<font color="#000080">(</font>HeapPtr<font color="#000080">^),</font><font color="#800000">0</font><font color="#000080">);
+                </font><font color="#FF0000"><b>end
+            else
+              with </b></font>PFreeRec<font color="#000080">(</font>HeapPtr<font color="#000080">)^ </font><font color="#FF0000"><b>do
+                begin
+                  </b></font>Next <font color="#000080">:= </font>Block_Address<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">];
+                  </font>Size <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>HeapEnd<font color="#000080">^)-</font>Seg<font color="#000080">(</font>HeapPtr<font color="#000080">^),</font><font color="#800000">0</font><font color="#000080">);
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font><font color="#008000"><i>{ HEAPPTR MUST BE IN THE LAST FREE BLOCK SO
+              THAT TP6 DOESN'T TRY TO USE ANY MEMORY BETWEEN
+              640K AND HEAPPTR }
+
+            </i></font>HeapPtr <font color="#000080">:= </font>Block_Address<font color="#000080">[</font>Num_Blocks<font color="#000080">];
+            </font>HeapEnd <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>Block_Address<font color="#000080">[</font>Num_Blocks<font color="#000080">]^)+</font>Seg<font color="#000080">(</font>Block_Size<font color="#000080">[</font>Num_Blocks<font color="#000080">]^),</font><font color="#800000">0</font><font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>UMB_Heap_Debug <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Num_Blocks <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>SaveExitProc <font color="#000080">:= </font>ExitProc<font color="#000080">;
+  </font>ExitProc <font color="#000080">:= @</font>Release_UMB<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0016.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,306 @@
+<html>
+<head><title> "Travling Salesman Problem" by PIERRE TOURIGNY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0157.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>program </b></font>citytour<font color="#000080">;
+</font><font color="#008000"><i>{modified anneal.pas in nrpas13.zip from the book Numerical Recipes}
+{95-06-23 by Pierre Tourigny, pierre@panpan.synapse.net}
+{solves the traveling salesman's problem by simulated annealing}
+</i></font><font color="#FF0000"><b>uses </b></font>graph<font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>title <font color="#000080">= </font><font color="#800000">'Tour of 48 US Capitals'</font><font color="#000080">;
+  </font>maxcity <font color="#000080">= </font><font color="#800000">99</font><font color="#000080">; </font><font color="#008000"><i>{maximum city index}
+  </i></font>maxstep <font color="#000080">= </font><font color="#800000">100</font><font color="#000080">; </font><font color="#008000"><i>{maximum number of temperature steps}
+  </i></font>tfactor <font color="#000080">= </font><font color="#800000">0.9</font><font color="#000080">; </font><font color="#008000"><i>{temperature step is 90% of previous step}
+  </i></font>radius <font color="#000080">= </font><font color="#800000">3956.67</font><font color="#000080">; </font><font color="#008000"><i>{average radius of the earth in miles}
+  </i></font>bgidir <font color="#000080">= </font><font color="#800000">'c:\bp\bgi'</font><font color="#000080">; </font><font color="#008000"><i>{directory of bgi drivers; change at need}
+</i></font><font color="#FF0000"><b>type
+  </b></font>city <font color="#000080">= </font><font color="#FF0000"><b>record </b></font>name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">]; </font>lat<font color="#000080">,</font>long<font color="#000080">: </font>real<font color="#000080">; </font>gx<font color="#000080">,</font>gy<font color="#000080">: </font>integer <font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>tdistances <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>maxcity<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font>maxcity<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>real<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>cities<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>maxcity<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>city<font color="#000080">;
+  </font>tour<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>maxcity<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;
+  </font>path<font color="#000080">,</font>delta<font color="#000080">,</font>temperature<font color="#000080">,</font>lowerbound<font color="#000080">: </font>real<font color="#000080">;
+  </font>count<font color="#000080">,</font>success<font color="#000080">,</font>maxpath<font color="#000080">,</font>maxsuccess<font color="#000080">,</font>offcut<font color="#000080">,</font>offlast<font color="#000080">,</font>offsplice<font color="#000080">,
+    </font>first<font color="#000080">,</font>last<font color="#000080">,</font>cutafter<font color="#000080">,</font>cutbefore<font color="#000080">,</font>spliceafter<font color="#000080">,</font>splicebefore<font color="#000080">,
+    </font>mx<font color="#000080">,</font>my<font color="#000080">,</font>grdriver<font color="#000080">,</font>grmode<font color="#000080">: </font>integer<font color="#000080">;
+  </font>distance<font color="#000080">: ^</font>tdistances<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>usage<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>writeln<font color="#000080">;
+</font>writeln<font color="#000080">(</font><font color="#800000">'Usage:   citytour &lt;data file&gt; &lt;solution file&gt;'</font><font color="#000080">);
+</font>writeln<font color="#000080">;
+</font>writeln<font color="#000080">(</font><font color="#800000">'Example: citytour us_cptl.dat us_cptl.sol'</font><font color="#000080">);
+</font>writeln<font color="#000080">;
+</font>writeln<font color="#000080">(</font><font color="#800000">'Data File Format:'</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font><font color="#800000">'   at most 100 cities, one city per line;'</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font><font color="#800000">'   line format: &lt;city name&gt;,&lt;latitude&gt;,'</font><font color="#000080">+
+  </font><font color="#800000">'&lt;longitude&gt;,&lt;other info (not used)&gt;'</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font><font color="#800000">'   latitude and longitude: degrees, minutes and hemisphere'</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font><font color="#800000">'   Example: Salt Lake City,40 45 n,111 58 w,Utah,US'</font><font color="#000080">);
+</font>halt<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>dmc2r<font color="#000080">(</font>degree<font color="#000080">,</font>minute<font color="#000080">: </font>real<font color="#000080">; </font>hemi<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>real<font color="#000080">;
+</font><font color="#008000"><i>{degrees, minutes, hemisphere to radians}
+</i></font><font color="#FF0000"><b>begin
+if </b></font>hemi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'s'</font><font color="#000080">,</font><font color="#800000">'S'</font><font color="#000080">,</font><font color="#800000">'w'</font><font color="#000080">,</font><font color="#800000">'W'</font><font color="#000080">] </font><font color="#FF0000"><b>then
+  </b></font>dmc2r <font color="#000080">:= -(</font>degree <font color="#000080">+ </font>minute<font color="#000080">/</font><font color="#800000">60.0</font><font color="#000080">)*</font>pi<font color="#000080">/</font><font color="#800000">180.0
+</font><font color="#FF0000"><b>else </b></font>dmc2r <font color="#000080">:= (</font>degree <font color="#000080">+ </font>minute<font color="#000080">/</font><font color="#800000">60.0</font><font color="#000080">)*</font>pi<font color="#000080">/</font><font color="#800000">180.0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>gcd<font color="#000080">(</font>i1<font color="#000080">,</font>i2<font color="#000080">: </font>integer<font color="#000080">): </font>real<font color="#000080">;
+</font><font color="#008000"><i>{approximate great-circle distance in miles}
+</i></font><font color="#FF0000"><b>var
+  </b></font>dlat<font color="#000080">,</font>dlong<font color="#000080">: </font>real<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+with </b></font>cities<font color="#000080">[</font>i1<font color="#000080">] </font><font color="#FF0000"><b>do begin
+  </b></font>dlat <font color="#000080">:= </font>abs<font color="#000080">(</font>lat<font color="#000080">-</font>cities<font color="#000080">[</font>i2<font color="#000080">].</font>lat<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>dlat <font color="#000080">&gt; </font>pi <font color="#FF0000"><b>then </b></font>dlat <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">*</font>pi<font color="#000080">-</font>dlat<font color="#000080">;
+  </font>dlong <font color="#000080">:= </font>abs<font color="#000080">(</font>long<font color="#000080">-</font>cities<font color="#000080">[</font>i2<font color="#000080">].</font>long<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>dlong <font color="#000080">&gt; </font>pi <font color="#FF0000"><b>then </b></font>dlong <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">*</font>pi<font color="#000080">-</font>dlong<font color="#000080">;
+  </font>gcd <font color="#000080">:= </font>radius<font color="#000080">*</font>sqrt<font color="#000080">(</font>sqr<font color="#000080">(</font>dlat<font color="#000080">)+
+    </font>abs<font color="#000080">(</font>sqr<font color="#000080">(</font>dlong<font color="#000080">)*</font>cos<font color="#000080">(</font>lat<font color="#000080">)*</font>cos<font color="#000080">(</font>cities<font color="#000080">[</font>i2<font color="#000080">].</font>lat<font color="#000080">)));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>split<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>d <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>minpos<font color="#000080">,</font>dpos <font color="#000080">: </font>byte<font color="#000080">;
+  </font>maxs <font color="#000080">: </font>byte <font color="#FF0000"><b>absolute </b></font>s<font color="#000080">;  </font>maxd <font color="#000080">: </font>byte <font color="#FF0000"><b>absolute </b></font>d<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font>minpos <font color="#000080">:= </font>succ<font color="#000080">(</font>maxs<font color="#000080">);
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>maxd <font color="#FF0000"><b>do begin
+  </b></font>dpos <font color="#000080">:= </font>pos<font color="#000080">(</font>d<font color="#000080">[</font>i<font color="#000080">],</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>dpos <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>dpos <font color="#000080">&lt; </font>minpos<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>minpos <font color="#000080">:= </font>dpos<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>split <font color="#000080">:= </font>copy<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>pred<font color="#000080">(</font>minpos<font color="#000080">));
+</font>s <font color="#000080">:= </font>copy<font color="#000080">(</font>s<font color="#000080">,</font>minpos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">255</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>fval<font color="#000080">(</font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>i<font color="#000080">,</font>code<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin </b></font>val<font color="#000080">(</font>s<font color="#000080">,</font>i<font color="#000080">,</font>code<font color="#000080">); </font>fval <font color="#000080">:= </font>i <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>findlow<font color="#000080">; </font><font color="#008000"><i>{find lower bound for optimal solution}
+{note: the lower bound is not the optimal length; it only
+means that the best tour cannot be shorter}
+</i></font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>j<font color="#000080">: </font>integer<font color="#000080">; </font>mind1<font color="#000080">,</font>mind2<font color="#000080">: </font>real<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>lowerbound <font color="#000080">:= </font><font color="#800000">0.0</font><font color="#000080">;
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+  </b></font>mind1 <font color="#000080">:= </font><font color="#800000">1.0e38</font><font color="#000080">; </font>mind2 <font color="#000080">:= </font>mind1<font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+    if </b></font>i <font color="#000080">= </font>j <font color="#FF0000"><b>then </b></font>continue<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">] &lt; </font>mind1 <font color="#FF0000"><b>then begin
+      </b></font>mind2 <font color="#000080">:= </font>mind1<font color="#000080">;
+      </font>mind1 <font color="#000080">:= </font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">];
+      </font><font color="#FF0000"><b>end
+    else if </b></font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">] &lt; </font>mind2
+      <font color="#FF0000"><b>then </b></font>mind2 <font color="#000080">:= </font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">];
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>lowerbound <font color="#000080">:= </font>lowerbound<font color="#000080">+</font>mind1<font color="#000080">+</font>mind2<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>lowerbound <font color="#000080">:= </font>lowerbound<font color="#000080">/</font><font color="#800000">2</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>drawtour<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>j<font color="#000080">: </font>integer<font color="#000080">;  </font>s<font color="#000080">,</font>sn<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>cleardevice<font color="#000080">;
+</font>outtext<font color="#000080">(</font>title<font color="#000080">);
+</font>setcolor<font color="#000080">(</font>white<font color="#000080">);
+</font><font color="#FF0000"><b>with </b></font>cities<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>do </b></font>moveto<font color="#000080">(</font>gx<font color="#000080">,</font>gy<font color="#000080">);
+</font>j <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+  </b></font>j <font color="#000080">:= </font>tour<font color="#000080">[</font>j<font color="#000080">];
+  </font><font color="#FF0000"><b>with </b></font>cities<font color="#000080">[</font>j<font color="#000080">] </font><font color="#FF0000"><b>do </b></font>lineto<font color="#000080">(</font>gx<font color="#000080">,</font>gy<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>setcolor<font color="#000080">(</font>red<font color="#000080">); </font>setfillstyle<font color="#000080">(</font>solidfill<font color="#000080">,</font>red<font color="#000080">);
+</font>j <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+  with </b></font>cities<font color="#000080">[</font>j<font color="#000080">] </font><font color="#FF0000"><b>do </b></font>fillellipse<font color="#000080">(</font>gx<font color="#000080">,</font>gy<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+  </font>j <font color="#000080">:= </font>tour<font color="#000080">[</font>j<font color="#000080">];
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>setcolor<font color="#000080">(</font>white<font color="#000080">);
+</font>str<font color="#000080">(</font>path<font color="#000080">:</font><font color="#800000">8</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font>sn<font color="#000080">);        </font>s <font color="#000080">:= </font><font color="#800000">'Path Length:'</font><font color="#000080">+</font>sn<font color="#000080">;
+</font>str<font color="#000080">(</font>temperature<font color="#000080">:</font><font color="#800000">8</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font>sn<font color="#000080">); </font>s <font color="#000080">:= </font>s<font color="#000080">+</font><font color="#800000">'      Temperature:'</font><font color="#000080">+</font>sn<font color="#000080">;
+</font>str<font color="#000080">(</font>success<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font>sn<font color="#000080">);       </font>s <font color="#000080">:= </font>s<font color="#000080">+</font><font color="#800000">'      Successful Moves:'</font><font color="#000080">+</font>sn<font color="#000080">;
+</font>outtextxy<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">,</font>my<font color="#000080">-</font><font color="#800000">15</font><font color="#000080">,</font>s<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>init<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>j<font color="#000080">: </font>integer<font color="#000080">; </font>data<font color="#000080">: </font>text<font color="#000080">; </font>s<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>gxscale<font color="#000080">,</font>gxmax<font color="#000080">,</font>gyscale<font color="#000080">,</font>gymax<font color="#000080">: </font>real<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+if </b></font>paramcount <font color="#000080">&lt;&gt; </font><font color="#800000">2 </font><font color="#FF0000"><b>then </b></font>usage<font color="#000080">;
+</font>randomize<font color="#000080">;
+</font>fillchar<font color="#000080">(</font>cities<font color="#000080">,</font>sizeof<font color="#000080">(</font>cities<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+</font>fillchar<font color="#000080">(</font>tour<font color="#000080">,</font>sizeof<font color="#000080">(</font>tour<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+</font>assign<font color="#000080">(</font>data<font color="#000080">,</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+</font><font color="#008000"><i>{$I-} </i></font>reset<font color="#000080">(</font>data<font color="#000080">); </font><font color="#008000"><i>{$I+}
+</i></font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'Data file not found'</font><font color="#000080">); </font>halt<font color="#000080">; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>grdriver <font color="#000080">:= </font>detect<font color="#000080">;
+</font>initgraph<font color="#000080">(</font>grdriver<font color="#000080">,</font>grmode<font color="#000080">,</font>bgidir<font color="#000080">);
+</font>mx <font color="#000080">:= </font>getmaxx<font color="#000080">; </font>my <font color="#000080">:= </font>getmaxy<font color="#000080">;
+</font>gyscale <font color="#000080">:= </font>my<font color="#000080">*</font><font color="#800000">180.0</font><font color="#000080">/(</font><font color="#800000">25.0</font><font color="#000080">*</font>pi<font color="#000080">); </font><font color="#008000"><i>{map is 25 degrees tall}
+</i></font>gxscale <font color="#000080">:= </font>mx<font color="#000080">*</font><font color="#800000">180.0</font><font color="#000080">/(</font><font color="#800000">60.0</font><font color="#000080">*</font>pi<font color="#000080">); </font><font color="#008000"><i>{map is 60 degrees wide}
+</i></font>gymax <font color="#000080">:= </font><font color="#800000">50.0</font><font color="#000080">*</font>pi<font color="#000080">/</font><font color="#800000">180.0</font><font color="#000080">; </font>gxmax <font color="#000080">:= </font><font color="#800000">125.0</font><font color="#000080">*</font>pi<font color="#000080">/</font><font color="#800000">180.0</font><font color="#000080">; </font><font color="#008000"><i>{graph point 0,0}
+</i></font>count <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>data<font color="#000080">) </font><font color="#FF0000"><b>do begin
+  </b></font>readln<font color="#000080">(</font>data<font color="#000080">,</font>s<font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>cities<font color="#000080">[</font>count<font color="#000080">] </font><font color="#FF0000"><b>do begin
+    </b></font>name <font color="#000080">:= </font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">','</font><font color="#000080">);
+    </font>lat <font color="#000080">:= </font>dmc2r<font color="#000080">(</font>fval<font color="#000080">(</font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">)),</font>fval<font color="#000080">(</font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">)),</font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">','</font><font color="#000080">));
+    </font>long <font color="#000080">:= </font>dmc2r<font color="#000080">(</font>fval<font color="#000080">(</font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">)),</font>fval<font color="#000080">(</font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">)),</font>split<font color="#000080">(</font>s<font color="#000080">,</font><font color="#800000">','</font><font color="#000080">));
+    </font>gx <font color="#000080">:= </font>trunc<font color="#000080">((</font>gxmax<font color="#000080">+</font>long<font color="#000080">)*</font>gxscale<font color="#000080">);
+    </font>gy <font color="#000080">:= </font>trunc<font color="#000080">((</font>gymax<font color="#000080">-</font>lat<font color="#000080">)*</font>gyscale<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>inc<font color="#000080">(</font>count<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>close<font color="#000080">(</font>data<font color="#000080">);
+
+</font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>count <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>count <font color="#000080">&gt; </font><font color="#800000">100</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>usage<font color="#000080">;
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do </b></font>tour<font color="#000080">[</font>i<font color="#000080">] := (</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>count<font color="#000080">; </font><font color="#008000"><i>{following city}
+</i></font>maxpath <font color="#000080">:= </font><font color="#800000">100</font><font color="#000080">*</font>count<font color="#000080">; </font>maxsuccess <font color="#000080">:= </font><font color="#800000">10</font><font color="#000080">*</font>count<font color="#000080">; </font>path <font color="#000080">:= </font><font color="#800000">0.0</font><font color="#000080">;
+</font>temperature <font color="#000080">:= </font><font color="#800000">1500.0 </font><font color="#008000"><i>{miles}</i></font><font color="#000080">;
+</font>new<font color="#000080">(</font>distance<font color="#000080">); </font>fillchar<font color="#000080">(</font>distance<font color="#000080">^,</font>sizeof<font color="#000080">(</font>distance<font color="#000080">^),</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">2 </font><font color="#FF0000"><b>do for </b></font>j <font color="#000080">:= </font>i<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>count<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do begin
+  </b></font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">] := </font>gcd<font color="#000080">(</font>i<font color="#000080">,</font>j<font color="#000080">); </font>distance<font color="#000080">^[</font>j<font color="#000080">,</font>i<font color="#000080">] := </font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">];
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>findlow<font color="#000080">;
+</font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#000080">(</font>count<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>do </b></font>path <font color="#000080">:= </font>path<font color="#000080">+</font>distance<font color="#000080">^[</font>i<font color="#000080">,(</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>count<font color="#000080">];
+</font>drawtour<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>findedges<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>offcut <font color="#000080">:= </font>random<font color="#000080">(</font>count<font color="#000080">); </font><font color="#008000"><i>{offset from 0}
+</i></font>offlast <font color="#000080">:= </font>random<font color="#000080">(</font>count<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">); </font><font color="#008000"><i>{offset from first}
+</i></font>offsplice <font color="#000080">:= </font>random<font color="#000080">(</font>count<font color="#000080">-</font>offlast<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">); </font><font color="#008000"><i>{offset from cutbefore}
+</i></font>cutafter <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>while </b></font>offcut <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do begin
+  </b></font>cutafter <font color="#000080">:= </font>tour<font color="#000080">[</font>cutafter<font color="#000080">];
+  </font>dec<font color="#000080">(</font>offcut<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>first <font color="#000080">:= </font>tour<font color="#000080">[</font>cutafter<font color="#000080">]; </font><font color="#008000"><i>{first city of segment}
+</i></font>last <font color="#000080">:= </font>first<font color="#000080">; </font><font color="#008000"><i>{last city of segment}
+</i></font><font color="#FF0000"><b>while </b></font>offlast <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do begin
+  </b></font>last <font color="#000080">:= </font>tour<font color="#000080">[</font>last<font color="#000080">];
+  </font>dec<font color="#000080">(</font>offlast<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>cutbefore <font color="#000080">:= </font>tour<font color="#000080">[</font>last<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>revcost<font color="#000080">; </font><font color="#008000"><i>{difference in path length if segment reversed}
+</i></font><font color="#FF0000"><b>begin
+</b></font>delta <font color="#000080">:= -</font>distance<font color="#000080">^[</font>cutafter<font color="#000080">,</font>first<font color="#000080">]-</font>distance<font color="#000080">^[</font>last<font color="#000080">,</font>cutbefore<font color="#000080">]
+  +</font>distance<font color="#000080">^[</font>cutafter<font color="#000080">,</font>last<font color="#000080">]+</font>distance<font color="#000080">^[</font>first<font color="#000080">,</font>cutbefore<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>reverse<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>next<font color="#000080">,</font>after<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>tour<font color="#000080">[</font>cutafter<font color="#000080">] := </font>last<font color="#000080">;
+</font>i <font color="#000080">:= </font>first<font color="#000080">; </font>after <font color="#000080">:= </font>cutbefore<font color="#000080">;
+</font><font color="#FF0000"><b>repeat
+  </b></font>next <font color="#000080">:= </font>tour<font color="#000080">[</font>i<font color="#000080">];
+  </font>tour<font color="#000080">[</font>i<font color="#000080">] := </font>after<font color="#000080">;
+  </font>after <font color="#000080">:= </font>i<font color="#000080">;
+  </font>i <font color="#000080">:= </font>next<font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>i <font color="#000080">= </font>cutbefore<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>transcost<font color="#000080">; </font><font color="#008000"><i>{difference due to transporting segment}
+</i></font><font color="#FF0000"><b>begin
+</b></font>delta <font color="#000080">:=
+  -</font>distance<font color="#000080">^[</font>cutafter<font color="#000080">,</font>first<font color="#000080">]-</font>distance<font color="#000080">^[</font>last<font color="#000080">,</font>cutbefore<font color="#000080">]
+  -</font>distance<font color="#000080">^[</font>spliceafter<font color="#000080">,</font>splicebefore<font color="#000080">]+</font>distance<font color="#000080">^[</font>cutafter<font color="#000080">,</font>cutbefore<font color="#000080">]
+  +</font>distance<font color="#000080">^[</font>spliceafter<font color="#000080">,</font>first<font color="#000080">]+</font>distance<font color="#000080">^[</font>last<font color="#000080">,</font>splicebefore<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>transport<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>tour<font color="#000080">[</font>cutafter<font color="#000080">] := </font>cutbefore<font color="#000080">;
+</font>tour<font color="#000080">[</font>spliceafter<font color="#000080">] := </font>first<font color="#000080">;
+</font>tour<font color="#000080">[</font>last<font color="#000080">] := </font>splicebefore<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>metropolis<font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+if </b></font>delta <font color="#000080">&lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>metropolis <font color="#000080">:= </font>true
+<font color="#FF0000"><b>else </b></font>metropolis <font color="#000080">:= </font>random <font color="#000080">&lt; </font>exp<font color="#000080">(-</font>delta<font color="#000080">/</font>temperature<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>anneal<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">,</font>j<font color="#000080">,</font>k<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+for </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>maxstep <font color="#FF0000"><b>do begin
+  </b></font>success <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>k <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>maxpath <font color="#FF0000"><b>do begin
+    </b></font>findedges<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>random<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">) = </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{reverse segment}
+      </i></font>revcost<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>metropolis <font color="#FF0000"><b>then begin
+        </b></font>inc<font color="#000080">(</font>success<font color="#000080">); </font>path <font color="#000080">:= </font>path<font color="#000080">+</font>delta<font color="#000080">; </font>reverse<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      end
+    else begin </b></font><font color="#008000"><i>{transport segment somewhere else}
+      </i></font>spliceafter <font color="#000080">:= </font>cutbefore<font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font>offsplice <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do begin
+        </b></font>spliceafter <font color="#000080">:= </font>tour<font color="#000080">[</font>spliceafter<font color="#000080">];
+        </font>dec<font color="#000080">(</font>offsplice<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>splicebefore <font color="#000080">:= </font>tour<font color="#000080">[</font>spliceafter<font color="#000080">];
+      </font>transcost<font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font>metropolis <font color="#FF0000"><b>then begin
+        </b></font>inc<font color="#000080">(</font>success<font color="#000080">); </font>path <font color="#000080">:= </font>path<font color="#000080">+</font>delta<font color="#000080">; </font>transport<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>success <font color="#000080">&gt;= </font>maxsuccess <font color="#FF0000"><b>then </b></font>break<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>drawtour<font color="#000080">;
+  </font>temperature <font color="#000080">:= </font>temperature<font color="#000080">*</font>tfactor<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>success <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>break<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>report<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">: </font>integer<font color="#000080">;  </font>d<font color="#000080">,</font>p<font color="#000080">: </font>real<font color="#000080">;  </font>solution<font color="#000080">: </font>text<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font>assign<font color="#000080">(</font>solution<font color="#000080">,</font>paramstr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));
+</font>rewrite<font color="#000080">(</font>solution<font color="#000080">);
+</font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font>p <font color="#000080">:= </font><font color="#800000">0.0</font><font color="#000080">;
+</font>writeln<font color="#000080">(</font><font color="#800000">'City'</font><font color="#000080">:</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">'Distance (miles)'</font><font color="#000080">:</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">'Cumulative'</font><font color="#000080">:</font><font color="#800000">20</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font>solution<font color="#000080">,</font><font color="#800000">'City'</font><font color="#000080">:</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">'Distance (miles)'</font><font color="#000080">:</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">'Cumulative'</font><font color="#000080">:</font><font color="#800000">20</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font>solution<font color="#000080">);
+</font><font color="#FF0000"><b>repeat
+  </b></font>d <font color="#000080">:= </font>distance<font color="#000080">^[</font>i<font color="#000080">,</font>tour<font color="#000080">[</font>i<font color="#000080">]]; </font>p <font color="#000080">:= </font>p <font color="#000080">+ </font>d<font color="#000080">;
+  </font>writeln<font color="#000080">(</font>cities<font color="#000080">[</font>i<font color="#000080">].</font>name<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">,</font>d<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font>p<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font>solution<font color="#000080">,</font>cities<font color="#000080">[</font>i<font color="#000080">].</font>name<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">,</font>d<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font>p<font color="#000080">:</font><font color="#800000">20</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">);
+  </font>i <font color="#000080">:= </font>tour<font color="#000080">[</font>i<font color="#000080">];
+  </font><font color="#FF0000"><b>until </b></font>i <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+</font>writeln<font color="#000080">(</font><font color="#800000">'Lower bound on optimal solution: '</font><font color="#000080">,</font>lowerbound<font color="#000080">:</font><font color="#800000">8</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">);
+</font>writeln<font color="#000080">(</font>solution<font color="#000080">,</font><font color="#800000">'Lower bound on optimal solution: '</font><font color="#000080">,</font>lowerbound<font color="#000080">:</font><font color="#800000">8</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">);
+</font>close<font color="#000080">(</font>solution<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font>init<font color="#000080">;
+</font>anneal<font color="#000080">;
+</font>closegraph<font color="#000080">;
+</font>report<font color="#000080">;
+</font>dispose<font color="#000080">(</font>distance<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0157.PAS">Original</a><b>]</b></p></body>
+</html>

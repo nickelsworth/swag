@@ -1,0 +1,288 @@
+<html>
+<head><title> "No DOS Shell" by WIN VAN DER VEGT</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0053.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Ever been in a situation where you want to secure a PC (for example in a
+network environment) by using menus from which you can't exit and
+user/software companies keep coming with software with the Shell to DOS
+option?
+
+Here's a simple solution which works with a lot of programs which shell
+by using COMSPEC.
+
+This program called execute patches it's own environment with a
+replacement COMSPEC, Does an EXEC and restores the original environment.
+It's done by making fetching all environment strings, replace comspec
+with the first commandline parameter (which should be shorter than the
+original comspec, so I use the program called EXIT located in the
+same directory as COMMAND.COM). Than it does an plain TP Exec (without
+swapping to EMS/XMS/DISK etc) of the second commandline parameter with
+the rest of the commandline as it's parameters.
+
+I used patching the original environment of EXECUTE because the program
+executed inherits it and EXECUTE needs comspec only to exit itself (and
+return to a menu for example). Because of this construction it's
+possible to exit the program started normally and return to a menu but
+you'll be unable to shell to dos and type something like FORMAT C:.
+
+An example EXIT.PAS is also supplied. Pressing CTRL-BREAK etc doesn't
+matter, you'll always return to the application from which you tried to
+shell. Beware that some programs like SPSS and VP-Planner have
+difficulties with R/O attributes on EXIT.EXE (and COMMAND.COM), so keep
+it R/W.
+
+So to for example disable the Turbo Pascal File/Dos use :
+
+EXECUTE C:\DOS\EXIT.EXE C:\TURBO55\TURBO.EXE TEST.PAS
+
+instead of
+
+C:\TURBO55\TURBO TEST.PAS
+
+If COMSPEC was C:\DOS\COMMAND.COM and Turbo Pascal was located in
+the C:\TURBO55 directory.
+
+
+Remember the extensions .EXE or .COM are necessary!
+
+------------------------&lt;cut here
+
+{---------------------------------------------------------}
+{  Project : Exec with Temporaryly changed 'COMSPEC'      }
+{          : the exec routine itself                      }
+{  Auteur  : Ir. G.W. van der Vegt                        }
+{---------------------------------------------------------}
+{  Datum .tijd  Revisie                                   }
+{  921118.0930  Creatie.                                  }
+{---------------------------------------------------------}
+{ This program patches the COMSPEC environment variable   }
+{ with a new value (ie EXIT.EXE) and executes the         }
+{ program. After execution it restores the environment    }
+{                                                         }
+{ Syntax :                                                }
+{                                                         }
+{ EXECUTE temporary_comspec program_name [paramaters]     }
+{                                                         }
+{ Limits :-Only maxenv environments strings can be stored,}
+{          each with a maximum length of 128 characters.  }
+{         -The temporary comspec must be shorter than the }
+{          original one.                                  }
+{         -Environment must be smaller than 32k           }
+{---------------------------------------------------------}
+
+{$M 4096,0,0}
+
+</i></font><font color="#FF0000"><b>Program </b></font>Execute<font color="#000080">;
+
+</font><font color="#FF0000"><b>Uses
+  </b></font>Crt<font color="#000080">,
+  </font>Dos<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Const
+  </b></font>Maxenv <font color="#000080">= </font><font color="#800000">64</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>psp <font color="#000080">= </font><font color="#FF0000"><b>Record
+          </b></font>int20adr <font color="#000080">: </font>Word<font color="#000080">;
+          </font>endofmem <font color="#000080">: </font>Word<font color="#000080">;
+          </font>res1     <font color="#000080">: </font>Byte<font color="#000080">;
+          </font>callfar  <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">5</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+          </font>int22    <font color="#000080">: </font>Pointer<font color="#000080">;
+          </font>Int23    <font color="#000080">: </font>Pointer<font color="#000080">;
+          </font>Int24    <font color="#000080">: </font>Pointer<font color="#000080">;
+          </font>parentpsp<font color="#000080">: </font>Word<font color="#000080">;
+          </font>handles  <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">20</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Byte<font color="#000080">;
+          </font>envseg   <font color="#000080">: </font>Word<font color="#000080">;
+        </font><font color="#008000"><i>{----More follows}
+        </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>env <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">32678</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Char<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>e      <font color="#000080">: ^</font>env<font color="#000080">;
+  </font>p      <font color="#000080">: ^</font>psp<font color="#000080">;
+  </font>addcnt <font color="#000080">: </font>Word<font color="#000080">;                           </font><font color="#008000"><i>{----no of additional strings}
+  </i></font>i      <font color="#000080">: </font>Integer<font color="#000080">;                        </font><font color="#008000"><i>{----loop counter}
+  </i></font>envar  <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>maxenv<font color="#000080">] </font><font color="#FF0000"><b>of String</b></font><font color="#000080">[</font><font color="#800000">128</font><font color="#000080">];</font><font color="#008000"><i>{----environment string storage}
+  </i></font>noenv  <font color="#000080">: </font>Integer<font color="#000080">;                        </font><font color="#008000"><i>{----no strings in environment}
+  </i></font>cmdline<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;                         </font><font color="#008000"><i>{----command line of program to start}
+  </i></font>comspec<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;                         </font><font color="#008000"><i>{----original comspec storage}
+  </i></font>ch     <font color="#000080">: </font>CHAR<font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Read_env<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>i<font color="#000080">,</font>k <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>p<font color="#000080">:=</font>Ptr<font color="#000080">(</font>prefixseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font>noenv<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#008000"><i>{----Show environment strings}
+  </i></font>e<font color="#000080">:=</font>Ptr<font color="#000080">(</font>p<font color="#000080">^.</font>envseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+  </font>i<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>Inc<font color="#000080">(</font>noenv<font color="#000080">);
+  </font>envar<font color="#000080">[</font>noenv<font color="#000080">]:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>Repeat
+    If </b></font><font color="#000080">(</font>e<font color="#000080">^[</font>i<font color="#000080">]&lt;&gt;</font><font color="#800000">#0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>Then </b></font>envar<font color="#000080">[</font>noenv<font color="#000080">]:=</font>envar<font color="#000080">[</font>noenv<font color="#000080">]+</font>e<font color="#000080">^[</font>i<font color="#000080">]
+      </font><font color="#FF0000"><b>Else
+        Begin
+          </b></font>Inc<font color="#000080">(</font>noenv<font color="#000080">);
+          </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>noenv<font color="#000080">&gt;=</font>maxenv<font color="#000080">)
+            </font><font color="#FF0000"><b>THEN
+              BEGIN
+                </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Only '</font><font color="#000080">,</font>maxenv<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">' environment strings can be stored.'</font><font color="#000080">);
+                </font>Halt<font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+          </font>envar<font color="#000080">[</font>noenv<font color="#000080">]:=</font><font color="#800000">''</font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font>Inc<font color="#000080">(</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>e<font color="#000080">^[</font>i<font color="#000080">]=</font><font color="#800000">#00</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>e<font color="#000080">^[</font>i<font color="#000080">]=</font>e<font color="#000080">^[</font>i<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">]);
+
+</font><font color="#008000"><i>{----Show Additional environment strings}
+  </i></font>Inc<font color="#000080">(</font>i<font color="#000080">);
+  </font>addcnt<font color="#000080">:=</font>Word<font color="#000080">(</font>Ord<font color="#000080">(</font>e<font color="#000080">^[</font>i<font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*</font>Ord<font color="#000080">(</font>e<font color="#000080">^[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]));
+  </font>Inc<font color="#000080">(</font>i<font color="#000080">);
+  </font>Inc<font color="#000080">(</font>i<font color="#000080">); </font><font color="#008000"><i>{----eerste character additional strings}
+  </i></font>k<font color="#000080">:=</font>addcnt<font color="#000080">;
+
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>noenv<font color="#000080">+</font>addcnt<font color="#000080">&gt;=</font>maxenv<font color="#000080">)
+    </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Only '</font><font color="#000080">,</font>maxenv<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">' (additional)environment strings can be stored'</font><font color="#000080">);
+        </font>Halt<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Repeat
+    If </b></font><font color="#000080">(</font>e<font color="#000080">^[</font>i<font color="#000080">]&lt;&gt;</font><font color="#800000">#0</font><font color="#000080">)
+      </font><font color="#FF0000"><b>Then </b></font>envar<font color="#000080">[</font>noenv<font color="#000080">]:=</font>envar<font color="#000080">[</font>noenv<font color="#000080">]+</font>e<font color="#000080">^[</font>i<font color="#000080">]
+      </font><font color="#FF0000"><b>Else
+        Begin
+          </b></font>Inc<font color="#000080">(</font>noenv<font color="#000080">);
+          </font>envar<font color="#000080">[</font>noenv<font color="#000080">]:=</font><font color="#800000">''</font><font color="#000080">;
+          </font>Dec<font color="#000080">(</font>k<font color="#000080">);
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font>Inc<font color="#000080">(</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>k<font color="#000080">&lt;=</font><font color="#800000">0</font><font color="#000080">);
+
+  </font>dec<font color="#000080">(</font>noenv<font color="#000080">);
+
+ </font><font color="#008000"><i>{Writeln(' Environment Strings : ',noenv-addcnt);
+  for j:=1 to noenv-addcnt do
+    writeln('e ',envar[j]);
+  Writeln(' Additional Strings : ',addcnt);
+  for j:=noenv-addcnt+1 to noenv do
+    writeln('a ',envar[j]);
+  writeln;}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{of Read_env}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Patch_env<font color="#000080">(</font>envst<font color="#000080">,</font>newval <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>Var
+  </b></font>i<font color="#000080">,</font>j<font color="#000080">,</font>k <font color="#000080">: </font>Integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>{----change an envronment string}
+  </i></font><font color="#FF0000"><b>for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>noenv <font color="#FF0000"><b>do
+    begin
+      if </b></font><font color="#000080">(</font>pos<font color="#000080">(</font>envst<font color="#000080">+</font><font color="#800000">'='</font><font color="#000080">,</font>envar<font color="#000080">[</font>i<font color="#000080">])=</font><font color="#800000">1</font><font color="#000080">)
+        </font><font color="#FF0000"><b>THEN
+          begin
+            </b></font>Delete<font color="#000080">(</font>envar<font color="#000080">[</font>i<font color="#000080">],</font>Pos<font color="#000080">(</font><font color="#800000">'='</font><font color="#000080">,</font>envar<font color="#000080">[</font>i<font color="#000080">])+</font><font color="#800000">1</font><font color="#000080">,</font>Length<font color="#000080">(</font>envar<font color="#000080">[</font>i<font color="#000080">])-</font>Pos<font color="#000080">(</font><font color="#800000">'='</font><font color="#000080">,</font>envar<font color="#000080">[</font>i<font color="#000080">]));
+            </font>envar<font color="#000080">[</font>i<font color="#000080">]:=</font>envar<font color="#000080">[</font>i<font color="#000080">]+</font>newval<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----patch environment strings}
+  </i></font>i<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>j<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>noenv<font color="#000080">-</font>addcnt <font color="#FF0000"><b>do
+    begin
+      for </b></font>k<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>envar<font color="#000080">[</font>j<font color="#000080">]) </font><font color="#FF0000"><b>do
+        begin
+          </b></font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font>envar<font color="#000080">[</font>j<font color="#000080">][</font>k<font color="#000080">];
+          </font>inc<font color="#000080">(</font>i<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+      </font>inc<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----patch environment string end}
+  </i></font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;                  </font>inc<font color="#000080">(</font>i<font color="#000080">);
+</font><font color="#008000"><i>{----patch additional string count}
+  </i></font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font>Chr<font color="#000080">(</font>addcnt <font color="#FF0000"><b>mod </b></font><font color="#800000">256</font><font color="#000080">); </font>inc<font color="#000080">(</font>i<font color="#000080">);
+  </font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font>Chr<font color="#000080">(</font>addcnt <font color="#FF0000"><b>div </b></font><font color="#800000">256</font><font color="#000080">); </font>inc<font color="#000080">(</font>i<font color="#000080">);
+
+</font><font color="#008000"><i>{----patch additional strings}
+  </i></font><font color="#FF0000"><b>for </b></font>j<font color="#000080">:=</font>noenv<font color="#000080">-</font>addcnt<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>noenv <font color="#FF0000"><b>do
+    begin
+      for </b></font>k<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>envar<font color="#000080">[</font>j<font color="#000080">]) </font><font color="#FF0000"><b>do
+        begin
+          </b></font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font>envar<font color="#000080">[</font>j<font color="#000080">][</font>k<font color="#000080">];
+          </font>inc<font color="#000080">(</font>i<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>e<font color="#000080">^[</font>i<font color="#000080">]:=</font><font color="#800000">#0</font><font color="#000080">;
+      </font>inc<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{of Patch_env}
+
+{---------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Begin
+  If </b></font><font color="#000080">(</font>Paramcount<font color="#000080">&lt;</font><font color="#800000">2</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Syntax : EXECUTE temporary_comspec program_name [program_param]'</font><font color="#000080">);
+        </font>Halt<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font>checkbreak<font color="#000080">:=</font>false<font color="#000080">;
+
+  </font>comspec<font color="#000080">:=</font>Getenv<font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">))&gt;</font>Length<font color="#000080">(</font>comspec<font color="#000080">))
+    </font><font color="#FF0000"><b>THEN
+      BEGIN
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Path&amp;name of temporary COMSPEC should be shorter than the original'</font><font color="#000080">);
+        </font>Halt<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font>Read_env<font color="#000080">;
+
+  </font>Patch_env<font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+
+  </font>cmdline<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>i<font color="#000080">:=</font><font color="#800000">3 </font><font color="#FF0000"><b>to </b></font>Paramcount <font color="#FF0000"><b>DO
+    </b></font>cmdline<font color="#000080">:=</font>cmdline<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">+</font>Paramstr<font color="#000080">(</font>i<font color="#000080">);
+
+  </font>Swapvectors<font color="#000080">;
+  </font>Exec<font color="#000080">(</font>Paramstr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">),</font>cmdline<font color="#000080">);
+  </font>Swapvectors<font color="#000080">;
+
+  </font><font color="#FF0000"><b>WHILE </b></font>Keypressed <font color="#FF0000"><b>DO </b></font>ch<font color="#000080">:=</font>Readkey<font color="#000080">;
+
+  </font>Patch_env<font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">,</font><font color="#800000">'C:\COMMAND.COM'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+------------------------&lt;</font>cut here
+
+
+<font color="#FF0000"><b>Program </b></font>Exit<font color="#000080">;
+
+</font><font color="#FF0000"><b>Uses
+  </b></font>CRT<font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+ </b></font>Clrscr<font color="#000080">;
+ </font>GotoXY<font color="#000080">(</font><font color="#800000">20</font><font color="#000080">,</font><font color="#800000">12</font><font color="#000080">);
+ </font>Write<font color="#000080">(</font><font color="#800000">'Sorry, SHELLing to DOS not Possible.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0053.PAS">Original</a><b>]</b></p></body>
+</html>

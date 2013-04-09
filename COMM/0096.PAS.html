@@ -1,0 +1,543 @@
+<html>
+<head><title> "Useful Serial I/O" by PETER MANDRELLA</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0096.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{ Unit UART - serielle I/O v3    07/91,08/92,01/93 }
+{ by Peter Mandrella, P.Mandrella@HOT.gun.de       }
+{ Dieser Quelltext ist Public Domain.              }
+
+{$B-,R-,S-,V-,F-,I-,A+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>uart<font color="#000080">;
+
+</font><font color="#008000"><i>{---------------------------------------------------------------------------)
+   Zu benutzende Schnittstellen sind zuerst mit SetUart zu initialisieren.
+   Anschlie&szlig;end k&ouml;nnen sie mit ActivateCom aktiviert und mit ReleaseCom
+   wieder freigegeben werden. Beim Aktivieren ist die Gr&ouml;&szlig;e des COM-Puffers
+   anzugeben; werden mehr als BufferSize Bytes empfangen und nicht abgeholt,
+   dann wird der Puffer komplett gel&ouml;scht und der Inhalt geht verloren!
+   Das Desaktivieren ist nicht unbedingt n&ouml;tig, sondern erfolgt falls
+   n&ouml;tig auch automatisch bei Programmende.
+
+   Das Empfangen von Daten erfolgt asynchron im Hintergrund. Mit Receive
+   k&ouml;nnen empfangene Daten abgeholt werden. Die Funktion liefert FALSE,
+   falls keine Daten vorhanden waren. Wahlweise kann auch mit Received
+   getestet werden, ob Daten anliegen, ohne diese zu lesen, oder mit
+   Peek ein Byte - falls vorhanden - abgeholt, aber nicht aus dem Puffer
+   entfernt werden.
+
+   Das Senden von Daten erfolgt mit SendByte (ohne CTS-Handshake) oder
+   mit HSendByte (mit CTS-Handshake).
+
+   &Uuml;ber die Funktionen RRing und Carrier kann getestet werden, ob ein
+   Klingelzeichen bzw. ein Carrier am Modem anliegt.
+
+   Da f&uuml;r COM3 und COM4 kein Default-IRQ existiert, k&ouml;nnen mit SetComParams
+   Adresse und IRQ einzelner Schnittstellen eingestellt werden. Vor dieser
+   Einstellung werden COM3 und COM4 nicht unterst&uuml;tzt. Default-Adressen
+   sind $3e8 und $2e8. Die Parameter von COM1 und COM2 sind korrekt
+   eingestellt und sollten normalerweise nicht ge&auml;ndert werden.
+
+(---------------------------------------------------------------------------}
+
+
+</i></font><font color="#FF0000"><b>interface
+
+uses </b></font>dos<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFNDEF DPMI}
+  </i></font><font color="#FF0000"><b>const </b></font>Seg0040 <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>const  </b></font>coms       <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;     </font><font color="#008000"><i>{ Anzahl der unterst&uuml;tzten Schnittstellen }
+
+       </i></font>ua         <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word <font color="#000080">= (</font><font color="#800000">$3f8</font><font color="#000080">,</font><font color="#800000">$2f8</font><font color="#000080">,</font><font color="#800000">$3e8</font><font color="#000080">,</font><font color="#800000">$2e8</font><font color="#000080">);
+       </font>datainout  <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;     </font><font color="#008000"><i>{ UART-Register-Offsets }
+       </i></font>intenable  <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+       </font>intids     <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;     </font><font color="#008000"><i>{ Read  }
+       </i></font>fifoctrl   <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;     </font><font color="#008000"><i>{ Write }
+       </i></font>linectrl   <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+       </font>modemctrl  <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+       </font>linestat   <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+       </font>modemstat  <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+       </font>scratch    <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;
+
+       </font>UartNone   <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;     </font><font color="#008000"><i>{ Ergebnisse von ComType }
+       </i></font>Uart8250   <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+       </font>Uart16450  <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+       </font>Uart16550  <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+       </font>Uart16550A <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+
+       </font>NoFifo     <font color="#000080">= </font><font color="#800000">$00</font><font color="#000080">;   </font><font color="#008000"><i>{ Triggerlevel bei 16550-Chips }
+       </i></font>FifoTL1    <font color="#000080">= </font><font color="#800000">$07</font><font color="#000080">;
+       </font>FifoTL4    <font color="#000080">= </font><font color="#800000">$47</font><font color="#000080">;
+       </font>FifoTL8    <font color="#000080">= </font><font color="#800000">$87</font><font color="#000080">;
+       </font>FifoTL14   <font color="#000080">= </font><font color="#800000">$C7</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type   </b></font>paritype   <font color="#000080">= (</font>Pnone<font color="#000080">,</font>Podd<font color="#000080">,</font>Pxxxx<font color="#000080">,</font>Peven<font color="#000080">);   </font><font color="#008000"><i>{ m&ouml;gliche Parit&auml;ts-Typen }
+
+
+{ Parameter f&uuml;r Schnittstelle einstellen
+{ no       : Nummer  (1-4)
+  address  : I/O-Adresse, 0 -&gt; Adresse wird beibehalten
+  _irq     : Interrupt-Nummer  (z.B. 3 f&uuml;r IRQ3, 4 f&uuml;r IRQ4); 0..15 }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SetComParams<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font>address<font color="#000080">:</font>word<font color="#000080">; </font>_irq<font color="#000080">:</font>byte<font color="#000080">);
+
+</font><font color="#008000"><i>{ Schnittstellen-Parameter einstellen
+  commno   : Nummer der Schnittstelle (1-4)
+  baudrate : Baudrate im Klartext; auch nicht-Standard-Baudraten m&ouml;glich!
+  parity   : s.o.
+  wlength  : Wort-l&auml;nge (7 oder 8)
+  stops    : Stop-Bits (1 oder 2)   }
+
+</i></font><font color="#FF0000"><b>function </b></font>ComType<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">;     </font><font color="#008000"><i>{ Typ des UART-Chips ermitteln }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SetUart<font color="#000080">(</font>comno<font color="#000080">:</font>byte<font color="#000080">; </font>baudrate<font color="#000080">:</font>longint<font color="#000080">; </font>parity<font color="#000080">:</font>paritype<font color="#000080">;
+                  </font>wlength<font color="#000080">,</font>stops<font color="#000080">:</font>byte<font color="#000080">);
+
+</font><font color="#008000"><i>{ Schnittstelle aktivieren
+  no         : Nummer der Schnittstelle
+  buffersize : Gr&ouml;&szlig;e des Puffers
+  FifoTL     : Falls ein 16550 vorhanden ist, kann man hier die Konstanten
+               f&uuml;r den Triggerlevel einsetzen (s.o.)}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>ActivateCom<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font>buffersize<font color="#000080">:</font>word<font color="#000080">; </font>FifoTL<font color="#000080">:</font>Byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>ReleaseCom<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);            </font><font color="#008000"><i>{ Schnitte desakt., Puffer freig. }
+
+</i></font><font color="#FF0000"><b>function  </b></font>receive<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>b<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;   </font><font color="#008000"><i>{ Byte holen, falls vorh. }
+</i></font><font color="#FF0000"><b>function  </b></font>peek<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>b<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">; </font><font color="#008000"><i>{dito, aber Byte bleibt im Puffer}
+</i></font><font color="#FF0000"><b>function  </b></font>received<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;      </font><font color="#008000"><i>{ Testen, ob Daten vorhanden }
+</i></font><font color="#FF0000"><b>procedure </b></font>flushinput<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);            </font><font color="#008000"><i>{ Receive-Puffer l&ouml;schen }
+</i></font><font color="#FF0000"><b>procedure </b></font>SendByte<font color="#000080">(</font>no<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">);            </font><font color="#008000"><i>{ Byte senden }
+</i></font><font color="#FF0000"><b>procedure </b></font>hsendbyte<font color="#000080">(</font>no<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">);           </font><font color="#008000"><i>{ Byte senden, mit CTS-Handshake }
+</i></font><font color="#FF0000"><b>procedure </b></font>putbyte<font color="#000080">(</font>no<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">);             </font><font color="#008000"><i>{ Byte im Puffer hinterlegen }
+
+</i></font><font color="#FF0000"><b>function  </b></font>rring<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;         </font><font color="#008000"><i>{ Telefon klingelt  }
+</i></font><font color="#FF0000"><b>function  </b></font>carrier<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;       </font><font color="#008000"><i>{ Carrier vorhanden }
+</i></font><font color="#FF0000"><b>function  </b></font>getCTS<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;        </font><font color="#008000"><i>{ True = (cts=1)    }
+</i></font><font color="#FF0000"><b>procedure </b></font>DropDtr<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);               </font><font color="#008000"><i>{ DTR=0 setzen      }
+</i></font><font color="#FF0000"><b>procedure </b></font>SetDtr<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);                </font><font color="#008000"><i>{ DTR=1 setzen      }
+</i></font><font color="#FF0000"><b>procedure </b></font>DropRts<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);               </font><font color="#008000"><i>{ RTS=0 setzen      }
+</i></font><font color="#FF0000"><b>procedure </b></font>SetRts<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);                </font><font color="#008000"><i>{ RTS=1 setzen      }
+</i></font><font color="#FF0000"><b>procedure </b></font>SendBreak<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);             </font><font color="#008000"><i>{ Break-Signal      }
+
+
+</i></font><font color="#FF0000"><b>implementation  </b></font><font color="#008000"><i>{-----------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>const  </b></font>active     <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>boolean <font color="#000080">= (</font>false<font color="#000080">,</font>false<font color="#000080">,</font>false<font color="#000080">,</font>false<font color="#000080">);
+       </font>irq        <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">= (</font><font color="#800000">$04</font><font color="#000080">,</font><font color="#800000">$03</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+       </font>intmask    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">= (</font><font color="#800000">$10</font><font color="#000080">,</font><font color="#800000">$08</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+       </font>intcom2    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>boolean <font color="#000080">= (</font>false<font color="#000080">,</font>false<font color="#000080">,</font>false<font color="#000080">,</font>false<font color="#000080">);
+
+       </font>MS_CTS     <font color="#000080">= </font><font color="#800000">$10</font><font color="#000080">;       </font><font color="#008000"><i>{ Modem-Status-Register }
+       </i></font>MS_DSR     <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+       </font>MS_RI      <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;       </font><font color="#008000"><i>{ Ring Indicator: Klingelsignal }
+       </i></font>MS_DCD     <font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">;       </font><font color="#008000"><i>{ Data Carrier Detect           }
+       </i></font>MC_DTR     <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">;       </font><font color="#008000"><i>{ Modem Control Register }
+       </i></font>MC_RTS     <font color="#000080">= </font><font color="#800000">$02</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type   </b></font>bufft      <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65534</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>var    </b></font>savecom    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>pointer<font color="#000080">;
+       </font>exitsave   <font color="#000080">: </font>pointer<font color="#000080">;
+       </font>bufsize    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;
+       </font>buffer     <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font><font color="#000080">^</font>bufft<font color="#000080">;
+       </font>bufi<font color="#000080">,</font>bufo  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>coms<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>error<font color="#000080">(</font>text<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'UART Fehler: '</font><font color="#000080">,</font>text<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>strs<font color="#000080">(</font>l<font color="#000080">:</font>longint<font color="#000080">):</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>s <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>str<font color="#000080">(</font>l<font color="#000080">,</font>s<font color="#000080">);
+  </font>strs<font color="#000080">:=</font>s<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{--- Interrupt-Handler -----------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>cli<font color="#000080">; </font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$fa</font><font color="#000080">);            </font><font color="#008000"><i>{ Interrupts sperren   }
+</i></font><font color="#FF0000"><b>procedure </b></font>sti<font color="#000080">; </font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$fb</font><font color="#000080">);            </font><font color="#008000"><i>{ Interrupts freigeben }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>com1server<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>intcom2<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;                      </font><font color="#008000"><i>{ Interrupt-Controller resetten }
+  </i></font>buffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]];
+  </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com2server<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>intcom2<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>buffer<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]];
+  </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com3server<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>intcom2<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>buffer<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]];
+  </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com4server<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>intcom2<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>buffer<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]];
+  </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com1FIFOserver<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]+</font>intids<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">4</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    repeat
+      </b></font>buffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]];
+      </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>until not </b></font>odd<font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]+</font>linestat<font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;                      </font><font color="#008000"><i>{ Interrupt-Controller resetten }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com2FIFOserver<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]+</font>intids<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">4</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    repeat
+      </b></font>buffer<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]];
+      </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>until not </b></font>odd<font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]+</font>linestat<font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com3FIFOserver<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]+</font>intids<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">4</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    repeat
+      </b></font>buffer<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]];
+      </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>until not </b></font>odd<font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]+</font>linestat<font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>com4FIFOserver<font color="#000080">; </font>interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]+</font>intids<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">4</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    repeat
+      </b></font>buffer<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]^[</font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]];
+      </font>inc<font color="#000080">(</font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]); </font><font color="#FF0000"><b>if </b></font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]=</font>bufsize<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufi<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>until not </b></font>odd<font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]+</font>linestat<font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{--- UART-Typ ermitteln ----------------------------------------------}
+
+{ Hinweis: Die Erkennung des 16550A funktioniert nur bei Chips,  }
+{          die weitgehend kompatibel zum Original-16550A von NS  }
+{          sind. Das gilt allerdings f&uuml;r die meisten verwendeten }
+{          16500A's - ich sch&auml;tze, f&uuml;r ca. 97-99%                }
+
+</i></font><font color="#FF0000"><b>function </b></font>ComType<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">;     </font><font color="#008000"><i>{ Typ des UART-Chips ermitteln }
+</i></font><font color="#FF0000"><b>var </b></font>uart        <font color="#000080">: </font>word<font color="#000080">;
+    </font>lsave<font color="#000080">,</font>ssave <font color="#000080">: </font>byte<font color="#000080">;
+    </font>isave<font color="#000080">,</font>iir   <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>uart<font color="#000080">:=</font>ua<font color="#000080">[</font>no<font color="#000080">];
+  </font>lsave<font color="#000080">:=</font>port<font color="#000080">[</font>uart<font color="#000080">+</font>linectrl<font color="#000080">];
+  </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>linectrl<font color="#000080">]:=</font>lsave <font color="#FF0000"><b>xor </b></font><font color="#800000">$ff</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>linectrl<font color="#000080">]&lt;&gt;</font>lsave <font color="#FF0000"><b>xor </b></font><font color="#800000">$ff </font><font color="#FF0000"><b>then
+    </b></font>ComType<font color="#000080">:=</font>UartNone
+  <font color="#FF0000"><b>else begin
+    </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>linectrl<font color="#000080">]:=</font>lsave<font color="#000080">;
+    </font>ssave<font color="#000080">:=</font>port<font color="#000080">[</font>uart<font color="#000080">+</font>scratch<font color="#000080">];
+    </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>scratch<font color="#000080">]:=</font><font color="#800000">$5a</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>scratch<font color="#000080">]&lt;&gt;</font><font color="#800000">$5a </font><font color="#FF0000"><b>then
+      </b></font>ComType<font color="#000080">:=</font>Uart8250                 <font color="#008000"><i>{ kein Scratchpad vorhanden }
+    </i></font><font color="#FF0000"><b>else begin
+      </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>scratch<font color="#000080">]:=</font><font color="#800000">$a5</font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>scratch<font color="#000080">]&lt;&gt;</font><font color="#800000">$a5 </font><font color="#FF0000"><b>then
+        </b></font>ComType<font color="#000080">:=</font>Uart8250               <font color="#008000"><i>{ kein Scratchpad vorhanden }
+      </i></font><font color="#FF0000"><b>else begin
+        </b></font>isave<font color="#000080">:=</font>port<font color="#000080">[</font>uart<font color="#000080">+</font>intids<font color="#000080">];
+        </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>fifoctrl<font color="#000080">]:=</font><font color="#800000">1</font><font color="#000080">;
+        </font>iir<font color="#000080">:=</font>port<font color="#000080">[</font>uart<font color="#000080">+</font>intids<font color="#000080">];
+        </font><font color="#FF0000"><b>if </b></font>isave <font color="#FF0000"><b>and </b></font><font color="#800000">$80</font><font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>fifoctrl<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>iir <font color="#FF0000"><b>and </b></font><font color="#800000">$40</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>ComType<font color="#000080">:=</font>Uart16550A
+        <font color="#FF0000"><b>else if </b></font>iir <font color="#FF0000"><b>and </b></font><font color="#800000">$80</font><font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>ComType<font color="#000080">:=</font>Uart16550
+        <font color="#FF0000"><b>else </b></font>ComType<font color="#000080">:=</font>Uart16450<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>scratch<font color="#000080">]:=</font>ssave<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{--- Schnitte einstellen / aktivieren / freigeben --------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SetComParams<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font>address<font color="#000080">:</font>word<font color="#000080">; </font>_irq<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>no<font color="#000080">&gt;=</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>no<font color="#000080">&lt;=</font>coms<font color="#000080">) </font><font color="#FF0000"><b>then begin
+    if </b></font>address<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>ua<font color="#000080">[</font>no<font color="#000080">]:=</font>address<font color="#000080">;
+    </font>irq<font color="#000080">[</font>no<font color="#000080">]:=</font>_irq<font color="#000080">;
+    </font>intmask<font color="#000080">[</font>no<font color="#000080">]:=(</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font><font color="#000080">(</font>_irq <font color="#FF0000"><b>and </b></font><font color="#800000">7</font><font color="#000080">));
+    </font>intcom2<font color="#000080">[</font>no<font color="#000080">]:=(</font>_irq<font color="#000080">&gt;</font><font color="#800000">7</font><font color="#000080">);      </font><font color="#008000"><i>{ 2. Interrupt-Controller }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>setuart<font color="#000080">(</font>comno<font color="#000080">:</font>byte<font color="#000080">; </font>baudrate<font color="#000080">:</font>longint<font color="#000080">; </font>parity<font color="#000080">:</font>paritype<font color="#000080">;
+                  </font>wlength<font color="#000080">,</font>stops<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>uart <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>uart<font color="#000080">:=</font>ua<font color="#000080">[</font>comno<font color="#000080">];
+  </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>linectrl<font color="#000080">]:=</font><font color="#800000">$80</font><font color="#000080">;
+  </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>datainout<font color="#000080">]:=</font>lo<font color="#000080">(</font>word<font color="#000080">(</font><font color="#800000">115200 </font><font color="#FF0000"><b>div </b></font>baudrate<font color="#000080">));
+  </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>datainout<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]:=</font>hi<font color="#000080">(</font>word<font color="#000080">(</font><font color="#800000">115200 </font><font color="#FF0000"><b>div </b></font>baudrate<font color="#000080">));
+  </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>linectrl<font color="#000080">]:= (</font>wlength<font color="#000080">-</font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>stops<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">4 </font><font color="#FF0000"><b>or </b></font>ord<font color="#000080">(</font>parity<font color="#000080">)*</font><font color="#800000">8</font><font color="#000080">;
+  </font>port<font color="#000080">[</font>uart<font color="#000080">+</font>modemctrl<font color="#000080">]:=</font><font color="#800000">$0b</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>port<font color="#000080">[</font>uart<font color="#000080">+</font>datainout<font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font><font color="#000080">;      </font><font color="#008000"><i>{ dummy }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>clearstatus<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>datainout<font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font><font color="#000080">;               </font><font color="#008000"><i>{ dummy-Read }
+  </i></font><font color="#FF0000"><b>if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linestat<font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemstat<font color="#000080">]&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$a0</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">]:=</font><font color="#800000">$20</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>IntNr<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>irq<font color="#000080">[</font>no<font color="#000080">]&lt;</font><font color="#800000">8 </font><font color="#FF0000"><b>then </b></font>IntNr<font color="#000080">:=</font>irq<font color="#000080">[</font>no<font color="#000080">]+</font><font color="#800000">8
+  </font><font color="#FF0000"><b>else </b></font>IntNr<font color="#000080">:=</font>irq<font color="#000080">[</font>no<font color="#000080">]+</font><font color="#800000">$68</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ActivateCom<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font>buffersize<font color="#000080">:</font>word<font color="#000080">; </font>FifoTL<font color="#000080">:</font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>p <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>i <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>active<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then begin
+    </b></font>error<font color="#000080">(</font><font color="#800000">'Schnittstelle '</font><font color="#000080">+</font>strs<font color="#000080">(</font>no<font color="#000080">)+</font><font color="#800000">' bereits aktiviert!'</font><font color="#000080">);
+    </font>exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+  else if </b></font><font color="#000080">(</font>no<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>no<font color="#000080">&gt;</font>coms<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>irq<font color="#000080">[</font>no<font color="#000080">]=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'Schnittstelle '</font><font color="#000080">+</font>strs<font color="#000080">(</font>no<font color="#000080">)+</font><font color="#800000">' (noch) nicht unterst&uuml;tzt!'</font><font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>active<font color="#000080">[</font>no<font color="#000080">]:=</font>true<font color="#000080">;
+
+  </font>bufsize<font color="#000080">[</font>no<font color="#000080">]:=</font>buffersize<font color="#000080">;                 </font><font color="#008000"><i>{ Puffer anlegen }
+  </i></font>getmem<font color="#000080">(</font>buffer<font color="#000080">[</font>no<font color="#000080">],</font>buffersize<font color="#000080">);
+  </font>bufi<font color="#000080">[</font>no<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">; </font>bufo<font color="#000080">[</font>no<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>fillchar<font color="#000080">(</font>buffer<font color="#000080">[</font>no<font color="#000080">]^,</font>bufsize<font color="#000080">[</font>no<font color="#000080">],</font><font color="#800000">0</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>fifotl <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN BEGIN
+           </b></font>Port<font color="#000080">[(</font>ua<font color="#000080">[</font>no<font color="#000080">] + </font>fifoctrl<font color="#000080">)] := </font>fifotl<font color="#000080">;
+           </font><font color="#FF0000"><b>IF </b></font><font color="#000080">((</font>Port<font color="#000080">[(</font>ua<font color="#000080">[</font>no<font color="#000080">] + </font>intids<font color="#000080">)] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$40</font><font color="#000080">) = </font><font color="#800000">0</font><font color="#000080">)
+             </font><font color="#FF0000"><b>THEN BEGIN
+                    </b></font>Port<font color="#000080">[(</font>ua<font color="#000080">[</font>no<font color="#000080">] + </font>fifoctrl<font color="#000080">)] := </font><font color="#800000">0</font><font color="#000080">;
+                    </font>fifotl <font color="#000080">:= </font>NoFifo<font color="#000080">;
+                  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>fifotl <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN CASE </b></font>no <font color="#FF0000"><b>OF
+           </b></font><font color="#800000">1 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com1FIFOserver<font color="#000080">;
+           </font><font color="#800000">2 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com2FIFOserver<font color="#000080">;
+           </font><font color="#800000">3 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com3FIFOserver<font color="#000080">;
+           </font><font color="#800000">4 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com4FIFOserver<font color="#000080">;
+         </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{CASE}
+    </i></font><font color="#FF0000"><b>ELSE CASE </b></font>no <font color="#FF0000"><b>OF
+           </b></font><font color="#800000">1 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com1server<font color="#000080">;
+           </font><font color="#800000">2 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com2server<font color="#000080">;
+           </font><font color="#800000">3 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com3server<font color="#000080">;
+           </font><font color="#800000">4 </font><font color="#000080">: </font>p<font color="#000080">:=@</font>com4server<font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{CASE}
+
+  </i></font>getintvec<font color="#000080">(</font>IntNr<font color="#000080">(</font>no<font color="#000080">),</font>savecom<font color="#000080">[</font>no<font color="#000080">]);           </font><font color="#008000"><i>{ IRQ setzen }
+  </i></font>setintvec<font color="#000080">(</font>IntNr<font color="#000080">(</font>no<font color="#000080">),</font>p<font color="#000080">);
+  </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>intenable<font color="#000080">]:=</font><font color="#800000">$01</font><font color="#000080">;                     </font><font color="#008000"><i>{ Int. bei Empfang }
+  </i></font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then
+    </b></font>port<font color="#000080">[</font><font color="#800000">$a1</font><font color="#000080">]:=</font>port<font color="#000080">[</font><font color="#800000">$a1</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>intmask<font color="#000080">[</font>no<font color="#000080">])     </font><font color="#008000"><i>{ Ints freigeben }
+  </i></font><font color="#FF0000"><b>else
+    </b></font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">]:=</font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>intmask<font color="#000080">[</font>no<font color="#000080">]);
+  </font>clearstatus<font color="#000080">(</font>no<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>releasecom<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if not </b></font>active<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'Schnittstelle '</font><font color="#000080">+</font>strs<font color="#000080">(</font>no<font color="#000080">)+</font><font color="#800000">' nicht aktiv!'</font><font color="#000080">)
+  </font><font color="#FF0000"><b>else begin
+    </b></font>active<font color="#000080">[</font>no<font color="#000080">]:=</font>false<font color="#000080">;
+    </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>intenable<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>intcom2<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then
+      </b></font>port<font color="#000080">[</font><font color="#800000">$a1</font><font color="#000080">]:=</font>port<font color="#000080">[</font><font color="#800000">$a1</font><font color="#000080">] </font><font color="#FF0000"><b>or </b></font>intmask<font color="#000080">[</font>no<font color="#000080">]    </font><font color="#008000"><i>{ Controller: COMn-Ints sperren }
+    </i></font><font color="#FF0000"><b>else
+      </b></font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">]:=</font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>or </b></font>intmask<font color="#000080">[</font>no<font color="#000080">];
+    </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>fifoctrl<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font>setintvec<font color="#000080">(</font>IntNr<font color="#000080">(</font>no<font color="#000080">),</font>savecom<font color="#000080">[</font>no<font color="#000080">]);
+    </font>clearstatus<font color="#000080">(</font>no<font color="#000080">);
+    </font>freemem<font color="#000080">(</font>buffer<font color="#000080">[</font>no<font color="#000080">],</font>bufsize<font color="#000080">[</font>no<font color="#000080">]);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{ Exit-Prozedur }
+
+{$F+}
+</i></font><font color="#FF0000"><b>procedure </b></font>comexit<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>i<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>coms <font color="#FF0000"><b>do
+    if </b></font>active<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>then begin
+      </b></font>DropDtr<font color="#000080">(</font>i<font color="#000080">);
+      </font>releasecom<font color="#000080">(</font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>exitproc<font color="#000080">:=</font>exitsave<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+
+{--- Daten senden / empfangen ----------------------------------------}
+
+</i></font><font color="#FF0000"><b>function </b></font>received<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;      </font><font color="#008000"><i>{ Testen, ob Daten vorhanden }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>received<font color="#000080">:=(</font>bufi<font color="#000080">[</font>no<font color="#000080">]&lt;&gt;</font>bufo<font color="#000080">[</font>no<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>receive<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>b<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;   </font><font color="#008000"><i>{ Byte holen, falls vorh. }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>bufi<font color="#000080">[</font>no<font color="#000080">]=</font>bufo<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then
+    </b></font>receive<font color="#000080">:=</font>false
+  <font color="#FF0000"><b>else begin
+    </b></font>b<font color="#000080">:=</font>buffer<font color="#000080">[</font>no<font color="#000080">]^[</font>bufo<font color="#000080">[</font>no<font color="#000080">]];
+    </font>inc<font color="#000080">(</font>bufo<font color="#000080">[</font>no<font color="#000080">]);
+    </font><font color="#FF0000"><b>if </b></font>bufo<font color="#000080">[</font>no<font color="#000080">]=</font>bufsize<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>bufo<font color="#000080">[</font>no<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+    </font>receive<font color="#000080">:=</font>true<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>peek<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>b<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>bufi<font color="#000080">[</font>no<font color="#000080">]=</font>bufo<font color="#000080">[</font>no<font color="#000080">] </font><font color="#FF0000"><b>then
+    </b></font>peek<font color="#000080">:=</font>false
+  <font color="#FF0000"><b>else begin
+    </b></font>b<font color="#000080">:=</font>buffer<font color="#000080">[</font>no<font color="#000080">]^[</font>bufo<font color="#000080">[</font>no<font color="#000080">]];
+    </font>peek<font color="#000080">:=</font>true<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>sendbyte<font color="#000080">(</font>no<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">);              </font><font color="#008000"><i>{ Byte senden }
+</i></font><font color="#FF0000"><b>begin
+  while </b></font><font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linestat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$20</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>do</b></font><font color="#000080">;
+  </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]]:=</font>b<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>hsendbyte<font color="#000080">(</font>no<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">);           </font><font color="#008000"><i>{ Byte senden, mit CTS-Handshake }
+</i></font><font color="#FF0000"><b>begin
+  while </b></font><font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemstat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$10</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>do</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linestat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$20</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>do</b></font><font color="#000080">;
+  </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]]:=</font>b<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>putbyte<font color="#000080">(</font>no<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">);             </font><font color="#008000"><i>{ Byte im Puffer hinterlegen }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>bufo<font color="#000080">[</font>no<font color="#000080">]=</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>bufo<font color="#000080">[</font>no<font color="#000080">]:=</font>bufsize<font color="#000080">[</font>no<font color="#000080">]
+  </font><font color="#FF0000"><b>else </b></font>dec<font color="#000080">(</font>bufo<font color="#000080">[</font>no<font color="#000080">]);
+  </font>buffer<font color="#000080">[</font>no<font color="#000080">]^[</font>bufo<font color="#000080">[</font>no<font color="#000080">]]:=</font>b<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>flushinput<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);            </font><font color="#008000"><i>{ Receive-Puffer l&ouml;schen }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>bufo<font color="#000080">[</font>no<font color="#000080">]:=</font>bufi<font color="#000080">[</font>no<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{--- Modem-Status-Lines ----------------------------------------------}
+
+</i></font><font color="#FF0000"><b>function </b></font>rring<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;            </font><font color="#008000"><i>{ Telefon klingelt  }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>rring<font color="#000080">:=(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemstat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font>MS_RI<font color="#000080">)&lt;&gt;</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>carrier<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;          </font><font color="#008000"><i>{ Carrier vorhanden }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>carrier<font color="#000080">:=(</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemstat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font>MS_DCD<font color="#000080">)&lt;&gt;</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DropDtr<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);                 </font><font color="#008000"><i>{ DTR=0 setzen      }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>MC_DTR<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetDtr<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);                  </font><font color="#008000"><i>{ DTR=1 setzen      }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">] </font><font color="#FF0000"><b>or </b></font>MC_DTR<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DropRts<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);                 </font><font color="#008000"><i>{ RTS=0 setzen      }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>MC_RTS<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetRts<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);                  </font><font color="#008000"><i>{ RTS=1 setzen      }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemctrl<font color="#000080">] </font><font color="#FF0000"><b>or </b></font>MC_RTS<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{ True -&gt; Modem (oder entsprechendes Ger&auml;t)  ist bereit, Daten zu empfangen }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetCTS<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>getcts<font color="#000080">:=((</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>modemstat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$10</font><font color="#000080">)&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and
+           </b></font><font color="#000080">((</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linestat<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$20</font><font color="#000080">)&lt;&gt;</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>ticker<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ticker<font color="#000080">:=</font>meml<font color="#000080">[</font>Seg0040<font color="#000080">:</font><font color="#800000">$6c</font><font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SendBreak<font color="#000080">(</font>no<font color="#000080">:</font>byte<font color="#000080">);             </font><font color="#008000"><i>{ Break-Signal      }
+</i></font><font color="#FF0000"><b>var </b></font>teiler <font color="#000080">: </font>word<font color="#000080">;
+    </font>btime  <font color="#000080">: </font>longint<font color="#000080">;
+    </font>t0     <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CLI<font color="#000080">;
+  </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">$80</font><font color="#000080">;
+  </font>teiler<font color="#000080">:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]] + </font><font color="#800000">256</font><font color="#000080">*</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font><font color="#800000">1</font><font color="#000080">];
+  </font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$7f</font><font color="#000080">;
+  </font>STI<font color="#000080">;
+  </font>btime<font color="#000080">:=</font>teiler <font color="#FF0000"><b>DIV </b></font><font color="#800000">200</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>btime<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>btime<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font>t0<font color="#000080">:=</font>ticker<font color="#000080">;
+  </font>inc<font color="#000080">(</font>btime<font color="#000080">,</font>ticker<font color="#000080">);
+  </font>Port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">$40</font><font color="#000080">;   </font><font color="#008000"><i>{ set break }
+  </i></font><font color="#FF0000"><b>repeat
+  until </b></font><font color="#000080">(</font>ticker<font color="#000080">&gt;</font>btime<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ticker<font color="#000080">&lt;</font>t0<font color="#000080">);
+  </font>Port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">]:=</font>port<font color="#000080">[</font>ua<font color="#000080">[</font>no<font color="#000080">]+</font>linectrl<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$bf</font><font color="#000080">;  </font><font color="#008000"><i>{ clear break }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>exitsave<font color="#000080">:=</font>exitproc<font color="#000080">;
+  </font>exitproc<font color="#000080">:=@</font>comexit<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0096.PAS">Original</a><b>]</b></p></body>
+</html>

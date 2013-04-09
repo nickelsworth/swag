@@ -1,0 +1,1206 @@
+<html>
+<head><title> "Play VOC Files without CT-VOICE.DRV" by ETHAN BRODSKY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0057.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+                                  SBDSP
+                          Version 1.03 (9/23/94)
+                         Written by Ethan Brodsky
+          Copyright 1994 by Ethan Brodsky.  All rights reserved.
+
+This library is distributed AS IS.  The author specifically disclaims
+any responsibility for any loss of profit or any consequential,
+incidental, or other damages.  SBDSP is freeware and is distributed
+with full Turbo Pascal source code.  You are free to incorporate parts
+of the code into your own programs as long as you give credit to Ethan
+Brodsky.  This source code may only be distributed in it's original
+form, including this documentation file.
+
+------------------------------------------------------------------------
+
+    You may have used my SBVox and SBVoice units.  They played VOC files
+on a Sound Blaster using Creative Labs' CT-VOICE driver.  Since they
+used the CT-VOICE driver, they wouldn't work on other sound cards.  The
+driver needed to be included with the program, either in a separate file
+or linked into the executable.
+
+    SBDSP performs the same functions as the SBVox unit without using
+the CT-VOICE driver.  It has only been tested on a SB16 and PAS16, but
+it should work on all Sound Blaster compatible sound cards.  By using
+DMA transfers, it plays sound without using the CPU, saving processor
+cycles for your program.
+
+    I have many improvements planned, including 16-bit sound, stereo
+effects, and mixing, along with new library for FM music.  But I NEED
+FEEDBACK!  If you use my code, tell me about it!  If you make any
+modifications, send them to me!  If you have any suggestions for
+improvements, tell me about them!  If you want me to write a C version,
+or a version to play WAV files, tell me!
+
+   You don't need to pay me for using this unit.  All you have to do
+is put my name in the credits for your product.  I'd appreciate it if
+you'd send me a message telling me how you used SBDSP.  (If you used
+it in a game, tell me where I can get it)  And finally, if you ever
+have a sound programming job, think of me.
+
+    You can find out most of the things you need to know in order to
+use this library by looking at the PlayVOC example program, but I'll
+go over it again.  The first thing you need to do is to reset the DSP,
+initialize SBDSP's internal variables, and install the interrupt
+handler.  In order to do this, you need to know the sound cards base
+address, IRQ number, and 8-bit DMA channel.   If this is being used
+on a Sound Blaster, this information can be obtained from the BLASTER
+environment variable.  I don't know whether other cards use this.  You
+can use the EnvironmentSet function to find out if the environment
+variable is set.  If it is, you can call the function InitSBFromEnv.
+Otherwise, you'll have to find out the settings some other way and pass
+them to the InitSB function.
+
+    Use the LoadVOCFile function to allocate a sound buffer.  Make sure
+that you save the value returned from this function.  It is the size of
+the allocated buffer.  It will be needed when you deallocate the buffer.
+The memory needed for Sound will be allocated inside this function. You
+do NOT need to allocate it beforehand.
+
+    Before you can play any sounds, you have to turn on the speaker
+output.  Do this by calling TurnSpeakerOn.  Make sure you turn it off
+at the end of the program.  If you want to install a marker handler,
+make sure you do it now by calling SetMarkerProc.  A marker handler
+will be called each time a marker block is reached.  Before you install
+your marker handler, save the old one using GetMarkerProc.  If the value
+returned is not nil, then another marker procedure has been installed.
+Call it each time your marker procedure is called.  This is a good
+practice to get into when setting up a handler such as this.  It will
+make it possible to install more than one marker procedure.
+
+    To play a sound, pass a pointer to the sound buffer to PlaySound.
+Any sound output in progress will be stopped.  To find out if the sound
+is finished, check the SoundPlaying variable.  The VOC file format has
+a provision for repeating sounds.  The sound can be set to repeat for
+a number of times (Or forever)  You can break out of the loop by calling
+BreakLoop.  The current iteration will finish and it will continue to
+the next block.  When the program is completely finished playing sound,
+call the ShutDownSB procedure.  This will stop any sound output in
+progress and remove the interrupt handler.  You should deallocate all
+sound buffers by using FreeBuffer.  The pointer to the buffer should be
+typecasted as a pointer.  Make sure that you pass the buffer size that
+was returned by LoadVOCFile so that the right amount of memory is
+deallocated.
+
+    This library will not allow you to play 16 bit or stereo VOC files.
+It will not work in protected mode since it uses DMA transfers.  If you
+have any other questions, feel free to ask.  If you would like me to
+make any modifications or a customized version of this unit to use in
+your program, contact me and we can work out some arrangements.
+
+There are several ways to contact me:
+    E-Mail:  ericbrodsky@psl.wisc.edu    (Preferred)
+    Phone:   (608) 238-4830
+    Mail:
+        Ethan Brodsky
+      4010 Cherokee Dr.
+      Madison, WI 53711
+
+Bug fixes and other announcements will be posted in:
+    comp.lang.pascal
+    comp.sys.ibm.pc.soundcard
+    comp.sys.ibm.pc.soundcard.tech
+    rec.games.programmer
+}
+
+
+{       SBDSP is Copyright 1994 by Ethan Brodsky.  All rights reserved.      }
+</i></font><font color="#FF0000"><b>unit </b></font>Mem<font color="#000080">;
+    </font><font color="#FF0000"><b>interface
+        function </b></font>GetBuffer<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Buffer<font color="#000080">: </font>pointer<font color="#000080">; </font>BufferLength<font color="#000080">: </font>LongInt<font color="#000080">): </font>boolean<font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>FreeBuffer<font color="#000080">(</font>Buffer<font color="#000080">: </font>pointer<font color="#000080">; </font>BufferLength<font color="#000080">: </font>LongInt<font color="#000080">);
+        </font><font color="#FF0000"><b>function </b></font>GetAbsoluteAddress<font color="#000080">(</font>p<font color="#000080">: </font>pointer<font color="#000080">): </font>LongInt<font color="#000080">;
+    </font><font color="#FF0000"><b>implementation
+        function </b></font>GetBuffer<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Buffer<font color="#000080">: </font>pointer<font color="#000080">; </font>BufferLength<font color="#000080">: </font>LongInt<font color="#000080">): </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>Dummy<font color="#000080">: </font>pointer<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>MaxAvail <font color="#000080">&lt; </font>BufferLength
+                    <font color="#FF0000"><b>then
+                        begin
+                            </b></font>GetBuffer <font color="#000080">:= </font>false<font color="#000080">;
+                            </font>Buffer <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+                            </font>Exit<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>GetBuffer <font color="#000080">:= </font>true<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>BufferLength <font color="#000080">&lt; </font><font color="#800000">$FFFF
+                    </font><font color="#FF0000"><b>then
+                        </b></font>GetMem<font color="#000080">(</font>Buffer<font color="#000080">, </font>BufferLength<font color="#000080">)
+                    </font><font color="#FF0000"><b>else
+                        begin
+                            </b></font>GetMem<font color="#000080">(</font>Buffer<font color="#000080">, </font><font color="#800000">$FFFF</font><font color="#000080">);
+                            </font>BufferLength <font color="#000080">:= </font>BufferLength <font color="#000080">- </font><font color="#800000">$FFFF</font><font color="#000080">;
+                            </font><font color="#FF0000"><b>while </b></font>BufferLength <font color="#000080">&gt; </font><font color="#800000">$FFFF </font><font color="#FF0000"><b>do
+                                begin
+                                    </b></font>GetMem<font color="#000080">(</font>Dummy<font color="#000080">, </font><font color="#800000">$FFFF</font><font color="#000080">);
+                                    </font>BufferLength <font color="#000080">:= </font>BufferLength <font color="#000080">- </font><font color="#800000">$FFFF</font><font color="#000080">;
+                                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                            </font>GetMem<font color="#000080">(</font>Dummy<font color="#000080">, </font>BufferLength<font color="#000080">);
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>FreeBuffer<font color="#000080">(</font>Buffer<font color="#000080">: </font>pointer<font color="#000080">; </font>BufferLength<font color="#000080">: </font>LongInt<font color="#000080">);
+            </font><font color="#FF0000"><b>var
+                </b></font>Dummy<font color="#000080">: </font>pointer<font color="#000080">;
+                </font>LeftToFree<font color="#000080">: </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>BufferLength <font color="#000080">&lt; </font><font color="#800000">$FFFF
+                    </font><font color="#FF0000"><b>then
+                        </b></font>FreeMem<font color="#000080">(</font>Buffer<font color="#000080">, </font>BufferLength<font color="#000080">)
+                    </font><font color="#FF0000"><b>else
+                        begin
+                            </b></font>Dummy <font color="#000080">:= </font>Buffer<font color="#000080">;
+                            </font>LeftToFree <font color="#000080">:= </font>BufferLength<font color="#000080">;
+                            </font>FreeMem<font color="#000080">(</font>Buffer<font color="#000080">, </font><font color="#800000">$FFFF</font><font color="#000080">);
+                            </font>LeftToFree <font color="#000080">:= </font>LeftToFree <font color="#000080">- </font><font color="#800000">$FFFF</font><font color="#000080">;
+                            </font>Dummy <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>Dummy<font color="#000080">^) + </font><font color="#800000">$1000</font><font color="#000080">, </font>Ofs<font color="#000080">(</font>Dummy<font color="#000080">^));
+                            </font><font color="#FF0000"><b>while </b></font>LeftToFree <font color="#000080">&gt; </font><font color="#800000">$FFFF </font><font color="#FF0000"><b>do
+                                begin
+                                    </b></font>FreeMem<font color="#000080">(</font>Dummy<font color="#000080">, </font><font color="#800000">$FFFF</font><font color="#000080">);
+                                    </font>LeftToFree <font color="#000080">:= </font>LeftToFree <font color="#000080">- </font><font color="#800000">$FFFF</font><font color="#000080">;
+                                    </font>Dummy <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>Dummy<font color="#000080">^) + </font><font color="#800000">$1000</font><font color="#000080">, </font>Ofs<font color="#000080">(</font>Dummy<font color="#000080">^));
+                                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                            </font>FreeMem<font color="#000080">(</font>Dummy<font color="#000080">, </font>LeftToFree<font color="#000080">);
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetAbsoluteAddress<font color="#000080">(</font>p<font color="#000080">: </font>pointer<font color="#000080">): </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>GetAbsoluteAddress <font color="#000080">:= </font>LongInt<font color="#000080">(</font>Seg<font color="#000080">(</font>p<font color="#000080">^))*</font><font color="#800000">16 </font><font color="#000080">+ </font>LongInt<font color="#000080">(</font>Ofs<font color="#000080">(</font>p<font color="#000080">^));
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+
+
+</font><font color="#008000"><i>{       SBDSP is Copyright 1994 by Ethan Brodsky.  All rights reserved.      }
+</i></font><font color="#FF0000"><b>unit </b></font>VOC<font color="#000080">;
+    </font><font color="#FF0000"><b>interface
+        const
+            </b></font>EndBlockNum            <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+            </font>VoiceBlockNum          <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+            </font>VoiceContinueBlockNum  <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+            </font>SilenceBlockNum        <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+            </font>MarkerBlockNum         <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+            </font>MessageBlockNum        <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+            </font>RepeatBlockNum         <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+            </font>RepeatEndBlockNum      <font color="#000080">= </font><font color="#800000">7</font><font color="#000080">;
+            </font>ExtendedInfoBlockNum   <font color="#000080">= </font><font color="#800000">8</font><font color="#000080">;
+            </font>NewVoiceBlockNum       <font color="#000080">= </font><font color="#800000">9</font><font color="#000080">;
+            </font>BlockNames <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">=
+                (
+                 </font><font color="#800000">'Terminator'</font><font color="#000080">,
+                 </font><font color="#800000">'Voice Data'</font><font color="#000080">,
+                 </font><font color="#800000">'Voice Continuation'</font><font color="#000080">,
+                 </font><font color="#800000">'Silence'</font><font color="#000080">,
+                 </font><font color="#800000">'Marker'</font><font color="#000080">,
+                 </font><font color="#800000">'Message'</font><font color="#000080">,
+                 </font><font color="#800000">'Repeat Loop'</font><font color="#000080">,
+                 </font><font color="#800000">'End Repeat Loop'</font><font color="#000080">,
+                 </font><font color="#800000">'Extended Info'</font><font color="#000080">,
+                 </font><font color="#800000">'New Voice Data'
+                </font><font color="#000080">);
+            </font><font color="#008000"><i>{Used in block type 1 and 8}
+            </i></font>Unpacked8  <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{8 bit (Uncompressed)}
+            </i></font>Packed4    <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">; </font><font color="#008000"><i>{4 bit}
+            </i></font>Packed26   <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">; </font><font color="#008000"><i>{2.6 bit}
+            </i></font>Packed2    <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">; </font><font color="#008000"><i>{2 bit}
+            </i></font>PackingNames <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">=
+                (
+                 </font><font color="#800000">'8 bit unpacked'</font><font color="#000080">,
+                 </font><font color="#800000">'4 bit packed'</font><font color="#000080">,
+                 </font><font color="#800000">'2.6 bit packed'</font><font color="#000080">,
+                 </font><font color="#800000">'2 bit packed'</font><font color="#000080">,
+                 </font><font color="#800000">'1 channel multi'</font><font color="#000080">,
+                 </font><font color="#800000">'2 channel multi'</font><font color="#000080">,
+                 </font><font color="#800000">'3 channel multi'</font><font color="#000080">,
+                 </font><font color="#800000">'4 channel multi'</font><font color="#000080">,
+                 </font><font color="#800000">'5 channel multi'</font><font color="#000080">,
+                 </font><font color="#800000">'6 channel multi'</font><font color="#000080">,
+                 </font><font color="#800000">'7 channel multi'
+                </font><font color="#000080">);
+            </font><font color="#008000"><i>{Used in block type 9}
+            </i></font>Uncompressed8     <font color="#000080">= </font><font color="#800000">$0000</font><font color="#000080">;
+            </font>Compressed4       <font color="#000080">= </font><font color="#800000">$0001</font><font color="#000080">;
+            </font>Compressed26      <font color="#000080">= </font><font color="#800000">$0002</font><font color="#000080">;
+            </font>Compressed2       <font color="#000080">= </font><font color="#800000">$0003</font><font color="#000080">;
+            </font>Uncompressed16    <font color="#000080">= </font><font color="#800000">$0004</font><font color="#000080">;
+            </font>CompressedALAW    <font color="#000080">= </font><font color="#800000">$0006</font><font color="#000080">;
+            </font>CompressedMULAW   <font color="#000080">= </font><font color="#800000">$0007</font><font color="#000080">;
+            </font>CompressedADPCM   <font color="#000080">= </font><font color="#800000">$0200</font><font color="#000080">; </font><font color="#008000"><i>{Why couldn't they make this $0008?}
+            </i></font>CompressionNames <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">=
+                (
+                    </font><font color="#800000">'8 bit uncompressed'</font><font color="#000080">,
+                    </font><font color="#800000">'4 bit compressed'</font><font color="#000080">,
+                    </font><font color="#800000">'2.6 bit compressed'</font><font color="#000080">,
+                    </font><font color="#800000">'2 bit compressed'</font><font color="#000080">,
+                    </font><font color="#800000">'16 bit uncompressed'</font><font color="#000080">,
+                    </font><font color="#800000">''</font><font color="#000080">,
+                    </font><font color="#800000">'ALAW compressed'</font><font color="#000080">,
+                    </font><font color="#800000">'MULAW compressed'
+                </font><font color="#000080">);
+            </font>ExtendedMono   <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+            </font>ExtendedStereo <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+            </font>ExtendedModeNames <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">= (</font><font color="#800000">'Mono'</font><font color="#000080">, </font><font color="#800000">'Stereo'</font><font color="#000080">);
+
+            </font>NewMono   <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;      </font><font color="#008000"><i>{This is Creative Labs' fault}
+            </i></font>NewStereo <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;      </font><font color="#008000"><i>{Blame it on Creative Labs}
+            </i></font>NewModeNames <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">= (</font><font color="#800000">'Mono'</font><font color="#000080">, </font><font color="#800000">'Stereo'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>type
+            </b></font>PSound <font color="#000080">= ^</font>TSound<font color="#000080">;
+            </font>TSound <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65520</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+            </font>PVOCHeader <font color="#000080">= ^</font>TVOCHeader<font color="#000080">;
+            </font>TVOCHeader <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">26</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+            </font>TripleByte <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+            </font>PBlock <font color="#000080">= ^</font>TBlock<font color="#000080">;
+            </font>TBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType<font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength<font color="#000080">: </font>TripleByte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PEndBlock <font color="#000080">= ^</font>TEndBlock<font color="#000080">;
+            </font>TEndBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PVoiceBlock <font color="#000080">= ^</font>TVoiceBlock<font color="#000080">;
+            </font>TVoiceBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>SR <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>Packing <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>Data <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65520</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PVoiceContinueBlock <font color="#000080">= ^</font>TVoiceContinueBlock<font color="#000080">;
+            </font>TVoiceContinueBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>Data <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65520</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PSilenceBlock <font color="#000080">= ^</font>TSilenceBlock<font color="#000080">;
+            </font>TSilenceBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>Duration <font color="#000080">: </font>word<font color="#000080">;
+                    </font>SR <font color="#000080">: </font>byte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PMarkerBlock <font color="#000080">= ^</font>TMarkerBlock<font color="#000080">;
+            </font>TMarkerBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>Marker <font color="#000080">: </font>word<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PMessageBlock <font color="#000080">= ^</font>TMessageBlock<font color="#000080">;
+            </font>TMessageBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>Data<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65520</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PRepeatBlock <font color="#000080">= ^</font>TRepeatBlock<font color="#000080">;
+            </font>TRepeatBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>Count<font color="#000080">: </font>word<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+            </font>PRepeatEndBlock <font color="#000080">= ^</font>TRepeatEndBlock<font color="#000080">;
+            </font>TRepeatEndBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>PExtendedInfoBlock <font color="#000080">= ^</font>TExtendedInfoBlock<font color="#000080">;
+            </font>TExtendedInfoBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>ExtendedSR <font color="#000080">: </font>word<font color="#000080">;
+                    </font>Packing <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>Mode <font color="#000080">: </font>byte<font color="#000080">; </font><font color="#008000"><i>{0 = mono, 1 = stereo}
+                </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>PNewVoiceBlock <font color="#000080">= ^</font>TNewVoiceBlock<font color="#000080">;
+            </font>TNewVoiceBlock <font color="#000080">=
+                </font><font color="#FF0000"><b>record
+                    </b></font>BlockType <font color="#000080">: </font>byte<font color="#000080">;
+                    </font>BlockLength <font color="#000080">: </font>TripleByte<font color="#000080">;
+                    </font>SamplingRate <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{HZ}
+                    </i></font>Dummy1 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                    </font>BitsPerSample <font color="#000080">: </font>byte<font color="#000080">; </font><font color="#008000"><i>{Uncompressed bits per sample}
+                    </i></font>Mode <font color="#000080">: </font>byte<font color="#000080">; </font><font color="#008000"><i>{1 = mono, 2 = stereo}
+                    </i></font>Compression<font color="#000080">: </font>word<font color="#000080">;
+                    </font>Dummy2 <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                    </font>Data <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">64000</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>TripleByteToLongint<font color="#000080">(</font>TB<font color="#000080">: </font>TripleByte<font color="#000080">): </font>LongInt<font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSamplingRate<font color="#000080">(</font>SR<font color="#000080">: </font>byte<font color="#000080">): </font>LongInt<font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSRByte<font color="#000080">(</font>SamplingRate<font color="#000080">: </font>word<font color="#000080">): </font>byte<font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetExtendedSamplingRate<font color="#000080">(</font>ExtendedSR<font color="#000080">: </font>word<font color="#000080">; </font>Mode<font color="#000080">: </font>byte<font color="#000080">): </font>LongInt<font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>BlockSize<font color="#000080">(</font>Block<font color="#000080">: </font>PBlock<font color="#000080">): </font>LongInt<font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>IncrementPtr<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>P<font color="#000080">: </font>pointer<font color="#000080">; </font>Count<font color="#000080">: </font>word<font color="#000080">);
+        </font><font color="#FF0000"><b>function </b></font>FindNextBlock<font color="#000080">(</font>Block<font color="#000080">: </font>PBlock<font color="#000080">): </font>PBlock<font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>LoadVOCFile<font color="#000080">(</font>FileName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Sound<font color="#000080">: </font>PSound<font color="#000080">): </font>LongInt<font color="#000080">;
+    </font><font color="#FF0000"><b>implementation
+        uses
+            </b></font>Mem<font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>TripleByteToLongint<font color="#000080">(</font>TB<font color="#000080">: </font>TripleByte<font color="#000080">): </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>TripleByteToLongint <font color="#000080">:= </font>LongInt<font color="#000080">(</font>TB<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) + </font>LongInt<font color="#000080">(</font>TB<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]) </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">8 </font><font color="#000080">+ </font>LongInt<font color="#000080">(</font>TB<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]) </font><font color="#FF0000"><b>SHL </b></font><font color="#800000">16</font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSamplingRate<font color="#000080">(</font>SR<font color="#000080">: </font>byte<font color="#000080">): </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>GetSamplingRate <font color="#000080">:= -</font><font color="#800000">1000000 </font><font color="#FF0000"><b>div </b></font><font color="#000080">(</font>SR <font color="#000080">- </font><font color="#800000">256</font><font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSRByte<font color="#000080">(</font>SamplingRate<font color="#000080">: </font>word<font color="#000080">): </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>GetSRByte <font color="#000080">:= </font><font color="#800000">256</font><font color="#000080">-(</font><font color="#800000">1000000 </font><font color="#FF0000"><b>div </b></font>SamplingRate<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetExtendedSamplingRate<font color="#000080">(</font>ExtendedSR<font color="#000080">: </font>word<font color="#000080">; </font>Mode<font color="#000080">: </font>byte<font color="#000080">): </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                case </b></font>Mode
+                    <font color="#FF0000"><b>of
+                        </b></font>ExtendedMono<font color="#000080">:
+                            </font>GetExtendedSamplingRate <font color="#000080">:= -</font><font color="#800000">256000000 </font><font color="#FF0000"><b>div </b></font><font color="#000080">(</font>ExtendedSR<font color="#000080">-</font><font color="#800000">65536</font><font color="#000080">);
+                        </font>ExtendedStereo<font color="#000080">:
+                            </font>GetExtendedSamplingRate <font color="#000080">:= (-</font><font color="#800000">256000000 </font><font color="#FF0000"><b>div </b></font><font color="#000080">(</font>ExtendedSR<font color="#000080">-</font><font color="#800000">65536</font><font color="#000080">)) </font><font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>BlockSize<font color="#000080">(</font>Block<font color="#000080">: </font>PBlock<font color="#000080">): </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>BlockSize <font color="#000080">:= </font>TripleByteToLongInt<font color="#000080">(</font>Block<font color="#000080">^.</font>BlockLength<font color="#000080">) + </font><font color="#800000">4</font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>IncrementPtr<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>P<font color="#000080">: </font>pointer<font color="#000080">; </font>Count<font color="#000080">: </font>word<font color="#000080">);
+          </font><font color="#008000"><i>{Easier to implement in assembly}
+            </i></font><font color="#FF0000"><b>begin
+                asm
+                    </b></font><font color="#FF00FF">LES  DI, P
+                    MOV  BX, Count
+                    MOV  AX, ES:[DI]
+                    MOV  DX, ES:[DI+2]
+                    ADD  AX, BX
+                    CMP  AX, $000F
+                    JNA  @1
+                    MOV  BX, AX
+                    AND  AX, $F
+                    AND  BX, $FFF0
+                    MOV  CL, 4
+                    SHR  BX, CL
+                    ADD  DX, BX
+                  @1:
+                    MOV  ES:[DI], AX
+                    MOV  ES:[DI+2], DX
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>FindNextBlock<font color="#000080">(</font>Block<font color="#000080">: </font>PBlock<font color="#000080">): </font>PBlock<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>NewBlock<font color="#000080">: </font>PBlock<font color="#000080">;
+                </font>BlockSize<font color="#000080">: </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>Block<font color="#000080">^.</font>BlockType <font color="#000080">= </font>EndBlockNum
+                    <font color="#FF0000"><b>then
+                        begin
+                            </b></font>FindNextBlock <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+                            </font>Exit<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>NewBlock <font color="#000080">:= </font>Block<font color="#000080">;
+                </font>BlockSize <font color="#000080">:= </font>TripleByteToLongInt<font color="#000080">(</font>Block<font color="#000080">^.</font>BlockLength<font color="#000080">) + </font><font color="#800000">4</font><font color="#000080">;
+                </font><font color="#FF0000"><b>while </b></font>BlockSize <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+                    begin
+                        if </b></font>BlockSize <font color="#000080">&gt; </font><font color="#800000">64000
+                            </font><font color="#FF0000"><b>then
+                                begin
+                                    </b></font>IncrementPtr<font color="#000080">(</font>pointer<font color="#000080">(</font>NewBlock<font color="#000080">), </font><font color="#800000">64000</font><font color="#000080">);
+                                    </font>Dec<font color="#000080">(</font>BlockSize<font color="#000080">, </font><font color="#800000">64000</font><font color="#000080">);
+                                </font><font color="#FF0000"><b>end
+                            else
+                                begin
+                                    </b></font>IncrementPtr<font color="#000080">(</font>pointer<font color="#000080">(</font>NewBlock<font color="#000080">), </font>BlockSize<font color="#000080">);
+                                    </font>BlockSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>FindNextBlock <font color="#000080">:= </font>NewBlock<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>LoadVOCFile<font color="#000080">(</font>FileName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Sound<font color="#000080">: </font>PSound<font color="#000080">): </font>LongInt<font color="#000080">;
+           </font><font color="#FF0000"><b>var
+                </b></font>f<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+                </font>Dummy<font color="#000080">: </font>Pointer<font color="#000080">;
+                </font>LeftToRead<font color="#000080">: </font>LongInt<font color="#000080">;
+                </font>Header<font color="#000080">: </font>PVOCHeader<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>Assign<font color="#000080">(</font>f<font color="#000080">, </font>FileName<font color="#000080">);
+                </font><font color="#008000"><i>{$I-}
+                </i></font>Reset<font color="#000080">(</font>f<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+                </font><font color="#008000"><i>{$I+}
+                </i></font><font color="#FF0000"><b>if </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0
+                    </font><font color="#FF0000"><b>then
+                        begin
+                            </b></font>LoadVOCFile <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{Couldn't open file}
+                            </i></font>Exit<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>LeftToRead <font color="#000080">:= </font>FileSize<font color="#000080">(</font>f<font color="#000080">) - </font>SizeOf<font color="#000080">(</font>Header<font color="#000080">^);
+                </font>LoadVOCFile <font color="#000080">:= </font>LeftToRead<font color="#000080">;
+                </font>New<font color="#000080">(</font>Header<font color="#000080">);
+                </font>BlockRead<font color="#000080">(</font>f<font color="#000080">, </font>Header<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>Header<font color="#000080">^));
+
+                </font><font color="#FF0000"><b>if </b></font>GetBuffer<font color="#000080">(</font>pointer<font color="#000080">(</font>Sound<font color="#000080">), </font>LeftToRead<font color="#000080">) &lt;&gt; </font>true
+                    <font color="#FF0000"><b>then
+                        begin
+                            </b></font>LoadVOCfile <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{Failed to allocate memory}
+                            </i></font>Exit<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>Dummy <font color="#000080">:= </font>Sound<font color="#000080">;
+                </font><font color="#FF0000"><b>while </b></font>LeftToRead <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+                    begin
+                        if </b></font>LeftToRead <font color="#000080">&lt; </font><font color="#800000">64000
+                            </font><font color="#FF0000"><b>then
+                                begin
+                                    </b></font>BlockRead<font color="#000080">(</font>f<font color="#000080">, </font>Dummy<font color="#000080">^, </font>LeftToRead<font color="#000080">);
+                                    </font>LeftToRead <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                                </font><font color="#FF0000"><b>end
+                            else
+                                begin
+                                    </b></font>BlockRead<font color="#000080">(</font>f<font color="#000080">, </font>Dummy<font color="#000080">^, </font><font color="#800000">64000</font><font color="#000080">);
+                                    </font>LeftToRead <font color="#000080">:= </font>LeftToRead <font color="#000080">- </font><font color="#800000">64000</font><font color="#000080">;
+                                    </font>IncrementPtr<font color="#000080">(</font>Dummy<font color="#000080">, </font><font color="#800000">64000</font><font color="#000080">);
+                                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>Close<font color="#000080">(</font>f<font color="#000080">);
+                </font>Dispose<font color="#000080">(</font>Header<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>begin
+    end</b></font><font color="#000080">.
+
+
+
+</font><font color="#008000"><i>{       SBDSP is Copyright 1994 by Ethan Brodsky.  All rights reserved.      }
+
+{$X+} {Extended syntax on}
+</i></font><font color="#FF0000"><b>unit </b></font>SBDSP<font color="#000080">;
+    </font><font color="#FF0000"><b>interface
+        uses
+            </b></font>VOC<font color="#000080">;
+        </font><font color="#FF0000"><b>const
+            On </b></font><font color="#000080">= </font>true<font color="#000080">;
+            </font>Off <font color="#000080">= </font>false<font color="#000080">;
+        </font><font color="#FF0000"><b>type
+            </b></font>Proc <font color="#000080">= </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>InitSB<font color="#000080">(</font>IRQ<font color="#000080">: </font>byte<font color="#000080">; </font>BaseIO<font color="#000080">: </font>word<font color="#000080">; </font>DMAChannel<font color="#000080">: </font>byte<font color="#000080">): </font>boolean<font color="#000080">;
+          </font><font color="#008000"><i>{This function must be called before any sound is played.  It will }
+          {initialize internal variables, reset the DSP chip, and install the}
+          {interrupt handler.                                                }
+          {IRQ:           The sound card's IRQ setting (Usually 5 or 7)      }
+          {BaseIO:        The sound card's base IO address (Usually $220)    }
+          {DMAChannel:    The sound card's 8-bit DMA channel (Usually 1)     }
+          {Returns:                                                          }
+          {    TRUE:      Sound card initialized correctly                   }
+          {    FALSE:     Error initializing sound card                      }
+        </i></font><font color="#FF0000"><b>function </b></font>EnvironmentSet<font color="#000080">: </font>boolean<font color="#000080">;
+          </font><font color="#008000"><i>{Returns:                                                          }
+          {    TRUE:  The BLASTER environment variable is set                }
+          {    FALSE: The BLASTER environment variable isn't set             }
+        </i></font><font color="#FF0000"><b>function </b></font>InitSBFromEnv<font color="#000080">: </font>boolean<font color="#000080">;
+          </font><font color="#008000"><i>{This function initializes the sound card from the settings stored }
+          {in the BLASTER environment variable.  I'm not sure if all sound   }
+          {cards use the enviroment variable.                                }
+          {Returns:                                                          }
+          {    TRUE:  Environment variable found and sound card initialized  }
+          {    FALSE: Environment variable not set or error initializing card}
+        </i></font><font color="#FF0000"><b>procedure </b></font>ShutDownSB<font color="#000080">;
+          </font><font color="#008000"><i>{This procedure must be called at the end of the program.  It stops}
+          {sound output, removes the interrupt handler, and restores the old }
+          {interrupt handler.                                                }
+        </i></font><font color="#FF0000"><b>procedure </b></font>InstallHandler<font color="#000080">;
+          </font><font color="#008000"><i>{This procedure will reinstall the }
+        </i></font><font color="#FF0000"><b>procedure </b></font>UninstallHandler<font color="#000080">;
+          </font><font color="#008000"><i>{This procedure will remove the interrupt handler.  You should not }
+          {need to call this.  If you do, sound output won't work until the  }
+          {handler is reinstalled.                                           }
+        </i></font><font color="#FF0000"><b>function </b></font>ResetDSP<font color="#000080">: </font>boolean<font color="#000080">;
+          </font><font color="#008000"><i>{This function resets the sound card's DSP chip.                   }
+          {Returns:                                                          }
+          {    TRUE:    The sound card's DSP chip was successfully reseted   }
+          {    FALSE:   The chip couldn't be initialized (Don't use it)      }
+        </i></font><font color="#FF0000"><b>function </b></font>GetDSPVersion<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+          </font><font color="#008000"><i>{This function returns a string containing the DSP chip version.   }
+        </i></font><font color="#FF0000"><b>procedure </b></font>TurnSpeakerOn<font color="#000080">;
+          </font><font color="#008000"><i>{This procedure turns on the speaker.  This should be called before}
+          {a sound is played, but after the sound card is initialized.       }
+        </i></font><font color="#FF0000"><b>procedure </b></font>TurnSpeakerOff<font color="#000080">;
+          </font><font color="#008000"><i>{Turn off the speaker so that sound can't be heard.  You should do }
+          {this when your program is finished playing sound.                 }
+        </i></font><font color="#FF0000"><b>function </b></font>GetSpeakerState<font color="#000080">: </font>boolean<font color="#000080">;
+          </font><font color="#008000"><i>{Returns the state of the speaker.  Only works on SBPro and higher.}
+          {Returns:                                                          }
+          {    TRUE:    Speaker is on                                        }
+          {    FALSE:   Speaker is off                                       }
+        </i></font><font color="#FF0000"><b>procedure </b></font>PlaySound<font color="#000080">(</font>Sound<font color="#000080">: </font>PSound<font color="#000080">);
+          </font><font color="#008000"><i>{Stops any sound in progress and start playing the sound specified.}
+          {Sound:       Pointer to buffer that the VOC file was loaded into  }
+        </i></font><font color="#FF0000"><b>procedure </b></font>PauseSound<font color="#000080">;
+          </font><font color="#008000"><i>{Pauses the sound output in progress.                              }
+        </i></font><font color="#FF0000"><b>procedure </b></font>ContinueSound<font color="#000080">;
+          </font><font color="#008000"><i>{Continues sound output stopped by Pause.                          }
+        </i></font><font color="#FF0000"><b>procedure </b></font>BreakLoop<font color="#000080">;
+          </font><font color="#008000"><i>{Stops the loop at the end of the current iteration and continues  }
+          {with the next block.                                              }
+        </i></font><font color="#FF0000"><b>procedure </b></font>SetMarkerProc<font color="#000080">(</font>MarkerProcedure<font color="#000080">: </font>pointer<font color="#000080">);
+          </font><font color="#008000"><i>{Installs a marker handler.  Each time a marker block is reached,  }
+          {the procedure specified is called.  Before installing a handler,  }
+          {you should store the old handler.  Your handler should also call  }
+          {the old handler.  Look in the example program to see how this is  }
+          {done.                                                             }
+          {MarkerProcedure:  Pointer to the marker procedure                 }
+        </i></font><font color="#FF0000"><b>procedure </b></font>GetMarkerProc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>MarkerProcedure<font color="#000080">: </font>pointer<font color="#000080">);
+          </font><font color="#008000"><i>{Gets the current marker procedure.                                }
+          {MarkerProcedure:  Current marker procedure (nil if none)          }
+        </i></font><font color="#FF0000"><b>var
+            </b></font>SoundPlaying  <font color="#000080">: </font>boolean<font color="#000080">;
+            </font>Looping       <font color="#000080">: </font>boolean<font color="#000080">;
+            </font>UnknownBlock  <font color="#000080">: </font>boolean<font color="#000080">;
+            </font>UnplayedBlock <font color="#000080">: </font>boolean<font color="#000080">;
+            </font>LastMarker    <font color="#000080">: </font>word<font color="#000080">;
+    </font><font color="#FF0000"><b>implementation
+        uses
+            </b></font>DOS<font color="#000080">,
+            </font>CRT<font color="#000080">,
+            </font>Mem<font color="#000080">;
+        </font><font color="#FF0000"><b>const
+            </b></font><font color="#008000"><i>{DSP Commands}
+            </i></font>CmdDirectDAC       <font color="#000080">= </font><font color="#800000">$10</font><font color="#000080">;
+            </font>CmdNormalDMADAC    <font color="#000080">= </font><font color="#800000">$14</font><font color="#000080">;
+            </font>Cmd2BitDMADAC      <font color="#000080">= </font><font color="#800000">$16</font><font color="#000080">;
+            </font>Cmd2BitRefDMADAC   <font color="#000080">= </font><font color="#800000">$17</font><font color="#000080">;
+            </font>CmdDirectADC       <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+            </font>CmdNormalDMAADC    <font color="#000080">= </font><font color="#800000">$24</font><font color="#000080">;
+            </font>CmdSetTimeConst    <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;
+            </font>CmdSetBlockSize    <font color="#000080">= </font><font color="#800000">$48</font><font color="#000080">;
+            </font>Cmd4BitDMADAC      <font color="#000080">= </font><font color="#800000">$74</font><font color="#000080">;
+            </font>Cmd4BitRefDMADAC   <font color="#000080">= </font><font color="#800000">$75</font><font color="#000080">;
+            </font>Cmd26BitDMADAC     <font color="#000080">= </font><font color="#800000">$76</font><font color="#000080">;
+            </font>Cmd26BitRefDMADAC  <font color="#000080">= </font><font color="#800000">$77</font><font color="#000080">;
+            </font>CmdSilenceBlock    <font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">;
+            </font>CmdHighSpeedDMADAC <font color="#000080">= </font><font color="#800000">$91</font><font color="#000080">;
+            </font>CmdHighSpeedDMAADC <font color="#000080">= </font><font color="#800000">$99</font><font color="#000080">;
+            </font>CmdHaltDMA         <font color="#000080">= </font><font color="#800000">$D0</font><font color="#000080">;
+            </font>CmdSpeakerOn       <font color="#000080">= </font><font color="#800000">$D1</font><font color="#000080">;
+            </font>CmdSpeakerOff      <font color="#000080">= </font><font color="#800000">$D3</font><font color="#000080">;
+            </font>CmdGetSpeakerState <font color="#000080">= </font><font color="#800000">$D8</font><font color="#000080">;
+            </font>CmdContinueDMA     <font color="#000080">= </font><font color="#800000">$D4</font><font color="#000080">;
+            </font>CmdGetVersion      <font color="#000080">= </font><font color="#800000">$E1</font><font color="#000080">;
+            </font>DACCommands <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">= (</font>CmdNormalDMADAC<font color="#000080">, </font>Cmd4BitDMADAC<font color="#000080">, </font>Cmd26BitDMADAC<font color="#000080">, </font>Cmd2BitDMADAC<font color="#000080">);
+        </font><font color="#FF0000"><b>var
+            </b></font>ResetPort    <font color="#000080">: </font>word<font color="#000080">;
+            </font>ReadPort     <font color="#000080">: </font>word<font color="#000080">;
+            </font>WritePort    <font color="#000080">: </font>word<font color="#000080">;
+            </font>PollPort     <font color="#000080">: </font>word<font color="#000080">;
+
+            </font>PICPort      <font color="#000080">: </font>byte<font color="#000080">;
+            </font>IRQStartMask <font color="#000080">: </font>byte<font color="#000080">;
+            </font>IRQStopMask  <font color="#000080">: </font>byte<font color="#000080">;
+            </font>IRQIntVector <font color="#000080">: </font>byte<font color="#000080">;
+            </font>IRQHandlerInstalled <font color="#000080">: </font>boolean<font color="#000080">;
+
+            </font>DMAStartMask <font color="#000080">: </font>byte<font color="#000080">;
+            </font>DMAStopMask  <font color="#000080">: </font>byte<font color="#000080">;
+            </font>DMAModeReg   <font color="#000080">: </font>byte<font color="#000080">;
+
+            </font>OldIntVector <font color="#000080">: </font>pointer<font color="#000080">;
+            </font>OldExitProc  <font color="#000080">: </font>pointer<font color="#000080">;
+
+            </font>MarkerProc   <font color="#000080">: </font>pointer<font color="#000080">;
+        </font><font color="#FF0000"><b>var
+            </b></font>VoiceStart     <font color="#000080">: </font>LongInt<font color="#000080">;
+            </font>CurPos         <font color="#000080">: </font>LongInt<font color="#000080">;
+            </font>CurPageEnd     <font color="#000080">: </font>LongInt<font color="#000080">;
+            </font>VoiceEnd       <font color="#000080">: </font>LongInt<font color="#000080">;
+            </font>LeftToPlay     <font color="#000080">: </font>LongInt<font color="#000080">;
+            </font>TimeConstant   <font color="#000080">: </font>byte<font color="#000080">;
+            </font>SoundPacking   <font color="#000080">: </font>byte<font color="#000080">;
+            </font>CurDACCommand  <font color="#000080">: </font>byte<font color="#000080">;
+
+            </font>LoopStart      <font color="#000080">: </font>PBlock<font color="#000080">;
+            </font>LoopsRemaining <font color="#000080">: </font>word<font color="#000080">;
+            </font>EndlessLoop    <font color="#000080">: </font>boolean<font color="#000080">;
+
+            </font>SilenceBlock   <font color="#000080">: </font>boolean<font color="#000080">;
+
+            </font>CurBlock       <font color="#000080">: </font>PBlock<font color="#000080">;
+            </font>NextBlock      <font color="#000080">: </font>PBlock<font color="#000080">;
+
+        </font><font color="#FF0000"><b>procedure </b></font>EnableInterrupts<font color="#000080">;  </font><font color="#FF0000"><b>InLine</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">); </font><font color="#008000"><i>{STI}
+        </i></font><font color="#FF0000"><b>procedure </b></font>DisableInterrupts<font color="#000080">; </font><font color="#FF0000"><b>InLine</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">); </font><font color="#008000"><i>{CLI}
+        </i></font><font color="#FF0000"><b>procedure </b></font>WriteDSP<font color="#000080">(</font>Value<font color="#000080">: </font>byte<font color="#000080">);
+            </font><font color="#FF0000"><b>Inline
+              </b></font><font color="#000080">(
+                </font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$16</font><font color="#000080">/&gt;</font>WritePort<font color="#000080">/    </font><font color="#008000"><i>{MOV   DX, WritePort (Variable)  }
+                </i></font><font color="#800000">$EC</font><font color="#000080">/                   </font><font color="#008000"><i>{IN    AL, DX                    }
+                </i></font><font color="#800000">$24</font><font color="#000080">/</font><font color="#800000">$80</font><font color="#000080">/               </font><font color="#008000"><i>{AND   AL, 80h                   }
+                </i></font><font color="#800000">$75</font><font color="#000080">/</font><font color="#800000">$FB</font><font color="#000080">/               </font><font color="#008000"><i>{JNZ   -05                       }
+                </i></font><font color="#800000">$58</font><font color="#000080">/                   </font><font color="#008000"><i>{POP   AX                        }
+                </i></font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$16</font><font color="#000080">/&gt;</font>WritePort<font color="#000080">/    </font><font color="#008000"><i>{MOV   DX, WritePort (Variable)  }
+                </i></font><font color="#800000">$EE                    </font><font color="#008000"><i>{OUT   DX, AL                    }
+              </i></font><font color="#000080">);
+        </font><font color="#FF0000"><b>function </b></font>ReadDSP<font color="#000080">: </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>Inline
+              </b></font><font color="#000080">(
+                </font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$16</font><font color="#000080">/&gt;</font>PollPort<font color="#000080">/     </font><font color="#008000"><i>{MOV   AL, PollPort  (Variable)  }
+                </i></font><font color="#800000">$EC</font><font color="#000080">/                   </font><font color="#008000"><i>{IN    AL, DX                    }
+                </i></font><font color="#800000">$24</font><font color="#000080">/</font><font color="#800000">$80</font><font color="#000080">/               </font><font color="#008000"><i>{AND   AL, 80h                   }
+                </i></font><font color="#800000">$74</font><font color="#000080">/</font><font color="#800000">$FB</font><font color="#000080">/               </font><font color="#008000"><i>{JZ    -05                       }
+                </i></font><font color="#800000">$8B</font><font color="#000080">/</font><font color="#800000">$16</font><font color="#000080">/&gt;</font>ReadPort<font color="#000080">/     </font><font color="#008000"><i>{MOV   DX, ReadPort  (Variable)  }
+                </i></font><font color="#800000">$EC                    </font><font color="#008000"><i>{IN    AL,DX                     }
+              </i></font><font color="#000080">);
+        </font><font color="#FF0000"><b>function </b></font>InitSB<font color="#000080">(</font>IRQ<font color="#000080">: </font>byte<font color="#000080">; </font>BaseIO<font color="#000080">: </font>word<font color="#000080">; </font>DMAChannel<font color="#000080">: </font>byte<font color="#000080">): </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>const
+                </b></font>IRQIntNums <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">=
+                    (</font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0C</font><font color="#000080">, </font><font color="#800000">$0D</font><font color="#000080">, </font><font color="#800000">$0E</font><font color="#000080">, </font><font color="#800000">$0F</font><font color="#000080">,
+                     </font><font color="#800000">$70</font><font color="#000080">, </font><font color="#800000">$71</font><font color="#000080">, </font><font color="#800000">$72</font><font color="#000080">, </font><font color="#800000">$73</font><font color="#000080">, </font><font color="#800000">$74</font><font color="#000080">, </font><font color="#800000">$75</font><font color="#000080">, </font><font color="#800000">$76</font><font color="#000080">, </font><font color="#800000">$77</font><font color="#000080">);
+            </font><font color="#FF0000"><b>var
+                </b></font>Success<font color="#000080">: </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>IRQ <font color="#000080">&lt;= </font><font color="#800000">7
+                    </font><font color="#FF0000"><b>then </b></font>PICPort <font color="#000080">:= </font><font color="#800000">$21   </font><font color="#008000"><i>{INTC1}
+                    </i></font><font color="#FF0000"><b>else </b></font>PICPort <font color="#000080">:= </font><font color="#800000">$A1</font><font color="#000080">;  </font><font color="#008000"><i>{INTC2}
+                </i></font>IRQIntVector <font color="#000080">:= </font>IRQIntNums<font color="#000080">[</font>IRQ<font color="#000080">];
+                </font>IRQStopMask  <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>SHL </b></font><font color="#000080">(</font>IRQ <font color="#FF0000"><b>mod </b></font><font color="#800000">8</font><font color="#000080">);
+                </font>IRQStartMask <font color="#000080">:= </font><font color="#FF0000"><b>not</b></font><font color="#000080">(</font>IRQStopMask<font color="#000080">);
+
+                </font>ResetPort <font color="#000080">:= </font>BaseIO <font color="#000080">+ </font><font color="#800000">$6</font><font color="#000080">;
+                </font>ReadPort  <font color="#000080">:= </font>BaseIO <font color="#000080">+ </font><font color="#800000">$A</font><font color="#000080">;
+                </font>WritePort <font color="#000080">:= </font>BaseIO <font color="#000080">+ </font><font color="#800000">$C</font><font color="#000080">;
+                </font>PollPort  <font color="#000080">:= </font>BaseIO <font color="#000080">+ </font><font color="#800000">$E</font><font color="#000080">;
+
+                </font>DMAStartMask <font color="#000080">:= </font>DMAChannel <font color="#000080">+ </font><font color="#800000">$00</font><font color="#000080">; </font><font color="#008000"><i>{000000xx}
+                </i></font>DMAStopMask  <font color="#000080">:= </font>DMAChannel <font color="#000080">+ </font><font color="#800000">$04</font><font color="#000080">; </font><font color="#008000"><i>{000001xx}
+                </i></font>DMAModeReg   <font color="#000080">:= </font>DMAChannel <font color="#000080">+ </font><font color="#800000">$48</font><font color="#000080">; </font><font color="#008000"><i>{010010xx}
+
+                </i></font>Success <font color="#000080">:= </font>ResetDSP<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>Success <font color="#FF0000"><b>then </b></font>InstallHandler<font color="#000080">;
+                </font>InitSB <font color="#000080">:= </font>Success<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>EnvironmentSet<font color="#000080">: </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>EnvironmentSet <font color="#000080">:= </font>GetEnv<font color="#000080">(</font><font color="#800000">'BLASTER'</font><font color="#000080">) &lt;&gt; </font><font color="#800000">''</font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSetting<font color="#000080">(</font>BLASTER<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>Letter<font color="#000080">: </font>char<font color="#000080">; </font>Hex<font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Value<font color="#000080">: </font>word<font color="#000080">): </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>EnvStr<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+                </font>NumStr<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+                </font>ErrorCode<font color="#000080">: </font>integer<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>EnvStr <font color="#000080">:= </font>BLASTER <font color="#000080">+ </font><font color="#800000">' '</font><font color="#000080">;
+                </font>Delete<font color="#000080">(</font>EnvStr<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Pos<font color="#000080">(</font>Letter<font color="#000080">, </font>EnvStr<font color="#000080">));
+                </font>NumStr <font color="#000080">:= </font>Copy<font color="#000080">(</font>EnvStr<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Pos<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">, </font>EnvStr<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+                </font><font color="#FF0000"><b>if </b></font>Hex
+                    <font color="#FF0000"><b>then </b></font>Val<font color="#000080">(</font><font color="#800000">'$' </font><font color="#000080">+ </font>NumStr<font color="#000080">, </font>Value<font color="#000080">, </font>ErrorCode<font color="#000080">)
+                    </font><font color="#FF0000"><b>else </b></font>Val<font color="#000080">(</font>NumStr<font color="#000080">, </font>Value<font color="#000080">, </font>ErrorCode<font color="#000080">);
+                </font><font color="#FF0000"><b>if </b></font>ErrorCode <font color="#000080">&lt;&gt; </font><font color="#800000">0
+                    </font><font color="#FF0000"><b>then </b></font>GetSetting <font color="#000080">:= </font>false
+                    <font color="#FF0000"><b>else </b></font>GetSetting <font color="#000080">:= </font>true<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSettings<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>BaseIO<font color="#000080">, </font>IRQ<font color="#000080">, </font>DMAChannel<font color="#000080">: </font>word<font color="#000080">): </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>EnvStr<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+                </font>i<font color="#000080">: </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>EnvStr <font color="#000080">:= </font>GetEnv<font color="#000080">(</font><font color="#800000">'BLASTER'</font><font color="#000080">);
+                </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>EnvStr<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>EnvStr<font color="#000080">[</font>i<font color="#000080">] := </font>UpCase<font color="#000080">(</font>EnvStr<font color="#000080">[</font>i<font color="#000080">]);
+                </font>GetSettings <font color="#000080">:= </font>true<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>EnvStr <font color="#000080">= </font><font color="#800000">''
+                    </font><font color="#FF0000"><b>then
+                        </b></font>GetSettings <font color="#000080">:= </font>false
+                    <font color="#FF0000"><b>else
+                        begin
+                            if not</b></font><font color="#000080">(</font>GetSetting<font color="#000080">(</font>EnvStr<font color="#000080">, </font><font color="#800000">'A'</font><font color="#000080">, </font>true<font color="#000080">, </font>BaseIO<font color="#000080">))
+                                </font><font color="#FF0000"><b>then </b></font>GetSettings <font color="#000080">:= </font>false<font color="#000080">;
+                            </font><font color="#FF0000"><b>if not</b></font><font color="#000080">(</font>GetSetting<font color="#000080">(</font>EnvStr<font color="#000080">, </font><font color="#800000">'I'</font><font color="#000080">, </font>false<font color="#000080">, </font>IRQ<font color="#000080">))
+                                </font><font color="#FF0000"><b>then </b></font>GetSettings <font color="#000080">:= </font>false<font color="#000080">;
+                            </font><font color="#FF0000"><b>if not</b></font><font color="#000080">(</font>GetSetting<font color="#000080">(</font>EnvStr<font color="#000080">, </font><font color="#800000">'D'</font><font color="#000080">, </font>false<font color="#000080">, </font>DMAChannel<font color="#000080">))
+                                </font><font color="#FF0000"><b>then </b></font>GetSettings <font color="#000080">:= </font>false<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>InitSBFromEnv<font color="#000080">: </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>IRQ<font color="#000080">, </font>BaseIO<font color="#000080">, </font>DMAChannel<font color="#000080">: </font>word<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>GetSettings<font color="#000080">(</font>BaseIO<font color="#000080">, </font>IRQ<font color="#000080">, </font>DMAChannel<font color="#000080">)
+                    </font><font color="#FF0000"><b>then </b></font>InitSBFromEnv <font color="#000080">:= </font>InitSB<font color="#000080">(</font>IRQ<font color="#000080">, </font>BaseIO<font color="#000080">, </font>DMAChannel<font color="#000080">)
+                    </font><font color="#FF0000"><b>else </b></font>InitSBFromEnv <font color="#000080">:= </font>false<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>ShutDownSB<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>ResetDSP<font color="#000080">;
+                </font>UninstallHandler<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>ResetDSP<font color="#000080">: </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>i<font color="#000080">: </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>Port<font color="#000080">[</font>ResetPort<font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+                </font>Delay<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+                </font>Port<font color="#000080">[</font>ResetPort<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+                </font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+                </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>ReadDSP <font color="#000080">&lt;&gt; </font><font color="#800000">$AA</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font><font color="#800000">100</font><font color="#000080">) </font><font color="#FF0000"><b>do
+                    </b></font>Inc<font color="#000080">(</font>i<font color="#000080">);
+                </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&lt; </font><font color="#800000">100
+                    </font><font color="#FF0000"><b>then </b></font>ResetDSP <font color="#000080">:= </font>true
+                    <font color="#FF0000"><b>else </b></font>ResetDSP <font color="#000080">:= </font>false<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetDSPVersion<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>MajorByte<font color="#000080">, </font>MinorByte<font color="#000080">: </font>byte<font color="#000080">;
+                </font>MajorStr<font color="#000080">, </font>MinorStr<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>WriteDSP<font color="#000080">(</font>CmdGetVersion<font color="#000080">);
+                </font>MajorByte <font color="#000080">:= </font>ReadDSP<font color="#000080">;   </font>Str<font color="#000080">(</font>MajorByte<font color="#000080">, </font>MajorStr<font color="#000080">);
+                </font>MinorByte <font color="#000080">:= </font>ReadDSP<font color="#000080">;   </font>Str<font color="#000080">(</font>MinorByte<font color="#000080">, </font>MinorStr<font color="#000080">);
+                </font>GetDSPVersion <font color="#000080">:= </font>MajorStr <font color="#000080">+ </font><font color="#800000">'.'  </font><font color="#000080">+ </font>MinorStr<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>TurnSpeakerOn<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>WriteDSP<font color="#000080">(</font>CmdSpeakerOn<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>TurnSpeakerOff<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>WriteDSP<font color="#000080">(</font>CmdSpeakerOff<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>GetSpeakerState<font color="#000080">: </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>SpeakerByte<font color="#000080">: </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>WriteDSP<font color="#000080">(</font>CmdGetSpeakerState<font color="#000080">);
+                </font>SpeakerByte <font color="#000080">:= </font>ReadDSP<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>SpeakerByte <font color="#000080">= </font><font color="#800000">0
+                    </font><font color="#FF0000"><b>then </b></font>GetSpeakerState <font color="#000080">:= </font>Off
+                    <font color="#FF0000"><b>else </b></font>GetSpeakerState <font color="#000080">:= </font><font color="#FF0000"><b>On</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>StartDMADSP<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>Page<font color="#000080">: </font>byte<font color="#000080">;
+                </font>Offset<font color="#000080">: </font>word<font color="#000080">;
+                </font>Length<font color="#000080">: </font>word<font color="#000080">;
+                </font>NextPageStart<font color="#000080">: </font>LongInt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>Page <font color="#000080">:= </font>CurPos <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+                </font>Offset <font color="#000080">:= </font>CurPos <font color="#FF0000"><b>mod </b></font><font color="#800000">65536</font><font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>VoiceEnd <font color="#000080">&lt; </font>CurPageEnd
+                    <font color="#FF0000"><b>then </b></font>Length <font color="#000080">:= </font>LeftToPlay<font color="#000080">-</font><font color="#800000">1
+                    </font><font color="#FF0000"><b>else </b></font>Length <font color="#000080">:= </font>CurPageEnd <font color="#000080">- </font>CurPos<font color="#000080">;
+
+                </font>Inc<font color="#000080">(</font>CurPos<font color="#000080">, </font>LongInt<font color="#000080">(</font>Length<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+                </font>Dec<font color="#000080">(</font>LeftToPlay<font color="#000080">, </font>LongInt<font color="#000080">(</font>Length<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+                </font>Inc<font color="#000080">(</font>CurPageEnd<font color="#000080">, </font><font color="#800000">65536</font><font color="#000080">);
+
+                </font>WriteDSP<font color="#000080">(</font>CmdSetTimeConst<font color="#000080">);
+                </font>WriteDSP<font color="#000080">(</font>TimeConstant<font color="#000080">);
+                </font>Port<font color="#000080">[</font><font color="#800000">$0A</font><font color="#000080">] := </font>DMAStopMask<font color="#000080">;
+                </font>Port<font color="#000080">[</font><font color="#800000">$0C</font><font color="#000080">] := </font><font color="#800000">$00</font><font color="#000080">;
+                </font>Port<font color="#000080">[</font><font color="#800000">$0B</font><font color="#000080">] := </font>DMAModeReg<font color="#000080">;
+                </font>Port<font color="#000080">[</font><font color="#800000">$02</font><font color="#000080">] := </font>Lo<font color="#000080">(</font>Offset<font color="#000080">);
+                </font>Port<font color="#000080">[</font><font color="#800000">$02</font><font color="#000080">] := </font>Hi<font color="#000080">(</font>Offset<font color="#000080">);
+                </font>Port<font color="#000080">[</font><font color="#800000">$03</font><font color="#000080">] := </font>Lo<font color="#000080">(</font>Length<font color="#000080">);
+                </font>Port<font color="#000080">[</font><font color="#800000">$03</font><font color="#000080">] := </font>Hi<font color="#000080">(</font>Length<font color="#000080">);
+                </font>Port<font color="#000080">[</font><font color="#800000">$83</font><font color="#000080">] := </font>Page<font color="#000080">;
+                </font>Port<font color="#000080">[</font><font color="#800000">$0A</font><font color="#000080">] := </font>DMAStartMask<font color="#000080">;
+                </font>WriteDSP<font color="#000080">(</font>CurDACCommand<font color="#000080">);
+                </font>WriteDSP<font color="#000080">(</font>Lo<font color="#000080">(</font>Length<font color="#000080">));
+                </font>WriteDSP<font color="#000080">(</font>Hi<font color="#000080">(</font>Length<font color="#000080">));
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>CallMarkerProc<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>MarkerProc <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil then </b></font>Proc<font color="#000080">(</font>MarkerProc<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>function </b></font>HandleBlock<font color="#000080">(</font>Block<font color="#000080">: </font>PBlock<font color="#000080">): </font>boolean<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>HandleBlock <font color="#000080">:= </font>false<font color="#000080">;
+                </font><font color="#FF0000"><b>case </b></font>Block<font color="#000080">^.</font>BlockType
+                    <font color="#FF0000"><b>of
+                        </b></font>EndBlockNum<font color="#000080">:
+                            </font><font color="#FF0000"><b>begin
+                                </b></font>SoundPlaying <font color="#000080">:= </font>false<font color="#000080">;
+                                </font>HandleBlock <font color="#000080">:= </font>true<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>VoiceBlockNum<font color="#000080">:
+                            </font><font color="#FF0000"><b>begin
+                                </b></font>VoiceStart <font color="#000080">:= </font>GetAbsoluteAddress<font color="#000080">(</font>Block<font color="#000080">) + </font><font color="#800000">6</font><font color="#000080">;
+                                </font>CurPageEnd <font color="#000080">:= ((</font>VoiceStart <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">16</font><font color="#000080">) + </font><font color="#800000">65536 </font><font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+                                </font>LeftToPlay <font color="#000080">:= </font>BlockSize<font color="#000080">(</font>Block<font color="#000080">) - </font><font color="#800000">6</font><font color="#000080">;
+                                </font>VoiceEnd <font color="#000080">:= </font>VoiceStart <font color="#000080">+ </font>LeftToPlay<font color="#000080">;
+                                </font>CurPos <font color="#000080">:= </font>VoiceStart<font color="#000080">;
+                                </font>TimeConstant <font color="#000080">:= </font>PVoiceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>SR<font color="#000080">;
+                                </font>SoundPacking <font color="#000080">:= </font>PVoiceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Packing<font color="#000080">;
+                                </font>CurDACCommand <font color="#000080">:= </font>DACCommands<font color="#000080">[</font>SoundPacking<font color="#000080">];
+                                </font>StartDMADSP<font color="#000080">;
+                                </font>HandleBlock <font color="#000080">:= </font>true<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>VoiceContinueBlockNum<font color="#000080">:
+                            </font><font color="#FF0000"><b>begin
+                                </b></font>VoiceStart <font color="#000080">:= </font>GetAbsoluteAddress<font color="#000080">(</font>Block<font color="#000080">)+</font><font color="#800000">4</font><font color="#000080">;
+                                </font>LeftToPlay <font color="#000080">:= </font>BlockSize<font color="#000080">(</font>Block<font color="#000080">) - </font><font color="#800000">4</font><font color="#000080">;
+                                </font>VoiceEnd <font color="#000080">:= </font>VoiceStart <font color="#000080">+ </font>LeftToPlay<font color="#000080">;
+                                </font>CurPos <font color="#000080">:= </font>VoiceStart<font color="#000080">;
+                                </font>StartDMADSP<font color="#000080">;
+                                </font>HandleBlock <font color="#000080">:= </font>true<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>SilenceBlockNum<font color="#000080">:
+                             </font><font color="#FF0000"><b>begin
+                                 </b></font>SilenceBlock <font color="#000080">:= </font>true<font color="#000080">;
+                                 </font>WriteDSP<font color="#000080">(</font>CmdSetTimeConst<font color="#000080">);
+                                 </font>WriteDSP<font color="#000080">(</font>PSilenceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>SR<font color="#000080">);
+                                 </font>WriteDSP<font color="#000080">(</font>CmdSilenceBlock<font color="#000080">);
+                                 </font>WriteDSP<font color="#000080">(</font>Lo<font color="#000080">(</font>PSilenceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Duration<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">));
+                                 </font>WriteDSP<font color="#000080">(</font>Hi<font color="#000080">(</font>PSilenceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Duration<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">));
+                                 </font>HandleBlock <font color="#000080">:= </font>true<font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>MarkerBlockNum<font color="#000080">:
+                             </font><font color="#FF0000"><b>begin
+                                 </b></font>LastMarker <font color="#000080">:= </font>PMarkerBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Marker<font color="#000080">;
+                                 </font>CallMarkerProc<font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>MessageBlockNum<font color="#000080">:
+                            </font><font color="#FF0000"><b>begin
+                            end</b></font><font color="#000080">;
+                        </font>RepeatBlockNum<font color="#000080">:
+                            </font><font color="#FF0000"><b>begin
+                                 </b></font>LoopStart <font color="#000080">:= </font>NextBlock<font color="#000080">;
+                                 </font>LoopsRemaining <font color="#000080">:= </font>PRepeatBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Count<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+                                 </font><font color="#FF0000"><b>if </b></font>LoopsRemaining <font color="#000080">= </font><font color="#800000">0 </font><font color="#008000"><i>{Wrapped around from $FFFF}
+                                     </i></font><font color="#FF0000"><b>then </b></font>EndlessLoop <font color="#000080">:= </font>true
+                                     <font color="#FF0000"><b>else </b></font>EndlessLoop <font color="#000080">:= </font>false<font color="#000080">;
+                                 </font>Looping <font color="#000080">:= </font>true<font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>RepeatEndBlockNum<font color="#000080">:
+                             </font><font color="#FF0000"><b>begin
+                                 if not</b></font><font color="#000080">(</font>EndlessLoop<font color="#000080">)
+                                     </font><font color="#FF0000"><b>then
+                                         begin
+                                             </b></font>Dec<font color="#000080">(</font>LoopsRemaining<font color="#000080">);
+                                             </font><font color="#FF0000"><b>if </b></font>LoopsRemaining <font color="#000080">= </font><font color="#800000">0
+                                                 </font><font color="#FF0000"><b>then
+                                                     begin
+                                                         </b></font>Looping <font color="#000080">:= </font>false<font color="#000080">;
+                                                         </font>Exit<font color="#000080">;
+                                                     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                 </font>NextBlock <font color="#000080">:= </font>LoopStart<font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font>NewVoiceBlockNum<font color="#000080">:
+                             </font><font color="#FF0000"><b>begin
+                                 if </b></font><font color="#000080">(</font>PNewVoiceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Mode <font color="#000080">= </font>NewStereo<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>PNewVoiceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>BitsPerSample <font color="#000080">= </font><font color="#800000">16</font><font color="#000080">)
+                                     </font><font color="#FF0000"><b>then
+                                         </b></font>UnplayedBlock <font color="#000080">:= </font>true
+                                     <font color="#FF0000"><b>else
+                                         begin
+                                             </b></font>VoiceStart <font color="#000080">:= </font>GetAbsoluteAddress<font color="#000080">(</font>Block<font color="#000080">) + </font><font color="#800000">16</font><font color="#000080">;
+                                             </font>CurPageEnd <font color="#000080">:= ((</font>VoiceStart <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">16</font><font color="#000080">) + </font><font color="#800000">65536 </font><font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+                                             </font>LeftToPlay <font color="#000080">:= </font>BlockSize<font color="#000080">(</font>Block<font color="#000080">) - </font><font color="#800000">16</font><font color="#000080">;
+                                             </font>VoiceEnd <font color="#000080">:= </font>VoiceStart <font color="#000080">+ </font>LeftToPlay<font color="#000080">;
+                                             </font>CurPos <font color="#000080">:= </font>VoiceStart<font color="#000080">;
+                                             </font>TimeConstant <font color="#000080">:= </font>GetSRByte<font color="#000080">(</font>PNewVoiceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>SamplingRate<font color="#000080">);
+                                             </font>SoundPacking <font color="#000080">:= </font>PNewVoiceBlock<font color="#000080">(</font>Block<font color="#000080">)^.</font>Compression<font color="#000080">;
+                                             </font>CurDACCommand <font color="#000080">:= </font>DACCommands<font color="#000080">[</font>SoundPacking<font color="#000080">];
+                                             </font>StartDMADSP<font color="#000080">;
+                                             </font>HandleBlock <font color="#000080">:= </font>true<font color="#000080">;
+                                         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                        </font><font color="#FF0000"><b>else
+                             </b></font>UnknownBlock <font color="#000080">:= </font>true<font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>ProcessBlocks<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                repeat
+                    </b></font>CurBlock <font color="#000080">:= </font>NextBlock<font color="#000080">;
+                    </font>NextBlock <font color="#000080">:= </font>FindNextBlock<font color="#000080">(</font>pointer<font color="#000080">(</font>CurBlock<font color="#000080">));
+                </font><font color="#FF0000"><b>until </b></font>HandleBlock<font color="#000080">(</font>CurBlock<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>ClearInterrupt<font color="#000080">;
+            </font><font color="#FF0000"><b>var
+                </b></font>Temp<font color="#000080">: </font>byte<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>Temp <font color="#000080">:= </font>Port<font color="#000080">[</font>PollPort<font color="#000080">];
+                </font>Port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>IntHandler<font color="#000080">; </font>interrupt<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                if </b></font>SilenceBlock <font color="#008000"><i>{Interrupted because a silence block ended}
+                    </i></font><font color="#FF0000"><b>then
+                        begin
+                            </b></font>SilenceBlock <font color="#000080">:= </font>false<font color="#000080">;
+                            </font>ProcessBlocks<font color="#000080">;
+                        </font><font color="#FF0000"><b>end
+                    else </b></font><font color="#008000"><i>{Interrupted because a DMA transfer was completed}
+                        </i></font><font color="#FF0000"><b>if </b></font>LeftToPlay <font color="#000080">&lt;&gt; </font><font color="#800000">0
+                            </font><font color="#FF0000"><b>then </b></font>StartDMADSP
+                            <font color="#FF0000"><b>else </b></font>ProcessBlocks<font color="#000080">;
+
+                </font>ClearInterrupt<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>PlaySound<font color="#000080">(</font>Sound<font color="#000080">: </font>PSound<font color="#000080">);
+            </font><font color="#FF0000"><b>begin
+                </b></font>PauseSound<font color="#000080">;
+                </font>NextBlock      <font color="#000080">:= </font>PBlock<font color="#000080">(</font>Sound<font color="#000080">);
+                </font>SoundPlaying   <font color="#000080">:= </font>true<font color="#000080">;
+                </font>Looping        <font color="#000080">:= </font>false<font color="#000080">;
+                </font>LastMarker     <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                </font>UnknownBlock   <font color="#000080">:= </font>false<font color="#000080">;
+                </font>UnplayedBlock  <font color="#000080">:= </font>false<font color="#000080">;
+
+                </font>LoopStart      <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+                </font>LoopsRemaining <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                </font>EndlessLoop    <font color="#000080">:= </font>false<font color="#000080">;
+
+                </font>ProcessBlocks<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>PauseSound<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>WriteDSP<font color="#000080">(</font>CmdHaltDMA<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>ContinueSound<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>WriteDSP<font color="#000080">(</font>CmdContinueDMA<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>BreakLoop<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>LoopsRemaining <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+                </font>EndlessLoop <font color="#000080">:= </font>false<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>procedure </b></font>StopSBIRQ<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>Port<font color="#000080">[</font>PICPort<font color="#000080">] := </font>Port<font color="#000080">[</font>PICPort<font color="#000080">] </font><font color="#FF0000"><b>OR </b></font>IRQStopMask<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>StartSBIRQ<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>Port<font color="#000080">[</font>PICPort<font color="#000080">] := </font>Port<font color="#000080">[</font>PICPort<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font>IRQStartMask<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>InstallHandler<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>DisableInterrupts<font color="#000080">;
+                </font>StopSBIRQ<font color="#000080">;
+                </font>GetIntVec<font color="#000080">(</font>IRQIntVector<font color="#000080">, </font>OldIntVector<font color="#000080">);
+                </font>SetIntVec<font color="#000080">(</font>IRQIntVector<font color="#000080">, @</font>IntHandler<font color="#000080">);
+                </font>StartSBIRQ<font color="#000080">;
+                </font>EnableInterrupts<font color="#000080">;
+                </font>IRQHandlerInstalled <font color="#000080">:= </font>true<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>UninstallHandler<font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>DisableInterrupts<font color="#000080">;
+                </font>StopSBIRQ<font color="#000080">;
+                </font>SetIntVec<font color="#000080">(</font>IRQIntVector<font color="#000080">, </font>OldIntVector<font color="#000080">);
+                </font>EnableInterrupts<font color="#000080">;
+                </font>IRQHandlerInstalled <font color="#000080">:= </font>false<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>procedure </b></font>SetMarkerProc<font color="#000080">(</font>MarkerProcedure<font color="#000080">: </font>pointer<font color="#000080">);
+            </font><font color="#FF0000"><b>begin
+                </b></font>MarkerProc <font color="#000080">:= </font>MarkerProcedure<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>GetMarkerProc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>MarkerProcedure<font color="#000080">: </font>pointer<font color="#000080">);
+            </font><font color="#FF0000"><b>begin
+                </b></font>MarkerProcedure <font color="#000080">:= </font>MarkerProc<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>SBDSPExitProc<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>begin
+                </b></font>ExitProc <font color="#000080">:= </font>OldExitProc<font color="#000080">;
+                </font>ResetDSP<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>IRQHandlerInstalled <font color="#000080">= </font>true<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>UninstallHandler<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>begin
+        </b></font>MarkerProc   <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+        </font>OldExitProc  <font color="#000080">:= </font>ExitProc<font color="#000080">;
+        </font>ExitProc     <font color="#000080">:= @</font>SBDSPExitProc<font color="#000080">;
+        </font>SoundPlaying <font color="#000080">:= </font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{       SBDSP is Copyright 1994 by Ethan Brodsky.  All rights reserved.      }
+{$M 16384, 0, 419430   Give some memory to the DOS shell.  If you are not}
+{going to shell to DOS, you can remove this line and let your program use}
+{all available memory for the heap.}
+</i></font><font color="#FF0000"><b>program </b></font>PlayVOCDirect<font color="#000080">;
+    </font><font color="#FF0000"><b>uses
+        </b></font>CRT<font color="#000080">,
+        </font>DOS<font color="#000080">,
+        </font>Mem<font color="#000080">,
+        </font>SBDSP<font color="#000080">,
+        </font>VOC<font color="#000080">;
+    </font><font color="#FF0000"><b>const
+        </b></font>IRQ        <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+        </font>BaseIO     <font color="#000080">= </font><font color="#800000">$220</font><font color="#000080">;
+        </font>DMAChannel <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+        </font>DefaultVOC <font color="#000080">= </font><font color="#800000">'C:\MUSIC\ESCAPE2.VOC'</font><font color="#000080">;
+         </font><font color="#008000"><i>{Put the name of the VOC file to play here}
+         {or pass it as a parameter to the program.}
+    </i></font><font color="#FF0000"><b>var
+        </b></font>VOCFileName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+        </font>SoundSize   <font color="#000080">: </font>LongInt<font color="#000080">;
+        </font>Sound       <font color="#000080">: </font>PSound<font color="#000080">;
+        </font>Chr         <font color="#000080">: </font>char<font color="#000080">;
+        </font>OldMarkerProc <font color="#000080">: </font>pointer<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>GetHexWordStr<font color="#000080">(</font>w<font color="#000080">: </font>word<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>const
+            </b></font>HexChars<font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">$F</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char <font color="#000080">= </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+        </font><font color="#FF0000"><b>begin
+            </b></font>GetHexWordStr <font color="#000080">:= </font>HexChars<font color="#000080">[</font>Hi<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">] + </font>HexChars<font color="#000080">[</font>Hi<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">] +
+                             </font>HexChars<font color="#000080">[</font>Lo<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">] + </font>HexChars<font color="#000080">[</font>Lo<font color="#000080">(</font>w<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">];
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>DisplayMarker<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>var
+            </b></font>Hour<font color="#000080">, </font>Minute<font color="#000080">, </font>Second<font color="#000080">, </font>Sec100<font color="#000080">: </font>word<font color="#000080">;
+        </font><font color="#FF0000"><b>begin
+            </b></font>GetTime<font color="#000080">(</font>Hour<font color="#000080">, </font>Minute<font color="#000080">, </font>Second<font color="#000080">, </font>Sec100<font color="#000080">);
+            </font>writeln<font color="#000080">(</font><font color="#800000">'Reached marker '</font><font color="#000080">, </font>LastMarker<font color="#000080">,
+                    </font><font color="#800000">' at '</font><font color="#000080">, </font>Hour<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">, </font>Minute<font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">, </font>Second<font color="#000080">, </font><font color="#800000">'.'</font><font color="#000080">, </font>Sec100<font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>OldMarkerProc <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>Proc<font color="#000080">(</font>OldMarkerProc<font color="#000080">);
+              </font><font color="#008000"><i>{If another handler is installed, call it}
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>WriteInstructions<font color="#000080">;
+        </font><font color="#FF0000"><b>begin
+            </b></font>writeln<font color="#000080">(</font><font color="#800000">'Begining output of sound file'</font><font color="#000080">);
+            </font>writeln<font color="#000080">(</font><font color="#800000">'Press &lt;B&gt; to break loop'</font><font color="#000080">);
+            </font>writeln<font color="#000080">(</font><font color="#800000">'Press &lt;P&gt; to pause output'</font><font color="#000080">);
+            </font>writeln<font color="#000080">(</font><font color="#800000">'Press &lt;C&gt; to continue output'</font><font color="#000080">);
+            </font>writeln<font color="#000080">(</font><font color="#800000">'Press &lt;D&gt; to shell to DOS'</font><font color="#000080">);
+            </font>writeln<font color="#000080">(</font><font color="#800000">'Press &lt;X&gt; to stop output and exit'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>begin
+        </b></font>writeln<font color="#000080">; </font>writeln<font color="#000080">;
+
+        </font><font color="#FF0000"><b>if </b></font>EnvironmentSet
+            <font color="#FF0000"><b>then
+                begin
+                    if </b></font>InitSBFromEnv
+                        <font color="#FF0000"><b>then
+                            begin
+                                </b></font>writeln<font color="#000080">(</font><font color="#800000">'Sound card initialized correctly using the BLASTER environment variable!'</font><font color="#000080">);
+                                </font>writeln<font color="#000080">(</font><font color="#800000">'DSP version '</font><font color="#000080">, </font>GetDSPVersion<font color="#000080">);
+                            </font><font color="#FF0000"><b>end
+                        else
+                            begin
+                                </b></font>writeln<font color="#000080">(</font><font color="#800000">'Error initializing sound card!'</font><font color="#000080">);
+                                </font>Halt<font color="#000080">(</font><font color="#800000">255</font><font color="#000080">);
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end
+            else
+                begin
+                    </b></font>writeln<font color="#000080">(</font><font color="#800000">'BLASTER environment variable not set, using default settings'</font><font color="#000080">);
+                    </font>writeln<font color="#000080">(</font><font color="#800000">'IRQ = '</font><font color="#000080">, </font>IRQ<font color="#000080">, </font><font color="#800000">'    Base IO = $'</font><font color="#000080">, </font>GetHexWordStr<font color="#000080">(</font>BaseIO<font color="#000080">), </font><font color="#800000">'    DMA Channel = '</font><font color="#000080">, </font>DMAChannel <font color="#000080">);
+                    </font><font color="#FF0000"><b>if </b></font>InitSB<font color="#000080">(</font>IRQ<font color="#000080">, </font>BaseIO<font color="#000080">, </font>DMAChannel<font color="#000080">)
+                        </font><font color="#FF0000"><b>then
+                            begin
+                                </b></font>writeln<font color="#000080">(</font><font color="#800000">'Sound card initialized correctly!'</font><font color="#000080">);
+                                </font>writeln<font color="#000080">(</font><font color="#800000">'DSP version '</font><font color="#000080">, </font>GetDSPVersion<font color="#000080">);
+                            </font><font color="#FF0000"><b>end
+                        else
+                            begin
+                                </b></font>writeln<font color="#000080">(</font><font color="#800000">'Error initializing sound card!'</font><font color="#000080">);
+                                </font>Halt<font color="#000080">(</font><font color="#800000">255</font><font color="#000080">);
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>if </b></font>ParamCount <font color="#000080">= </font><font color="#800000">0
+            </font><font color="#FF0000"><b>then </b></font>VOCFileName <font color="#000080">:= </font>DefaultVOC
+            <font color="#FF0000"><b>else </b></font>VOCFileName <font color="#000080">:= </font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+        </font>SoundSize <font color="#000080">:= </font>LoadVOCfile<font color="#000080">(</font>VOCFileName<font color="#000080">, </font>Sound<font color="#000080">);  </font>writeln<font color="#000080">(</font><font color="#800000">'Sound file loaded'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>SoundSize <font color="#000080">= </font><font color="#800000">0
+            </font><font color="#FF0000"><b>then
+                begin
+                    </b></font>writeln<font color="#000080">(</font><font color="#800000">'Error loading VOC file.  Probably because:'</font><font color="#000080">);
+                    </font>writeln<font color="#000080">(</font><font color="#800000">'    1.  There is no VOC file by name '</font><font color="#000080">, </font>VOCFileName<font color="#000080">, </font><font color="#800000">'.'</font><font color="#000080">);
+                    </font>writeln<font color="#000080">(</font><font color="#800000">'    2.  There is not enough memory to load it.'</font><font color="#000080">);
+                    </font>writeln<font color="#000080">(</font><font color="#800000">'        Largest available block:  '</font><font color="#000080">, </font>MaxAvail<font color="#000080">, </font><font color="#800000">' bytes'</font><font color="#000080">);
+                    </font>Halt<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font>GetMarkerProc<font color="#000080">(</font>OldMarkerProc<font color="#000080">);
+        </font>SetMarkerProc<font color="#000080">(@</font>DisplayMarker<font color="#000080">);
+
+        </font>TurnSpeakerOn<font color="#000080">;
+        </font>WriteInstructions<font color="#000080">;
+        </font>PlaySound<font color="#000080">(</font>Sound<font color="#000080">);
+        </font><font color="#FF0000"><b>repeat
+            if </b></font>KeyPressed
+                <font color="#FF0000"><b>then
+                    begin
+                        </b></font>Chr <font color="#000080">:= </font>UpCase<font color="#000080">(</font>ReadKey<font color="#000080">);
+                        </font><font color="#FF0000"><b>case </b></font>Chr
+                            <font color="#FF0000"><b>of
+                                </b></font><font color="#800000">'B'</font><font color="#000080">:
+                                    </font><font color="#FF0000"><b>begin
+                                        </b></font>BreakLoop<font color="#000080">;
+                                        </font>writeln<font color="#000080">(</font><font color="#800000">'Broke out of loop'</font><font color="#000080">);
+                                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+                                </font><font color="#800000">'P'</font><font color="#000080">:
+                                    </font><font color="#FF0000"><b>begin
+                                        </b></font>PauseSound<font color="#000080">;
+                                        </font>writeln<font color="#000080">(</font><font color="#800000">'Sound output paused'</font><font color="#000080">);
+                                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                </font><font color="#800000">'C'</font><font color="#000080">:
+                                    </font><font color="#FF0000"><b>begin
+                                        </b></font>ContinueSound<font color="#000080">;
+                                        </font>writeln<font color="#000080">(</font><font color="#800000">'Sound output continued'</font><font color="#000080">);
+                                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                </font><font color="#800000">'D'</font><font color="#000080">:
+                                    </font><font color="#FF0000"><b>begin
+                                        </b></font>SwapVectors<font color="#000080">;
+                                        </font>Exec<font color="#000080">(</font>GetEnv<font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">), </font><font color="#800000">''</font><font color="#000080">);
+                                        </font><font color="#FF0000"><b>if </b></font>DOSError <font color="#000080">&lt;&gt; </font><font color="#800000">0
+                                            </font><font color="#FF0000"><b>then
+                                                begin
+                                                    </b></font>writeln<font color="#000080">(</font><font color="#800000">'Error running COMMAND.COM!'</font><font color="#000080">);
+                                                    </font>Halt<font color="#000080">(</font><font color="#800000">255</font><font color="#000080">);
+                                                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                        </font>SwapVectors<font color="#000080">;
+                                        </font>WriteInstructions<font color="#000080">;
+                                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                                </font><font color="#800000">'X'</font><font color="#000080">:
+                                    </font><font color="#FF0000"><b>begin
+                                        </b></font>PauseSound<font color="#000080">;
+                                        </font>writeln<font color="#000080">(</font><font color="#800000">'Sound output stopped!'</font><font color="#000080">);
+                                        </font>Exit<font color="#000080">;
+                                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font>UnknownBlock
+                <font color="#FF0000"><b>then
+                    begin
+                        </b></font>writeln<font color="#000080">(</font><font color="#800000">'An unknown VOC block was reached.  It is probably'</font><font color="#000080">);
+                        </font>writeln<font color="#000080">(</font><font color="#800000">'block 8, which I didn''t implement because it is'</font><font color="#000080">);
+                        </font>writeln<font color="#000080">(</font><font color="#800000">'useless. (At least for this library it is)'</font><font color="#000080">);
+                        </font>UnknownBlock <font color="#000080">:= </font>false<font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font>UnplayedBlock
+               <font color="#FF0000"><b>then
+                   begin
+                       </b></font>writeln<font color="#000080">(</font><font color="#800000">'A 16-bit or stereo block was reached.  This library'</font><font color="#000080">);
+                       </font>writeln<font color="#000080">(</font><font color="#800000">'doesn''t support either of these.'</font><font color="#000080">);
+                       </font>UnplayedBlock <font color="#000080">:= </font>false<font color="#000080">;
+                   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>SoundPlaying <font color="#000080">= </font>false<font color="#000080">);
+        </font>TurnSpeakerOff<font color="#000080">;
+
+        </font>SetMarkerProc<font color="#000080">(</font>OldMarkerProc<font color="#000080">); </font><font color="#008000"><i>{Not really necessary}
+        </i></font>FreeBuffer<font color="#000080">(</font>pointer<font color="#000080">(</font>Sound<font color="#000080">), </font>SoundSize<font color="#000080">);
+        </font>ShutDownSB<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0057.PAS">Original</a><b>]</b></p></body>
+</html>

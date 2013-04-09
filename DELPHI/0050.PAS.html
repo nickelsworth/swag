@@ -1,0 +1,188 @@
+<html>
+<head><title> "Delphi Detecting CPU Type" by RAY LISCHNER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0050.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{Here is a Delphi unit to detect the CPU type, modified from Intel's
+code. Use should be fairly obvious.  If not, send me email, and I can
+send you an example program.  Because Delphi's assembler is 16-bit,
+the code looks a little wierd.  Try using a 32-bit disassembler to see
+the 32-bit instructions (or read the comments). }
+
+</i></font><font color="#FF0000"><b>unit </b></font>CpuId<font color="#000080">;
+
+</font><font color="#008000"><i>{ This code comes from Intel, and has been modified for Delphi's
+  inline assembler.  Since Intel made the original code freely
+  available, I am making my changes freely available.
+
+  Share and enjoy!
+
+  Ray Lischner
+  Tempest Software
+  6/18/95
+}
+
+</i></font><font color="#FF0000"><b>interface
+
+type
+  </b></font><font color="#008000"><i>{ All the types currently known.  As new types are created,
+    add suitable names, and extend the case statement in
+    CpuTypeString.
+  }
+  </i></font>TCpuType <font color="#000080">= (</font>cpu8086<font color="#000080">, </font>cpu80286<font color="#000080">, </font>cpu386<font color="#000080">, </font>cpu486<font color="#000080">, </font>cpuPentium<font color="#000080">);
+
+</font><font color="#008000"><i>{ Return the type of the current CPU }
+</i></font><font color="#FF0000"><b>function </b></font>CpuType<font color="#000080">: </font>TCpuType<font color="#000080">;
+
+</font><font color="#008000"><i>{ Return the type as a short string }
+</i></font><font color="#FF0000"><b>function </b></font>CpuTypeString<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+uses </b></font>SysUtils<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>CpuType<font color="#000080">: </font>TCpuType<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">push DS
+
+</font><font color="#008000"><i>{ First check for an 8086 CPU }
+{ Bits 12-15 of the FLAGS register are always set on the }
+{ 8086 processor. }
+  </i></font><font color="#FF00FF">pushf</font>				       <font color="#008000"><i>{ save EFLAGS }
+  </i></font><font color="#FF00FF">pop</font>		<font color="#FF00FF">bx</font>		          <font color="#008000"><i>{ store EFLAGS in BX }
+  </i></font><font color="#FF00FF">mov</font>		<font color="#FF00FF">ax,0fffh</font>		    <font color="#008000"><i>{ clear bits 12-15 }
+  </i></font><font color="#FF00FF">and</font>		<font color="#FF00FF">ax,bx</font>		       <font color="#008000"><i>{ in EFLAGS }
+  </i></font><font color="#FF00FF">push</font>	<font color="#FF00FF">ax</font>			       <font color="#008000"><i>{ store new EFLAGS value on stack }
+  </i></font><font color="#FF00FF">popf</font>	 			       <font color="#008000"><i>{ replace current EFLAGS value }
+  </i></font><font color="#FF00FF">pushf</font>				       <font color="#008000"><i>{ set new EFLAGS }
+  </i></font><font color="#FF00FF">pop</font>		<font color="#FF00FF">ax</font>		          <font color="#008000"><i>{ store new EFLAGS in AX }
+  </i></font><font color="#FF00FF">and</font>		<font color="#FF00FF">ax,0f000h</font>	    <font color="#008000"><i>{ if bits 12-15 are set, then CPU }
+  </i></font><font color="#FF00FF">cmp</font>		<font color="#FF00FF">ax,0f000h</font>	    <font color="#008000"><i>{ is an 8086/8088 }
+  </i></font><font color="#FF00FF">mov</font> 	<font color="#FF00FF">ax, cpu8086     </font><font color="#008000"><i>{ turn on 8086/8088 flag }
+  </i></font><font color="#FF00FF">je</font>		<font color="#FF00FF">@@End_CpuType
+
+  </font><font color="#008000"><i>{ 80286 CPU check }
+  { Bits 12-15 of the FLAGS register are always clear on the }
+  { 80286 processor. }
+  </i></font><font color="#FF00FF">or</font>		<font color="#FF00FF">bx,0f000h</font>	    <font color="#008000"><i>{ try to set bits 12-15 }
+  </i></font><font color="#FF00FF">push</font> 	<font color="#FF00FF">bx
+  popf
+  pushf
+  pop</font>		<font color="#FF00FF">ax
+  and</font>		<font color="#FF00FF">ax,0f000h</font>	      <font color="#008000"><i>{ if bits 12-15 are cleared, CPU=80286 }
+  </i></font><font color="#FF00FF">mov</font> 	<font color="#FF00FF">ax, cpu80286      </font><font color="#008000"><i>{ turn on 80286 flag }
+  </i></font><font color="#FF00FF">jz</font>		<font color="#FF00FF">@@End_CpuType
+
+  </font><font color="#008000"><i>{ To test for 386 or better, we need to use 32 bit instructions,
+    but the 16-bit Delphi assembler does not recognize the 32 bit
+opcodes
+    or operands.  Instead, use the 66H operand size prefix to change
+    each instruction to its 32-bit equivalent. For 32-bit immediate
+    operands, we also need to store the high word of the operand
+immediately
+    following the instruction.  The 32-bit instruction is shown in a
+comment
+    after the 66H instruction.
+  }
+
+  { i386 CPU check }
+  { The AC bit, bit #18, is a new bit introduced in the EFLAGS }
+  { register on the i486 DX CPU to generate alignment faults. }
+  { This bit can not be set on the i386 CPU. }
+
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pushfd }
+  </i></font><font color="#FF00FF">pushf
+  db 66h                    </font><font color="#008000"><i>{ pop eax }
+  </i></font><font color="#FF00FF">pop</font>	<font color="#FF00FF">ax</font>		                <font color="#008000"><i>{ get original EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ mov ecx, eax }
+  </i></font><font color="#FF00FF">mov</font>	<font color="#FF00FF">cx,ax</font>		             <font color="#008000"><i>{ save original EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ xor eax,40000h }
+  </i></font><font color="#FF00FF">xor</font>	<font color="#FF00FF">ax,0h</font>	                <font color="#008000"><i>{ flip AC bit in EFLAGS }
+  </i></font><font color="#FF00FF">dw 0004h
+  db 66h                    </font><font color="#008000"><i>{ push eax }
+  </i></font><font color="#FF00FF">push ax</font>			          <font color="#008000"><i>{ save for EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ popfd }
+  </i></font><font color="#FF00FF">popf</font>				          <font color="#008000"><i>{ copy to EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pushfd }
+  </i></font><font color="#FF00FF">pushf</font>				          <font color="#008000"><i>{ push EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pop eax }
+  </i></font><font color="#FF00FF">pop</font>	<font color="#FF00FF">ax</font>		                <font color="#008000"><i>{ get new EFLAGS value }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ xor eax,ecx }
+  </i></font><font color="#FF00FF">xor</font>	<font color="#FF00FF">ax,cx</font>		             <font color="#008000"><i>{ can't toggle AC bit, CPU=Intel386 }
+  </i></font><font color="#FF00FF">mov ax, cpu386            </font><font color="#008000"><i>{ turn on 386 flag }
+  </i></font><font color="#FF00FF">je @@End_CpuType
+
+</font><font color="#008000"><i>{ i486 DX CPU / i487 SX MCP and i486 SX CPU checking }
+{ Checking for ability to set/clear ID flag (Bit 21) in EFLAGS }
+{ which indicates the presence of a processor }
+{ with the ability to use the CPUID instruction. }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pushfd }
+  </i></font><font color="#FF00FF">pushf</font>				          <font color="#008000"><i>{ push original EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pop eax }
+  </i></font><font color="#FF00FF">pop</font>	<font color="#FF00FF">ax</font>		                <font color="#008000"><i>{ get original EFLAGS in eax }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ mov ecx, eax }
+  </i></font><font color="#FF00FF">mov</font>	<font color="#FF00FF">cx,ax</font>		             <font color="#008000"><i>{ save original EFLAGS in ecx }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ xor eax,200000h }
+  </i></font><font color="#FF00FF">xor</font>	<font color="#FF00FF">ax,0h</font>	                <font color="#008000"><i>{ flip ID bit in EFLAGS }
+  </i></font><font color="#FF00FF">dw 0020h
+  db 66h                    </font><font color="#008000"><i>{ push eax }
+  </i></font><font color="#FF00FF">push ax</font>			          <font color="#008000"><i>{ save for EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ popfd }
+  </i></font><font color="#FF00FF">popf</font>				          <font color="#008000"><i>{ copy to EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pushfd }
+  </i></font><font color="#FF00FF">pushf                     </font><font color="#008000"><i>{ push EFLAGS }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ pop eax }
+  </i></font><font color="#FF00FF">pop</font>	<font color="#FF00FF">ax</font>		                <font color="#008000"><i>{ get new EFLAGS value }
+  </i></font><font color="#FF00FF">db 66h                    </font><font color="#008000"><i>{ xor eax, ecx }
+  </i></font><font color="#FF00FF">xor ax, cx
+  mov ax, cpu486            </font><font color="#008000"><i>{ turn on i486 flag }
+  </i></font><font color="#FF00FF">je @@End_CpuType</font>	       <font color="#008000"><i>{ if ID bit cannot be changed, CPU=486
+}
+</i></font>					             <font color="#008000"><i>{ without CPUID instruction functionality }
+
+{ Execute CPUID instruction to determine vendor, family, }
+{ model and stepping.  The use of the CPUID instruction used }
+{ in this program can be used for B0 and later steppings }
+{ of the P5 processor. }
+   </i></font><font color="#FF00FF">db 66h                  </font><font color="#008000"><i>{ mov eax, 1 }
+</i></font>	<font color="#FF00FF">mov ax, 1</font>			      <font color="#008000"><i>{ set up for CPUID instruction }
+   </i></font><font color="#FF00FF">dw 0
+   db 66h                  </font><font color="#008000"><i>{ cpuid }
+</i></font>	<font color="#FF00FF">db</font>	<font color="#FF00FF">0Fh</font>	               <font color="#008000"><i>{ Hardcoded opcode for CPUID
+instruction }
+</i></font>	<font color="#FF00FF">db</font>	<font color="#FF00FF">0a2h
+   db 66h                  </font><font color="#008000"><i>{ and eax, 0F00H }
+</i></font>	<font color="#FF00FF">and ax, 0F00H</font>	         <font color="#008000"><i>{ mask everything but family }
+   </i></font><font color="#FF00FF">dw 0
+   db 66h                  </font><font color="#008000"><i>{ shr eax, 8 }
+</i></font>	<font color="#FF00FF">shr ax, 8               </font><font color="#008000"><i>{ shift the cpu type down to the low byte }
+   </i></font><font color="#FF00FF">sub ax, 1               </font><font color="#008000"><i>{ subtract 1 to map to TCpuType }
+
+</i></font><font color="#FF00FF">@@End_CpuType:
+   pop ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>CpuTypeString<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>kind<font color="#000080">: </font>TCpuType<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>kind <font color="#000080">:= </font>CpuType<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>kind <font color="#FF0000"><b>of
+  </b></font>cpu8086<font color="#000080">:
+    </font>Result <font color="#000080">:= </font><font color="#800000">'8086'</font><font color="#000080">;
+  </font>cpu80286<font color="#000080">:
+    </font>Result <font color="#000080">:= </font><font color="#800000">'80286'</font><font color="#000080">;
+  </font>cpu386<font color="#000080">:
+    </font>Result <font color="#000080">:= </font><font color="#800000">'386'</font><font color="#000080">;
+  </font>cpu486<font color="#000080">:
+    </font>Result <font color="#000080">:= </font><font color="#800000">'486'</font><font color="#000080">;
+  </font>cpuPentium<font color="#000080">:
+    </font>Result <font color="#000080">:= </font><font color="#800000">'Pentium'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>else
+    </b></font><font color="#008000"><i>{ Try to be flexible for future cpu types, e.g., P6. }
+    </i></font>Result <font color="#000080">:= </font>Format<font color="#000080">(</font><font color="#800000">'P%d'</font><font color="#000080">, [</font>Ord<font color="#000080">(</font>kind<font color="#000080">)]);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0050.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,199 @@
+<html>
+<head><title> "SHARE Unit in ASM" by HELGE HELGESEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(*
+From: HELGE HELGESEN
+Subj: SHARE.EXE
+---------------------------------------------------------------------------
+-&gt; Can I lock the files after the RESET and unlock before / after
+-&gt; the close?
+
+Yes. This is one advantage of network files. All users running
+your program will open the files simultaneously, and when a
+process wants to write to a record, it simply locks it. No other
+processes can then read or write to the record, though they can
+read/write all other records.
+
+(I assume you're NOT using text files!)
+
+-&gt; I'd like to add a thing that checks if the file is locked
+-&gt; before the reset.
+
+If a record is locked, then the process still can open the file.
+
+-&gt; Does the &quot;lock&quot; occur on the open or the read of the file?
+
+What do you mean? You can open a file in numerous ways. If you
+open it for shDenyN, then locking is done on record(byte) basis.
+If you open it for exclusive(FileMode=2) access or shDenyRW (no
+other can access the file) then locking is done on file basis.
+
+Here's a short unit with file locking support. It's written for
+Turbo Pascal (or Borland Pascal) 7.0, but it should work with
+TP60 without many modifications.
+SHARE.PAS ---&gt;
+*)
+
+</i></font><font color="#FF0000"><b>Unit </b></font>Share<font color="#000080">;
+</font><font color="#008000"><i>{
+  Utility to allow file sharing on a network
+  (c) 1993 Helge Olav Helgesen
+}
+
+</i></font><font color="#FF0000"><b>interface
+
+uses
+  </b></font>dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>shShareInstalled<font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#008000"><i>{ check if SHARE is installed }
+</i></font><font color="#FF0000"><b>function </b></font>LockByte<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>thefile<font color="#000080">; </font>FirstByte<font color="#000080">, </font>NoBytes<font color="#000080">: </font>longint<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>UnLockByte<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>thefile<font color="#000080">; </font>FirstByte<font color="#000080">, </font>NoBytes<font color="#000080">: </font>longint<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>Lock<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>thefile<font color="#000080">; </font>FirstRec<font color="#000080">, </font>NoRecs<font color="#000080">: </font>word<font color="#000080">): </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>UnLock<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>thefile<font color="#000080">; </font>FirstRec<font color="#000080">, </font>NoRecs<font color="#000080">: </font>word<font color="#000080">): </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+</b></font><font color="#008000"><i>{
+  Here's a list of file file modes you can open a file with. To allow
+  multiple access to one file, it should either be marked R/O, or opened
+  with shDenyN-mode. To open a file with a spesified mode, do:
+
+  FileMode:=shDenyN+shAccessRW; (Add the flags)
+}
+  </i></font>shDenyR    <font color="#000080">= </font><font color="#800000">$30</font><font color="#000080">; </font><font color="#008000"><i>{ Deny Read to other Processes }
+  </i></font>shDenyW    <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Deny Write to other Processes }
+  </i></font>shDenyRW   <font color="#000080">= </font><font color="#800000">$10</font><font color="#000080">; </font><font color="#008000"><i>{ Deny access to other Processes }
+  </i></font>shDenyN    <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">; </font><font color="#008000"><i>{ Deny none - full access to other Processes }
+  </i></font>shAccessR  <font color="#000080">= </font><font color="#800000">$0</font><font color="#000080">;  </font><font color="#008000"><i>{ open for Read access }
+  </i></font>shAccessW  <font color="#000080">= </font><font color="#800000">$1</font><font color="#000080">;  </font><font color="#008000"><i>{ open for Write Access }
+  </i></font>shAccessRW <font color="#000080">= </font><font color="#800000">$2</font><font color="#000080">;  </font><font color="#008000"><i>{ open for both read and write }
+  </i></font>shPrivate  <font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">; </font><font color="#008000"><i>{ private mode - don't know what this is... }
+
+</i></font><font color="#FF0000"><b>implementation </b></font><font color="#008000"><i>{ the private part }
+
+</i></font><font color="#FF0000"><b>function </b></font>shShareInstalled<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  Returns TRUE if Share is installed on the local machine!
+}
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax,$1000 </font><font color="#008000"><i>{ check if SHARE is installed }
+  </i></font><font color="#FF00FF">int $2f </font><font color="#008000"><i>{ call multiplex interrupt }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ shShareInstalled }
+
+</i></font><font color="#FF0000"><b>function </b></font>LockByte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  Locks a region of bytes in the specified file.
+}
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax, $5c00
+  les bx, thefile
+  mov bx, es:[bx].FileRec.Handle
+  les dx, FirstByte
+  mov cx, es
+  les di, NoBytes
+  mov si, es
+  int $21
+  jc @1
+  xor al, al
+@1:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Lock<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  Lock records.
+}
+</i></font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les bx, thefile
+  mov cx, es:[bx].FileRec.RecSize
+  mov ax, FirstRec
+  mul cx
+  push ax
+  push dx
+  mov ax, NoRecs
+  mul cx
+  mov si, dx
+  mov di, ax
+  pop cx
+  pop dx
+  mov ax, $5c00
+  mov bx, es:[bx].FileRec.Handle
+  int $21
+  jc @1
+  xor al, al
+@1:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>UnLockByte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov ax, $5c01
+  les bx, thefile
+  mov bx, es:[bx].FileRec.Handle
+  les dx, FirstByte
+  mov cx, es
+  les di, NoBytes
+  mov si, es
+  int $21
+  jc @1
+  xor al, al
+@1:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>UnLock<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">les bx, thefile
+  mov cx, es:[bx].FileRec.RecSize
+  mov ax, FirstRec
+  mul cx
+  push ax
+  push dx
+  mov ax, NoRecs
+  mul cx
+  mov si, dx
+  mov di, ax
+  pop cx
+  pop dx
+  mov ax, $5c01
+  mov bx, es:[bx].FileRec.Handle
+  int $21
+  jc @1
+  xor al, al
+@1:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font>They<font color="#800000">'re used this way:
+</font>Lock<font color="#000080">(</font>MyFile<font color="#000080">, </font>FirstByteToLock<font color="#000080">, </font>NoBytesToLock<font color="#000080">);
+</font>LockByte<font color="#000080">(</font>MyFile<font color="#000080">, </font>FirstRecToLock<font color="#000080">, </font>NoRecsToLock<font color="#000080">);
+
+</font>Since you<font color="#800000">'re working with records, you probably want to use Lock.
+</font>When you want <font color="#FF0000"><b>to </b></font>update a <font color="#FF0000"><b>record</b></font><font color="#000080">, </font>this might be the code<font color="#000080">:
+
+</font>Lock<font color="#000080">(</font>MyFile<font color="#000080">, </font>Rec<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+</font>Write<font color="#000080">(</font>MyFile<font color="#000080">, </font>MyRec<font color="#000080">);
+</font>UnLock<font color="#000080">(</font>MyFile<font color="#000080">, </font>Rec<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+
+</font>You will <font color="#FF0000"><b>of </b></font>course have <font color="#FF0000"><b>to </b></font>make code <font color="#FF0000"><b>to </b></font>check <font color="#FF0000"><b>if </b></font>the lock failed
+<font color="#000080">(</font>any result but <font color="#800000">0</font><font color="#000080">), </font>you can<font color="#800000">'t write to the record. Always unlock
+</font>the <font color="#FF0000"><b>record as </b></font>soon you<font color="#800000">'re done!
+
+</font>The last ones are UnLock <font color="#FF0000"><b>and </b></font>UnLockByte<font color="#000080">. </font>They<font color="#800000">'re used the same
+</font>way <font color="#FF0000"><b>as </b></font>Lock <font color="#FF0000"><b>and </b></font>LockByte<font color="#000080">.
+
+</font><font color="#FF0000"><b>And </b></font>a last note<font color="#000080">! </font>You can<font color="#800000">'t open a file in a mode that conflicts
+</font><font color="#FF0000"><b>with </b></font>the access other processes have <font color="#FF0000"><b>to </b></font>a <font color="#FF0000"><b>file</b></font><font color="#000080">.
+
+</font>Eg<font color="#000080">.
+
+</font><font color="#FF0000"><b>if </b></font>you first open a <font color="#FF0000"><b>file with </b></font>mode shDenyN<font color="#000080">+</font>shAccessRW<font color="#000080">, </font><font color="#FF0000"><b>and then
+try to </b></font>open the <font color="#FF0000"><b>file </b></font>again <font color="#000080">(</font>without closing the first one<font color="#000080">) </font><font color="#FF0000"><b>with
+</b></font>the mode shDenyRW<font color="#000080">+</font>shAccessRW<font color="#000080">, </font>the reset will fail<font color="#000080">.
+
+</font>I<font color="#800000">'ll see if I can make a short program to illustrate how this
+</font>works<font color="#000080">...
+
+</font>Hope this helps a litte<font color="#000080">,
+
+... </font>Helge
+
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,528 @@
+<html>
+<head><title> "Extract File Descriptions from BBS files" by EDDY THILLEMAN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0124.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A+,B-,D-,E-,F-,G-,I-,L-,N-,O-,P-,Q-,R-,S-,T-,V-,X-,Y-}
+{$M 16384,0,655360}
+{$DEFINE Kort}
+</i></font><font color="#FF0000"><b>Program </b></font>Extract<font color="#000080">;
+  </font><font color="#008000"><i>{ extract filenames and accompanying descriptions from bbs files listings }
+  { Author: Eddy Thilleman, 19 mei 1994 }
+  { written in Borland Pascal version 7.01 }
+  {  modified: augustus 1994 - choose between long vs. short directory name }
+  {  modified: januari  1995 - keep only filenames with entries found on screen
+                             - total number of found entries
+                             - delete destination directory if no entries found }
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>TypeNotAllowed <font color="#000080">= </font><font color="#FF0000"><b>set of </b></font>char<font color="#000080">;  </font><font color="#008000"><i>{ filter out (some) header lines }
+</i></font><font color="#FF0000"><b>Const
+  </b></font>NotAllowed <font color="#000080">: </font>TypeNotAllowed <font color="#000080">= [</font><font color="#800000">''</font><font color="#000080">..</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">'*'</font><font color="#000080">,</font><font color="#800000">':'</font><font color="#000080">..</font><font color="#800000">'?'</font><font color="#000080">,</font><font color="#800000">'|'</font><font color="#000080">,</font><font color="#800000">'&deg;'</font><font color="#000080">..</font><font color="#800000">'&szlig;'</font><font color="#000080">];
+  </font>NoFAttr <font color="#000080">: </font>word <font color="#000080">=   </font><font color="#800000">$1C</font><font color="#000080">;  </font><font color="#008000"><i>{ dir-, volume-, system attributen }
+  </i></font>FAttr   <font color="#000080">: </font>word <font color="#000080">=   </font><font color="#800000">$23</font><font color="#000080">;  </font><font color="#008000"><i>{ readonly-, hidden-, archive attributes }
+  </i></font>BufSizeBig     <font color="#000080">= </font><font color="#800000">49152</font><font color="#000080">;  </font><font color="#008000"><i>{ 48 KB }
+  </i></font>BufSizeSmall   <font color="#000080">=  </font><font color="#800000">8192</font><font color="#000080">;  </font><font color="#008000"><i>{  8 KB }
+  </i></font>Cannot         <font color="#000080">= </font><font color="#800000">'Cannot create destination '</font><font color="#000080">;
+  </font>MaxNrLines     <font color="#000080">=    </font><font color="#800000">20</font><font color="#000080">;  </font><font color="#008000"><i>{ max # of lines for one entry }
+  </i></font>MaxNrSearch    <font color="#000080">=    </font><font color="#800000">18</font><font color="#000080">;  </font><font color="#008000"><i>{ max # of words to search for }
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>BufTypeSource  <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>BufSizeBig  <font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>BufTypeDest    <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>BufSizeSmall<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+  </font>string3        <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">03</font><font color="#000080">];
+  </font>String12       <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+  </font>String16       <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">16</font><font color="#000080">];
+  </font>String25       <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">25</font><font color="#000080">];
+  </font>String65       <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">65</font><font color="#000080">];
+  </font>TypeLine       <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxNrLines<font color="#000080">] </font><font color="#FF0000"><b>of string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>Line             <font color="#000080">: </font>TypeLine<font color="#000080">;         </font><font color="#008000"><i>{ filename and description  }
+  </i></font>Tmp1<font color="#000080">, </font>Tmp2       <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;           </font><font color="#008000"><i>{ temporary hold lines here }
+  </i></font>FileName         <font color="#000080">: </font>String12<font color="#000080">;         </font><font color="#008000"><i>{ filename in files listing }
+  </i></font>SearchText       <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxNrSearch<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>String65<font color="#000080">;
+  </font>Count<font color="#000080">, </font>TotalCount<font color="#000080">: </font>word<font color="#000080">;             </font><font color="#008000"><i>{ # of found entries        }
+  </i></font>SourceFile<font color="#000080">, </font>DestFile <font color="#000080">: </font>text<font color="#000080">;         </font><font color="#008000"><i>{ sourcefile and dest. file }
+  </i></font>SourceBuf        <font color="#000080">: </font>BufTypeSource<font color="#000080">;    </font><font color="#008000"><i>{ source text buffer        }
+  </i></font>DestBuf          <font color="#000080">: </font>BufTypeDest<font color="#000080">;      </font><font color="#008000"><i>{ destination text buffer   }
+{$IFDEF Kort}
+  </i></font>DestListing      <font color="#000080">: </font>string16<font color="#000080">;         </font><font color="#008000"><i>{ name of destination file  }
+  </i></font>DestDir          <font color="#000080">: </font>string3 <font color="#000080">;         </font><font color="#008000"><i>{ name of destination directory }
+{$ELSE}
+  </i></font>DestListing      <font color="#000080">: </font>string25<font color="#000080">;         </font><font color="#008000"><i>{ name of destination file  }
+  </i></font>DestDir          <font color="#000080">: </font>string12<font color="#000080">;         </font><font color="#008000"><i>{ name of destination directory }
+{$ENDIF}
+  </i></font>FR               <font color="#000080">: </font>SearchRec<font color="#000080">;        </font><font color="#008000"><i>{ FileRecord }
+  </i></font>FMask<font color="#000080">, </font>DirName   <font color="#000080">: </font>String12<font color="#000080">;
+  </font>Exists           <font color="#000080">: </font>boolean<font color="#000080">;
+  </font>nr<font color="#000080">,                                  </font><font color="#008000"><i>{ nr: points to element# where
+                                             to put the next read-in line   }
+  </i></font>NrLines          <font color="#000080">: </font>byte<font color="#000080">;             </font><font color="#008000"><i>{ NrLines: number of lines belonging
+                                             to this entry }
+  </i></font>found<font color="#000080">, </font>Header    <font color="#000080">: </font>boolean<font color="#000080">;
+  </font>T                <font color="#000080">: </font>byte<font color="#000080">;             </font><font color="#008000"><i>{ points to char in line: allowed? }
+  </i></font>NrSearch<font color="#000080">,                            </font><font color="#008000"><i>{ current word to search for       }
+  </i></font>TotalNrSearch    <font color="#000080">: </font>byte<font color="#000080">;             </font><font color="#008000"><i>{ total # of words to search for   }
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LowerFast<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Str<font color="#000080">: </font><font color="#FF0000"><b>String </b></font><font color="#000080">);
+  </font><font color="#008000"><i>{ 52 Bytes by Bob Swart, 11-6-1993, '80XXX' FASTEST! }
+</i></font><font color="#FF0000"><b>InLine</b></font><font color="#000080">(
+  </font><font color="#800000">$8C</font><font color="#000080">/</font><font color="#800000">$DA</font><font color="#000080">/               </font><font color="#008000"><i>{       mov   DX,DS                 }
+  </i></font><font color="#800000">$BB</font><font color="#000080">/</font>Ord<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">)/
+      </font>Ord<font color="#000080">(</font><font color="#800000">'Z'</font><font color="#000080">)-</font>Ord<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">)/ </font><font color="#008000"><i>{       mov   BX,'Z'-'A'/'A'        }
+  </i></font><font color="#800000">$5E</font><font color="#000080">/                   </font><font color="#008000"><i>{       pop   SI                    }
+  </i></font><font color="#800000">$1F</font><font color="#000080">/                   </font><font color="#008000"><i>{       pop   DS                    }
+  </i></font><font color="#800000">$FC</font><font color="#000080">/                   </font><font color="#008000"><i>{       cld                         }
+  </i></font><font color="#800000">$AC</font><font color="#000080">/                   </font><font color="#008000"><i>{       lodsb                       }
+  </i></font><font color="#800000">$88</font><font color="#000080">/</font><font color="#800000">$C1</font><font color="#000080">/               </font><font color="#008000"><i>{       mov   CL,AL                 }
+  </i></font><font color="#800000">$30</font><font color="#000080">/</font><font color="#800000">$ED</font><font color="#000080">/               </font><font color="#008000"><i>{       xor   CH,CH                 }
+  </i></font><font color="#800000">$D1</font><font color="#000080">/</font><font color="#800000">$E9</font><font color="#000080">/               </font><font color="#008000"><i>{       shr   CX,1                  }
+  </i></font><font color="#800000">$73</font><font color="#000080">/</font><font color="#800000">$0B</font><font color="#000080">/               </font><font color="#008000"><i>{       jnc   @Part1                }
+  </i></font><font color="#800000">$AC</font><font color="#000080">/                   </font><font color="#008000"><i>{       lodsb                       }
+  </i></font><font color="#800000">$28</font><font color="#000080">/</font><font color="#800000">$D8</font><font color="#000080">/               </font><font color="#008000"><i>{       sub   AL,BL                 }
+  </i></font><font color="#800000">$38</font><font color="#000080">/</font><font color="#800000">$F8</font><font color="#000080">/               </font><font color="#008000"><i>{       cmp   AL,BH                 }
+  </i></font><font color="#800000">$77</font><font color="#000080">/</font><font color="#800000">$04</font><font color="#000080">/               </font><font color="#008000"><i>{       ja    @Part1                }
+  </i></font><font color="#800000">$80</font><font color="#000080">/</font><font color="#800000">$44</font><font color="#000080">/</font><font color="#800000">$FF</font><font color="#000080">/
+      </font>Ord<font color="#000080">(</font><font color="#800000">'a'</font><font color="#000080">)-</font>Ord<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">)/ </font><font color="#008000"><i>{@Loop: ADD   Byte Ptr[SI-1],'a'-'A'}
+  </i></font><font color="#800000">$E3</font><font color="#000080">/</font><font color="#800000">$14</font><font color="#000080">/               </font><font color="#008000"><i>{@Part1:jcxz  @Exit                 }
+  </i></font><font color="#800000">$AD</font><font color="#000080">/                   </font><font color="#008000"><i>{       lodsw                       }
+  </i></font><font color="#800000">$28</font><font color="#000080">/</font><font color="#800000">$D8</font><font color="#000080">/               </font><font color="#008000"><i>{       sub   AL,BL                 }
+  </i></font><font color="#800000">$38</font><font color="#000080">/</font><font color="#800000">$F8</font><font color="#000080">/               </font><font color="#008000"><i>{       cmp   AL,BH                 }
+  </i></font><font color="#800000">$77</font><font color="#000080">/</font><font color="#800000">$04</font><font color="#000080">/               </font><font color="#008000"><i>{       ja    @Part2                }
+  </i></font><font color="#800000">$80</font><font color="#000080">/</font><font color="#800000">$44</font><font color="#000080">/</font><font color="#800000">$FE</font><font color="#000080">/
+      </font>Ord<font color="#000080">(</font><font color="#800000">'a'</font><font color="#000080">)-</font>Ord<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">)/ </font><font color="#008000"><i>{       ADD   Byte Ptr[SI-2],'a'-'A'}
+  </i></font><font color="#800000">$49</font><font color="#000080">/                   </font><font color="#008000"><i>{@Part2:dec   CX                    }
+  </i></font><font color="#800000">$28</font><font color="#000080">/</font><font color="#800000">$DC</font><font color="#000080">/               </font><font color="#008000"><i>{       sub   AH,BL                 }
+  </i></font><font color="#800000">$38</font><font color="#000080">/</font><font color="#800000">$FC</font><font color="#000080">/               </font><font color="#008000"><i>{       cmp   AH,BH                 }
+  </i></font><font color="#800000">$77</font><font color="#000080">/</font><font color="#800000">$EC</font><font color="#000080">/               </font><font color="#008000"><i>{       ja    @Part1                }
+  </i></font><font color="#800000">$EB</font><font color="#000080">/</font><font color="#800000">$E6</font><font color="#000080">/               </font><font color="#008000"><i>{       jmp   @Loop                 }
+  </i></font><font color="#800000">$8E</font><font color="#000080">/</font><font color="#800000">$DA                </font><font color="#008000"><i>{@Exit: mov   DS,DX                 }
+</i></font><font color="#000080">) </font><font color="#008000"><i>{ LowerFast }</i></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>CopySubStr<font color="#000080">( </font>Str1<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>start<font color="#000080">, </font>nrchars<font color="#000080">: </font>byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Str2<font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">);
+</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ copy part of Str1 (beginning at start for nrchars) to Str2
+    if start &gt; length of Str1, Str2 will contain a empty string.
+    if nrchars specifies more characters than remain starting at the
+    start position, Str2 will contain just that remainder of Str1. }
+</i></font><font color="#FF0000"><b>asm     </b></font><font color="#008000"><i>{ setup }
+        </i></font><font color="#FF00FF">lds   si, str1     </font><font color="#008000"><i>{ load in DS:SI pointer to str1 }
+        </i></font><font color="#FF00FF">cld                </font><font color="#008000"><i>{ string operations forward     }
+        </i></font><font color="#FF00FF">les   di, str2     </font><font color="#008000"><i>{ load in ES:DI pointer to str2 }
+        </i></font><font color="#FF00FF">mov   ah, [si]     </font><font color="#008000"><i>{ length str1 --&gt; AH            }
+        </i></font><font color="#FF00FF">and   ah, ah       </font><font color="#008000"><i>{ length str1 = 0?              }
+        </i></font><font color="#FF00FF">je    @null        </font><font color="#008000"><i>{ yes, empty string in Str2     }
+        </i></font><font color="#FF00FF">mov   bl, [start]  </font><font color="#008000"><i>{ starting position --&gt; BL      }
+        </i></font><font color="#FF00FF">cmp   ah, bl       </font><font color="#008000"><i>{ start &gt; length str1?          }
+        </i></font><font color="#FF00FF">jb    @null        </font><font color="#008000"><i>{ yes, empty string in Str2     }
+
+        { start + nrchars - 1 &gt; length str1?               }
+        </i></font><font color="#FF00FF">mov   al, [nrchars]</font><font color="#008000"><i>{ nrchars --&gt; AL                }
+        </i></font><font color="#FF00FF">mov   dh, al       </font><font color="#008000"><i>{ nrchars --&gt; DH                }
+        </i></font><font color="#FF00FF">add   dh, bl       </font><font color="#008000"><i>{ add start                     }
+        </i></font><font color="#FF00FF">dec   dh
+        cmp   ah, dh       </font><font color="#008000"><i>{ nrchars &gt; rest of str1?       }
+        </i></font><font color="#FF00FF">jb    @rest        </font><font color="#008000"><i>{ yes, copy rest of str1        }
+        </i></font><font color="#FF00FF">jmp   @copy
+@null:  xor   ax, ax       </font><font color="#008000"><i>{ return a empty string         }
+        </i></font><font color="#FF00FF">jmp   @done
+@rest:  sub   ah, bl       </font><font color="#008000"><i>{ length str1 - start           }
+        </i></font><font color="#FF00FF">inc   ah
+        mov   al, ah
+@copy:  mov   cl, al       </font><font color="#008000"><i>{ how many chars to copy        }
+        </i></font><font color="#FF00FF">xor   ch, ch       </font><font color="#008000"><i>{ clear CH                      }
+        </i></font><font color="#FF00FF">xor   bh, bh       </font><font color="#008000"><i>{ clear BH                      }
+        </i></font><font color="#FF00FF">add   si, bx       </font><font color="#008000"><i>{ starting position             }
+        </i></font><font color="#FF00FF">mov   dx, di       </font><font color="#008000"><i>{ save pointer to str2          }
+        </i></font><font color="#FF00FF">inc   di
+    rep movsb              </font><font color="#008000"><i>{ copy part str1 to str2        }
+        </i></font><font color="#FF00FF">mov   di, dx       </font><font color="#008000"><i>{ restore pointer to str2       }
+</i></font><font color="#FF00FF">@done:  mov   [di], al     </font><font color="#008000"><i>{ overwrite length byte of str2 }
+</i></font><font color="#FF00FF">@exit:
+</font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ CopySubStr }</i></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>StrCopy<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Str1<font color="#000080">, </font>Str2<font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ copy str1 to str2 }
+</i></font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">lds   si, str1     </font><font color="#008000"><i>{ load in DS:SI pointer to str1 }
+        </i></font><font color="#FF00FF">cld                </font><font color="#008000"><i>{ string operations forward     }
+        </i></font><font color="#FF00FF">les   di, str2     </font><font color="#008000"><i>{ load in ES:DI pointer to str2 }
+        </i></font><font color="#FF00FF">xor   ch, ch       </font><font color="#008000"><i>{ clear CH                      }
+        </i></font><font color="#FF00FF">mov   cl, [si]     </font><font color="#008000"><i>{ length str1 --&gt; CX            }
+        </i></font><font color="#FF00FF">inc   cx           </font><font color="#008000"><i>{ include length byte           }
+    </i></font><font color="#FF00FF">rep movsb              </font><font color="#008000"><i>{ copy str1 to str2             }
+</i></font><font color="#FF00FF">@exit:
+</font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ StrCopy }</i></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>StrPos<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>str1<font color="#000080">, </font>str2<font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">): </font>byte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ returns position of the first occurrence of str1 in str2 }
+  { str1 - string to search for }
+  { str2 - string to search in  }
+  { return value in AX }
+</i></font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">cld                 </font><font color="#008000"><i>{ string operations forward                 }
+        </i></font><font color="#FF00FF">les   di, str2      </font><font color="#008000"><i>{ load in ES:DI pointer to str2             }
+        </i></font><font color="#FF00FF">xor   cx, cx        </font><font color="#008000"><i>{ clear cx                                  }
+        </i></font><font color="#FF00FF">mov   cl, [di]      </font><font color="#008000"><i>{ length str2 --&gt; CL                        }
+        </i></font><font color="#FF00FF">jcxz  @not          </font><font color="#008000"><i>{ if length str2 = 0, nothing to search in  }
+        </i></font><font color="#FF00FF">mov   bh, cl        </font><font color="#008000"><i>{ length str2 --&gt; BH                        }
+        </i></font><font color="#FF00FF">inc   di            </font><font color="#008000"><i>{ di point to 1st char of str2              }
+        </i></font><font color="#FF00FF">lds   si, str1      </font><font color="#008000"><i>{ load in DS:SI pointer to str1             }
+        </i></font><font color="#FF00FF">lodsb               </font><font color="#008000"><i>{ load in AL length str1                    }
+        </i></font><font color="#FF00FF">and   al, al        </font><font color="#008000"><i>{ length str1 = 0?                          }
+        </i></font><font color="#FF00FF">jz    @not          </font><font color="#008000"><i>{ length str1 = 0, nothing to search for    }
+        </i></font><font color="#FF00FF">dec   al            </font><font color="#008000"><i>{ 1st char need not be compared again       }
+        </i></font><font color="#FF00FF">sub   cl, al        </font><font color="#008000"><i>{ length str2 - length str1                 }
+        </i></font><font color="#FF00FF">jbe   @not          </font><font color="#008000"><i>{ length str2 &lt; length str1                 }
+        </i></font><font color="#FF00FF">mov   ah, al        </font><font color="#008000"><i>{ length str1 --&gt; AH                        }
+        </i></font><font color="#FF00FF">lodsb               </font><font color="#008000"><i>{ load in AL 1st character of str1          }
+</i></font><font color="#FF00FF">@start:
+  repne scasb               </font><font color="#008000"><i>{ scan for next occurrence 1st char in str2 }
+        </i></font><font color="#FF00FF">jne   @not          </font><font color="#008000"><i>{ no success                                }
+        </i></font><font color="#FF00FF">mov   dx, si        </font><font color="#008000"><i>{ pointer to 2nd char in str1 --&gt; DX        }
+        </i></font><font color="#FF00FF">mov   bl, cl        </font><font color="#008000"><i>{ number of chars in str2 to go --&gt; BL      }
+        </i></font><font color="#FF00FF">mov   cl, ah        </font><font color="#008000"><i>{ length str1 --&gt; CL                        }
+   </i></font><font color="#FF00FF">repe cmpsb               </font><font color="#008000"><i>{ compare until characters don't match      }
+        </i></font><font color="#FF00FF">je    @pos          </font><font color="#008000"><i>{ full match                                }
+        </i></font><font color="#FF00FF">sub   si, dx        </font><font color="#008000"><i>{ current SI - prev. SI = # of chars moved  }
+        </i></font><font color="#FF00FF">sub   di, si        </font><font color="#008000"><i>{ current DI - # of chars moved = prev. DI  }
+        </i></font><font color="#FF00FF">mov   si, dx        </font><font color="#008000"><i>{ restore pointer to 2nd char in str1       }
+        </i></font><font color="#FF00FF">mov   cl, bl        </font><font color="#008000"><i>{ number of chars in str2 to go --&gt; BL      }
+        </i></font><font color="#FF00FF">jmp   @start        </font><font color="#008000"><i>{ scan for next occurrence 1st char in str2 }
+</i></font><font color="#FF00FF">@not:   xor   ax, ax        </font><font color="#008000"><i>{ str1 is not in str2, result 0             }
+        </i></font><font color="#FF00FF">jmp   @exit
+@pos:   add   bl, ah        </font><font color="#008000"><i>{ number of chars in str2 left              }
+        </i></font><font color="#FF00FF">mov   al, bh        </font><font color="#008000"><i>{ length str2 --&gt; AX                        }
+        </i></font><font color="#FF00FF">sub   al, bl        </font><font color="#008000"><i>{ start position of str1 in str2            }
+</i></font><font color="#FF00FF">@exit:                      </font><font color="#008000"><i>{ we are finished. }
+</i></font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ StrPos }</i></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>Trim<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Str<font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ remove leading and trailing white space from str }
+  { white space = all ASCII chars 0h - 20h }
+</i></font><font color="#FF0000"><b>asm     </b></font><font color="#008000"><i>{ setup }
+        </i></font><font color="#FF00FF">lds   si, str        </font><font color="#008000"><i>{ load in DS:SI pointer to Str       }
+        </i></font><font color="#FF00FF">xor   cx, cx         </font><font color="#008000"><i>{ clear cx                           }
+        </i></font><font color="#FF00FF">mov   cl, [si]       </font><font color="#008000"><i>{ length Str --&gt; cx                  }
+        </i></font><font color="#FF00FF">jcxz  @exit          </font><font color="#008000"><i>{ if length Str = 0, exit            }
+        </i></font><font color="#FF00FF">mov   bx, si         </font><font color="#008000"><i>{ save pointer to length byte of Str }
+        </i></font><font color="#FF00FF">add   si, cx         </font><font color="#008000"><i>{ last character                     }
+
+        { look for trailing space }
+</i></font><font color="#FF00FF">@loop1: mov   al, [si]       </font><font color="#008000"><i>{ load character                     }
+        </i></font><font color="#FF00FF">cmp   al, ' '        </font><font color="#008000"><i>{ no white space                     }
+        </i></font><font color="#FF00FF">ja    @stop1         </font><font color="#008000"><i>{ first non-blank character found    }
+        </i></font><font color="#FF00FF">dec   si             </font><font color="#008000"><i>{ next character                     }
+        </i></font><font color="#FF00FF">dec   cx             </font><font color="#008000"><i>{ count down                         }
+        </i></font><font color="#FF00FF">jcxz  @done          </font><font color="#008000"><i>{ if no more characters left, done   }
+        </i></font><font color="#FF00FF">jmp   @loop1         </font><font color="#008000"><i>{ try again                          }
+</i></font><font color="#FF00FF">@stop1: mov   si, bx         </font><font color="#008000"><i>{ point to start of Str              }
+        </i></font><font color="#FF00FF">inc   si             </font><font color="#008000"><i>{ point to 1st character             }
+        </i></font><font color="#FF00FF">mov   di, si         </font><font color="#008000"><i>{ pointer to Str --&gt; DI              }
+        { look for leading white space }
+</i></font><font color="#FF00FF">@loop2: mov   al, [si]       </font><font color="#008000"><i>{ load character                     }
+        </i></font><font color="#FF00FF">cmp   al, ' '        </font><font color="#008000"><i>{ no white space                     }
+        </i></font><font color="#FF00FF">ja    @stop2         </font><font color="#008000"><i>{ first non-blank character found    }
+        </i></font><font color="#FF00FF">inc   si             </font><font color="#008000"><i>{ next character                     }
+        </i></font><font color="#FF00FF">dec   cx             </font><font color="#008000"><i>{ count down                         }
+        </i></font><font color="#FF00FF">jcxz  @done          </font><font color="#008000"><i>{ if no more characters left, done   }
+        </i></font><font color="#FF00FF">jmp   @loop2         </font><font color="#008000"><i>{ try again                          }
+
+        { remove leading white space }
+</i></font><font color="#FF00FF">@stop2: cld                  </font><font color="#008000"><i>{ string operations forward          }
+        </i></font><font color="#FF00FF">mov   dx, cx         </font><font color="#008000"><i>{ save new length Str                }
+    </i></font><font color="#FF00FF">rep movsb                </font><font color="#008000"><i>{ move remaining part of Str         }
+        </i></font><font color="#FF00FF">mov   cx, dx         </font><font color="#008000"><i>{ restore new length Str             }
+</i></font><font color="#FF00FF">@done:  mov   [bx], cl       </font><font color="#008000"><i>{ new length of Str                  }
+</i></font><font color="#FF00FF">@exit:
+</font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ Trim }</i></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>InSet25<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>_Set<font color="#000080">; </font>OrdElement<font color="#000080">: </font>Byte<font color="#000080">): </font>Boolean<font color="#000080">;
+  </font><font color="#008000"><i>{ I got this function from Bob Swart }
+</i></font><font color="#FF0000"><b>InLine</b></font><font color="#000080">(
+  </font><font color="#800000">$58</font><font color="#000080">/         </font><font color="#008000"><i>{   pop   AX                   }
+  </i></font><font color="#800000">$30</font><font color="#000080">/</font><font color="#800000">$E4</font><font color="#000080">/     </font><font color="#008000"><i>{   xor   AH,AH                }
+  </i></font><font color="#800000">$5F</font><font color="#000080">/         </font><font color="#008000"><i>{   pop   DI                   }
+  </i></font><font color="#800000">$07</font><font color="#000080">/         </font><font color="#008000"><i>{   pop   ES                   }
+  </i></font><font color="#800000">$89</font><font color="#000080">/</font><font color="#800000">$C3</font><font color="#000080">/     </font><font color="#008000"><i>{   mov   BX,AX                }
+  </i></font><font color="#800000">$B1</font><font color="#000080">/</font><font color="#800000">$03</font><font color="#000080">/     </font><font color="#008000"><i>{   mov   CL,3                 }
+  </i></font><font color="#800000">$D3</font><font color="#000080">/</font><font color="#800000">$EB</font><font color="#000080">/     </font><font color="#008000"><i>{   shr   BX,CL                }
+  </i></font><font color="#800000">$88</font><font color="#000080">/</font><font color="#800000">$C1</font><font color="#000080">/     </font><font color="#008000"><i>{   mov   CL,AL                }
+  </i></font><font color="#800000">$80</font><font color="#000080">/</font><font color="#800000">$E1</font><font color="#000080">/</font><font color="#800000">$07</font><font color="#000080">/ </font><font color="#008000"><i>{   and   CL,$07               }
+  </i></font><font color="#800000">$B0</font><font color="#000080">/</font><font color="#800000">$01</font><font color="#000080">/     </font><font color="#008000"><i>{   mov   AL,1                 }
+  </i></font><font color="#800000">$D2</font><font color="#000080">/</font><font color="#800000">$E0</font><font color="#000080">/     </font><font color="#008000"><i>{   shl   AL,CL                }
+  </i></font><font color="#800000">$26</font><font color="#000080">/         </font><font color="#008000"><i>{   ES:                        }
+  </i></font><font color="#800000">$22</font><font color="#000080">/</font><font color="#800000">$01</font><font color="#000080">/     </font><font color="#008000"><i>{   and   AL,BYTE PTR [DI+BX]  }
+  </i></font><font color="#800000">$D2</font><font color="#000080">/</font><font color="#800000">$E8</font><font color="#000080">);    </font><font color="#008000"><i>{   shr   AL,CL                }
+{ InSet25 }
+
+
+</i></font><font color="#FF0000"><b>function </b></font>OpenTextFile <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>InF<font color="#000080">: </font>text<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>buffer<font color="#000080">: </font>BufTypeSource<font color="#000080">): </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Assign<font color="#000080">( </font>InF<font color="#000080">, </font>Name <font color="#000080">);
+  </font>SetTextBuf<font color="#000080">( </font>InF<font color="#000080">, </font>buffer <font color="#000080">);
+  </font>Reset<font color="#000080">( </font>InF <font color="#000080">);
+  </font>OpenTextFile <font color="#000080">:= (</font>IOResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ OpenTextFile }</i></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>CreateTextFile <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>OutF<font color="#000080">: </font>text<font color="#000080">; </font><font color="#FF0000"><b>const </b></font>name<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>var </b></font>buffer<font color="#000080">: </font>BufTypeDest<font color="#000080">): </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Assign<font color="#000080">( </font>OutF<font color="#000080">, </font>Name <font color="#000080">);
+  </font>SetTextBuf<font color="#000080">( </font>OutF<font color="#000080">, </font>buffer <font color="#000080">);
+  </font>Rewrite<font color="#000080">( </font>OutF <font color="#000080">);
+  </font>CreateTextFile <font color="#000080">:= (</font>IOResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ CreateTextFile }</i></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Exist<font color="#000080">( </font>Name <font color="#000080">: </font><font color="#FF0000"><b>string </b></font><font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#008000"><i>{ Return true if directory or file with the same name is found}
+</i></font><font color="#FF0000"><b>var
+  </b></font>F    <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>Attr <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Assign<font color="#000080">( </font>F<font color="#000080">, </font>Name <font color="#000080">);
+  </font>GetFAttr<font color="#000080">( </font>F<font color="#000080">, </font>Attr <font color="#000080">);
+  </font>Exist <font color="#000080">:= (</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF Kort}
+</i></font><font color="#FF0000"><b>procedure </b></font>UniekeEntry<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Naam <font color="#000080">: </font>string3 <font color="#000080">);
+</font><font color="#FF0000"><b>const
+  </b></font>max    <font color="#000080">= </font><font color="#800000">$39</font><font color="#000080">;  </font><font color="#008000"><i>{ '0'..'9' = $30..$39 }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Nbyte  <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#FF0000"><b>absolute </b></font>Naam<font color="#000080">;
+  </font>Exists <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Nbyte <font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">3</font><font color="#000080">;  </font><font color="#008000"><i>{ FileName of 3 characters }
+
+  </i></font>Exists <font color="#000080">:= </font>True<font color="#000080">;
+  </font>Nbyte <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+    </b></font>Nbyte <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+      </b></font>Nbyte <font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+        </b></font>Exists <font color="#000080">:= </font>Exist<font color="#000080">( </font>Naam <font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] );
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] );
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] );
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ end procedure UniekeEntry }
+
+{$ELSE}
+</i></font><font color="#FF0000"><b>procedure </b></font>UniekeEntry<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>Naam <font color="#000080">: </font>string12 <font color="#000080">);
+</font><font color="#FF0000"><b>const
+  </b></font>max    <font color="#000080">= </font><font color="#800000">$39</font><font color="#000080">;  </font><font color="#008000"><i>{ '0'..'9' = $30..$39 }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Nbyte  <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">12</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#FF0000"><b>absolute </b></font>Naam<font color="#000080">;
+  </font>Exists <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Nbyte <font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">12</font><font color="#000080">;  </font><font color="#008000"><i>{ FileName of 12 characters (8+3+&quot;.&quot;) }
+  </i></font>Nbyte <font color="#000080">[</font><font color="#800000">9</font><font color="#000080">] := </font><font color="#800000">$2E</font><font color="#000080">; </font><font color="#008000"><i>{ '.' as 9e character }
+
+  </i></font>Exists <font color="#000080">:= </font>True<font color="#000080">;
+  </font>Nbyte <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+    </b></font>Nbyte <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+      </b></font>Nbyte <font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+        </b></font>Nbyte <font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+        </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+          </b></font>Nbyte <font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+          </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+            </b></font>Nbyte <font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+            </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+              </b></font>Nbyte <font color="#000080">[</font><font color="#800000">7</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+              </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">7</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+                </b></font>Nbyte <font color="#000080">[</font><font color="#800000">8</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+                </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">8</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+                  </b></font>Nbyte <font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+                  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+                    </b></font>Nbyte <font color="#000080">[</font><font color="#800000">11</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+                    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">11</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+                      </b></font>Nbyte <font color="#000080">[</font><font color="#800000">12</font><font color="#000080">] := </font><font color="#800000">$30</font><font color="#000080">;
+                      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>Nbyte <font color="#000080">[</font><font color="#800000">12</font><font color="#000080">] &lt;= </font>max<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>Exists <font color="#FF0000"><b>do begin
+                        </b></font>Exists <font color="#000080">:= </font>Exist<font color="#000080">( </font>Naam <font color="#000080">);
+                        </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">12</font><font color="#000080">] );
+                      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                      </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">11</font><font color="#000080">] );
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] );
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                  </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">8</font><font color="#000080">] );
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">7</font><font color="#000080">] );
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">6</font><font color="#000080">] );
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] );
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">4</font><font color="#000080">] );
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] );
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] );
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Exists <font color="#FF0000"><b>then </b></font>inc<font color="#000080">( </font>Nbyte <font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] );
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ end procedure UniekeEntry }
+{$ENDIF}
+
+
+</i></font><font color="#FF0000"><b>procedure </b></font>Search<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>found <font color="#000080">:= </font>False<font color="#000080">;
+  </font>NrSearch <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>NrSearch <font color="#000080">&lt;= </font>TotalNrSearch<font color="#000080">) </font><font color="#FF0000"><b>and not </b></font>found <font color="#FF0000"><b>do
+  begin
+    </b></font>nr <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>nr <font color="#000080">&lt;= </font>NrLines<font color="#000080">) </font><font color="#FF0000"><b>and not </b></font>found <font color="#FF0000"><b>do
+    begin                                </b></font><font color="#008000"><i>{ search wanted text    }
+      </i></font>StrCopy<font color="#000080">( </font>Line<font color="#000080">[</font>nr<font color="#000080">], </font>Tmp1 <font color="#000080">);
+      </font>LowerFast<font color="#000080">( </font>Tmp1 <font color="#000080">);                 </font><font color="#008000"><i>{ convert to lower case }
+      </i></font><font color="#FF0000"><b>if </b></font>StrPos<font color="#000080">( </font>SearchText<font color="#000080">[</font>NrSearch<font color="#000080">], </font>Tmp1 <font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>found <font color="#000080">:= </font>True<font color="#000080">;
+      </font>inc<font color="#000080">( </font>nr <font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>inc<font color="#000080">( </font>NrSearch <font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>found <font color="#FF0000"><b>then                      </b></font><font color="#008000"><i>{ at least one of the wanted words found }
+  </i></font><font color="#FF0000"><b>begin
+    for </b></font>nr <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>NrLines <font color="#FF0000"><b>do </b></font>WriteLn<font color="#000080">( </font>DestFile<font color="#000080">, </font>Line<font color="#000080">[</font>nr<font color="#000080">] );
+    </font>inc<font color="#000080">( </font>Count <font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>Process<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>SourceListing <font color="#000080">: </font>string12 <font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>Count <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>DestListing  <font color="#000080">:= </font>DestDir <font color="#000080">+ </font><font color="#800000">'\' </font><font color="#000080">+ </font>SourceListing<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>OpenTextFile<font color="#000080">( </font>SourceFile<font color="#000080">, </font>SourceListing<font color="#000080">, </font>SourceBuf <font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+    if </b></font>CreateTextFile<font color="#000080">( </font>DestFile<font color="#000080">, </font>DestListing<font color="#000080">, </font>DestBuf <font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>write<font color="#000080">( </font>SourceListing<font color="#000080">:</font><font color="#800000">12 </font><font color="#000080">);
+      </font>Header   <font color="#000080">:= </font>False<font color="#000080">;
+      </font>FileName <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font>NrLines  <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>nr <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font>ReadLn<font color="#000080">( </font>SourceFile<font color="#000080">, </font>Line<font color="#000080">[</font>nr<font color="#000080">] );
+      </font><font color="#FF0000"><b>while not </b></font>Eof<font color="#000080">(</font>SourceFile<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>IOResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>StrCopy<font color="#000080">( </font>Line<font color="#000080">[</font>nr<font color="#000080">], </font>Tmp1 <font color="#000080">);
+        </font>Trim<font color="#000080">( </font>Tmp1 <font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>Length<font color="#000080">( </font>Tmp1 <font color="#000080">) &gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then                  </b></font><font color="#008000"><i>{ no empty lines }
+        </i></font><font color="#FF0000"><b>begin
+          </b></font>CopySubStr<font color="#000080">( </font>Line<font color="#000080">[</font>nr<font color="#000080">], </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">12</font><font color="#000080">, </font>FileName <font color="#000080">);
+          </font>Trim<font color="#000080">( </font>FileName <font color="#000080">);
+          </font>T <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>T <font color="#000080">&lt;= </font>Length<font color="#000080">( </font>FileName <font color="#000080">))
+          </font><font color="#FF0000"><b>and not </b></font>InSet25<font color="#000080">( </font>NotAllowed<font color="#000080">, </font>Byte<font color="#000080">( </font>FileName<font color="#000080">[</font>T<font color="#000080">] ) ) </font><font color="#FF0000"><b>do
+            </b></font>inc<font color="#000080">( </font>T <font color="#000080">);                               </font><font color="#008000"><i>{ look out for headers }
+          { }
+          </i></font>Header <font color="#000080">:= (</font>T <font color="#000080">&lt;= </font>Length<font color="#000080">( </font>FileName <font color="#000080">))
+            </font><font color="#FF0000"><b>or </b></font><font color="#000080">((</font>Length<font color="#000080">( </font>FileName <font color="#000080">) &gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Line<font color="#000080">[</font>nr<font color="#000080">][</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">' '</font><font color="#000080">));  </font><font color="#008000"><i>{ header? }
+          </i></font><font color="#FF0000"><b>if </b></font>Header <font color="#FF0000"><b>then
+            </b></font>FileName <font color="#000080">:= </font><font color="#800000">''                          </font><font color="#008000"><i>{ read next line }
+          </i></font><font color="#FF0000"><b>else                                      </b></font><font color="#008000"><i>{ no header }
+          </i></font><font color="#FF0000"><b>begin
+            if </b></font><font color="#000080">(</font>Length<font color="#000080">( </font>FileName <font color="#000080">) = </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then        </b></font><font color="#008000"><i>{ more description }
+            </i></font><font color="#FF0000"><b>begin
+              </b></font>inc<font color="#000080">( </font>nr <font color="#000080">);
+              </font>inc<font color="#000080">( </font>NrLines <font color="#000080">);
+            </font><font color="#FF0000"><b>end
+            else
+            begin
+              </b></font>StrCopy<font color="#000080">( </font>Line<font color="#000080">[</font>nr<font color="#000080">], </font>Tmp2 <font color="#000080">);     </font><font color="#008000"><i>{ save new textline    }
+              </i></font>Search<font color="#000080">;
+
+              </font><font color="#008000"><i>{ setup for next entry }
+              </i></font>NrLines  <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                 </font><font color="#008000"><i>{ already got one line }
+              </i></font>nr       <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;                 </font><font color="#008000"><i>{ so next line in #2   }
+              </i></font>StrCopy<font color="#000080">( </font>Tmp2<font color="#000080">, </font>Line<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] );      </font><font color="#008000"><i>{ restore new textline }
+              </i></font>FileName <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;                </font><font color="#008000"><i>{ make sure a new line is read }
+            </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ endif (Length( FileName ) = 0)) }
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ if Header }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ if Length( Tmp1 ) &gt; 0 }
+        </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Length<font color="#000080">( </font>FileName <font color="#000080">) = </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          </b></font>ReadLn<font color="#000080">( </font>SourceFile<font color="#000080">, </font>Line<font color="#000080">[</font>nr<font color="#000080">] );
+        </font><font color="#008000"><i>{ }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ while not Eof(SourceFile) and (IOResult = 0) }
+      </i></font>inc<font color="#000080">( </font>NrLines <font color="#000080">);   </font><font color="#008000"><i>{ include the last line in the search }
+      </i></font>Search<font color="#000080">;
+      </font>Close<font color="#000080">( </font>DestFile <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Count <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>Erase<font color="#000080">( </font>DestFile <font color="#000080">);
+        </font>Write<font color="#000080">( </font><font color="#800000">#13 </font><font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else
+      begin
+        </b></font>writeln<font color="#000080">( </font>Count<font color="#000080">:</font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">' in '</font><font color="#000080">, </font>DestListing <font color="#000080">);
+        </font>TotalCount <font color="#000080">:= </font>TotalCount <font color="#000080">+ </font>Count<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+    end  </b></font><font color="#008000"><i>{ if CreateTextFile }
+    </i></font><font color="#FF0000"><b>else
+      </b></font>writeln<font color="#000080">( </font>Cannot<font color="#000080">, </font><font color="#800000">'file '</font><font color="#000080">, </font>DestListing <font color="#000080">);
+    </font><font color="#008000"><i>{ }
+    </i></font>Close<font color="#000080">( </font>SourceFile <font color="#000080">);
+  </font><font color="#FF0000"><b>end   </b></font><font color="#008000"><i>{ if OpenTextFile }
+  </i></font><font color="#FF0000"><b>else
+    </b></font>writeln<font color="#000080">( </font><font color="#800000">'Cannot open sourcefile '</font><font color="#000080">, </font>SourceListing <font color="#000080">);
+  </font><font color="#008000"><i>{ }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>ParamCount <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then                 </b></font><font color="#008000"><i>{ parameters: listing catchwords  }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>TotalCount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>TotalNrSearch <font color="#000080">:= </font>ParamCount <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>TotalNrSearch <font color="#000080">&gt; </font>MaxNrSearch<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>TotalNrSearch <font color="#000080">:= </font>MaxNrSearch<font color="#000080">;      </font><font color="#008000"><i>{ no more catchwords than maximum }
+    </i></font>UniekeEntry<font color="#000080">( </font>DestDir <font color="#000080">);
+    </font><font color="#FF0000"><b>if not </b></font>Exists <font color="#FF0000"><b>then
+    begin
+      </b></font>MkDir<font color="#000080">( </font>DestDir <font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>IOResult<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>Write<font color="#000080">( </font><font color="#800000">'Searching:' </font><font color="#000080">);
+        </font>FMask        <font color="#000080">:= </font>ParamStr<font color="#000080">( </font><font color="#800000">1 </font><font color="#000080">);                    </font><font color="#008000"><i>{ filemask       }
+        </i></font><font color="#FF0000"><b>for </b></font>NrSearch <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>TotalNrSearch <font color="#FF0000"><b>do             </b></font><font color="#008000"><i>{ all catchwords }
+        </i></font><font color="#FF0000"><b>begin
+          </b></font>SearchText<font color="#000080">[</font>NrSearch<font color="#000080">] := </font>ParamStr<font color="#000080">( </font>NrSearch<font color="#000080">+</font><font color="#800000">1 </font><font color="#000080">); </font><font color="#008000"><i>{ each catchword }
+          </i></font>LowerFast<font color="#000080">( </font>SearchText<font color="#000080">[</font>NrSearch<font color="#000080">] );     </font><font color="#008000"><i>{ translate to lower case }
+          </i></font>Write<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">, </font>SearchText<font color="#000080">[</font>NrSearch<font color="#000080">] );
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>WriteLn<font color="#000080">;
+        </font>FindFirst<font color="#000080">(</font>FMask<font color="#000080">, </font>FAttr<font color="#000080">, </font>FR<font color="#000080">);
+        </font><font color="#FF0000"><b>while </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+        begin
+          </b></font>Process<font color="#000080">(</font>FR<font color="#000080">.</font>Name<font color="#000080">);
+          </font>FindNext<font color="#000080">(</font>FR<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>WriteLn<font color="#000080">( </font><font color="#800000">'Total found '</font><font color="#000080">, </font>TotalCount<font color="#000080">, </font><font color="#800000">' entries.' </font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>TotalCount <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>RmDir<font color="#000080">( </font>DestDir <font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ if not IOResult }
+    </i></font><font color="#FF0000"><b>end   </b></font><font color="#008000"><i>{ if not Exists }
+    </i></font><font color="#FF0000"><b>else
+      </b></font>writeln<font color="#000080">( </font>Cannot<font color="#000080">, </font><font color="#800000">'directory '</font><font color="#000080">, </font>DestListing <font color="#000080">);
+    </font><font color="#008000"><i>{ }
+  </i></font><font color="#FF0000"><b>end   </b></font><font color="#008000"><i>{ if ParamCount &gt; 1 }
+  </i></font><font color="#FF0000"><b>else
+    </b></font>WriteLn<font color="#000080">( </font><font color="#800000">'Extract filename word(s)' </font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0124.PAS">Original</a><b>]</b></p></body>
+</html>

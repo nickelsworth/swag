@@ -1,0 +1,277 @@
+<html>
+<head><title> "READTEXT.PAS" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0008.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A+,B-,D-,E+,F-,I+,L-,N-,O-,R+,S-,V-}
+{$M 4048,65536,655360}
+
+</i></font><font color="#FF0000"><b>Program </b></font>ReadText<font color="#000080">;
+
+</font><font color="#008000"><i>{ Author Trevor J Carlsen - released into the public domain 1991         }
+{        PO Box 568                                                      }
+{        Port Hedland                                                    }
+{        Western Australia 6721                                          }
+{        Voice +61 91 73 2026  Data +61 91 73 2569                       }
+{        FidoNet 3:690/644                                               }
+
+{ This example Programs displays a Text File using simple Word wrap. The }
+{ cursor keys are used to page Forward or backwards by page or by line.  }
+{ The Program makes some important assumptions.  The main one is that no }
+{ line in the File will ever exceed 255 Characters in length.  to get    }
+{ around this restriction the ReadTxtLine Function would need to be      }
+{ rewritten.                                                             }
+
+{ The other major restriction is that Files exceeding a size able to be  }
+{ totally placed in RAM cannot be viewed.                                }
+
+{$DEFinE TurboPower (Remove the period if you have Turbo Power's TPro)  }
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font><font color="#008000"><i>{$ifDEF TurboPower }
+  </i></font>tpCrt<font color="#000080">,
+  </font>colordef<font color="#000080">;
+  </font><font color="#008000"><i>{$else}
+  </i></font>Crt<font color="#000080">;
+  </font><font color="#008000"><i>{$endif}
+
+</i></font><font color="#FF0000"><b>Const
+  </b></font><font color="#008000"><i>{$ifNDEF TurboPower }
+  </i></font>BlackOnLtGray <font color="#000080">= </font><font color="#800000">$70</font><font color="#000080">;      </font>LtGrayOnBlue <font color="#000080">= </font><font color="#800000">$17</font><font color="#000080">;
+  </font><font color="#008000"><i>{$endif}
+  </i></font>LineLength    <font color="#000080">= </font><font color="#800000">79</font><font color="#000080">;       </font>MaxLines     <font color="#000080">= </font><font color="#800000">6000</font><font color="#000080">;
+  </font>ScreenLines   <font color="#000080">= </font><font color="#800000">22</font><font color="#000080">;       </font>escape       <font color="#000080">= </font><font color="#800000">$011b</font><font color="#000080">;
+  </font>Home          <font color="#000080">= </font><font color="#800000">$4700</font><font color="#000080">;    </font>_end         <font color="#000080">= </font><font color="#800000">$4f00</font><font color="#000080">;
+  </font>upArrow       <font color="#000080">= </font><font color="#800000">$4800</font><font color="#000080">;    </font>downArrow    <font color="#000080">= </font><font color="#800000">$5000</font><font color="#000080">;
+  </font>PageUp        <font color="#000080">= </font><font color="#800000">$4900</font><font color="#000080">;    </font>PageDown     <font color="#000080">= </font><font color="#800000">$5100</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>LineStr    <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font>Linelength<font color="#000080">];
+  </font>StrPtr     <font color="#000080">= ^</font>LineStr<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>TxtFile    <font color="#000080">: </font>Text<font color="#000080">;
+  </font>Lines      <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxLines<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>StrPtr<font color="#000080">;
+  </font>NumberLines<font color="#000080">: </font><font color="#800000">1</font><font color="#000080">..</font>MaxLines<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font>CurrentLine<font color="#000080">: </font><font color="#800000">1</font><font color="#000080">..</font>MaxLines<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">-</font>ScreenLines<font color="#000080">;
+  </font>st         <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>finished   <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>OldExitProc<font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>TxtBuffer  <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">16383</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>OldAttr    <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>LastPos<font color="#000080">(</font>ch <font color="#000080">: </font>Char<font color="#000080">; </font>S <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">): </font>Byte<font color="#000080">;
+  </font><font color="#008000"><i>{ Returns the last position of ch in S or zero if ch not in S }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>x   <font color="#000080">: </font>Word<font color="#000080">;
+    </font>len <font color="#000080">: </font>Byte <font color="#FF0000"><b>Absolute </b></font>S<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>x <font color="#000080">:= </font>succ<font color="#000080">(</font>len<font color="#000080">);
+    </font><font color="#FF0000"><b>Repeat
+      </b></font>dec<font color="#000080">(</font>x<font color="#000080">);
+    </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>x <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>S<font color="#000080">[</font>x<font color="#000080">] = </font>ch<font color="#000080">);
+    </font>LastPos <font color="#000080">:= </font>x<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ LastPos }
+
+</i></font><font color="#FF0000"><b>Function </b></font>Wrap<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>S<font color="#000080">,</font>CarryOver<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">): </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ Returns a String of maximum length Linelength from S. Any additional }
+  { Characters remaining are placed into CarryOver.                      }
+  </i></font><font color="#FF0000"><b>Const
+    </b></font>space <font color="#000080">= </font><font color="#800000">#32</font><font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>temp      <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>LastSpace <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>len       <font color="#000080">: </font>Byte <font color="#FF0000"><b>Absolute </b></font>S<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>FillChar<font color="#000080">(</font>temp<font color="#000080">,</font>sizeof<font color="#000080">(</font>temp<font color="#000080">),</font><font color="#800000">32</font><font color="#000080">);
+    </font>temp <font color="#000080">:= </font>S<font color="#000080">; </font>CarryOver <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">; </font>wrap <font color="#000080">:= </font>temp<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>length<font color="#000080">(</font>temp<font color="#000080">) &gt; </font>LineLength <font color="#FF0000"><b>then begin
+      </b></font>LastSpace <font color="#000080">:= </font>LastPos<font color="#000080">(</font>space<font color="#000080">,</font>copy<font color="#000080">(</font>temp<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>LineLength<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">));
+      </font><font color="#FF0000"><b>if </b></font>LastSpace <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+        </b></font>Wrap<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]   := </font>chr<font color="#000080">(</font>LastSpace <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+        </font>CarryOver <font color="#000080">:= </font>copy<font color="#000080">(</font>temp<font color="#000080">,</font>LastSpace <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">255</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ if LastSpace... }
+      </i></font><font color="#FF0000"><b>else begin
+        </b></font>Wrap<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]   := </font>chr<font color="#000080">(</font>len<font color="#000080">);
+        </font>CarryOver <font color="#000080">:= </font>copy<font color="#000080">(</font>temp<font color="#000080">,</font>len<font color="#000080">,</font><font color="#800000">255</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ else }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ if (length(S))...}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ Wrap }
+
+</i></font><font color="#FF0000"><b>Function </b></font>ReadTxtLine<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>f<font color="#000080">: </font>Text<font color="#000080">; </font>L<font color="#000080">: </font>Byte<font color="#000080">): </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>temp <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+    </font>len  <font color="#000080">: </font>Byte <font color="#FF0000"><b>Absolute </b></font>temp<font color="#000080">;
+    </font>done <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>len <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font>done <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#008000"><i>{$I-}
+    </i></font><font color="#FF0000"><b>While not </b></font>eoln<font color="#000080">(</font>f<font color="#000080">) </font><font color="#FF0000"><b>do begin
+      </b></font>read<font color="#000080">(</font>f<font color="#000080">,</font>temp<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>Ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Error reading File - aborted'</font><font color="#000080">);
+        </font>halt<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ While }
+    </i></font><font color="#FF0000"><b>if </b></font>eoln<font color="#000080">(</font>f<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>readln<font color="#000080">(</font>f<font color="#000080">);
+    </font>ReadTxtLine <font color="#000080">:= </font>st <font color="#000080">+ </font>Wrap<font color="#000080">(</font>temp<font color="#000080">,</font>st<font color="#000080">);
+    </font>finished <font color="#000080">:= </font>eof<font color="#000080">(</font>f<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ ReadTxtLine }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>ReadTxtFile<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>f<font color="#000080">: </font>Text<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>x <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>st          <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font>NumberLines <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>Repeat
+      if </b></font>NumberLines <font color="#000080">&gt; </font>MaxLines <font color="#FF0000"><b>then begin
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'File too big'</font><font color="#000080">);
+        </font>halt<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>MaxAvail <font color="#000080">&gt;= </font>Sizeof<font color="#000080">(</font>LineStr<font color="#000080">)) </font><font color="#FF0000"><b>then
+        </b></font>new<font color="#000080">(</font>Lines<font color="#000080">[</font>NumberLines<font color="#000080">])
+      </font><font color="#FF0000"><b>else begin
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Insufficient memory'</font><font color="#000080">);
+        </font>halt<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>FillChar<font color="#000080">(</font>Lines<font color="#000080">[</font>NumberLines<font color="#000080">]^,</font>LineLength<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">32</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>length<font color="#000080">(</font>st<font color="#000080">) &gt; </font>LineLength <font color="#FF0000"><b>then
+        </b></font>Lines<font color="#000080">[</font>NumberLines<font color="#000080">]^  := </font>wrap<font color="#000080">(</font>st<font color="#000080">,</font>st<font color="#000080">)
+      </font><font color="#FF0000"><b>else if </b></font>length<font color="#000080">(</font>st<font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+        </b></font>Lines<font color="#000080">[</font>NumberLines<font color="#000080">]^  := </font>st<font color="#000080">;
+        </font>st <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end else
+        </b></font>Lines<font color="#000080">[</font>NumberLines<font color="#000080">]^  := </font>ReadTxtLine<font color="#000080">(</font>f<font color="#000080">,</font>LineLength<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+      </font>Lines<font color="#000080">[</font>NumberLines<font color="#000080">]^[</font><font color="#800000">0</font><font color="#000080">] := </font>chr<font color="#000080">(</font>LineLength<font color="#000080">);
+      </font><font color="#FF0000"><b>if not </b></font>finished <font color="#FF0000"><b>then
+        </b></font>inc<font color="#000080">(</font>NumberLines<font color="#000080">);
+    </font><font color="#FF0000"><b>Until </b></font>finished<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ ReadTxtFile }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>DisplayScreen<font color="#000080">(</font>line<font color="#000080">: </font>Word<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>x <font color="#000080">: </font>Byte<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>For </b></font>x <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ScreenLines <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>do
+      </b></font>Writeln<font color="#000080">(</font>Lines<font color="#000080">[</font>x<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">+</font>line<font color="#000080">]^);
+    </font>Write<font color="#000080">(</font>Lines<font color="#000080">[</font>x<font color="#000080">+</font>line<font color="#000080">]^)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PreviousPage<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>CurrentLine <font color="#000080">&gt; </font>ScreenLines <font color="#FF0000"><b>then
+      </b></font>dec<font color="#000080">(</font>CurrentLine<font color="#000080">,</font>ScreenLines<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>CurrentLine <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ PreviousPage }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>NextPage<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>CurrentLine <font color="#000080">&lt; (</font>succ<font color="#000080">(</font>NumberLines<font color="#000080">) - </font>ScreenLines <font color="#000080">* </font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>inc<font color="#000080">(</font>CurrentLine<font color="#000080">,</font>ScreenLines<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>CurrentLine <font color="#000080">:= </font>succ<font color="#000080">(</font>NumberLines<font color="#000080">) - </font>ScreenLines<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ NextPage }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>PreviousLine<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>CurrentLine <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+      </b></font>dec<font color="#000080">(</font>CurrentLine<font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>CurrentLine <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ PreviousLine }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>NextLine<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>CurrentLine <font color="#000080">&lt; (</font>succ<font color="#000080">(</font>NumberLines<font color="#000080">) - </font>ScreenLines<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>inc<font color="#000080">(</font>CurrentLine<font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>CurrentLine <font color="#000080">:= </font>succ<font color="#000080">(</font>NumberLines<font color="#000080">) - </font>ScreenLines<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ NextLine }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>StartofFile<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>CurrentLine <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ StartofFile }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>endofFile<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>CurrentLine <font color="#000080">:= </font>succ<font color="#000080">(</font>NumberLines<font color="#000080">) - </font>ScreenLines<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ endofFile }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>DisplayFile<font color="#000080">;
+
+  </font><font color="#FF0000"><b>Function </b></font>KeyWord <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>Asm
+      </b></font><font color="#FF00FF">mov  ah,0
+      int  16h
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>DisplayScreen<font color="#000080">(</font>CurrentLine<font color="#000080">);
+    </font><font color="#FF0000"><b>Repeat
+      Case </b></font>KeyWord <font color="#FF0000"><b>of
+        </b></font>PageUp    <font color="#000080">: </font>PreviousPage<font color="#000080">;
+        </font>PageDown  <font color="#000080">: </font>NextPage<font color="#000080">;
+        </font>UpArrow   <font color="#000080">: </font>PreviousLine<font color="#000080">;
+        </font>DownArrow <font color="#000080">: </font>NextLine<font color="#000080">;
+        </font>Home      <font color="#000080">: </font>StartofFile<font color="#000080">;
+        </font>_end      <font color="#000080">: </font>endofFile<font color="#000080">;
+        </font>Escape    <font color="#000080">: </font>halt<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ Case }
+      </i></font>DisplayScreen<font color="#000080">(</font>CurrentLine<font color="#000080">);
+    </font><font color="#FF0000"><b>Until </b></font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ DisplayFile }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>NewExitProc<font color="#000080">;</font><font color="#FF0000"><b>Far</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>ExitProc <font color="#000080">:= </font>OldExitProc<font color="#000080">;
+    </font><font color="#008000"><i>{$ifDEF TurboPower}
+    </i></font>NormalCursor<font color="#000080">;
+    </font><font color="#008000"><i>{$endif}
+    </i></font>Window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">80</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">);
+    </font>TextAttr <font color="#000080">:= </font>OldAttr<font color="#000080">;
+    </font>ClrScr<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Initialise<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>CurrentLine <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ParamCount <font color="#000080">&lt;&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'No File name parameter'</font><font color="#000080">);
+      </font>halt<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>OldAttr <font color="#000080">:= </font>TextAttr<font color="#000080">;
+    </font>assign<font color="#000080">(</font>TxtFile<font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+    </font><font color="#008000"><i>{$I-}  </i></font>reset<font color="#000080">(</font>TxtFile<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>Ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Unable to open '</font><font color="#000080">,</font>Paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+      </font>halt<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>SetTextBuf<font color="#000080">(</font>TxtFile<font color="#000080">,</font>TxtBuffer<font color="#000080">);
+    </font>Window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">23</font><font color="#000080">,</font><font color="#800000">80</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">);
+    </font>TextAttr <font color="#000080">:= </font>BlackOnCyan<font color="#000080">;
+    </font>ClrScr<font color="#000080">;
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'              Next Page = [PageDown]     Previous Page = [PageUp]'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'              Next Line = [DownArrow]    Previous Line = [UpArrow]'</font><font color="#000080">);
+    </font>Write<font color="#000080">(</font><font color="#800000">'         Start of File = [Home]   end of File = [end]   Quit = [Escape]'</font><font color="#000080">);
+    </font>Window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">80</font><font color="#000080">,</font><font color="#800000">22</font><font color="#000080">);
+    </font>TextAttr <font color="#000080">:= </font>LtGrayOnBlue<font color="#000080">;
+    </font>ClrScr<font color="#000080">;
+    </font><font color="#008000"><i>{$ifDEF TurboPower}
+    </i></font>HiddenCursor<font color="#000080">;
+    </font><font color="#008000"><i>{$endif}
+    </i></font>OldExitProc <font color="#000080">:= </font>ExitProc<font color="#000080">;
+    </font>ExitProc    <font color="#000080">:= @</font>NewExitProc<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Initialise<font color="#000080">;
+  </font>ReadTxtFile<font color="#000080">(</font>TxtFile<font color="#000080">);
+  </font>DisplayFile<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0008.PAS">Original</a><b>]</b></p></body>
+</html>

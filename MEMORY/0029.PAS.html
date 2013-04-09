@@ -1,0 +1,237 @@
+<html>
+<head><title> "XMS Unit" by SEAN PALMER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+Sean Palmer
+
+&gt; I did not mean to imply that I expected a library that could provide
+&gt; access to XMS With simple Pointer dereferences.  I understand the
+&gt; difficulty of accessing &gt;1MB from a Real-mode Program.  I would be
+&gt; happy(ECSTATIC in fact) if I could find a library that would allow an
+&gt; allocation to XMS, returning a handle to the block, and allow
+&gt; access(copying) of the block via a Procedure call.  Of course, the
+&gt; catch is that the library would have to be able to deal With random
+&gt; allocations and deallocations-like a heap manager For XMS.  I know that
+&gt; there are VMM's out there that can do this-I just can't get my hands
+&gt; on one!
+
+Try this:
+
+turbo pascal 6.0 source
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>xms<font color="#000080">;  </font><font color="#008000"><i>{this Unit won't handle blocks bigger than 64k}
+
+</i></font><font color="#FF0000"><b>Interface
+
+Function  </b></font>installed <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function  </b></font>init<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>h <font color="#000080">: </font>Word<font color="#000080">; </font>z <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">;   </font><font color="#008000"><i>{alloc xms}
+</i></font><font color="#FF0000"><b>Procedure </b></font>avail<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>total<font color="#000080">, </font>largest <font color="#000080">: </font>Word<font color="#000080">);  </font><font color="#008000"><i>{how much free?}
+</i></font><font color="#FF0000"><b>Function  </b></font>save<font color="#000080">(</font>h<font color="#000080">, </font>z <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>s<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#008000"><i>{move main to xms}
+</i></font><font color="#FF0000"><b>Function  </b></font>load<font color="#000080">(</font>h<font color="#000080">, </font>z <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>s<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#008000"><i>{move xms to main}
+</i></font><font color="#FF0000"><b>Procedure </b></font>free<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">);                     </font><font color="#008000"><i>{dispose xms}
+</i></font><font color="#FF0000"><b>Function  </b></font>lock<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">) : </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>Function  </b></font>unlock<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function  </b></font>getInfo<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>lockCount<font color="#000080">, </font>handlesLeft <font color="#000080">: </font>Byte<font color="#000080">;
+                  </font><font color="#FF0000"><b>Var </b></font>sizeK <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Function  </b></font>resize<font color="#000080">(</font>h<font color="#000080">, </font>sizeK <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+</b></font><font color="#008000"><i>{Error codes, returned in BL reg}
+
+</i></font><font color="#FF0000"><b>Const
+  </b></font>FuncNotImplemented   <font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">;          </font><font color="#008000"><i>{Function is not implemented}
+  </i></font>VDiskDeviceDetected  <font color="#000080">= </font><font color="#800000">$81</font><font color="#000080">;          </font><font color="#008000"><i>{a VDISK compatible device found}
+  </i></font>A20Error             <font color="#000080">= </font><font color="#800000">$82</font><font color="#000080">;          </font><font color="#008000"><i>{an A20 error occurred}
+  </i></font>GeneralDriverError   <font color="#000080">= </font><font color="#800000">$8E</font><font color="#000080">;          </font><font color="#008000"><i>{general driver error}
+  </i></font>UnrecoverableError   <font color="#000080">= </font><font color="#800000">$8F</font><font color="#000080">;          </font><font color="#008000"><i>{unrecoverable driver error}
+  </i></font>HmaDoesNotExist      <font color="#000080">= </font><font color="#800000">$90</font><font color="#000080">;          </font><font color="#008000"><i>{high memory area does not exist}
+  </i></font>HmaAlreadyInUse      <font color="#000080">= </font><font color="#800000">$91</font><font color="#000080">;          </font><font color="#008000"><i>{high memory area already in use}
+  </i></font>HmaSizeTooSmall      <font color="#000080">= </font><font color="#800000">$92</font><font color="#000080">;          </font><font color="#008000"><i>{size requested less than /HMAMIN}
+  </i></font>HmaNotAllocated      <font color="#000080">= </font><font color="#800000">$93</font><font color="#000080">;          </font><font color="#008000"><i>{high memory area not allocated}
+  </i></font>A20StillEnabled      <font color="#000080">= </font><font color="#800000">$94</font><font color="#000080">;          </font><font color="#008000"><i>{A20 line is still enabled}
+  </i></font>AllExtMemAllocated   <font color="#000080">= </font><font color="#800000">$A0</font><font color="#000080">;          </font><font color="#008000"><i>{all extended memory is allocated}
+  </i></font>OutOfExtMemHandles   <font color="#000080">= </font><font color="#800000">$A1</font><font color="#000080">;          </font><font color="#008000"><i>{extended memory handles exhausted}
+  </i></font>InvalidHandle        <font color="#000080">= </font><font color="#800000">$A2</font><font color="#000080">;          </font><font color="#008000"><i>{invalid handle}
+  </i></font>InvalidSourceHandle  <font color="#000080">= </font><font color="#800000">$A3</font><font color="#000080">;          </font><font color="#008000"><i>{invalid source handle}
+  </i></font>InvalidSourceOffset  <font color="#000080">= </font><font color="#800000">$A4</font><font color="#000080">;          </font><font color="#008000"><i>{invalid source offset}
+  </i></font>InvalidDestHandle    <font color="#000080">= </font><font color="#800000">$A5</font><font color="#000080">;          </font><font color="#008000"><i>{invalid destination handle}
+  </i></font>InvalidDestOffset    <font color="#000080">= </font><font color="#800000">$A6</font><font color="#000080">;          </font><font color="#008000"><i>{invalid destination offset}
+  </i></font>InvalidLength        <font color="#000080">= </font><font color="#800000">$A7</font><font color="#000080">;          </font><font color="#008000"><i>{invalid length}
+  </i></font>OverlapInMoveReq     <font color="#000080">= </font><font color="#800000">$A8</font><font color="#000080">;          </font><font color="#008000"><i>{overlap in move request}
+  </i></font>ParityErrorDetected  <font color="#000080">= </font><font color="#800000">$A9</font><font color="#000080">;          </font><font color="#008000"><i>{parity error detected}
+  </i></font>BlockIsNotLocked     <font color="#000080">= </font><font color="#800000">$AA</font><font color="#000080">;          </font><font color="#008000"><i>{block is not locked}
+  </i></font>BlockIsLocked        <font color="#000080">= </font><font color="#800000">$AB</font><font color="#000080">;          </font><font color="#008000"><i>{block is locked}
+  </i></font>LockCountOverflowed  <font color="#000080">= </font><font color="#800000">$AC</font><font color="#000080">;          </font><font color="#008000"><i>{lock count overflowed}
+  </i></font>LockFailed           <font color="#000080">= </font><font color="#800000">$AD</font><font color="#000080">;          </font><font color="#008000"><i>{lock failed}
+  </i></font>SmallerUMBAvailable  <font color="#000080">= </font><font color="#800000">$B0</font><font color="#000080">;          </font><font color="#008000"><i>{a smaller upper memory block is avail}
+  </i></font>NoUMBAvailable       <font color="#000080">= </font><font color="#800000">$B1</font><font color="#000080">;          </font><font color="#008000"><i>{no upper memory blocks are available}
+  </i></font>InvalidUMBSegment    <font color="#000080">= </font><font color="#800000">$B2</font><font color="#000080">;          </font><font color="#008000"><i>{invalid upper memory block segment}
+
+  </i></font>xmsProc <font color="#000080">: </font>Pointer <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">; </font><font color="#008000"><i>{entry point For xms driver, nil if none}
+
+</i></font><font color="#FF0000"><b>Var
+  </b></font>copyRec <font color="#000080">: </font><font color="#FF0000"><b>Record
+    </b></font>size <font color="#000080">: </font>LongInt<font color="#000080">;    </font><font color="#008000"><i>{Bytes to move (must be even)}
+    </i></font>srcH <font color="#000080">: </font>Word<font color="#000080">;       </font><font color="#008000"><i>{handle (0=conventional mem)}
+    </i></font>srcP <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>dstH <font color="#000080">: </font>Word<font color="#000080">;
+    </font>dstP <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>installed <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>installed <font color="#000080">:= (</font>xmsProc <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>init<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>h <font color="#000080">: </font>Word<font color="#000080">; </font>z <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  dx, z
+  test dx, $3FF
+  jz   @S
+  add  dx, $400
+ @S: </font><font color="#008000"><i>{allow For partial K's}
+  </i></font><font color="#FF00FF">mov  cl, 10
+  shr  dx, cl  </font><font color="#008000"><i>{convert to K}
+  </i></font><font color="#FF00FF">mov  ah, 9
+  call xmsProc </font><font color="#008000"><i>{allocate XMS block}
+  </i></font><font color="#FF00FF">cmp  ax, 1
+  je   @S2
+  xor  al, al
+ @S2:
+  les  di, h
+  mov  es:[di], dx
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>avail<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>total<font color="#000080">, </font>largest <font color="#000080">: </font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah, 8
+  call xmsProc  </font><font color="#008000"><i>{query free xms}
+  </i></font><font color="#FF00FF">les  di, total
+  mov  es:[di], dx
+  les  di, largest
+  mov  es:[di], ax
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>copy <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm  </b></font><font color="#008000"><i>{internal}
+  </i></font><font color="#FF00FF">push ds
+  mov  si, offset copyRec </font><font color="#008000"><i>{it's in DS, right?}
+  </i></font><font color="#FF00FF">mov  ah, $B
+  call xmsProc  </font><font color="#008000"><i>{copy memory}
+  </i></font><font color="#FF00FF">cmp  ax,1
+  je   @S
+  xor  al,al
+ @S:
+  pop  ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>save<font color="#000080">(</font>h<font color="#000080">, </font>z <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>s<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>odd<font color="#000080">(</font>z<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>inc<font color="#000080">(</font>z<font color="#000080">);
+  </font><font color="#FF0000"><b>With </b></font>copyRec <font color="#FF0000"><b>do
+  begin
+    </b></font>size <font color="#000080">:= </font>z<font color="#000080">;
+    </font>srcH <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>srcP <font color="#000080">:= @</font>s<font color="#000080">; </font><font color="#008000"><i>{source, from main memory}
+    </i></font>dstH <font color="#000080">:= </font>h<font color="#000080">;
+    </font>dstP <font color="#000080">:= </font>ptr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">); </font><font color="#008000"><i>{dest, to xms block}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>save <font color="#000080">:= </font>copy<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>load<font color="#000080">(</font>h<font color="#000080">, </font>z <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>s<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>odd<font color="#000080">(</font>z<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>inc<font color="#000080">(</font>z<font color="#000080">);
+  </font><font color="#FF0000"><b>With </b></font>copyRec <font color="#FF0000"><b>do
+  begin
+    </b></font>size <font color="#000080">:= </font>z<font color="#000080">;
+    </font>srcH <font color="#000080">:= </font>h<font color="#000080">;
+    </font>srcP <font color="#000080">:= </font>ptr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">); </font><font color="#008000"><i>{source, from xms block}
+    </i></font>dstH <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>dstP <font color="#000080">:= @</font>s<font color="#000080">; </font><font color="#008000"><i>{dest, to main memory}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>load <font color="#000080">:= </font>copy<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>free<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  dx, h
+  mov  ah, $A
+  call xmsProc
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>lock<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">) : </font>LongInt<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah, $C
+  mov  dx, h
+  call xmsProc </font><font color="#008000"><i>{lock xms block}
+  </i></font><font color="#FF00FF">cmp  ax, 1
+  je   @OK
+  xor  bx, bx
+  xor  dx, dx
+ @OK:  </font><font color="#008000"><i>{set block to nil (0) if err}
+  </i></font><font color="#FF00FF">mov  ax, bx
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>unlock<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah, $D
+  mov  dx, h
+  call xmsProc </font><font color="#008000"><i>{unlock xms block}
+  </i></font><font color="#FF00FF">cmp  ax, 1
+  je   @S
+  xor  al, al
+ @S:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>getInfo<font color="#000080">(</font>h <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>lockCount<font color="#000080">, </font>handlesLeft <font color="#000080">: </font>Byte<font color="#000080">;
+                 </font><font color="#FF0000"><b>Var </b></font>sizeK <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah, $E
+  mov  dx, h
+  call xmsProc  </font><font color="#008000"><i>{get xms handle info}
+  </i></font><font color="#FF00FF">cmp  ax, 1
+  je   @S
+  xor  al, al
+ @S:
+  les  di, lockCount
+  mov  es:[di], bh
+  les  di, handlesLeft
+  mov  es:[di], bl
+  les  di, sizeK
+  mov  es:[di], dx
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>resize<font color="#000080">(</font>h<font color="#000080">, </font>sizeK <font color="#000080">: </font>Word<font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah, $F
+  mov  dx, h
+  mov  bx, sizeK
+  call xmsProc </font><font color="#008000"><i>{resize XMS block}
+  </i></font><font color="#FF00FF">cmp  ax ,1
+  je   @S
+  xor  al, al
+ @S:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  Asm </b></font><font color="#008000"><i>{there is a possibility these ints will trash the ds register}
+    </i></font><font color="#FF00FF">mov ax, $4300 </font><font color="#008000"><i>{load check Function For xms driver}
+    </i></font><font color="#FF00FF">int $2F  </font><font color="#008000"><i>{call multiplex int}
+    </i></font><font color="#FF00FF">cmp al, $80
+    jne @X
+    mov ax, $4310
+    int $2F </font><font color="#008000"><i>{get adr of entry point-&gt;es:bx}
+    </i></font><font color="#FF00FF">mov Word ptr xmsProc, bx
+    mov Word ptr xmsProc+2, es
+   @X:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p></body>
+</html>

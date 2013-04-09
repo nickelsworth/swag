@@ -1,0 +1,325 @@
+<html>
+<head><title> "Voc Player!!!" by ALWIN LOECKX</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0060.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+=&gt; A few days ago you posted a VOC file player that doesn't use CT-VOICE.DRV.
+=&gt; I would like to know how to use it.  So far I have tried this.
+=&gt; Uses PLAY;
+=&gt;
+=&gt; Var A : Pointer;
+=&gt;
+=&gt; Begin
+=&gt;  PLAY_VOC('HI.VOC',A); End.
+=&gt; End.
+=&gt;
+=&gt; Could you explain why this doesn't work and or give me a working demo!
+
+You have to use &quot;getmem&quot; to reserve some memory before calling &quot;play_voc&quot;.
+Here follows a slightly modified unit + demo...
+
+Alwin Loeckx - fido (2:291/754.6)
+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>play<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+</b></font><font color="#008000"><i>{ resetdsp returns true if reset was successful }
+{ base should be 1 for base address 210h, 2 for 220h etc... }
+</i></font><font color="#FF0000"><b>function </b></font>reset_dsp<font color="#000080">(</font>base <font color="#000080">: </font>word<font color="#000080">) : </font>boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{ write dac sets the speaker output level }
+</i></font><font color="#FF0000"><b>procedure </b></font>write_dac<font color="#000080">(</font>level <font color="#000080">: </font>byte<font color="#000080">);
+
+</font><font color="#008000"><i>{ readdac reads the microphone input level }
+</i></font><font color="#FF0000"><b>function </b></font>read_dac <font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#008000"><i>{ speakeron connects the dac to the speaker }
+</i></font><font color="#FF0000"><b>function </b></font>speaker_on<font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#008000"><i>{ speakeroff disconnects the dac from the speaker, }
+{ but does not affect the dac operation }
+</i></font><font color="#FF0000"><b>function </b></font>speaker_off<font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#008000"><i>{ functions to pause dma playback }
+</i></font><font color="#FF0000"><b>procedure </b></font>dma_pause<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>dma_continue<font color="#000080">;
+
+</font><font color="#008000"><i>{ playback plays a sample of a given size back at a given frequency using }
+{ dma channel 1. the sample must not cross a page boundry }
+</i></font><font color="#FF0000"><b>procedure </b></font>play_back<font color="#000080">(</font>sound <font color="#000080">: </font>pointer<font color="#000080">; </font>size <font color="#000080">: </font>word<font color="#000080">; </font>frequency <font color="#000080">: </font>word<font color="#000080">);
+
+</font><font color="#008000"><i>{ plays voc-file }
+</i></font><font color="#FF0000"><b>procedure </b></font>play_voc<font color="#000080">(</font>filename <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>buf <font color="#000080">: </font>pointer<font color="#000080">);
+
+</font><font color="#008000"><i>{ true if playing voc }
+</i></font><font color="#FF0000"><b>function </b></font>playing_voc <font color="#000080">: </font>boolean<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>implementation
+
+uses </b></font>crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>dsp_reset        <font color="#000080">: </font>word<font color="#000080">;
+    </font>dsp_read_data    <font color="#000080">: </font>word<font color="#000080">;
+    </font>dsp_write_data   <font color="#000080">: </font>word<font color="#000080">;
+    </font>dsp_write_status <font color="#000080">: </font>word<font color="#000080">;
+    </font>dsp_data_avail   <font color="#000080">: </font>word<font color="#000080">;
+
+    </font>since_midnight   <font color="#000080">: </font>longint <font color="#FF0000"><b>absolute </b></font><font color="#800000">$40</font><font color="#000080">:</font><font color="#800000">$6C</font><font color="#000080">;
+    </font>playing_till     <font color="#000080">: </font>longint<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>reset_dsp<font color="#000080">(</font>base <font color="#000080">: </font>word<font color="#000080">) : </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>base <font color="#000080">:= </font>base <font color="#000080">* </font><font color="#800000">$10</font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ calculate the port addresses }
+ </i></font>dsp_reset        <font color="#000080">:= </font>base <font color="#000080">+ </font><font color="#800000">$206</font><font color="#000080">;
+ </font>dsp_read_data    <font color="#000080">:= </font>base <font color="#000080">+ </font><font color="#800000">$20a</font><font color="#000080">;
+ </font>dsp_write_data   <font color="#000080">:= </font>base <font color="#000080">+ </font><font color="#800000">$20c</font><font color="#000080">;
+ </font>dsp_write_status <font color="#000080">:= </font>base <font color="#000080">+ </font><font color="#800000">$20c</font><font color="#000080">;
+ </font>dsp_data_avail   <font color="#000080">:= </font>base <font color="#000080">+ </font><font color="#800000">$20e</font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ reset the dsp, and give some nice long delays just to be safe }
+ </i></font>port<font color="#000080">[</font>dsp_reset<font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+ </font>delay<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+
+ </font>port<font color="#000080">[</font>dsp_reset<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+ </font>delay<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+
+ </font>reset_dsp <font color="#000080">:= (</font>port<font color="#000080">[</font>dsp_data_avail<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$80 </font><font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">) </font><font color="#FF0000"><b>and
+              </b></font><font color="#000080">(</font>port<font color="#000080">[</font>dsp_read_data<font color="#000080">] = </font><font color="#800000">$aa</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>write_dsp<font color="#000080">(</font>value <font color="#000080">: </font>byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+ while </b></font>port<font color="#000080">[</font>dsp_write_status<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$80 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do</b></font><font color="#000080">;
+ </font>port<font color="#000080">[</font>dsp_write_data<font color="#000080">] := </font>value<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>read_dsp <font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ while </b></font>port<font color="#000080">[</font>dsp_data_avail<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$80 </font><font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>do</b></font><font color="#000080">;
+ </font>read_dsp <font color="#000080">:= </font>port<font color="#000080">[</font>dsp_read_data<font color="#000080">];
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>write_dac<font color="#000080">(</font>level <font color="#000080">: </font>byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+ </b></font>write_dsp<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">);
+ </font>write_dsp<font color="#000080">(</font>level<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>read_dac <font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>write_dsp<font color="#000080">(</font><font color="#800000">$20</font><font color="#000080">);
+ </font>read_dac <font color="#000080">:= </font>read_dsp<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>speaker_on<font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>write_dsp<font color="#000080">(</font><font color="#800000">$d1</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>speaker_off<font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>write_dsp<font color="#000080">(</font><font color="#800000">$d3</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>dma_continue<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>playing_till <font color="#000080">:= </font>since_midnight <font color="#000080">+ </font>playing_till<font color="#000080">;
+ </font>write_dsp<font color="#000080">(</font><font color="#800000">$d4</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>dma_pause<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>playing_till <font color="#000080">:= </font>playing_till <font color="#000080">- </font>since_midnight<font color="#000080">;
+ </font>write_dsp<font color="#000080">(</font><font color="#800000">$d0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>play_back<font color="#000080">(</font>sound <font color="#000080">: </font>pointer<font color="#000080">; </font>size <font color="#000080">: </font>word<font color="#000080">; </font>frequency <font color="#000080">: </font>word<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>time_constant <font color="#000080">: </font>word<font color="#000080">;
+    </font>page          <font color="#000080">: </font>word<font color="#000080">;
+    </font>offset        <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>speaker_on<font color="#000080">;
+
+ </font>size <font color="#000080">:= </font>size <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ set up the dma chip }
+ </i></font>offset <font color="#000080">:= </font>seg<font color="#000080">(</font>sound<font color="#000080">^) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4 </font><font color="#000080">+ </font>ofs<font color="#000080">(</font>sound<font color="#000080">^);
+ </font>page <font color="#000080">:= (</font>seg<font color="#000080">(</font>sound<font color="#000080">^) + </font>ofs<font color="#000080">(</font>sound<font color="#000080">^) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">12</font><font color="#000080">;
+ </font>port<font color="#000080">[</font><font color="#800000">$0a</font><font color="#000080">] := </font><font color="#800000">5</font><font color="#000080">;
+ </font>port<font color="#000080">[</font><font color="#800000">$0c</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+ </font>port<font color="#000080">[</font><font color="#800000">$0b</font><font color="#000080">] := </font><font color="#800000">$49</font><font color="#000080">;
+ </font>port<font color="#000080">[</font><font color="#800000">$02</font><font color="#000080">] := </font>lo<font color="#000080">(</font>offset<font color="#000080">);
+ </font>port<font color="#000080">[</font><font color="#800000">$02</font><font color="#000080">] := </font>hi<font color="#000080">(</font>offset<font color="#000080">);
+ </font>port<font color="#000080">[</font><font color="#800000">$83</font><font color="#000080">] := </font>page<font color="#000080">;
+ </font>port<font color="#000080">[</font><font color="#800000">$03</font><font color="#000080">] := </font>lo<font color="#000080">(</font>size<font color="#000080">);
+ </font>port<font color="#000080">[</font><font color="#800000">$03</font><font color="#000080">] := </font>hi<font color="#000080">(</font>size<font color="#000080">);
+ </font>port<font color="#000080">[</font><font color="#800000">$0a</font><font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ set the playback frequency }
+ </i></font>time_constant <font color="#000080">:= </font><font color="#800000">256 </font><font color="#000080">- </font><font color="#800000">1000000 </font><font color="#FF0000"><b>div </b></font>frequency<font color="#000080">;
+ </font>write_dsp<font color="#000080">(</font><font color="#800000">$40</font><font color="#000080">);
+ </font>write_dsp<font color="#000080">(</font>time_constant<font color="#000080">);
+
+ </font><font color="#008000"><i>{ set the playback type (8-bit) }
+ </i></font>write_dsp<font color="#000080">(</font><font color="#800000">$14</font><font color="#000080">);
+ </font>write_dsp<font color="#000080">(</font>lo<font color="#000080">(</font>size<font color="#000080">));
+ </font>write_dsp<font color="#000080">(</font>hi<font color="#000080">(</font>size<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+
+</font><font color="#FF0000"><b>procedure </b></font>play_voc<font color="#000080">(</font>filename <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>buf <font color="#000080">: </font>pointer<font color="#000080">);
+
+</font><font color="#FF0000"><b>var </b></font>f <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+    </font>s <font color="#000080">: </font>word<font color="#000080">;
+
+    </font>freq <font color="#000080">: </font>word<font color="#000080">;
+
+    </font>h <font color="#000080">: </font><font color="#FF0000"><b>record
+         </b></font>signature  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">20</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">; </font><font color="#008000"><i>{ vendor's name }
+         </i></font>data_start <font color="#000080">: </font>word<font color="#000080">;                 </font><font color="#008000"><i>{ start of data in file }
+         </i></font>version    <font color="#000080">: </font>integer<font color="#000080">;              </font><font color="#008000"><i>{ min. driver version required }
+         </i></font>id         <font color="#000080">: </font>integer<font color="#000080">;              </font><font color="#008000"><i>{ 1 - complement of version field
++$1234 }        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;                                </font><font color="#008000"><i>{ used to indentify a .voc
+file }
+    </i></font>d <font color="#000080">: </font><font color="#FF0000"><b>record
+         </b></font>id   <font color="#000080">: </font>byte<font color="#000080">;                </font><font color="#008000"><i>{ = 1 }
+         </i></font>len  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ length of voice data (len data + 2) }
+         </i></font>sr   <font color="#000080">: </font>byte<font color="#000080">;                </font><font color="#008000"><i>{ sr = 256 - (1,000,000 / sampling rate) }
+         </i></font>pack <font color="#000080">: </font>byte<font color="#000080">;                </font><font color="#008000"><i>{ 0 : unpacked, 1 : 4-bit, 2 : 2.6 bit, 3:
+2 bit packed }        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font><font color="#008000"><i>{$i-}
+ </i></font><font color="#FF0000"><b>if </b></font>pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>filename<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>filename <font color="#000080">:= </font>filename <font color="#000080">+ </font><font color="#800000">'.voc'</font><font color="#000080">;
+
+ </font>assign<font color="#000080">(</font>f<font color="#000080">, </font>filename<font color="#000080">);
+ </font>reset<font color="#000080">(</font>f<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+
+ </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>h<font color="#000080">, </font><font color="#800000">26</font><font color="#000080">);
+
+ </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>d<font color="#000080">, </font><font color="#800000">6</font><font color="#000080">);
+
+ </font>freq <font color="#000080">:= </font>round<font color="#000080">(</font><font color="#800000">1000000 </font><font color="#000080">/ (</font><font color="#800000">256 </font><font color="#000080">- </font>d<font color="#000080">.</font>sr<font color="#000080">));
+ </font>s    <font color="#000080">:= </font>ord<font color="#000080">(</font>d<font color="#000080">.</font>len<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">]) + </font>ord<font color="#000080">(</font>d<font color="#000080">.</font>len<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">]) * </font><font color="#800000">256 </font><font color="#000080">+ </font>ord<font color="#000080">(</font>d<font color="#000080">.</font>len<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) * </font><font color="#800000">256 </font><font color="#000080">* </font><font color="#800000">256</font><font color="#000080">;
+
+ </font><font color="#008000"><i>(*
+ writeln('-----------header----------');
+ writeln('signature: ', h.signature);
+ writeln('data_start: ', h.data_start);
+ writeln('version: ', hi(h.version), '.', lo(h.version));
+ writeln('id: ', h.id);
+ writeln;
+ writeln('------------data-----------');
+ writeln('id: ', d.id);
+ writeln('len: ', s);
+ writeln('sr: ', d.sr);
+ writeln('freq: ', freq);
+ writeln('pack: ', d.pack);
+ *)
+
+ </i></font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>buf<font color="#000080">^, </font>s<font color="#000080">);
+
+ </font>close<font color="#000080">(</font>f<font color="#000080">);
+ </font><font color="#008000"><i>{$i-}
+
+ </i></font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+   </b></font>writeln<font color="#000080">(</font><font color="#800000">'Can''t find voc file &quot;' </font><font color="#000080">+ </font>filename <font color="#000080">+ </font><font color="#800000">'&quot;'</font><font color="#000080">);
+   </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font>playing_till <font color="#000080">:= </font>since_midnight <font color="#000080">+ </font>round<font color="#000080">(</font>s <font color="#000080">/ </font>freq <font color="#000080">* </font><font color="#800000">18.20648193</font><font color="#000080">);
+ </font>play_back<font color="#000080">(</font>buf<font color="#000080">, </font>s<font color="#000080">, </font>freq<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>function </b></font>playing_voc <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>playing_voc <font color="#000080">:= </font>since_midnight <font color="#000080">&gt; </font>playing_till<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>begin
+ if not </b></font>reset_dsp<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+   </b></font>writeln<font color="#000080">(</font><font color="#800000">'SoundBlaster not found at 220h'</font><font color="#000080">);
+   </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end
+ else
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'SoundBlaster found at 220h'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ -----------------&quot;demo.pas&quot;------------------------------------------ }
+
+</i></font><font color="#FF0000"><b>uses </b></font>crt<font color="#000080">, </font>play<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>voc  <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>name <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>getmem<font color="#000080">(</font>voc<font color="#000080">, </font><font color="#800000">65535</font><font color="#000080">);
+
+ </font><font color="#FF0000"><b>if </b></font>paramcount <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+  </b></font>name <font color="#000080">:= </font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)
+ </font><font color="#FF0000"><b>else
+  begin
+   </b></font>write<font color="#000080">(</font><font color="#800000">'Play voc file (size &lt; 65535!): '</font><font color="#000080">);
+   </font>readln<font color="#000080">(</font>name<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font>play_voc<font color="#000080">(</font>name<font color="#000080">, </font>voc<font color="#000080">);
+ </font>writeln<font color="#000080">;
+
+ </font>writeln<font color="#000080">(</font><font color="#800000">'Playing, press &quot;P&quot; to pause...'</font><font color="#000080">);
+
+ </font><font color="#FF0000"><b>repeat
+  if </b></font>keypressed <font color="#FF0000"><b>then if </b></font><font color="#000080">(</font>upcase<font color="#000080">(</font>readkey<font color="#000080">) = </font><font color="#800000">'P'</font><font color="#000080">) </font><font color="#FF0000"><b>then
+   begin
+    </b></font>dma_pause<font color="#000080">;
+
+    </font>writeln<font color="#000080">(</font><font color="#800000">'Press &quot;C&quot; to continue...'</font><font color="#000080">);
+
+    </font><font color="#FF0000"><b>repeat
+    until </b></font>upcase<font color="#000080">(</font>readkey<font color="#000080">) = </font><font color="#800000">'C'</font><font color="#000080">;
+
+    </font>writeln<font color="#000080">(</font><font color="#800000">'Continuing...'</font><font color="#000080">);
+    </font>dma_continue<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>until </b></font>playing_voc<font color="#000080">;
+
+ </font>writeln<font color="#000080">(</font><font color="#800000">'Done...'</font><font color="#000080">);
+
+ </font>freemem<font color="#000080">(</font>voc<font color="#000080">, </font><font color="#800000">65535</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0060.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,732 @@
+<html>
+<head><title> "Complete Comm package" by WILLEM VAN SCHAIK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0047.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  unit COM.PAS
+
+  Turbo Pascal (version 4.0 or higher) unit for serial communication which
+  is based on interrupt routines and includes buffering of incoming data.
+
+  Features:
+
+  - supports COM1 and COM2 in parallel
+  - baudrates up to 115200 baud
+  - RTS/CTS and XON/XOFF flow control
+
+  Version 3.0 - May 1994
+
+  Copyright 1994, Willem van Schaik - Oirschot - Netherlands
+
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>unit </b></font>Com<font color="#000080">;
+
+  </font><font color="#FF0000"><b>interface
+
+  uses </b></font>Crt<font color="#000080">, </font>Dos<font color="#000080">;
+
+  </font><font color="#FF0000"><b>type
+    </b></font>PortType <font color="#000080">= (</font>COM1<font color="#000080">, </font>COM2<font color="#000080">);
+    </font>BaudType <font color="#000080">= (</font>B110<font color="#000080">, </font>B150<font color="#000080">, </font>B300<font color="#000080">, </font>B600<font color="#000080">, </font>B1200<font color="#000080">, </font>B2400<font color="#000080">, </font>B4800<font color="#000080">,
+       </font>B9600<font color="#000080">, </font>B19200<font color="#000080">, </font>B38400<font color="#000080">, </font>B57600<font color="#000080">, </font>B115200<font color="#000080">);
+    </font>ParityType <font color="#000080">= (</font>None<font color="#000080">, </font>Odd<font color="#000080">, </font>Even<font color="#000080">, </font>Mark<font color="#000080">, </font>Space<font color="#000080">);
+    </font>LengthType <font color="#000080">= (</font>D5<font color="#000080">, </font>D6<font color="#000080">, </font>D7<font color="#000080">, </font>D8<font color="#000080">);
+    </font>StopType <font color="#000080">= (</font>S1<font color="#000080">, </font>S2<font color="#000080">);
+    </font>FlowType <font color="#000080">= (</font>No<font color="#000080">, </font>RtsCts<font color="#000080">, </font>XonXoff<font color="#000080">);
+
+  </font><font color="#FF0000"><b>procedure </b></font>InitCom <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">;
+         </font>BaudRate <font color="#000080">: </font>BaudType<font color="#000080">;
+                     </font>ParityBit <font color="#000080">: </font>ParityType<font color="#000080">;
+         </font>DataLength <font color="#000080">: </font>LengthType<font color="#000080">;
+         </font>StopBits <font color="#000080">: </font>StopType<font color="#000080">;
+         </font>FlowControl <font color="#000080">: </font>FlowType<font color="#000080">);
+  </font><font color="#FF0000"><b>procedure </b></font>ExitCom <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">);
+  </font><font color="#FF0000"><b>function  </b></font>ComReceived <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">) : </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>function  </b></font>ReadCom <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">) : </font>char<font color="#000080">;
+  </font><font color="#FF0000"><b>function  </b></font>ComAllowed <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">) : </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>procedure </b></font>WriteCom <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">; </font>OutByte <font color="#000080">: </font>char<font color="#000080">);
+  </font><font color="#FF0000"><b>procedure </b></font>BreakCom <font color="#000080">(</font>PortNumber <font color="#000080">: </font>PortType<font color="#000080">);
+
+  </font><font color="#FF0000"><b>implementation
+
+  type
+    </b></font>IntBlock <font color="#000080">= </font><font color="#FF0000"><b>record
+      </b></font>IntOldIP <font color="#000080">: </font>integer<font color="#000080">;
+      </font>IntOldCS <font color="#000080">: </font>integer<font color="#000080">;
+      </font>IntNumber <font color="#000080">: </font>byte<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>INS8250 <font color="#000080">= </font><font color="#FF0000"><b>record
+      </b></font>DLL <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ divisor latch low register (if LCR bit7 = 1) }
+      </i></font>DLH <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ divisor latch high register (if LCR bit7 = 1) }
+      </i></font>THR <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ transmit holding register }
+      </i></font>RBR <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ receive holding register }
+      </i></font>IER <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ interrupt enable register }
+      </i></font>LCR <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ line control register }
+      </i></font>MCR <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ modem control register }
+      </i></font>LSR <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ line status register }
+      </i></font>MSR <font color="#000080">: </font>integer<font color="#000080">;  </font><font color="#008000"><i>{ modem status register }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>const
+    </b></font>IntDS <font color="#000080">: </font>integer <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+    </font>ComPort <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1<font color="#000080">..</font>COM2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>INS8250 <font color="#000080">=
+      ((</font>DLL <font color="#000080">: </font><font color="#800000">$3F8 </font><font color="#000080">; </font>DLH <font color="#000080">: </font><font color="#800000">$3F9 </font><font color="#000080">; </font>THR <font color="#000080">: </font><font color="#800000">$3F8 </font><font color="#000080">; </font>RBR <font color="#000080">: </font><font color="#800000">$3F8 </font><font color="#000080">;
+        </font>IER <font color="#000080">: </font><font color="#800000">$3F9 </font><font color="#000080">; </font>LCR <font color="#000080">: </font><font color="#800000">$3FB </font><font color="#000080">; </font>MCR <font color="#000080">: </font><font color="#800000">$3FC </font><font color="#000080">; </font>LSR <font color="#000080">: </font><font color="#800000">$3FD </font><font color="#000080">; </font>MSR <font color="#000080">: </font><font color="#800000">$3FE</font><font color="#000080">),
+       (</font>DLL <font color="#000080">: </font><font color="#800000">$2F8 </font><font color="#000080">; </font>DLH <font color="#000080">: </font><font color="#800000">$2F9 </font><font color="#000080">; </font>THR <font color="#000080">: </font><font color="#800000">$2F8 </font><font color="#000080">; </font>RBR <font color="#000080">: </font><font color="#800000">$2F8 </font><font color="#000080">;
+        </font>IER <font color="#000080">: </font><font color="#800000">$2F9 </font><font color="#000080">; </font>LCR <font color="#000080">: </font><font color="#800000">$2FB </font><font color="#000080">; </font>MCR <font color="#000080">: </font><font color="#800000">$2FC </font><font color="#000080">; </font>LSR <font color="#000080">: </font><font color="#800000">$2FD </font><font color="#000080">; </font>MSR <font color="#000080">: </font><font color="#800000">$2FE</font><font color="#000080">));
+    </font><font color="#008000"><i>{ size of the input buffer and the amount of free space to disable flow
+      from the other side and to enable it again }
+    </i></font>ComBufferSize <font color="#000080">= </font><font color="#800000">4096</font><font color="#000080">;
+    </font>ComFlowLower <font color="#000080">= </font><font color="#800000">256</font><font color="#000080">;
+    </font>ComFlowUpper <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>var
+    </b></font>ComBuffer <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1 <font color="#000080">.. </font>COM2<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..(</font>ComBufferSize<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>ComBufferHead<font color="#000080">, </font>ComBufferTail <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1 <font color="#000080">.. </font>COM2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;
+    </font>ComFlowControl <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1 <font color="#000080">.. </font>COM2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>FlowType<font color="#000080">;
+    </font>ComFlowHalted <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1 <font color="#000080">.. </font>COM2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>boolean<font color="#000080">;
+    </font>ComXoffReceived <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1 <font color="#000080">.. </font>COM2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>boolean<font color="#000080">;
+    </font>ComBlock <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>COM1 <font color="#000080">.. </font>COM2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>IntBlock<font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  InstallComInt
+
+  To install an interrupt routine, first the old routine vector is read and
+  stored using function 35 hex. Next the new routine is installed using
+  function 25 hex.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>InstallComInt <font color="#000080">(</font>IntNumber <font color="#000080">: </font>byte<font color="#000080">; </font>IntHandler <font color="#000080">: </font>integer<font color="#000080">;
+                           </font><font color="#FF0000"><b>var </b></font>Block <font color="#000080">: </font>IntBlock<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>IntDS <font color="#000080">:= </font>DSeg<font color="#000080">;
+    </font>Block<font color="#000080">.</font>IntNumber <font color="#000080">:= </font>IntNumber<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$35</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font>IntNumber<font color="#000080">;
+    </font>MSDos <font color="#000080">(</font>Dos<font color="#000080">.</font>Registers<font color="#000080">(</font>Regs<font color="#000080">));
+    </font>Block<font color="#000080">.</font>IntOldCS <font color="#000080">:= </font>Regs<font color="#000080">.</font>ES<font color="#000080">;
+    </font>Block<font color="#000080">.</font>IntOldIP <font color="#000080">:= </font>Regs<font color="#000080">.</font>BX<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$25</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font>IntNumber<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>DS <font color="#000080">:= </font>CSeg<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>DX <font color="#000080">:= </font>IntHandler<font color="#000080">;
+    </font>MSDos <font color="#000080">(</font>Dos<font color="#000080">.</font>Registers<font color="#000080">(</font>Regs<font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  UnInstallComInt
+
+  Uninstalling the interrupt routine is done by resetting the old interrupt
+  vector using function 25.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>UnInstallComInt <font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Block <font color="#000080">: </font>IntBlock<font color="#000080">);
+
+  </font><font color="#FF0000"><b>var
+    </b></font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>Regs<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$25</font><font color="#000080">;
+    </font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font>Block<font color="#000080">.</font>IntNumber<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>DS <font color="#000080">:= </font>Block<font color="#000080">.</font>IntOldCS<font color="#000080">;
+    </font>Regs<font color="#000080">.</font>DX <font color="#000080">:= </font>Block<font color="#000080">.</font>IntOldIP<font color="#000080">;
+    </font>MSDos <font color="#000080">(</font>Dos<font color="#000080">.</font>Registers<font color="#000080">(</font>Regs<font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  Com1IntHandler
+
+  This routine is installed as the interrupt routine by InstallComInt, which
+  in its turn is called by InitCom at initialisation of the unit.
+
+  When a byte arrives at the COM-port, first action is to get the byte from
+  the UART register and store it the buffer. Next the buffer pointer is
+  increased. Depending on flow control being enabled or not, it is checked if
+  the free space has become less then ComFlowLower and if that is the case the
+  other party (the DCE) is signalled to stop transmitting data.
+
+  When the type of flow control specified at calling InitCom is RtsCts (this
+  is hardware flow control), the RTS bit of the MCR register is lowered. If
+  flow control is XonXoff (software flow control), an XOFF character (13 hex)
+  is send to the other party by calling WriteCom.
+
+  Finally the routine must be ended with a CLI instruction and the interrupt
+  flags must be cleared.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>Com1IntHandler <font color="#000080">(</font>Flags<font color="#000080">, </font>CS<font color="#000080">, </font>IP<font color="#000080">, </font>AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP
+<font color="#000080">: </font>word<font color="#000080">);
+  </font>interrupt<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>ComBuffer<font color="#000080">[</font>COM1<font color="#000080">, </font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">]] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>COM1<font color="#000080">].</font>RBR<font color="#000080">];
+    </font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>COM1<font color="#000080">] = </font>No <font color="#FF0000"><b>then
+    begin
+      </b></font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] := (</font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>ComBufferSize<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else </b></font><font color="#008000"><i>{ when flow control increase buffer pointer later }
+    </i></font><font color="#FF0000"><b>begin
+      </b></font><font color="#008000"><i>{ check for incoming XON/XOFF }
+      </i></font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>COM1<font color="#000080">] = </font>XonXoff <font color="#FF0000"><b>then
+      begin
+        if </b></font>ComBuffer<font color="#000080">[</font>COM1<font color="#000080">, </font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">]] = </font><font color="#800000">$11 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ XON }
+          </i></font>ComXoffReceived<font color="#000080">[</font>COM1<font color="#000080">] := </font>false
+        <font color="#FF0000"><b>else if </b></font>ComBuffer<font color="#000080">[</font>COM1<font color="#000080">, </font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">]] = </font><font color="#800000">$13 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ XOFF }
+          </i></font>ComXoffReceived<font color="#000080">[</font>COM1<font color="#000080">] := </font>true<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] := (</font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>ComBufferSize<font color="#000080">;
+      </font><font color="#008000"><i>{ check if outgoing must be temporized }
+      </i></font><font color="#FF0000"><b>if not </b></font>ComFlowHalted<font color="#000080">[</font>COM1<font color="#000080">] </font><font color="#FF0000"><b>then
+        if </b></font><font color="#000080">(</font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] &gt;= </font>ComBufferTail<font color="#000080">[</font>COM1<font color="#000080">]) </font><font color="#FF0000"><b>and
+   </b></font><font color="#000080">(</font>ComBufferTail<font color="#000080">[</font>COM1<font color="#000080">] - </font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] + </font>ComBufferSize <font color="#000080">&lt; </font>ComFlowLower<font color="#000080">)
+   </font><font color="#FF0000"><b>or
+   </b></font><font color="#000080">(</font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] &lt; </font>ComBufferTail<font color="#000080">[</font>COM1<font color="#000080">]) </font><font color="#FF0000"><b>and
+   </b></font><font color="#000080">(</font>ComBufferTail<font color="#000080">[</font>COM1<font color="#000080">] - </font>ComBufferHead<font color="#000080">[</font>COM1<font color="#000080">] &lt; </font>ComFlowLower<font color="#000080">) </font><font color="#FF0000"><b>then
+        begin </b></font><font color="#008000"><i>{ buffer gets too full }
+   </i></font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>COM1<font color="#000080">] = </font>RtsCts <font color="#FF0000"><b>then
+     </b></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>COM1<font color="#000080">].</font>MCR<font color="#000080">] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>COM1<font color="#000080">].</font>MCR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FD </font><font color="#008000"><i>{ lower RTS }
+   </i></font><font color="#FF0000"><b>else if </b></font>ComFlowControl<font color="#000080">[</font>COM1<font color="#000080">] = </font>XonXoff <font color="#FF0000"><b>then
+     </b></font>WriteCom <font color="#000080">(</font>COM1<font color="#000080">, </font><font color="#800000">#$13</font><font color="#000080">); </font><font color="#008000"><i>{ send XOFF }
+   </i></font>ComFlowHalted<font color="#000080">[</font>COM1<font color="#000080">] := </font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>inline </b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);                         </font><font color="#008000"><i>{ CLI }
+    </i></font>Port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">;                     </font><font color="#008000"><i>{ clear interrupt flag }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  Com2IntHandler
+
+  This routine is identical to Com1IntHandler, only for COM2.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>Com2IntHandler <font color="#000080">(</font>Flags<font color="#000080">, </font>CS<font color="#000080">, </font>IP<font color="#000080">, </font>AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP <font color="#000080">: </font>word<font color="#000080">);
+  </font>interrupt<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>ComBuffer<font color="#000080">[</font>COM2<font color="#000080">, </font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">]] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>COM2<font color="#000080">].</font>RBR<font color="#000080">];
+    </font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>COM2<font color="#000080">] = </font>No <font color="#FF0000"><b>then
+    begin
+      </b></font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] := (</font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>ComBufferSize<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else </b></font><font color="#008000"><i>{ when flow control increase buffer pointer later }
+    </i></font><font color="#FF0000"><b>begin
+      </b></font><font color="#008000"><i>{ check for incoming XON/XOFF }
+      </i></font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>COM2<font color="#000080">] = </font>XonXoff <font color="#FF0000"><b>then
+      begin
+        if </b></font>ComBuffer<font color="#000080">[</font>COM2<font color="#000080">, </font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">]] = </font><font color="#800000">$11 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ XON }
+          </i></font>ComXoffReceived<font color="#000080">[</font>COM2<font color="#000080">] := </font>false
+        <font color="#FF0000"><b>else if </b></font>ComBuffer<font color="#000080">[</font>COM2<font color="#000080">, </font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">]] = </font><font color="#800000">$13 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ XOFF }
+          </i></font>ComXoffReceived<font color="#000080">[</font>COM2<font color="#000080">] := </font>true<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] := (</font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>ComBufferSize<font color="#000080">;
+      </font><font color="#008000"><i>{ check if outgoing must be temporized }
+      </i></font><font color="#FF0000"><b>if not </b></font>ComFlowHalted<font color="#000080">[</font>COM2<font color="#000080">] </font><font color="#FF0000"><b>then
+        if </b></font><font color="#000080">(</font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] &gt;= </font>ComBufferTail<font color="#000080">[</font>COM2<font color="#000080">]) </font><font color="#FF0000"><b>and
+   </b></font><font color="#000080">(</font>ComBufferTail<font color="#000080">[</font>COM2<font color="#000080">] - </font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] + </font>ComBufferSize <font color="#000080">&lt; </font>ComFlowLower<font color="#000080">)
+   </font><font color="#FF0000"><b>or
+   </b></font><font color="#000080">(</font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] &lt; </font>ComBufferTail<font color="#000080">[</font>COM2<font color="#000080">]) </font><font color="#FF0000"><b>and
+   </b></font><font color="#000080">(</font>ComBufferTail<font color="#000080">[</font>COM2<font color="#000080">] - </font>ComBufferHead<font color="#000080">[</font>COM2<font color="#000080">] &lt; </font>ComFlowLower<font color="#000080">) </font><font color="#FF0000"><b>then
+        begin </b></font><font color="#008000"><i>{ buffer gets too full }
+   </i></font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>COM2<font color="#000080">] = </font>RtsCts <font color="#FF0000"><b>then
+     </b></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>COM2<font color="#000080">].</font>MCR<font color="#000080">] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>COM2<font color="#000080">].</font>MCR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FD </font><font color="#008000"><i>{ lower RTS }
+   </i></font><font color="#FF0000"><b>else if </b></font>ComFlowControl<font color="#000080">[</font>COM2<font color="#000080">] = </font>XonXoff <font color="#FF0000"><b>then
+     </b></font>WriteCom <font color="#000080">(</font>COM2<font color="#000080">, </font><font color="#800000">#$13</font><font color="#000080">); </font><font color="#008000"><i>{ send XOFF }
+   </i></font>ComFlowHalted<font color="#000080">[</font>COM2<font color="#000080">] := </font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>inline </b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);                         </font><font color="#008000"><i>{ CLI }
+    </i></font>Port<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">;                     </font><font color="#008000"><i>{ clear interrupt flag }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  InitCom;
+
+  For each of the COM ports that will be used, this routine must be called
+  to initialize the UART and to install the interrrupt routine. The first
+  five parameters define the serial protocol (baudrate B150..B11500, parity
+  None..Space, length D5..D8 and number of stop bits S1 or S2). The last
+  parameter specifies the type of flow control, with allowed values No,
+  RtsCts and XonXoff.
+
+  The control signals DTR and RTS of the COM port (plus the OUT2 signal, which
+  is used by some internal modems) are raised to signal the other end of the
+  line that the port is ready to receive data.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>InitCom<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType;
+            BaudRate : BaudType;
+                        ParityBit : ParityType;
+            DataLength : LengthType;
+            StopBits : StopType;
+            FlowControl : FlowType); }
+  </i></font><font color="#FF0000"><b>const
+    </b></font>BaudReg <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>B110 <font color="#000080">.. </font>B115200<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word <font color="#000080">=
+      (</font><font color="#800000">$0417</font><font color="#000080">, </font><font color="#800000">$0300</font><font color="#000080">, </font><font color="#800000">$0180</font><font color="#000080">, </font><font color="#800000">$00C0</font><font color="#000080">, </font><font color="#800000">$0060</font><font color="#000080">, </font><font color="#800000">$0030</font><font color="#000080">,
+       </font><font color="#800000">$0018</font><font color="#000080">, </font><font color="#800000">$000C</font><font color="#000080">, </font><font color="#800000">$0006</font><font color="#000080">, </font><font color="#800000">$0003</font><font color="#000080">, </font><font color="#800000">$0002</font><font color="#000080">, </font><font color="#800000">$0001</font><font color="#000080">);
+    </font>ParityReg <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>None<font color="#000080">..</font>Space<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">=
+      (</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$18</font><font color="#000080">, </font><font color="#800000">$28</font><font color="#000080">, </font><font color="#800000">$38</font><font color="#000080">);
+    </font>LengthReg <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>D5 <font color="#000080">.. </font>D8<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">=
+      (</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">);
+    </font>StopReg <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font>S1 <font color="#000080">.. </font>S2<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#000080">=
+      (</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>var
+    </b></font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font><font color="#008000"><i>{ enable the interrupt (IRQ4 resp. IRQ3) for the specified COM port, by
+      resetting the bits in the Interrupt Mask Register of the 8259 interrupt
+      controller }
+    </i></font><font color="#FF0000"><b>if </b></font>PortNumber <font color="#000080">= </font>COM1 <font color="#FF0000"><b>then
+    begin
+      </b></font>InstallComInt<font color="#000080">(</font><font color="#800000">$0C</font><font color="#000080">, </font>Ofs<font color="#000080">(</font>Com1IntHandler<font color="#000080">), </font>ComBlock<font color="#000080">[</font>COM1<font color="#000080">]);
+      </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$EF
+    </font><font color="#FF0000"><b>end
+    else if </b></font>PortNumber <font color="#000080">= </font>COM2 <font color="#FF0000"><b>then
+    begin
+      </b></font>InstallComInt<font color="#000080">(</font><font color="#800000">$0B</font><font color="#000080">, </font>Ofs<font color="#000080">(</font>Com2IntHandler<font color="#000080">), </font>ComBlock<font color="#000080">[</font>COM2<font color="#000080">]);
+      </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F7
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] := </font><font color="#800000">$80</font><font color="#000080">; </font><font color="#008000"><i>{ switch to write latch reg }
+    </i></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>DLH<font color="#000080">] := </font>Hi <font color="#000080">(</font>BaudReg <font color="#000080">[</font>BaudRate<font color="#000080">]);
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>DLL<font color="#000080">] := </font>Lo <font color="#000080">(</font>BaudReg <font color="#000080">[</font>BaudRate<font color="#000080">]);
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] := </font><font color="#800000">$00 </font><font color="#FF0000"><b>or
+         </b></font>ParityReg <font color="#000080">[</font>ParityBit<font color="#000080">] </font><font color="#FF0000"><b>or
+         </b></font>LengthReg <font color="#000080">[</font>DataLength<font color="#000080">] </font><font color="#FF0000"><b>or
+         </b></font>StopReg <font color="#000080">[</font>StopBits<font color="#000080">];
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>IER<font color="#000080">] := </font><font color="#800000">$01</font><font color="#000080">; </font><font color="#008000"><i>{ enable interrupts }
+    </i></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>MCR<font color="#000080">] := </font><font color="#800000">$01 </font><font color="#FF0000"><b>or </b></font><font color="#008000"><i>{ raise DTR }
+                </i></font><font color="#800000">$02 </font><font color="#FF0000"><b>or </b></font><font color="#008000"><i>{ raise RTS }
+         </i></font><font color="#800000">$08</font><font color="#000080">;   </font><font color="#008000"><i>{ raise OUT2 }
+    </i></font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+    </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+    </font>ComFlowControl<font color="#000080">[</font>PortNumber<font color="#000080">] := </font>FlowControl<font color="#000080">;
+    </font>ComFlowHalted<font color="#000080">[</font>PortNumber<font color="#000080">] := </font>false<font color="#000080">;
+    </font>ComXoffReceived<font color="#000080">[</font>PortNumber<font color="#000080">] := </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  ExitCom;
+
+  This routine must be called for each COM port in use, to remove the
+  interrupt routine and to reset the control lines.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>ExitCom<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType) }
+
+  </i></font><font color="#FF0000"><b>var
+    </b></font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font><font color="#008000"><i>{ disable the interrupt (IRQ4 resp. IRQ3) for the specified COM port, by
+      setting the bits in the Interrupt Mask Register of the 8259 interrupt
+      controller }
+    </i></font><font color="#FF0000"><b>if </b></font>PortNumber <font color="#000080">= </font>COM1 <font color="#FF0000"><b>then
+      </b></font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">$10
+    </font><font color="#FF0000"><b>else if </b></font>PortNumber <font color="#000080">= </font>COM2 <font color="#FF0000"><b>then
+      </b></font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] := </font>Port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">$08</font><font color="#000080">;
+
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$7F</font><font color="#000080">;
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>IER<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ disable interrupts }
+    </i></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>MCR<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ lower DTR, RTS and OUT2 }
+    </i></font>UnInstallComInt<font color="#000080">(</font>ComBlock<font color="#000080">[</font>PortNumber<font color="#000080">]);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  ComReceived;
+
+  When the head and tail pointer (for writing resp. reading bytes) are not
+  pointing to the same byte in the buffer, a byte has arrived from the UART
+  and was stored in the buffer by the interrupt routine.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>function </b></font>ComReceived<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType) : boolean; }
+
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ComReceived <font color="#000080">:= </font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] &lt;&gt; </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">];
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  ReadCom;
+
+  Calling this function will wait for a byte in the buffer (if there is not
+  yet one present) and then return it. The tail buffer pointer is increased
+  and if flow from the other side was stopped, a check is made if the free
+  space has again become more then ComFlowUpper. In that situation, depending
+  on the type of flow control, either the RTS line is raised or and XON byte
+  (11 hex) is send to the other party.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>function </b></font>ReadCom<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType) : char; }
+
+  </i></font><font color="#FF0000"><b>begin
+    while </b></font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] = </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">] </font><font color="#FF0000"><b>do </b></font>Delay<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+    </font>ReadCom <font color="#000080">:= </font>char<font color="#000080">(</font>ComBuffer<font color="#000080">[</font>PortNumber<font color="#000080">, </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">]]);
+    </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">] := (</font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">] + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>mod </b></font>ComBufferSize<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ComFlowControl<font color="#000080">[</font>PortNumber<font color="#000080">] &lt;&gt; </font>No<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>ComFlowHalted<font color="#000080">[</font>PortNumber<font color="#000080">] </font><font color="#FF0000"><b>then
+      if </b></font><font color="#000080">(</font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] &gt;= </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">]) </font><font color="#FF0000"><b>and
+        </b></font><font color="#000080">(</font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">] - </font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] + </font>ComBufferSize <font color="#000080">&gt; </font>ComFlowUpper<font color="#000080">) </font><font color="#FF0000"><b>or
+        </b></font><font color="#000080">(</font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] &lt; </font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">]) </font><font color="#FF0000"><b>and
+        </b></font><font color="#000080">(</font>ComBufferTail<font color="#000080">[</font>PortNumber<font color="#000080">] - </font>ComBufferHead<font color="#000080">[</font>PortNumber<font color="#000080">] &gt; </font>ComFlowUpper<font color="#000080">)
+</font><font color="#FF0000"><b>then
+      begin </b></font><font color="#008000"><i>{ buffer has emptied enough }
+        </i></font><font color="#FF0000"><b>if </b></font>ComFlowControl<font color="#000080">[</font>PortNumber<font color="#000080">] = </font>RtsCts <font color="#FF0000"><b>then
+   </b></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>MCR<font color="#000080">] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>MCR<font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">$02 </font><font color="#008000"><i>{
+raise RTS }
+        </i></font><font color="#FF0000"><b>else if </b></font>ComFlowControl<font color="#000080">[</font>PortNumber<font color="#000080">] = </font>XonXoff <font color="#FF0000"><b>then
+   </b></font>WriteCom <font color="#000080">(</font>PortNumber<font color="#000080">, </font><font color="#800000">#$11</font><font color="#000080">); </font><font color="#008000"><i>{ send XON }
+        </i></font>ComFlowHalted<font color="#000080">[</font>PortNumber<font color="#000080">] := </font>false<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  ComAllowed;
+
+  With this function it is possible to check if writing data to the COM port
+  is allowed. When there is no flow control no check is made on any control
+  line and the result will always be true. When hardware type flow control is
+  enabled, DSR (and CD) and CTS must be high. In case of software flow
+  control DSR must be high and a check is made if an XOFF byte was received.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>function  </b></font>ComAllowed<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType) : boolean; }
+
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ComAllowed <font color="#000080">:= </font>true<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ComFlowControl<font color="#000080">[</font>PortNumber<font color="#000080">] = </font>RtsCts<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font><font color="#008000"><i>{ replace in next line both $30 with $B0 for checking on CD, DSR and CTS}
+      </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>MSR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$30</font><font color="#000080">) &lt;&gt; </font><font color="#800000">$30</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ no DSR or CTS}
+        </i></font>ComAllowed <font color="#000080">:= </font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else if </b></font><font color="#000080">(</font>ComFlowControl<font color="#000080">[</font>PortNumber<font color="#000080">] = </font>XonXoff<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font><font color="#008000"><i>{ replace in next line both $20 with $A0 for checking on CD and DSR }
+      </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>MSR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$20</font><font color="#000080">) &lt;&gt; </font><font color="#800000">$20</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#008000"><i>{ no DSR }
+         </i></font><font color="#000080">(</font>ComXoffReceived<font color="#000080">[</font>PortNumber<font color="#000080">]) </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ XOFF received }
+        </i></font>ComAllowed <font color="#000080">:= </font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>end
+  end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  WriteCom;
+
+  This routine is to write a byte to the COM port. However, when necessary
+  this will be delayed until the previous output byte is out the the UART.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>WriteCom<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType; OutByte : char); }
+
+  </i></font><font color="#FF0000"><b>begin
+    while </b></font><font color="#000080">((</font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LSR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$20</font><font color="#000080">) &lt;&gt; </font><font color="#800000">$20</font><font color="#000080">) </font><font color="#FF0000"><b>do  </b></font><font color="#008000"><i>{ TD empty }
+      </i></font>Delay<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+    </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>THR<font color="#000080">] := </font>byte<font color="#000080">(</font>OutByte<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  BreakCom;
+
+  With this routine the TD line can be lowered for 200 msec, which is a so-
+  called break signal.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>BreakCom<font color="#000080">; </font><font color="#008000"><i>{ (PortNumber : PortType); }
+
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] </font><font color="#FF0000"><b>or </b></font><font color="#800000">$40</font><font color="#000080">;
+    </font>Delay <font color="#000080">(</font><font color="#800000">200</font><font color="#000080">);  </font><font color="#008000"><i>{ 0.2 seconds }
+    </i></font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] := </font>Port<font color="#000080">[</font>ComPort<font color="#000080">[</font>PortNumber<font color="#000080">].</font>LCR<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$BF</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  end of COM.PAS
+  ---------------------------------------------------------------------------
+}
+
+{ ---------------------------------------------------------------------------
+  program TTY.PAS
+
+  Sample terminal emulation using simple teletype protocol to be used with
+  the unit COM.PAS for serial communnication.
+
+  Features:
+
+  - switching between COM1 and COM2
+  - baudrates up to 115200 baud
+  - RTS/CTS and XON/XOFF flow control
+  - debug mode to display control characters
+
+  Version 3.0 - May 1994
+
+  Copyright 1994, Willem van Schaik - Oirschot - Netherlands
+
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>program </b></font>Tty<font color="#000080">;
+
+  </font><font color="#FF0000"><b>uses </b></font>Crt<font color="#000080">, </font>Com<font color="#000080">;
+
+  </font><font color="#FF0000"><b>const
+    </b></font>Ascii <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">[</font><font color="#800000">5</font><font color="#000080">] =
+      (</font><font color="#800000">'&lt;NUL&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;SOH&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;STX&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;ETX&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;EOT&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;ENQ&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;ACK&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;BEL&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;BS&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;HT&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;LF&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;VT&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;FF&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;CR&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;SO&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;SI&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;DLE&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;DC1&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;DC2&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;DC3&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;DC4&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;NAK&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;SYN&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;ETB&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;CAN&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;EM&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;SUB&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;ESC&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;FS&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;GS&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;RS&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;US&gt;'</font><font color="#000080">,
+       </font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">'!'</font><font color="#000080">,</font><font color="#800000">'&quot;'</font><font color="#000080">,</font><font color="#800000">'#'</font><font color="#000080">,</font><font color="#800000">'$'</font><font color="#000080">,</font><font color="#800000">'%'</font><font color="#000080">,</font><font color="#800000">'&amp;'</font><font color="#000080">,</font><font color="#800000">''''</font><font color="#000080">,</font><font color="#800000">'('</font><font color="#000080">,</font><font color="#800000">')'</font><font color="#000080">,</font><font color="#800000">'*'</font><font color="#000080">,</font><font color="#800000">'+'</font><font color="#000080">,</font><font color="#800000">','</font><font color="#000080">,</font><font color="#800000">'-'</font><font color="#000080">,</font><font color="#800000">'.'</font><font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">,
+       </font><font color="#800000">'0'</font><font color="#000080">,</font><font color="#800000">'1'</font><font color="#000080">,</font><font color="#800000">'2'</font><font color="#000080">,</font><font color="#800000">'3'</font><font color="#000080">,</font><font color="#800000">'4'</font><font color="#000080">,</font><font color="#800000">'5'</font><font color="#000080">,</font><font color="#800000">'6'</font><font color="#000080">,</font><font color="#800000">'7'</font><font color="#000080">,</font><font color="#800000">'8'</font><font color="#000080">,</font><font color="#800000">'9'</font><font color="#000080">,</font><font color="#800000">':'</font><font color="#000080">,</font><font color="#800000">';'</font><font color="#000080">,</font><font color="#800000">'&lt;'</font><font color="#000080">,</font><font color="#800000">'='</font><font color="#000080">,</font><font color="#800000">'&gt;'</font><font color="#000080">,</font><font color="#800000">'?'</font><font color="#000080">,
+       </font><font color="#800000">'@'</font><font color="#000080">,</font><font color="#800000">'A'</font><font color="#000080">,</font><font color="#800000">'B'</font><font color="#000080">,</font><font color="#800000">'C'</font><font color="#000080">,</font><font color="#800000">'D'</font><font color="#000080">,</font><font color="#800000">'E'</font><font color="#000080">,</font><font color="#800000">'F'</font><font color="#000080">,</font><font color="#800000">'G'</font><font color="#000080">,</font><font color="#800000">'H'</font><font color="#000080">,</font><font color="#800000">'I'</font><font color="#000080">,</font><font color="#800000">'J'</font><font color="#000080">,</font><font color="#800000">'K'</font><font color="#000080">,</font><font color="#800000">'L'</font><font color="#000080">,</font><font color="#800000">'M'</font><font color="#000080">,</font><font color="#800000">'N'</font><font color="#000080">,</font><font color="#800000">'O'</font><font color="#000080">,
+       </font><font color="#800000">'P'</font><font color="#000080">,</font><font color="#800000">'Q'</font><font color="#000080">,</font><font color="#800000">'R'</font><font color="#000080">,</font><font color="#800000">'S'</font><font color="#000080">,</font><font color="#800000">'T'</font><font color="#000080">,</font><font color="#800000">'U'</font><font color="#000080">,</font><font color="#800000">'V'</font><font color="#000080">,</font><font color="#800000">'W'</font><font color="#000080">,</font><font color="#800000">'X'</font><font color="#000080">,</font><font color="#800000">'Y'</font><font color="#000080">,</font><font color="#800000">'Z'</font><font color="#000080">,</font><font color="#800000">'['</font><font color="#000080">,</font><font color="#800000">'\'</font><font color="#000080">,</font><font color="#800000">']'</font><font color="#000080">,</font><font color="#800000">'^'</font><font color="#000080">,</font><font color="#800000">'_'</font><font color="#000080">,
+       </font><font color="#800000">'`'</font><font color="#000080">,</font><font color="#800000">'a'</font><font color="#000080">,</font><font color="#800000">'b'</font><font color="#000080">,</font><font color="#800000">'c'</font><font color="#000080">,</font><font color="#800000">'d'</font><font color="#000080">,</font><font color="#800000">'e'</font><font color="#000080">,</font><font color="#800000">'f'</font><font color="#000080">,</font><font color="#800000">'g'</font><font color="#000080">,</font><font color="#800000">'h'</font><font color="#000080">,</font><font color="#800000">'i'</font><font color="#000080">,</font><font color="#800000">'j'</font><font color="#000080">,</font><font color="#800000">'k'</font><font color="#000080">,</font><font color="#800000">'l'</font><font color="#000080">,</font><font color="#800000">'m'</font><font color="#000080">,</font><font color="#800000">'n'</font><font color="#000080">,</font><font color="#800000">'o'</font><font color="#000080">,
+       </font><font color="#800000">'p'</font><font color="#000080">,</font><font color="#800000">'q'</font><font color="#000080">,</font><font color="#800000">'r'</font><font color="#000080">,</font><font color="#800000">'s'</font><font color="#000080">,</font><font color="#800000">'t'</font><font color="#000080">,</font><font color="#800000">'u'</font><font color="#000080">,</font><font color="#800000">'v'</font><font color="#000080">,</font><font color="#800000">'w'</font><font color="#000080">,</font><font color="#800000">'x'</font><font color="#000080">,</font><font color="#800000">'y'</font><font color="#000080">,</font><font color="#800000">'z'</font><font color="#000080">,</font><font color="#800000">'{'</font><font color="#000080">,</font><font color="#800000">'|'</font><font color="#000080">,</font><font color="#800000">'}'</font><font color="#000080">,</font><font color="#800000">'~'</font><font color="#000080">,</font><font color="#800000">'&lt;DEL&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;128&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;129&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;130&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;131&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;132&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;133&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;134&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;135&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;136&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;137&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;138&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;139&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;140&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;141&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;142&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;143&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;144&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;145&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;146&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;147&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;148&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;149&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;150&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;151&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;152&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;153&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;154&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;155&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;156&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;157&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;158&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;159&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;160&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;161&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;162&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;163&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;164&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;165&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;166&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;167&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;168&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;169&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;170&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;171&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;172&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;173&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;174&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;175&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;176&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;177&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;178&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;179&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;180&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;181&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;182&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;183&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;184&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;185&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;186&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;187&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;188&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;189&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;190&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;191&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;192&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;193&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;194&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;195&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;196&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;197&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;198&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;199&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;200&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;201&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;202&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;203&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;204&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;205&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;206&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;207&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;208&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;209&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;210&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;211&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;212&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;213&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;214&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;215&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;216&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;217&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;218&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;219&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;220&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;221&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;222&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;223&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;224&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;225&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;226&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;227&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;228&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;229&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;230&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;231&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;232&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;233&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;234&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;235&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;236&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;237&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;238&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;239&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;240&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;241&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;242&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;243&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;244&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;245&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;246&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;247&gt;'</font><font color="#000080">,
+       </font><font color="#800000">'&lt;248&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;249&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;250&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;251&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;252&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;253&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;254&gt;'</font><font color="#000080">,</font><font color="#800000">'&lt;255&gt;'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>var
+    </b></font>TtyPort <font color="#000080">: </font>PortType<font color="#000080">;
+    </font>TtyBaud <font color="#000080">: </font>BaudType<font color="#000080">;
+    </font>TtyParity <font color="#000080">: </font>ParityType<font color="#000080">;
+    </font>TtyLength <font color="#000080">: </font>LengthType<font color="#000080">;
+    </font>TtyStop <font color="#000080">: </font>StopType<font color="#000080">;
+    </font>TtyFlow <font color="#000080">: </font>FlowType<font color="#000080">;
+
+    </font>ChCom<font color="#000080">, </font>ChKey <font color="#000080">: </font>char<font color="#000080">;
+    </font>DoDebug <font color="#000080">: </font>boolean<font color="#000080">;
+    </font>GoExit <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#008000"><i>{ ---------------------------------------------------------------------------
+  TtyGetPars
+
+  Procedure to handle alt-key combinations that are used to change the
+  settings of the terminal emulation protocol.
+  ---------------------------------------------------------------------------
+}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>TtyGetPars <font color="#000080">(</font>AltKey <font color="#000080">: </font>char<font color="#000080">);
+
+  </font><font color="#FF0000"><b>var
+    </b></font>ParsInput <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">16</font><font color="#000080">];
+
+  </font><font color="#FF0000"><b>begin
+    case </b></font>AltKey <font color="#FF0000"><b>of
+
+      </b></font><font color="#800000">#120</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-1 }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'TTY:  port = COM1:'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>TtyPort <font color="#000080">&lt;&gt; </font>COM1 <font color="#FF0000"><b>then
+        begin
+          </b></font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+          </font>TtyPort <font color="#000080">:= </font>COM1<font color="#000080">;
+          </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">)
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#121</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-2 }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'TTY:  port = COM2:'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>TtyPort <font color="#000080">&lt;&gt; </font>COM2 <font color="#FF0000"><b>then
+        begin
+          </b></font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+          </font>TtyPort <font color="#000080">:= </font>COM2<font color="#000080">;
+          </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">)
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#48</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-B }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  baudrate = '</font><font color="#000080">);
+        </font>Readln <font color="#000080">(</font>ParsInput<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'3'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'300'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B300
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'6'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'600'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B600
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'12'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'1200'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B1200
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'24'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'2400'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B2400
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'48'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'4800'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B4800
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'96'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'9600'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B9600
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'192'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'19200'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B19200
+        <font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'384'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ParsInput <font color="#000080">= </font><font color="#800000">'38400'</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>TtyBaud <font color="#000080">:= </font>B38400
+        <font color="#FF0000"><b>else
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'      baudrate = 300,600,1200,2400,4800,9600,19200,38400'</font><font color="#000080">);
+        </font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+        </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#38</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-L }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  word length = '</font><font color="#000080">);
+        </font>Readln <font color="#000080">(</font>ParsInput<font color="#000080">);
+        </font><font color="#FF0000"><b>case </b></font>ParsInput<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of
+          </b></font><font color="#800000">'5'</font><font color="#000080">: </font>TtyLength <font color="#000080">:= </font>D5<font color="#000080">;
+          </font><font color="#800000">'6'</font><font color="#000080">: </font>TtyLength <font color="#000080">:= </font>D6<font color="#000080">;
+          </font><font color="#800000">'7'</font><font color="#000080">: </font>TtyLength <font color="#000080">:= </font>D7<font color="#000080">;
+          </font><font color="#800000">'8'</font><font color="#000080">: </font>TtyLength <font color="#000080">:= </font>D8<font color="#000080">;
+        </font><font color="#FF0000"><b>else
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'      word length = 5,6,7,8'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+        </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#25</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-P }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  parity bit = '</font><font color="#000080">);
+        </font>Readln <font color="#000080">(</font>ParsInput<font color="#000080">);
+        </font><font color="#FF0000"><b>case </b></font>ParsInput<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of
+          </b></font><font color="#800000">'n'</font><font color="#000080">, </font><font color="#800000">'N'</font><font color="#000080">: </font>TtyParity <font color="#000080">:= </font>None<font color="#000080">;
+          </font><font color="#800000">'o'</font><font color="#000080">, </font><font color="#800000">'O'</font><font color="#000080">: </font>TtyParity <font color="#000080">:= </font>Odd<font color="#000080">;
+          </font><font color="#800000">'e'</font><font color="#000080">, </font><font color="#800000">'E'</font><font color="#000080">: </font>TtyParity <font color="#000080">:= </font>Even<font color="#000080">;
+          </font><font color="#800000">'m'</font><font color="#000080">, </font><font color="#800000">'O'</font><font color="#000080">: </font>TtyParity <font color="#000080">:= </font>Mark<font color="#000080">;
+          </font><font color="#800000">'s'</font><font color="#000080">, </font><font color="#800000">'O'</font><font color="#000080">: </font>TtyParity <font color="#000080">:= </font>Space<font color="#000080">;
+        </font><font color="#FF0000"><b>else
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'      parity bit = none,odd,even,mark,space'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+        </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#31</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-S }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  stop bits = '</font><font color="#000080">);
+        </font>Readln <font color="#000080">(</font>ParsInput<font color="#000080">);
+        </font><font color="#FF0000"><b>case </b></font>ParsInput<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of
+          </b></font><font color="#800000">'1'</font><font color="#000080">: </font>TtyStop <font color="#000080">:= </font>S1<font color="#000080">;
+          </font><font color="#800000">'2'</font><font color="#000080">: </font>TtyStop <font color="#000080">:= </font>S2<font color="#000080">;
+        </font><font color="#FF0000"><b>else
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'      stop bits = 1,2'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+        </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#33</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-F }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  flow control = '</font><font color="#000080">);
+        </font>Readln <font color="#000080">(</font>ParsInput<font color="#000080">);
+        </font><font color="#FF0000"><b>case </b></font>ParsInput<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of
+          </b></font><font color="#800000">'n'</font><font color="#000080">, </font><font color="#800000">'N'</font><font color="#000080">: </font>TtyFlow <font color="#000080">:= </font>No<font color="#000080">;
+          </font><font color="#800000">'r'</font><font color="#000080">, </font><font color="#800000">'R'</font><font color="#000080">: </font>TtyFlow <font color="#000080">:= </font>RtsCts<font color="#000080">;
+          </font><font color="#800000">'x'</font><font color="#000080">, </font><font color="#800000">'X'</font><font color="#000080">: </font>TtyFlow <font color="#000080">:= </font>XonXoff<font color="#000080">;
+        </font><font color="#FF0000"><b>else
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'      flow control = no,rts/cts,xon/xoff'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>ExitCom <font color="#000080">(</font>TtyPort<font color="#000080">);
+        </font>InitCom <font color="#000080">(</font>TtyPort<font color="#000080">, </font>TtyBaud<font color="#000080">, </font>TtyParity<font color="#000080">, </font>TtyLength<font color="#000080">, </font>TtyStop<font color="#000080">, </font>TtyFlow<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#23</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-I }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  port = COM'</font><font color="#000080">, </font>ord<font color="#000080">(</font>TtyPort<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">':      '</font><font color="#000080">);
+        </font><font color="#FF0000"><b>case </b></font>TtyBaud <font color="#FF0000"><b>of
+          </b></font>B110<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 110          '</font><font color="#000080">);
+          </font>B150<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 150          '</font><font color="#000080">);
+          </font>B300<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 300          '</font><font color="#000080">);
+          </font>B600<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 600          '</font><font color="#000080">);
+          </font>B1200<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 1200         '</font><font color="#000080">);
+          </font>B2400<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 2400         '</font><font color="#000080">);
+          </font>B4800<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 4800         '</font><font color="#000080">);
+          </font>B9600<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 9600         '</font><font color="#000080">);
+          </font>B19200<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 19200        '</font><font color="#000080">);
+          </font>B38400<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 38400        '</font><font color="#000080">);
+          </font>B57600<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 57600        '</font><font color="#000080">);
+          </font>B115200<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'baudrate = 115200       '</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>case </b></font>TtyParity <font color="#FF0000"><b>of
+          </b></font>None<font color="#000080">: </font>Writeln <font color="#000080">(</font><font color="#800000">'parity bit = none'</font><font color="#000080">);
+          </font>Odd<font color="#000080">: </font>Writeln <font color="#000080">(</font><font color="#800000">'parity bit = odd'</font><font color="#000080">);
+          </font>Even<font color="#000080">: </font>Writeln <font color="#000080">(</font><font color="#800000">'parity bit = even'</font><font color="#000080">);
+          </font>Mark<font color="#000080">: </font>Writeln <font color="#000080">(</font><font color="#800000">'parity bit = mark'</font><font color="#000080">);
+          </font>Space<font color="#000080">: </font>Writeln <font color="#000080">(</font><font color="#800000">'parity bit = space'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>case </b></font>TtyFlow <font color="#FF0000"><b>of
+          </b></font>No<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'      flow = no         '</font><font color="#000080">);
+          </font>RtsCts<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'      flow = rts/cts    '</font><font color="#000080">);
+          </font>XonXoff<font color="#000080">: </font>Write <font color="#000080">(</font><font color="#800000">'      flow = xon/xoff   '</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'word length = '</font><font color="#000080">, </font>ord<font color="#000080">(</font>TtyLength<font color="#000080">)+</font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">'         '</font><font color="#000080">);
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'stop bits = '</font><font color="#000080">, </font>ord<font color="#000080">(</font>TtyStop<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#35</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-H }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'TTY:  alt-1 - COM1      '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-B - baudrate        '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-I - info'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'      alt-2 - COM2      '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-L - word length     '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-H - help'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'      alt-F - flow      '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-P - parity bit'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">;
+        </font>Write <font color="#000080">(</font><font color="#800000">'      alt-D - debug     '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-S - stop bits       '</font><font color="#000080">);
+        </font>Write <font color="#000080">(</font><font color="#800000">'alt-X - exit'</font><font color="#000080">);
+        </font>Writeln<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#32</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-D }
+      </i></font><font color="#FF0000"><b>begin
+        </b></font>DoDebug <font color="#000080">:= </font><font color="#FF0000"><b>not </b></font>DoDebug<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>DoDebug <font color="#FF0000"><b>then
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'TTY:  debug = on'</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else
+          </b></font>Writeln <font color="#000080">(</font><font color="#800000">'TTY:  debug = off'</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#800000">#45</font><font color="#000080">:  </font><font color="#008000"><i>{ alt-X }
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>WhereX <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>Writeln<font color="#000080">;
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'TTY:  exit'</font><font color="#000080">);
+        </font>GoExit <font color="#000080">:= </font>true<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ case ChKey }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ procedure TtyGetPars }
+
+{ ---------------------------------------------------------------------------
+
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0047.PAS">Original</a><b>]</b></p></body>
+</html>

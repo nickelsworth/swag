@@ -1,0 +1,366 @@
+<html>
+<head><title> "Trapping INT29 Output" by TRISDARESA SUMARJOSO</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0010.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+TRISDARESA SUMARJOSO
+
+&gt; I was wondering if anyone knew how to make a split screen While
+&gt; making EXEC calls and not losing your Windows?
+
+&gt; Anyone got any ideas or routines that do this? I can do it easily
+&gt; using TTT when I just stay Within the Program, but the problems arise
+&gt; when I do the SwapVectors and do my Exec call, all hell breaks loose.
+&gt; Lynn.
+
+        Here is a Unit that I've created to trap Int 29h. the Function of this
+Unit is to trap the output that Dos spits through the Int 29h (such as XCopy,
+PkZip, etc) and redirect it into a predefined Window.
+        Here is the stuff:
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>I29UnitA<font color="#000080">;
+
+</font><font color="#008000"><i>{ This Unit will trap Dos output which use Int 29h. Any other
+  method of writing the scren, such as Direct Write which bypasses
+  Int 29h call, will not be trapped. }
+
+</i></font><font color="#FF0000"><b>Interface
+
+</b></font><font color="#008000"><i>{ Initialize the view that will be use to output the Dos output.
+  Will also draw basic Window frame. }
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitView<font color="#000080">(</font>XX1<font color="#000080">, </font>XY1<font color="#000080">, </font>XX2<font color="#000080">, </font>XY2 <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#008000"><i>{ Clear the pre-defined view. }
+</i></font><font color="#FF0000"><b>Procedure </b></font>ClearView<font color="#000080">;
+</font><font color="#008000"><i>{ Procedure to redirect the Turbo Pascal Write and WriteLn Procedure.
+  (standard OutPut only).
+  Do not call this Procedure twice in the row.
+  More than once call to this Procedure will result Pascal's standard
+  output Procedure will not be restored properly. }
+</i></font><font color="#FF0000"><b>Procedure </b></font>TrapWrite<font color="#000080">;
+</font><font color="#008000"><i>{ Restore Pascal's Write and WriteLn Procedure into its original
+  condition that was altered With TRAPWrite. (standard OutPut only). }
+</i></font><font color="#FF0000"><b>Procedure </b></font>UnTrapWrite<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+Uses
+  </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>VioCharType <font color="#000080">= </font><font color="#FF0000"><b>Record
+    Case </b></font>Boolean <font color="#FF0000"><b>Of
+      </b></font>True  <font color="#000080">: (</font>Ch<font color="#000080">, </font>Attr <font color="#000080">: </font>Byte<font color="#000080">);
+      </font>False <font color="#000080">: (</font>Content <font color="#000080">: </font>Word<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>DrvFunc    <font color="#000080">= </font><font color="#FF0000"><b>Function</b></font><font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>TextRec<font color="#000080">) : </font>Integer<font color="#000080">;
+  </font>VioBufType <font color="#000080">= </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">24</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">79</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>VioCharType<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>OldInt29     <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>OldExit      <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>OldIOFunc    <font color="#000080">: </font>DrvFunc<font color="#000080">;
+  </font>OldFlushFunc <font color="#000080">: </font>DrvFunc<font color="#000080">;
+  </font>TrapWriteVar <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>X1<font color="#000080">, </font>Y1<font color="#000080">, </font>X2<font color="#000080">,
+  </font>Y2           <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>XVio         <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>YVio         <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>VioBuffer    <font color="#000080">: ^</font>VioBufType<font color="#000080">;
+  </font>VioCurLoc    <font color="#000080">: </font>Word <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$0040</font><font color="#000080">:</font><font color="#800000">$0050</font><font color="#000080">;
+
+</font><font color="#008000"><i>{$F+}
+</i></font><font color="#FF0000"><b>Procedure </b></font>NewInt29<font color="#000080">(</font>Flags<font color="#000080">, </font>CS<font color="#000080">, </font>IP<font color="#000080">, </font>AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP<font color="#000080">: </font>Word<font color="#000080">);
+</font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Attr <font color="#000080">:= </font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Attr <font color="#FF0000"><b>And Not </b></font><font color="#800000">112</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Lo<font color="#000080">(</font>AX<font color="#000080">) = </font><font color="#800000">13</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    </b></font>XVio <font color="#000080">:= </font>X1<font color="#000080">;
+    </font>AX <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else
+  if </b></font><font color="#000080">(</font>Lo<font color="#000080">(</font>AX<font color="#000080">) = </font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    </b></font>Inc<font color="#000080">(</font>YVio<font color="#000080">);
+    </font>AX <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font><font color="#000080">(</font>XVio <font color="#000080">&gt; </font>X2<font color="#000080">) </font><font color="#FF0000"><b>Then
+    begin
+      </b></font>XVio <font color="#000080">:= </font>X1<font color="#000080">;
+      </font>Inc<font color="#000080">(</font>YVio<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>YVio <font color="#000080">&gt; </font>Y2<font color="#000080">) </font><font color="#FF0000"><b>Then
+    begin
+      Asm
+        </b></font><font color="#FF00FF">Mov   AH, 06
+        Mov   AL, YVio
+        Sub   AL, Y2
+        Mov   CH, Y1
+        Mov   CL, X1
+        Mov   DH, Y2
+        Mov   DL, X2
+        Mov   BH, 07
+        Int   10h
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>YVio <font color="#000080">:= </font>Y2<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Lo<font color="#000080">(</font>AX<font color="#000080">) = </font><font color="#800000">32</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+    begin
+      if </b></font><font color="#000080">(</font>Lo<font color="#000080">(</font>VioCurLoc<font color="#000080">) &lt; </font>XVio<font color="#000080">) </font><font color="#FF0000"><b>Then
+      begin
+        </b></font>XVio <font color="#000080">:= </font>Lo<font color="#000080">(</font>VioCurLoc<font color="#000080">);
+        </font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Ch <font color="#000080">:= </font>Lo<font color="#000080">(</font>AX<font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else
+      begin
+        </b></font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Ch <font color="#000080">:= </font>Lo<font color="#000080">(</font>AX<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>XVio<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Ch <font color="#000080">:= </font>Lo<font color="#000080">(</font>AX<font color="#000080">);
+      </font>Inc<font color="#000080">(</font>XVio<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>VioCurLoc <font color="#000080">:= </font>YVio <font color="#FF0000"><b>Shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font>XVio<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Attr <font color="#000080">:= </font>VioBuffer<font color="#000080">^[</font>YVio<font color="#000080">, </font>XVio<font color="#000080">].</font>Attr <font color="#FF0000"><b>Or </b></font><font color="#800000">112</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+{$F+}
+</i></font><font color="#FF0000"><b>Procedure </b></font>RestoreInt29<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ExitProc <font color="#000080">:= </font>OldExit<font color="#000080">;
+  </font>SetIntVec<font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, </font>OldInt29<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>TrapWriteVar <font color="#FF0000"><b>Then
+  begin
+    </b></font>TextRec<font color="#000080">(</font>OutPut<font color="#000080">).</font>InOutFunc <font color="#000080">:= @</font>OldIOFunc<font color="#000080">;
+    </font>TextRec<font color="#000080">(</font>OutPut<font color="#000080">).</font>FlushFunc <font color="#000080">:= @</font>OldFlushFunc<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>HookInt29<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetIntVec<font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, </font>OldInt29<font color="#000080">);
+  </font>SetIntVec<font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, @</font>NewInt29<font color="#000080">);
+  </font>OldExit <font color="#000080">:= </font>ExitProc<font color="#000080">;
+  </font>ExitProc <font color="#000080">:= @</font>RestoreInt29<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>InitView<font color="#000080">(</font>XX1<font color="#000080">, </font>XY1<font color="#000080">, </font>XX2<font color="#000080">, </font>XY2<font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>I    <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>X1 <font color="#000080">:= </font>XX1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font>Y1 <font color="#000080">:= </font>XY1<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+  </font>X2 <font color="#000080">:= </font>XX2<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+  </font>Y2 <font color="#000080">:= </font>XY2<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+  </font>XVio <font color="#000080">:= </font>X1<font color="#000080">;
+  </font>YVio <font color="#000080">:= </font>Y1<font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font>XX1 <font color="#FF0000"><b>To </b></font>XX2 <font color="#FF0000"><b>Do
+  begin
+    </b></font>VioBuffer<font color="#000080">^[</font>XY1<font color="#000080">, </font>I<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">205</font><font color="#000080">;
+    </font>VioBuffer<font color="#000080">^[</font>XY2<font color="#000080">, </font>I<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">205</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>I <font color="#000080">:= </font>XY1<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>To </b></font>XY2<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>Do
+  begin
+    </b></font>VioBuffer<font color="#000080">^[</font>I<font color="#000080">, </font>XX1<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">179</font><font color="#000080">;
+    </font>VioBuffer<font color="#000080">^[</font>I<font color="#000080">, </font>XX2<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">179</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>VioBuffer<font color="#000080">^[</font>XY1<font color="#000080">, </font>XX1<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">213</font><font color="#000080">;
+  </font>VioBuffer<font color="#000080">^[</font>XY2<font color="#000080">, </font>XX1<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">212</font><font color="#000080">;
+  </font>VioBuffer<font color="#000080">^[</font>XY1<font color="#000080">, </font>XX2<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">184</font><font color="#000080">;
+  </font>VioBuffer<font color="#000080">^[</font>XY2<font color="#000080">, </font>XX2<font color="#000080">].</font>Ch <font color="#000080">:= </font><font color="#800000">190</font><font color="#000080">;
+  </font>VioCurLoc <font color="#000080">:= </font>YVio <font color="#FF0000"><b>Shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font>XVio<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>DoWriteStuff<font color="#000080">(</font>F <font color="#000080">: </font>TextRec<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>I    <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>Regs <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  For </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>To </b></font>F<font color="#000080">.</font>BufPos<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>Do
+  begin
+    </b></font>Regs<font color="#000080">.</font>AL <font color="#000080">:= </font>Byte<font color="#000080">(</font>F<font color="#000080">.</font>BufPtr<font color="#000080">^[</font>I<font color="#000080">]);
+    </font>Intr<font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, </font>Regs<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$F+}
+</i></font><font color="#FF0000"><b>Function </b></font>NewOutputFunc<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>TextRec<font color="#000080">) : </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DoWriteStuff<font color="#000080">(</font>F<font color="#000080">);
+  </font>F<font color="#000080">.</font>BufPos <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>NewOutPutFunc <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+{$F+}
+</i></font><font color="#FF0000"><b>Function </b></font>NewFlushFunc<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>TextRec<font color="#000080">) : </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DoWriteStuff<font color="#000080">(</font>F<font color="#000080">);
+  </font>F<font color="#000080">.</font>BufPos <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>NewFlushFunc <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>TrapWrite<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not </b></font>TrapWriteVar <font color="#FF0000"><b>Then
+  begin
+    With </b></font>TextRec<font color="#000080">(</font>OutPut<font color="#000080">) </font><font color="#FF0000"><b>Do
+    begin
+      </b></font>OldIOFunc <font color="#000080">:= </font>DrvFunc<font color="#000080">(</font>InOutFunc<font color="#000080">);
+      </font>InOutFunc <font color="#000080">:= @</font>NewOutPutFunc<font color="#000080">;
+      </font>OldFlushFunc <font color="#000080">:= </font>DrvFUnc<font color="#000080">(</font>FlushFunc<font color="#000080">);
+      </font>FlushFunc <font color="#000080">:= @</font>NewFlushFunc<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>TrapWriteVar <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>UnTrapWrite<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>TrapWriteVar <font color="#FF0000"><b>Then
+  begin
+    </b></font>TextRec<font color="#000080">(</font>OutPut<font color="#000080">).</font>InOutFunc <font color="#000080">:= @</font>OldIOFunc<font color="#000080">;
+    </font>TextRec<font color="#000080">(</font>OutPut<font color="#000080">).</font>FlushFunc <font color="#000080">:= @</font>OldFlushFunc<font color="#000080">;
+    </font>TrapWriteVar <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ClearView<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  Asm
+    </b></font><font color="#FF00FF">Mov   AH, 06
+    Mov   AL, 0
+    Mov   CH, Y1
+    Mov   CL, X1
+    Mov   DH, Y2
+    Mov   DL, X2
+    Mov   BH, 07
+    Int   10h
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>XVio <font color="#000080">:= </font>X1<font color="#000080">;
+  </font>YVio <font color="#000080">:= </font>Y1<font color="#000080">;
+  </font>VioCurLoc <font color="#000080">:= </font>YVio <font color="#FF0000"><b>Shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font>XVio<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>CheckMode<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>MyRegs <font color="#000080">: </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>MyRegs<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$F</font><font color="#000080">;
+  </font>Intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>MyRegs<font color="#000080">);
+  </font><font color="#FF0000"><b>Case </b></font>MyRegs<font color="#000080">.</font>AL <font color="#FF0000"><b>Of
+    </b></font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">3  </font><font color="#000080">: </font>VioBuffer <font color="#000080">:= </font>Ptr<font color="#000080">(</font><font color="#800000">$B800</font><font color="#000080">, </font><font color="#800000">$0000</font><font color="#000080">);
+    </font><font color="#800000">7           </font><font color="#000080">: </font>VioBuffer <font color="#000080">:= </font>Ptr<font color="#000080">(</font><font color="#800000">$B000</font><font color="#000080">, </font><font color="#800000">$0000</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>X1 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Y1 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>X2 <font color="#000080">:= </font><font color="#800000">79</font><font color="#000080">;
+  </font>Y2 <font color="#000080">:= </font><font color="#800000">24</font><font color="#000080">;
+  </font>XVio <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>YVio <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>VioCurLoc <font color="#000080">:= </font>YVio <font color="#FF0000"><b>Shl </b></font><font color="#800000">8 </font><font color="#000080">+ </font>XVio<font color="#000080">;
+  </font>HookInt29<font color="#000080">;
+  </font>TrapWriteVar <font color="#000080">:= </font>False<font color="#000080">;
+  </font>CheckMode<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font><font color="#FF0000"><b>Program </b></font>Int29Testing<font color="#000080">;
+
+</font><font color="#008000"><i>{$A+,B-,D+,E+,F-,G-,I+,L+,N-,O-,P-,Q-,R-,S+,T-,V+,X+}
+{$M $800,0,0}
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>Dos<font color="#000080">, </font>Crt<font color="#000080">,
+  </font>I29UnitA<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>CmdLine      <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>I            <font color="#000080">: </font>Byte<font color="#000080">;
+
+</font><font color="#008000"><i>{ Function to convert a String to upper case.
+  Return the upper-case String. }
+
+</i></font><font color="#FF0000"><b>Function </b></font>Str2Upr<font color="#000080">(</font>Str <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">Push DS
+  CLD
+  LDS  SI, Str
+  LES  DI, @Result
+  LodSB
+  Or   AL, AL
+  Jz   @Done
+  StoSB
+  Xor  CH, CH
+  Mov  CL, AL
+ @@1:
+  LodSB
+  Cmp  AL, 'a'
+  JB   @@2
+  Cmp  AL, 'z'
+  JA   @@2
+  Sub  AL, 20h
+ @@2:
+  StoSB
+  Loop @@1
+ @Done:
+  Pop  DS
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>ClrScr<font color="#000080">;
+  </font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'Output interceptor.'</font><font color="#000080">);
+  </font><font color="#008000"><i>{ Initialize redirector's area. }
+  </i></font>InitView<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">79</font><font color="#000080">,</font><font color="#800000">24</font><font color="#000080">);
+  </font><font color="#FF0000"><b>Repeat
+          </b></font><font color="#008000"><i>{ Redirect Turbo's output into the predefined Window. }
+    </i></font>TrapWrite<font color="#000080">;
+    </font>Write<font color="#000080">(</font><font color="#800000">#0</font><font color="#000080">,</font><font color="#800000">' Please enter Dos command (Done to Exit): '</font><font color="#000080">);
+    </font>ReadLn<font color="#000080">(</font>CmdLine<font color="#000080">);
+    </font>WriteLn<font color="#000080">;
+    </font><font color="#008000"><i>{ Restore Turbo's original Output routine. }
+    </i></font>UnTrapWrite<font color="#000080">;
+    </font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Command executed : '</font><font color="#000080">, </font>CmdLine<font color="#000080">);
+    </font>CmdLine <font color="#000080">:= </font>Str2Upr<font color="#000080">(</font>CmdLine<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>CmdLine <font color="#000080">&lt;&gt; </font><font color="#800000">'DONE'</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>CmdLine <font color="#000080">&lt;&gt; </font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+    begin
+      </b></font>SwapVectors<font color="#000080">;
+      </font>Exec<font color="#000080">(</font><font color="#800000">'C:\Command.Com'</font><font color="#000080">, </font><font color="#800000">'/C'</font><font color="#000080">+</font>CmdLine<font color="#000080">);
+      </font>SwapVectors<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'Command execution done. Press anykey to continue...'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>Repeat Until </b></font>ReadKey <font color="#000080">&lt;&gt; </font><font color="#800000">#0</font><font color="#000080">;
+    </font>ClearView<font color="#000080">;
+    </font>GotoXY<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                                   '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>CmdLine <font color="#000080">= </font><font color="#800000">'DONE'</font><font color="#000080">);
+  </font>ClrScr<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{
+Both the testing Program and the Unit itself (expecially the Unit), is by no
+mean perfect. Use With caution. It might not wise to use such redirector
+(my int 29 Unit) in a Program that swaps itself out of memory. The above
+Programs were not optimized in anyway (so it might slow your Program a
+little). And I don't guarantee that this Program will work on your computer
+(it work Without a problem on mine). if you like this Unit, you can use it
+anyway you desire. Just remember I can guarantee nothing For this method.
+}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0010.PAS">Original</a><b>]</b></p></body>
+</html>

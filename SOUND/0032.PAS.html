@@ -1,0 +1,171 @@
+<html>
+<head><title> "Sampling with Blaster" by RYNHARDT HAARHOFF</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0032.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+RYNHARDT HAARHOFF
+
+&gt; Help!!! Does anyone have and source code for sampling through the
+&gt; Sound Blaster??? Its to do with my 'A' Level Project!!!!
+
+the following is a small program using &quot;realtime&quot; sampling. If you would
+rather use the CT-VOICE driver then please tell me so.
+
+PLEASE NOTE: this was written for a VGA screen, and it uses direct video
+memory access in 320x200 mode. If you have any problems with the screen, then
+revert back to the BGI, and replace PutDot with PutPixel. It will be slightly
+slower then :-(
+I have an SB PRO, so I can't guarantee it will work on any other SB, or
+on any other system. Use at own risk :-)
+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>VoiceScope<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses
+  </b></font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>ResetPort    <font color="#000080">= </font><font color="#800000">$226</font><font color="#000080">;
+  </font>CommandPort  <font color="#000080">= </font><font color="#800000">$22C</font><font color="#000080">;
+  </font>ReadPort     <font color="#000080">= </font><font color="#800000">$22A</font><font color="#000080">;
+  </font>PollPort     <font color="#000080">= </font><font color="#800000">$22E</font><font color="#000080">;
+  </font>MaxOldDots   <font color="#000080">= </font><font color="#800000">50000</font><font color="#000080">;  </font><font color="#008000"><i>{max size of the array}
+  </i></font>MixerRegPort <font color="#000080">= </font><font color="#800000">$224</font><font color="#000080">;   </font><font color="#008000"><i>{Volume : Hi nibble = left, Lo Nibble = right}
+  </i></font>MixerDatPort <font color="#000080">= </font><font color="#800000">$225</font><font color="#000080">;
+  </font>Master       <font color="#000080">= </font><font color="#800000">35</font><font color="#000080">;
+  </font>Line         <font color="#000080">= </font><font color="#800000">46</font><font color="#000080">;
+  </font>VOC          <font color="#000080">= </font><font color="#800000">21</font><font color="#000080">;
+  </font>FM           <font color="#000080">= </font><font color="#800000">23</font><font color="#000080">;     </font><font color="#008000"><i>{Hi nibble = FM channel; Lo nibble = volume}
+  </i></font>CD           <font color="#000080">= </font><font color="#800000">25</font><font color="#000080">;
+  </font>Mic          <font color="#000080">= </font><font color="#800000">27</font><font color="#000080">;
+  </font>ADCChannel   <font color="#000080">= </font><font color="#800000">29</font><font color="#000080">;
+  </font>StereoSell   <font color="#000080">= </font><font color="#800000">31</font><font color="#000080">;     </font><font color="#008000"><i>{0,1 = mono; 2,3 = stereo}
+
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>Scr       <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">199</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">319</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$A000</font><font color="#000080">:</font><font color="#800000">0000</font><font color="#000080">;
+  </font>Ch        <font color="#000080">: </font>char<font color="#000080">;
+  </font>XInt<font color="#000080">,
+  </font>XWidth<font color="#000080">,
+  </font>XMax<font color="#000080">,
+  </font>YMax<font color="#000080">,
+  </font>XMid<font color="#000080">,
+  </font>YMid<font color="#000080">,
+  </font>MaxHeight<font color="#000080">,
+  </font>XStart<font color="#000080">,
+  </font>Color<font color="#000080">,
+  </font>ColorBack <font color="#000080">: </font>integer<font color="#000080">;
+  </font>OldDots   <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MaxOldDots<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;     </font><font color="#008000"><i>{to store old dots}
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitVideo<font color="#000080">(</font>Mode <font color="#000080">: </font>byte<font color="#000080">; </font>Clr <font color="#000080">: </font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if NOT </b></font>Clr <font color="#FF0000"><b>then
+    </b></font>Mode <font color="#000080">:= </font>Mode <font color="#000080">+ </font><font color="#800000">128</font><font color="#000080">;
+  </font><font color="#FF0000"><b>ASM
+    </b></font><font color="#FF00FF">mov AH, 00
+    mov AL, Mode
+    int 10h
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PutDot<font color="#000080">(</font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">; </font>Color <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>Scr<font color="#000080">[</font>y<font color="#000080">, </font>x<font color="#000080">] := </font>Color<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SquareFill<font color="#000080">(</font>x1<font color="#000080">, </font>y1<font color="#000080">, </font>x2<font color="#000080">, </font>y2 <font color="#000080">: </font>word<font color="#000080">; </font>Color <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>y <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>y <font color="#000080">:= </font>y1 <font color="#FF0000"><b>to </b></font>y2 <font color="#FF0000"><b>do
+    </b></font>FillChar<font color="#000080">(</font>Scr<font color="#000080">[</font>y<font color="#000080">, </font>x1<font color="#000080">], </font>x2<font color="#000080">-</font>x1<font color="#000080">, </font>Color<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetMixer<font color="#000080">(</font>PortNum<font color="#000080">, </font>Vol <font color="#000080">: </font>byte<font color="#000080">);  </font><font color="#008000"><i>{Set mixer ports}
+</i></font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">MOV DX, MixerRegPort       </font><font color="#008000"><i>{Select register port}
+    </i></font><font color="#FF00FF">MOV AL, PortNum            </font><font color="#008000"><i>{Select which channel}
+    </i></font><font color="#FF00FF">OUT DX, AL
+    MOV DX, MixerDatPort       </font><font color="#008000"><i>{Select data port}
+    </i></font><font color="#FF00FF">MOV AL, Vol                </font><font color="#008000"><i>{Write volume/data}
+    </i></font><font color="#FF00FF">OUT DX, AL
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>ResetSB <font color="#000080">: </font>boolean<font color="#000080">;      </font><font color="#008000"><i>{resets the SB}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>Port<font color="#000080">[</font>ResetPort<font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+  </font>Delay<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font>Port<font color="#000080">[</font>ResetPort<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+  </font>Delay<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Port<font color="#000080">[</font>PollPort<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">128 </font><font color="#000080">= </font><font color="#800000">128 </font><font color="#FF0000"><b>then
+    </b></font>ResetSB <font color="#000080">:= </font>True
+  <font color="#FF0000"><b>else
+    </b></font>ResetSB <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ShowDots<font color="#000080">(</font>D <font color="#000080">: </font>integer<font color="#000080">);   </font><font color="#008000"><i>{show the voice data}
+</i></font><font color="#FF0000"><b>var
+  </b></font>x<font color="#000080">, </font>y <font color="#000080">: </font>word<font color="#000080">;
+  </font>NewX <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>x <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>XWidth <font color="#000080">* </font>d <font color="#FF0000"><b>do
+  begin
+    </b></font>port<font color="#000080">[</font>CommandPort<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">;                     </font><font color="#008000"><i>{ these three lines }
+    </i></font><font color="#FF0000"><b>repeat until </b></font><font color="#000080">(</font>port<font color="#000080">[</font>PollPort<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">128 </font><font color="#000080">= </font><font color="#800000">128</font><font color="#000080">);  </font><font color="#008000"><i>{ gets the actual   }
+    </i></font>y <font color="#000080">:= </font>port<font color="#000080">[</font>ReadPort<font color="#000080">];                          </font><font color="#008000"><i>{ data from the SB  }
+
+    </i></font><font color="#FF0000"><b>if </b></font>y <font color="#000080">&gt; </font><font color="#800000">128 </font><font color="#000080">+ </font>MaxHeight <font color="#FF0000"><b>then
+      </b></font>y <font color="#000080">:= </font><font color="#800000">128 </font><font color="#000080">+ </font>MaxHeight<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>y <font color="#000080">&lt; </font><font color="#800000">128 </font><font color="#000080">- </font>MaxHeight <font color="#FF0000"><b>then
+      </b></font>y <font color="#000080">:= </font><font color="#800000">128 </font><font color="#000080">- </font>MaxHeight<font color="#000080">;
+
+    </font>NewX <font color="#000080">:= </font>x <font color="#FF0000"><b>div </b></font>d<font color="#000080">;
+    </font>PutDot<font color="#000080">(</font>NewX <font color="#000080">+ </font>XStart<font color="#000080">, </font>OldDots<font color="#000080">[</font>x<font color="#000080">] + </font>YMid <font color="#000080">- </font><font color="#800000">128</font><font color="#000080">, </font>ColorBack<font color="#000080">);
+    </font>PutDot<font color="#000080">(</font>NewX <font color="#000080">+ </font>XStart<font color="#000080">, </font>y <font color="#000080">+ </font>YMid <font color="#000080">- </font><font color="#800000">128</font><font color="#000080">, </font>y <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">);
+    </font>OldDots<font color="#000080">[</font>x<font color="#000080">] := </font>y<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>keypressed <font color="#FF0000"><b>then
+  begin    </b></font><font color="#008000"><i>{pause}
+    </i></font>Ch <font color="#000080">:= </font>ReadKey<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Ch <font color="#000080">= </font><font color="#800000">#32 </font><font color="#FF0000"><b>then
+      repeat until </b></font>keypressed<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Init<font color="#000080">;    </font><font color="#008000"><i>{initialize all the variables}
+</i></font><font color="#FF0000"><b>var
+  </b></font>N <font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>InitVideo<font color="#000080">(</font><font color="#800000">$13</font><font color="#000080">, </font>TRUE<font color="#000080">);
+  </font>Ch        <font color="#000080">:= </font><font color="#800000">#0</font><font color="#000080">;
+  </font>XMax      <font color="#000080">:= </font><font color="#800000">319</font><font color="#000080">;
+  </font>XMid      <font color="#000080">:= </font>XMax <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">;
+  </font>YMax      <font color="#000080">:= </font><font color="#800000">199</font><font color="#000080">;
+  </font>YMid      <font color="#000080">:= </font>YMax <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">;
+  </font>XInt      <font color="#000080">:= </font><font color="#800000">10</font><font color="#000080">;
+  </font>XWidth    <font color="#000080">:= </font><font color="#800000">280</font><font color="#000080">;
+  </font>XStart    <font color="#000080">:= </font>XMid <font color="#000080">- </font>XWidth <font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">;
+  </font>MaxHeight <font color="#000080">:= </font><font color="#800000">60</font><font color="#000080">;
+  </font>Color     <font color="#000080">:= </font><font color="#800000">9</font><font color="#000080">;
+  </font>ColorBack <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>SquareFill<font color="#000080">(</font>XStart<font color="#000080">-</font><font color="#800000">10</font><font color="#000080">, </font>YMid<font color="#000080">-</font>MaxHeight<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">-</font><font color="#800000">10</font><font color="#000080">, </font>XStart<font color="#000080">+</font>XWidth<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">+</font><font color="#800000">10</font><font color="#000080">, </font>YMid<font color="#000080">+</font>MaxHeight<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">+</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">);
+  </font>SquareFill<font color="#000080">(</font>XStart<font color="#000080">, </font>YMid<font color="#000080">-</font>MaxHeight<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">, </font>XStart<font color="#000080">+</font>XWidth<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>YMid<font color="#000080">+</font>MaxHeight<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>ColorBack<font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>N <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>MaxOldDots <font color="#FF0000"><b>do
+    </b></font>OldDots<font color="#000080">[</font>N<font color="#000080">] := </font><font color="#800000">128</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ResetSb <font color="#FF0000"><b>then</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Init<font color="#000080">;
+  </font>SetMixer<font color="#000080">(</font>ADCChannel<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);   </font><font color="#008000"><i>{Sets the ADC channel to MIC}
+
+  {NOTE: I don't know if the mixer routines will work on any other
+         SB. If something stalls, then exclude the mixer statements
+         If you want to use the LINE-IN, then SetMixer(ADCChannel, 6);}
+
+  </i></font><font color="#FF0000"><b>While </b></font>Ch <font color="#000080">&lt;&gt; </font><font color="#800000">#27 </font><font color="#FF0000"><b>do </b></font>ShowDots<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);    </font><font color="#008000"><i>{This value is a time constant}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0032.PAS">Original</a><b>]</b></p></body>
+</html>

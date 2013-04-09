@@ -1,0 +1,908 @@
+<html>
+<head><title> "Create Virtual Screens in RAM" by STEFFEN UNGER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SCREEN SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0103.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(* this one is a small unit creating (up to 10) virtual screens in RAM. It's
+   some kind of thrown-together code, so feel free to optimize it somehow.
+   the viewer could be done using linked lists, for instance... :-)
+   The unit is absolutely FREE. You are not even asked for crediting me...
+   I donate it to SWAG.
+
+   If you optimized it, please re-donate it to SWAG, so we can ALL
+   have the profits.
+
+   Done by KLAUSI, (aka Steffen Unger)
+   contact:
+           NICK'S BOX - +49 3741 223617
+           e-mail     - systemklaus@t-online.de
+           snail mail - Steffen Unger
+                        Baerenstr. 9
+                        D-08523 Plauen
+                        GERMANY
+   Have fun!
+
+   PS. Sorry for the partly German remarks, i was too lazy to
+   translate them all ;-)
+*)
+
+
+
+
+
+
+{$M 8192,0,655300}
+{$G+,X+}
+</i></font><font color="#FF0000"><b>unit </b></font>vscreen<font color="#000080">;
+</font><font color="#FF0000"><b>interface
+
+uses </b></font>dos<font color="#000080">,</font>crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>type </b></font>vptr<font color="#000080">=^</font>vs<font color="#000080">; </font><font color="#008000"><i>{pointer to a virtual screen}
+     </i></font>vs<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3999</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{one screen}
+
+     </i></font>vpa<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>vptr<font color="#000080">; </font><font color="#008000"><i>{10 virtual screens}
+
+     </i></font>s80<font color="#000080">=</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">80</font><font color="#000080">]; </font><font color="#008000"><i>{common type for one string, that fits 80x25}
+
+     </i></font>pwin<font color="#000080">=^</font>twin<font color="#000080">; </font><font color="#008000"><i>{pointer to a window-data-record}
+     </i></font>twin<font color="#000080">=</font><font color="#FF0000"><b>record
+      </b></font>closerpos<font color="#000080">:</font>shortint<font color="#000080">;
+      </font>typ<font color="#000080">,</font>rahmen<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>{typ  = position of title, rahmen=frame type
+                               (see definition below)}
+      </i></font>l<font color="#000080">,</font>o<font color="#000080">,</font>br<font color="#000080">,</font>ho<font color="#000080">:</font>shortint<font color="#000080">;  </font><font color="#008000"><i>{l/o  = upper left corner of the window,
+                        br/ho= width/height of window}
+      </i></font>raf<font color="#000080">,</font>arbf<font color="#000080">,
+      </font>titf<font color="#000080">,</font>shadf<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>{raf/arbf/titf/shadf=
+                        frame-workarea-title-shadow colors}
+      </i></font>titel<font color="#000080">:</font>s80<font color="#000080">;       </font><font color="#008000"><i>{titel = title}
+      </i></font>shadow<font color="#000080">:</font>boolean<font color="#000080">;  </font><font color="#008000"><i>{should the window be shadowed ?}
+      </i></font>ismove<font color="#000080">,</font>isresize<font color="#000080">:</font>boolean<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>VGA<font color="#000080">:</font>BOOLEAN<font color="#000080">=</font>TRUE<font color="#000080">;         </font><font color="#008000"><i>{TRUE, if a VGA present}
+      </i></font>MONO<font color="#000080">:</font>BOOLEAN<font color="#000080">=</font>TRUE<font color="#000080">;        </font><font color="#008000"><i>{TRUE if there is a mono display?}
+      </i></font>nkey<font color="#000080">:</font>char<font color="#000080">=</font><font color="#800000">#0</font><font color="#000080">;             </font><font color="#008000"><i>{dummy for function keys read by readkey}
+      </i></font>ismaus<font color="#000080">:</font>boolean<font color="#000080">=</font>false<font color="#000080">;     </font><font color="#008000"><i>{is there a mouse connected ?}
+      </i></font>tmaxwin<font color="#000080">=</font><font color="#800000">15</font><font color="#000080">;               </font><font color="#008000"><i>{max. count of windows. play with it...}
+      </i></font>isblink<font color="#000080">:</font>boolean<font color="#000080">=</font>true<font color="#000080">;     </font><font color="#008000"><i>{high background active?}
+
+</i></font><font color="#FF0000"><b>var </b></font>ms<font color="#000080">:</font>vpa<font color="#000080">; </font><font color="#008000"><i>{holds the virtual screens in ram}
+    </i></font>savecurs<font color="#000080">:</font>word<font color="#000080">; </font><font color="#008000"><i>{last cursor-size}
+    </i></font>winds<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>tmaxwin<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>pwin<font color="#000080">; </font><font color="#008000"><i>{array of tmaxwin+1 records(TWIN)}
+    </i></font>maxwin<font color="#000080">,</font>aktwin<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>{maxwin = count of windows stored
+                         aktwin = current window-number}
+    </i></font>mx<font color="#000080">,</font>my<font color="#000080">:</font>word<font color="#000080">;         </font><font color="#008000"><i>{mouse-coordinates}
+    </i></font>but<font color="#000080">:</font>byte<font color="#000080">;           </font><font color="#008000"><i>{mousebutton # pressed}
+
+{Procedures}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>waitms<font color="#000080">(</font>x<font color="#000080">:</font>word<font color="#000080">);      </font><font color="#008000"><i>{machine independent delay}
+</i></font><font color="#FF0000"><b>function </b></font>up<font color="#000080">(</font>ch<font color="#000080">:</font>char<font color="#000080">):</font>char<font color="#000080">;     </font><font color="#008000"><i>{&quot;GERMAN&quot; upcase}
+</i></font><font color="#FF0000"><b>function </b></font>ups<font color="#000080">(</font>s<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">):</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#008000"><i>{&quot;GERMAN&quot; string-upcase}
+</i></font><font color="#FF0000"><b>function </b></font>readkey<font color="#000080">:</font>char<font color="#000080">;         </font><font color="#008000"><i>{replacement of crt.rreadkey, which misses
+                                some keys}
+</i></font><font color="#FF0000"><b>procedure </b></font>retrace<font color="#000080">;             </font><font color="#008000"><i>{wait for retrace}
+</i></font><font color="#FF0000"><b>procedure </b></font>checkvga<font color="#000080">;            </font><font color="#008000"><i>{checks presence of vga and sets VGA and MONO}
+</i></font><font color="#FF0000"><b>procedure </b></font>newscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);     </font><font color="#008000"><i>{get a new screenpointer}
+</i></font><font color="#FF0000"><b>procedure </b></font>getscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);     </font><font color="#008000"><i>{get a new scnpointer and copy scn currently shown}
+</i></font><font color="#FF0000"><b>procedure </b></font>copyscn<font color="#000080">(</font>fromscn<font color="#000080">,</font>toscn<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{copy pages in virtual scn-area}
+</i></font><font color="#FF0000"><b>procedure </b></font>clearscn<font color="#000080">(</font>nr<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{clear one virtual screen using color COLOR}
+</i></font><font color="#FF0000"><b>procedure </b></font>putscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);  </font><font color="#008000"><i>{put screen NR onto the monitor}
+</i></font><font color="#FF0000"><b>procedure </b></font>killscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{frees the memory used by one vscreen(NR)}
+</i></font><font color="#FF0000"><b>procedure </b></font>freescn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{re-displays the screen (NR) and then kills it}
+</i></font><font color="#FF0000"><b>procedure </b></font>blinken<font color="#000080">(</font>an<font color="#000080">:</font>boolean<font color="#000080">); </font><font color="#008000"><i>{if VGA then switches bright background (TRUE=ON)}
+</i></font><font color="#FF0000"><b>procedure </b></font>cursor<font color="#000080">(</font>an<font color="#000080">:</font>boolean<font color="#000080">);  </font><font color="#008000"><i>{shows (TRUE) or hides (FALSE) the cursor}
+</i></font><font color="#FF0000"><b>function </b></font>vcol<font color="#000080">(</font>color<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">; </font><font color="#008000"><i>{this manages the colors shown, if VGA and blink or MONO...}
+</i></font><font color="#FF0000"><b>function </b></font>z<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>byte<font color="#000080">):</font>integer<font color="#000080">;     </font><font color="#008000"><i>{returns the location of a single CHAR in vscn-array}
+</i></font><font color="#FF0000"><b>function </b></font>f<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>byte<font color="#000080">):</font>integer<font color="#000080">;     </font><font color="#008000"><i>{does the same for the attribute}
+</i></font><font color="#FF0000"><b>procedure </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">,</font>farbe<font color="#000080">:</font>byte<font color="#000080">;</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">); </font><font color="#008000"><i>{puts a string into vscreen-ram.
+                                             if farbe &lt; $ff then the color is set too.}
+</i></font><font color="#FF0000"><b>procedure </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">,</font>l<font color="#000080">,</font>farbe<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{changes the color of a line in vscn(NR), starting
+                                       at x,y and running over length(L)}
+</i></font><font color="#FF0000"><b>function </b></font>rp<font color="#000080">(</font>c<font color="#000080">:</font>char<font color="#000080">;</font>cnt<font color="#000080">:</font>byte<font color="#000080">):</font>s80<font color="#000080">; </font><font color="#008000"><i>{expands char (C) into a string of length(CNT)}
+</i></font><font color="#FF0000"><b>procedure </b></font>window<font color="#000080">(</font>anr<font color="#000080">,</font>nr<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{puts SAVED! window nr(ANR) into screen (NR)}
+{,typ,rahmen,l,o,br,ho,raf,arbf,shadf,titf:byte;
+                 titel:s80;shadow:boolean);}
+</i></font><font color="#FF0000"><b>procedure </b></font>vsinit<font color="#000080">; </font><font color="#008000"><i>{initialises ALL vscreens (0..9).}
+</i></font><font color="#FF0000"><b>procedure </b></font>vsfree<font color="#000080">; </font><font color="#008000"><i>{frees ALL (0..9) vscreens}
+</i></font><font color="#FF0000"><b>procedure </b></font>winsave<font color="#000080">(</font>anr<font color="#000080">,</font>typo<font color="#000080">,</font>rahme<font color="#000080">:</font>byte<font color="#000080">;</font>li<font color="#000080">,</font>ob<font color="#000080">,</font>brt<font color="#000080">,</font>hoh<font color="#000080">:</font>byte<font color="#000080">;</font>ra<font color="#000080">,</font>arb<font color="#000080">,</font>shad<font color="#000080">,</font>tit<font color="#000080">:</font>byte<font color="#000080">;</font>titl<font color="#000080">:</font>s80<font color="#000080">;</font>sha<font color="#000080">:</font>boolean<font color="#000080">;</font>mv<font color="#000080">,</font>res<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#008000"><i>{creates a new entry in the windows list, which can be displayed later}
+</i></font><font color="#FF0000"><b>procedure </b></font>hwin<font color="#000080">(</font>nr<font color="#000080">,</font>typ<font color="#000080">,</font>rahmen<font color="#000080">,</font>l<font color="#000080">,</font>o<font color="#000080">,</font>br<font color="#000080">,</font>ho<font color="#000080">,</font>raf<font color="#000080">,</font>arbf<font color="#000080">,</font>shadf<font color="#000080">,</font>titf<font color="#000080">:</font>byte<font color="#000080">;</font>titel<font color="#000080">:</font>s80<font color="#000080">;</font>shadow<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#008000"><i>{creates an UNSAVED window in screen (ANR), for help or so...}
+</i></font><font color="#FF0000"><b>procedure </b></font>winget<font color="#000080">(</font>nr<font color="#000080">,</font>vnr<font color="#000080">:</font>byte<font color="#000080">;</font>all<font color="#000080">:</font>boolean<font color="#000080">); </font><font color="#008000"><i>{activates window(NR) on vscreen(VNR)}
+</i></font><font color="#FF0000"><b>procedure </b></font>winwrite<font color="#000080">(</font>ys<font color="#000080">,</font>nr<font color="#000080">,</font>snr<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">;</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">); </font><font color="#008000"><i>{write a string into window}
+</i></font><font color="#FF0000"><b>procedure </b></font>winkill<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#008000"><i>{kill window-record(NR) from heap}
+</i></font><font color="#FF0000"><b>procedure </b></font>minit<font color="#000080">; </font><font color="#008000"><i>{init mouse and set ISMAUS.}
+</i></font><font color="#FF0000"><b>procedure </b></font>weg<font color="#000080">;   </font><font color="#008000"><i>{HIDE mouse pointer}
+</i></font><font color="#FF0000"><b>procedure </b></font>zeig<font color="#000080">;  </font><font color="#008000"><i>{SHOW mouse pointer}
+</i></font><font color="#FF0000"><b>function </b></font>mausx<font color="#000080">:</font>integer<font color="#000080">; </font><font color="#008000"><i>{x-coordinate of the mouse}
+</i></font><font color="#FF0000"><b>function </b></font>mausy<font color="#000080">:</font>integer<font color="#000080">; </font><font color="#008000"><i>{y-coordinate of the mouse}
+</i></font><font color="#FF0000"><b>function </b></font>button<font color="#000080">:</font>byte<font color="#000080">;</font><font color="#008000"><i>{number of the button pressed}
+</i></font><font color="#FF0000"><b>function </b></font>mausxy<font color="#000080">(</font>l<font color="#000080">,</font>o<font color="#000080">,</font>r<font color="#000080">,</font>u<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">; </font><font color="#008000"><i>{check range(L,O,R,U) if mouse is within}
+</i></font><font color="#FF0000"><b>procedure </b></font>mauspos<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>{set x,y-position of mouse-pointer}
+</i></font><font color="#FF0000"><b>procedure </b></font>mausbereich<font color="#000080">(</font>l<font color="#000080">,</font>o<font color="#000080">,</font>r<font color="#000080">,</font>u<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>{shrink mouse-range to (L,O,R,U)}
+
+{these parts depend on the simple textviewer}
+
+</i></font><font color="#FF0000"><b>const </b></font>tmaxzeilen<font color="#000080">=</font><font color="#800000">2500</font><font color="#000080">;  </font><font color="#008000"><i>{since one string is max 159 chars long,max-lines=2500}
+      </i></font>xoffs<font color="#000080">:</font>byte<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;     </font><font color="#008000"><i>{number of char in string to be shown leftmost (for horizontal scroll)}
+
+</i></font><font color="#FF0000"><b>type </b></font>zp<font color="#000080">=^</font>zeile<font color="#000080">;         </font><font color="#008000"><i>{pointer to ONE line}
+     </i></font>zeile<font color="#000080">=</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">159</font><font color="#000080">];  </font><font color="#008000"><i>{Max: 159 chars= 160 bytes}
+     </i></font>zeilen<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>tmaxzeilen<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>zp<font color="#000080">;
+     </font><font color="#008000"><i>{line-array, which holds all lines read}
+
+</i></font><font color="#FF0000"><b>var </b></font>tf<font color="#000080">:</font>text<font color="#000080">; </font><font color="#008000"><i>{textfile to read}
+    </i></font>zmax<font color="#000080">,</font>zakt<font color="#000080">:</font>integer<font color="#000080">; </font><font color="#008000"><i>{ZMAX=number of lines read, ZAKT=current startline in display-range.}
+    </i></font>ch<font color="#000080">:</font>char<font color="#000080">; </font><font color="#008000"><i>{key pressed}
+    </i></font>ze<font color="#000080">:</font>zeilen<font color="#000080">; </font><font color="#008000"><i>{here are the lines read}
+    </i></font>tcol<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>{color for text-display}
+
+
+</i></font><font color="#FF0000"><b>function </b></font>doxor<font color="#000080">(</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">):</font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#008000"><i>{a very simple en-/decoding algorithm (XOR 13)}
+</i></font><font color="#FF0000"><b>function </b></font>readin<font color="#000080">(</font>f<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">):</font>boolean<font color="#000080">; </font><font color="#008000"><i>{read textfile into array(ZEILEN). False if failed}
+</i></font><font color="#FF0000"><b>procedure </b></font>display<font color="#000080">(</font>nr<font color="#000080">,</font>pxpos<font color="#000080">,</font>x<font color="#000080">,</font>ys<font color="#000080">,</font>zrange<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">;</font>mitxor<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#008000"><i>{this is the viewer thng.NR=number of vscreen to write to,
+ pxpos= xposition of line-counter,
+ x,sy = leftmost/uppermost startposition of display,
+ zrange = nomber of lines to display in window,
+ color = display-color,
+ mitxor = TRUE, if the text is encoded using DOXOR and should be
+          decoded in viewer.}
+</i></font><font color="#FF0000"><b>procedure </b></font>cleanup<font color="#000080">; </font><font color="#008000"><i>{frees memory used by ZEILEN}
+
+
+</i></font><font color="#FF0000"><b>implementation
+
+procedure </b></font>retrace<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">mov dx,3dah
+ @vert1:
+  in al,dx
+  test al,8
+  jz @vert1
+ @vert2:
+  in al,dx
+  test al,8
+  jnz @vert2
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>minit<font color="#000080">;
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ismaus,1;mov ax,0;int 33h;cmp ax,0;jz @nixmaus;jmp @raus;
+@nixmaus: mov ismaus,0;@raus: </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>weg<font color="#000080">;
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ax,2;int 33h </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>zeig<font color="#000080">;
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ax,1;int 33h </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>mausx<font color="#000080">:</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ax,3;int 33h;shr cx,3;mov @result,cx </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>mausy<font color="#000080">:</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ax,3;int 33h;shr dx,3;mov @result,dx </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>button<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ax,3;int 33h;mov @result,bl </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>mausxy<font color="#000080">(</font>l<font color="#000080">,</font>o<font color="#000080">,</font>r<font color="#000080">,</font>u<font color="#000080">:</font>word<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>mx<font color="#000080">,</font>my<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin </b></font>mx<font color="#000080">:=</font>mausx<font color="#000080">;</font>my<font color="#000080">:=</font>mausy<font color="#000080">;</font>mausxy<font color="#000080">:=((</font>mx<font color="#000080">&gt;=</font>l<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>mx<font color="#000080">&lt;=</font>r<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">((</font>my<font color="#000080">&gt;=</font>o<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>my<font color="#000080">&lt;=</font>u<font color="#000080">));</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>mauspos<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>word<font color="#000080">);
+</font><font color="#FF0000"><b>begin asm </b></font><font color="#FF00FF">mov ax,4;mov cx,x;mov dx,y;shr cx,3;shr dx,3; int 33h;</font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>mausbereich<font color="#000080">(</font>l<font color="#000080">,</font>o<font color="#000080">,</font>r<font color="#000080">,</font>u<font color="#000080">:</font>word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ asm </b></font><font color="#FF00FF">mov ax,7;mov cx,l;mov dx,r;shr cx,3;shr dx,3;int 33h;
+     mov ax,8;mov cx,o;mov dx,u;shr cx,3;shr dx,3;int 33h </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>waitms<font color="#000080">(</font>x<font color="#000080">:</font>word<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm           </b></font><font color="#008000"><i>{ delay.. }
+ </i></font><font color="#FF00FF">mov ax,x;mov bx,1000;mul bx;mov cx,dx;mov dx,ax;mov ax,$8600;int $15
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>up<font color="#000080">(</font>ch<font color="#000080">:</font>char<font color="#000080">):</font>char<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>cc<font color="#000080">:</font>char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ case </b></font>ch <font color="#FF0000"><b>of
+  </b></font><font color="#800000">'Ñ'</font><font color="#000080">:</font>cc<font color="#000080">:=</font><font color="#800000">'é'</font><font color="#000080">;
+  </font><font color="#800000">'î'</font><font color="#000080">:</font>cc<font color="#000080">:=</font><font color="#800000">'&trade;'</font><font color="#000080">;
+  </font><font color="#800000">'Å'</font><font color="#000080">:</font>cc<font color="#000080">:=</font><font color="#800000">'ö'</font><font color="#000080">;
+ </font><font color="#FF0000"><b>else </b></font>cc<font color="#000080">:=</font>upcase<font color="#000080">(</font>ch<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>up<font color="#000080">:=</font>cc<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ups<font color="#000080">(</font>s<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">):</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>l<font color="#000080">:</font>byte<font color="#000080">;</font>ss<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin </b></font>ss<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;</font><font color="#FF0000"><b>for </b></font>l<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>ss<font color="#000080">:=</font>ss<font color="#000080">+</font>up<font color="#000080">(</font>s<font color="#000080">[</font>l<font color="#000080">]);</font>ups<font color="#000080">:=</font>ss<font color="#000080">; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>altpressed<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin </b></font>altpressed<font color="#000080">:=(</font>mem<font color="#000080">[</font><font color="#800000">$0</font><font color="#000080">:</font><font color="#800000">$417</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">8 </font><font color="#000080">= </font><font color="#800000">8</font><font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>readkey<font color="#000080">:</font>char<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>res<font color="#000080">,</font>nk<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>nkey<font color="#000080">&lt;&gt;</font><font color="#800000">#0 </font><font color="#FF0000"><b>then begin
+   </b></font>readkey<font color="#000080">:=</font>nkey<font color="#000080">;</font>nkey<font color="#000080">:=</font><font color="#800000">#0</font><font color="#000080">;</font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+   </b></font><font color="#FF00FF">mov nk,0
+   mov ah,$10
+   int 16h
+   cmp al,0
+   jz @fkey
+   cmp al,$e0
+   jz @fkey
+   mov res,al
+   jmp @raus
+ @fkey:
+   mov res,0
+   mov nk,ah
+ @raus:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>nkey<font color="#000080">:=</font>chr<font color="#000080">(</font>nk<font color="#000080">);
+  </font>readkey<font color="#000080">:=</font>chr<font color="#000080">(</font>res<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CheckVga<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>r<font color="#000080">:</font>REGISTERS<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>r<font color="#000080">.</font>ax<font color="#000080">:=</font><font color="#800000">$1a00</font><font color="#000080">; </font><font color="#008000"><i>{Funktion 26 des Interrupts 16 (Bildschirmsteuerung).}
+  </i></font>intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">,</font>r<font color="#000080">);
+  </font>VGA<font color="#000080">:=(</font>r<font color="#000080">.</font>al<font color="#000080">=</font><font color="#800000">$1a</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>r<font color="#000080">.</font>bl <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">]);
+  </font><font color="#008000"><i>{Gibt die Funktion 26 zurÅck, ist eine EGA/VGA Karte vorhanden.
+   Die Werte 4,5,7,8 geben an, ob ein Schwaz/Wei&aacute; ode Farbbilschirm
+   angeschlossen ist.}
+  </i></font><font color="#FF0000"><b>IF </b></font>VGA <font color="#FF0000"><b>THEN
+    </b></font><font color="#008000"><i>{Ist eine EGA/VGA da, gilt: bei Werten 5 und 7 existiert ein
+     Schwarz/Wei&aacute; - Monitor.}
+    </i></font>MONO<font color="#000080">:=((</font>r<font color="#000080">.</font>bl<font color="#000080">=</font><font color="#800000">5</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>r<font color="#000080">.</font>bl<font color="#000080">=</font><font color="#800000">7</font><font color="#000080">))
+  </font><font color="#FF0000"><b>ELSE
+    </b></font><font color="#008000"><i>{Ist keine VGA da, bedeutet LASTMODE=7: Monochrommonitor}
+    </i></font>MONO<font color="#000080">:=(</font>mem<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">:</font><font color="#800000">$449</font><font color="#000080">]=</font><font color="#800000">7</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>VSeg<font color="#000080">:</font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>VSeg<font color="#000080">:=</font><font color="#800000">$b800</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>mem<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">:</font><font color="#800000">$449</font><font color="#000080">]=</font><font color="#800000">7 </font><font color="#FF0000"><b>THEN
+    </b></font>VSeg<font color="#000080">:=</font><font color="#800000">$b000</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>newscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ if </b></font>nr<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+ </font>new<font color="#000080">(</font>ms<font color="#000080">[</font>nr<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>getscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ if </b></font>nr<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+ </font>new<font color="#000080">(</font>ms<font color="#000080">[</font>nr<font color="#000080">]);
+ </font>move<font color="#000080">(</font>ptr<font color="#000080">(</font>vseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)^,</font>ms<font color="#000080">[</font>nr<font color="#000080">]^,</font><font color="#800000">4000</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>copyscn<font color="#000080">(</font>fromscn<font color="#000080">,</font>toscn<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ if </b></font>fromscn<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then begin </b></font>move<font color="#000080">(</font>ptr<font color="#000080">(</font>vseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)^,</font>ms<font color="#000080">[</font>toscn<font color="#000080">]^,</font><font color="#800000">4000</font><font color="#000080">);</font>exit <font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>toscn<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then begin </b></font>move<font color="#000080">(</font>ms<font color="#000080">[</font>fromscn<font color="#000080">]^,</font>ptr<font color="#000080">(</font>vseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)^,</font><font color="#800000">4000</font><font color="#000080">);</font>exit <font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>move<font color="#000080">(</font>ms<font color="#000080">[</font>fromscn<font color="#000080">]^,</font>ms<font color="#000080">[</font>toscn<font color="#000080">]^,</font><font color="#800000">4000</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>clearscn<font color="#000080">(</font>nr<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>z<font color="#000080">,</font>s<font color="#000080">:</font>byte<font color="#000080">;</font>fw<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>fw<font color="#000080">:=</font><font color="#800000">$2000 </font><font color="#FF0000"><b>or </b></font>color<font color="#000080">;
+ </font><font color="#FF0000"><b>for </b></font>z<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">24 </font><font color="#FF0000"><b>do
+  for </b></font>s<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">80 </font><font color="#FF0000"><b>do </b></font>memw<font color="#000080">[</font>seg<font color="#000080">(</font>ms<font color="#000080">):(</font>z<font color="#000080">+</font>s<font color="#000080">)]:=</font>fw
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>putscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ </b></font>retrace<font color="#000080">;
+ </font>move<font color="#000080">(</font>ms<font color="#000080">[</font>nr<font color="#000080">]^,</font>ptr<font color="#000080">(</font>vseg<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">)^,</font><font color="#800000">4000</font><font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>killscn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ </b></font>dispose<font color="#000080">(</font>ms<font color="#000080">[</font>nr<font color="#000080">])
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>freescn<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ </b></font>putscn<font color="#000080">(</font>nr<font color="#000080">);</font>killscn<font color="#000080">(</font>nr<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Blinken<font color="#000080">(</font>an<font color="#000080">:</font>BOOLEAN<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  IF NOT </b></font>VGA <font color="#FF0000"><b>THEN </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ax,$1003
+    mov bl,an
+    int 10h
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>isblink<font color="#000080">:=</font>an<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Cursor<font color="#000080">(</font>an<font color="#000080">:</font>BOOLEAN<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  IF NOT </b></font>an <font color="#FF0000"><b>THEN
+  asm
+    </b></font><font color="#FF00FF">mov ax,$0300
+    int 10h
+    mov SaveCurs,cx
+    mov ax,$0100
+    mov cx,$2000
+    int 10h
+  </font><font color="#FF0000"><b>end
+  ELSE
+  asm
+    </b></font><font color="#FF00FF">mov ax,$0100
+    mov cx,SaveCurs
+    int 10h
+  </font><font color="#FF0000"><b>end
+End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>vcol<font color="#000080">(</font>color<font color="#000080">:</font>byte<font color="#000080">):</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>vcol<font color="#000080">:=</font>color<font color="#000080">;
+ </font><font color="#FF0000"><b>if not</b></font><font color="#000080">(</font>vga<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>isblink<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>color<font color="#000080">:=</font>color <font color="#FF0000"><b>and </b></font><font color="#800000">$7f</font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>mono <font color="#FF0000"><b>then begin
+  if </b></font>color <font color="#FF0000"><b>and </b></font><font color="#800000">$ff</font><font color="#000080">&gt;</font><font color="#800000">$f </font><font color="#FF0000"><b>then </b></font>color<font color="#000080">:=</font><font color="#800000">70</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>color <font color="#FF0000"><b>and </b></font><font color="#800000">$ff</font><font color="#000080">&gt;</font><font color="#800000">7 </font><font color="#FF0000"><b>then </b></font>color<font color="#000080">:=</font><font color="#800000">$F</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>color <font color="#FF0000"><b>and </b></font><font color="#800000">$ff</font><font color="#000080">&lt;</font><font color="#800000">8 </font><font color="#FF0000"><b>then </b></font>color<font color="#000080">:=</font><font color="#800000">$7
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>vcol<font color="#000080">:=</font>color
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Z<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>BYTE<font color="#000080">):</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Z<font color="#000080">:=((</font>Pred<font color="#000080">(</font>y<font color="#000080">)*</font><font color="#800000">160</font><font color="#000080">)+(</font>x <font color="#FF0000"><b>SHL </b></font><font color="#800000">1</font><font color="#000080">)-</font><font color="#800000">2</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>F<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">:</font>BYTE<font color="#000080">):</font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>F<font color="#000080">:=</font>Succ<font color="#000080">(</font>Z<font color="#000080">(</font>x<font color="#000080">,</font>y<font color="#000080">));
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">,</font>farbe<font color="#000080">:</font>byte<font color="#000080">;</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>l<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ for </b></font>l<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>do begin
+  if </b></font>nr<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then
+   </b></font>mem<font color="#000080">[</font>vseg<font color="#000080">:</font>z<font color="#000080">(</font>x<font color="#000080">+</font>pred<font color="#000080">(</font>l<font color="#000080">),</font>y<font color="#000080">)]:=</font>ord<font color="#000080">(</font>s<font color="#000080">[</font>l<font color="#000080">])
+  </font><font color="#FF0000"><b>else
+   </b></font>ms<font color="#000080">[</font>nr<font color="#000080">]^[</font>z<font color="#000080">(</font>x<font color="#000080">+</font>pred<font color="#000080">(</font>l<font color="#000080">),</font>y<font color="#000080">)]:=</font>ord<font color="#000080">(</font>s<font color="#000080">[</font>l<font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>farbe<font color="#000080">&lt;&gt;</font><font color="#800000">$ff </font><font color="#FF0000"><b>then begin
+   </b></font>farbe<font color="#000080">:=</font>vcol<font color="#000080">(</font>farbe<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>nr<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then
+     </b></font>mem<font color="#000080">[</font>vseg<font color="#000080">:</font>f<font color="#000080">(</font>x<font color="#000080">+</font>pred<font color="#000080">(</font>l<font color="#000080">),</font>y<font color="#000080">)]:=</font>farbe
+    <font color="#FF0000"><b>else
+     </b></font>ms<font color="#000080">[</font>nr<font color="#000080">]^[</font>f<font color="#000080">(</font>x<font color="#000080">+</font>pred<font color="#000080">(</font>l<font color="#000080">),</font>y<font color="#000080">)]:=</font>farbe
+  <font color="#FF0000"><b>end
+ end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">,</font>l<font color="#000080">,</font>farbe<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>bl<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ for </b></font>bl<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>l<font color="#000080">) </font><font color="#FF0000"><b>do begin
+   </b></font>farbe<font color="#000080">:=</font>vcol<font color="#000080">(</font>farbe<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>nr<font color="#000080">&gt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then
+     </b></font>mem<font color="#000080">[</font>vseg<font color="#000080">:</font>f<font color="#000080">(</font>x<font color="#000080">+</font>bl<font color="#000080">,</font>y<font color="#000080">)]:=</font>farbe
+    <font color="#FF0000"><b>else
+     </b></font>ms<font color="#000080">[</font>nr<font color="#000080">]^[</font>f<font color="#000080">(</font>x<font color="#000080">+</font>bl<font color="#000080">,</font>y<font color="#000080">)]:=</font>farbe
+ <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>RP<font color="#000080">(</font>c<font color="#000080">:</font>CHAR<font color="#000080">;</font>cnt<font color="#000080">:</font>BYTE<font color="#000080">):</font>S80<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>s<font color="#000080">:</font>S80<font color="#000080">;</font>b<font color="#000080">:</font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>s<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>b<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font>cnt <font color="#FF0000"><b>DO </b></font>s<font color="#000080">:=</font>s<font color="#000080">+</font>c<font color="#000080">;
+  </font>RP<font color="#000080">:=</font>s
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>hwin<font color="#000080">(</font>nr<font color="#000080">,</font>typ<font color="#000080">,</font>rahmen<font color="#000080">,</font>l<font color="#000080">,</font>o<font color="#000080">,</font>br<font color="#000080">,</font>ho<font color="#000080">,</font>raf<font color="#000080">,</font>arbf<font color="#000080">,</font>shadf<font color="#000080">,</font>titf<font color="#000080">:</font>byte<font color="#000080">;</font>titel<font color="#000080">:</font>s80<font color="#000080">;</font>shadow<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>ro<font color="#000080">:</font>byte<font color="#000080">;</font>oho<font color="#000080">,</font>lrm<font color="#000080">:</font>byte<font color="#000080">; </font>titlepos<font color="#000080">,</font>dc<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>rahf<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">=
+      ((</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">),
+       (</font><font color="#800000">'&Eacute;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">,</font><font color="#800000">'&raquo;'</font><font color="#000080">,</font><font color="#800000">'&ordm;'</font><font color="#000080">,</font><font color="#800000">'&Egrave;'</font><font color="#000080">,</font><font color="#800000">'&frac14;'</font><font color="#000080">,</font><font color="#800000">'&Igrave;'</font><font color="#000080">,</font><font color="#800000">'&sup1;'</font><font color="#000080">,</font><font color="#800000">'&Ccedil;'</font><font color="#000080">,</font><font color="#800000">'∂'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">),
+       (</font><font color="#800000">'&Otilde;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">,</font><font color="#800000">'&cedil;'</font><font color="#000080">,</font><font color="#800000">'&sup3;'</font><font color="#000080">,</font><font color="#800000">'&Ocirc;'</font><font color="#000080">,</font><font color="#800000">'&frac34;'</font><font color="#000080">,</font><font color="#800000">'&AElig;'</font><font color="#000080">,</font><font color="#800000">'&micro;'</font><font color="#000080">,</font><font color="#800000">'&Atilde;'</font><font color="#000080">,</font><font color="#800000">'&acute;'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">),
+       (</font><font color="#800000">'&Ouml;'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">,</font><font color="#800000">'&middot;'</font><font color="#000080">,</font><font color="#800000">'&ordm;'</font><font color="#000080">,</font><font color="#800000">'&Oacute;'</font><font color="#000080">,</font><font color="#800000">'&frac12;'</font><font color="#000080">,</font><font color="#800000">'&Ccedil;'</font><font color="#000080">,</font><font color="#800000">'∂'</font><font color="#000080">,</font><font color="#800000">'&Igrave;'</font><font color="#000080">,</font><font color="#800000">'&sup1;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">),
+       (</font><font color="#800000">'&Uacute;'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">,</font><font color="#800000">'&iquest;'</font><font color="#000080">,</font><font color="#800000">'&sup3;'</font><font color="#000080">,</font><font color="#800000">'&Agrave;'</font><font color="#000080">,</font><font color="#800000">'&Ugrave;'</font><font color="#000080">,</font><font color="#800000">'&Atilde;'</font><font color="#000080">,</font><font color="#800000">'&acute;'</font><font color="#000080">,</font><font color="#800000">'&AElig;'</font><font color="#000080">,</font><font color="#800000">'&micro;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">));
+
+</font><font color="#FF0000"><b>begin
+  </b></font>dec<font color="#000080">(</font>br<font color="#000080">);</font>dec<font color="#000080">(</font>ho<font color="#000080">);
+  </font>titlepos<font color="#000080">:=</font>o<font color="#000080">;</font>oho<font color="#000080">:=</font>o<font color="#000080">+</font>ho<font color="#000080">;</font>lrm<font color="#000080">:=</font>l<font color="#000080">+</font>br<font color="#000080">;
+  </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>o<font color="#000080">,</font>vcol<font color="#000080">(</font>raf<font color="#000080">),</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],</font>pred<font color="#000080">(</font>br<font color="#000080">))+</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>rahmen<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">,</font>o<font color="#000080">,</font>raf <font color="#FF0000"><b>and </b></font><font color="#800000">$f7</font><font color="#000080">,</font><font color="#800000">' &eth; '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>ro<font color="#000080">:=</font>succ<font color="#000080">(</font>o<font color="#000080">) </font><font color="#FF0000"><b>to </b></font>o<font color="#000080">+</font>pred<font color="#000080">(</font>ho<font color="#000080">) </font><font color="#FF0000"><b>do begin
+   </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>ro<font color="#000080">,</font>vcol<font color="#000080">(</font>raf<font color="#000080">),</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">]);</font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font>br<font color="#000080">,</font>ro<font color="#000080">,</font>vcol<font color="#000080">(</font>raf<font color="#000080">),</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">]);
+   </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>ro<font color="#000080">,</font>vcol<font color="#000080">(</font>arbf<font color="#000080">),</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>br<font color="#000080">)))
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>o<font color="#000080">+</font>ho<font color="#000080">,</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],</font>pred<font color="#000080">(</font>br<font color="#000080">)));
+  </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font>br<font color="#000080">,</font>o<font color="#000080">+</font>ho<font color="#000080">,</font>raf <font color="#FF0000"><b>and </b></font><font color="#800000">$f7</font><font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">5</font><font color="#000080">]);
+  </font><font color="#008000"><i>{Titel / Typart}
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>titel<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>br<font color="#000080">&gt;</font>length<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  case </b></font>typ <font color="#FF0000"><b>of
+   </b></font><font color="#800000">0</font><font color="#000080">:</font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">);
+   </font><font color="#800000">1</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &Igrave;&Iacute;&sup1;}
+       </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">6</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],
+       </font>pred<font color="#000080">(</font>br<font color="#000080">))+</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">7</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>br<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end</b></font><font color="#000080">;
+   </font><font color="#800000">2</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &Ccedil;&Auml;∂}
+      </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>vcol<font color="#000080">(</font>raf<font color="#000080">),</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">8</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">],
+       </font>pred<font color="#000080">(</font>br<font color="#000080">))+</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">9</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>br<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end</b></font><font color="#000080">;
+   </font><font color="#800000">3</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &ordm; &Iacute; &ordm;}
+       </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],</font>br<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>br<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end</b></font><font color="#000080">;
+   </font><font color="#800000">4</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &ordm; &Auml; &ordm;}
+       </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">],</font>br<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ho<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>br<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end
+  end</b></font><font color="#000080">;
+  </font>dc<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>shadow <font color="#FF0000"><b>then begin
+   </b></font>dc<font color="#000080">:=</font>succ<font color="#000080">(</font>o<font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>lrm<font color="#000080">&lt;</font><font color="#800000">79</font><font color="#000080">) </font><font color="#FF0000"><b>then
+   for </b></font>ro<font color="#000080">:=</font>dc <font color="#FF0000"><b>to </b></font>succ<font color="#000080">(</font>o<font color="#000080">+</font>ho<font color="#000080">) </font><font color="#FF0000"><b>do begin
+    if </b></font><font color="#000080">(</font>ro<font color="#000080">&lt;</font><font color="#800000">26</font><font color="#000080">) </font><font color="#FF0000"><b>then
+     </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">+</font>br<font color="#000080">),</font>ro<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font>vcol<font color="#000080">(</font>shadf<font color="#000080">));
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>lrm<font color="#000080">&lt;</font><font color="#800000">80 </font><font color="#FF0000"><b>then
+    for </b></font>ro<font color="#000080">:=</font>dc <font color="#FF0000"><b>to </b></font>succ<font color="#000080">(</font>o<font color="#000080">+</font>ho<font color="#000080">) </font><font color="#FF0000"><b>do begin
+     if </b></font><font color="#000080">(</font>ro<font color="#000080">&lt;</font><font color="#800000">26</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">+</font>br<font color="#000080">),</font>ro<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>vcol<font color="#000080">(</font>shadf<font color="#000080">));
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>oho<font color="#000080">&lt;</font><font color="#800000">25 </font><font color="#FF0000"><b>then </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">,</font>succ<font color="#000080">(</font>o<font color="#000080">+</font>ho<font color="#000080">),</font>pred<font color="#000080">(</font>br<font color="#000080">),</font>vcol<font color="#000080">(</font>shadf<font color="#000080">))
+  </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>window<font color="#000080">(</font>anr<font color="#000080">,</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>ro<font color="#000080">,</font>brr<font color="#000080">,</font>hoh<font color="#000080">,</font>oho<font color="#000080">,</font>lrm<font color="#000080">:</font>byte<font color="#000080">; </font>titlepos<font color="#000080">,</font>dc<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>rahf<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">=
+      ((</font><font color="#800000">'&Eacute;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">,</font><font color="#800000">'&raquo;'</font><font color="#000080">,</font><font color="#800000">'&ordm;'</font><font color="#000080">,</font><font color="#800000">'&Egrave;'</font><font color="#000080">,</font><font color="#800000">'&frac14;'</font><font color="#000080">,</font><font color="#800000">'&Igrave;'</font><font color="#000080">,</font><font color="#800000">'&sup1;'</font><font color="#000080">,</font><font color="#800000">'&Ccedil;'</font><font color="#000080">,</font><font color="#800000">'∂'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">),
+       (</font><font color="#800000">'&Otilde;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">,</font><font color="#800000">'&cedil;'</font><font color="#000080">,</font><font color="#800000">'&sup3;'</font><font color="#000080">,</font><font color="#800000">'&Ocirc;'</font><font color="#000080">,</font><font color="#800000">'&frac34;'</font><font color="#000080">,</font><font color="#800000">'&AElig;'</font><font color="#000080">,</font><font color="#800000">'&micro;'</font><font color="#000080">,</font><font color="#800000">'&Atilde;'</font><font color="#000080">,</font><font color="#800000">'&acute;'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">),
+       (</font><font color="#800000">'&Ouml;'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">,</font><font color="#800000">'&middot;'</font><font color="#000080">,</font><font color="#800000">'&ordm;'</font><font color="#000080">,</font><font color="#800000">'&Oacute;'</font><font color="#000080">,</font><font color="#800000">'&frac12;'</font><font color="#000080">,</font><font color="#800000">'&Ccedil;'</font><font color="#000080">,</font><font color="#800000">'∂'</font><font color="#000080">,</font><font color="#800000">'&Igrave;'</font><font color="#000080">,</font><font color="#800000">'&sup1;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">),
+       (</font><font color="#800000">'&Uacute;'</font><font color="#000080">,</font><font color="#800000">'&Auml;'</font><font color="#000080">,</font><font color="#800000">'&iquest;'</font><font color="#000080">,</font><font color="#800000">'&sup3;'</font><font color="#000080">,</font><font color="#800000">'&Agrave;'</font><font color="#000080">,</font><font color="#800000">'&Ugrave;'</font><font color="#000080">,</font><font color="#800000">'&Atilde;'</font><font color="#000080">,</font><font color="#800000">'&acute;'</font><font color="#000080">,</font><font color="#800000">'&AElig;'</font><font color="#000080">,</font><font color="#800000">'&micro;'</font><font color="#000080">,</font><font color="#800000">'&Iacute;'</font><font color="#000080">));
+
+</font><font color="#FF0000"><b>begin
+ with </b></font>winds<font color="#000080">[</font>anr<font color="#000080">]^</font><font color="#FF0000"><b>do begin
+  </b></font>brr<font color="#000080">:=</font>pred<font color="#000080">(</font>br<font color="#000080">);</font>hoh<font color="#000080">:=</font>pred<font color="#000080">(</font>ho<font color="#000080">);</font>oho<font color="#000080">:=</font>o<font color="#000080">+</font>hoh<font color="#000080">;</font>lrm<font color="#000080">:=</font>l<font color="#000080">+</font>brr<font color="#000080">;
+  </font>titlepos<font color="#000080">:=</font>o<font color="#000080">;
+  </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>o<font color="#000080">,</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],</font>pred<font color="#000080">(</font>brr<font color="#000080">))+</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">]);
+  </font><font color="#FF0000"><b>if </b></font>rahmen<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>closerpos<font color="#000080">,</font>o<font color="#000080">,</font>raf <font color="#FF0000"><b>and </b></font><font color="#800000">$f7</font><font color="#000080">,</font><font color="#800000">' &eth; '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>ro<font color="#000080">:=</font>succ<font color="#000080">(</font>o<font color="#000080">) </font><font color="#FF0000"><b>to </b></font>o<font color="#000080">+</font>pred<font color="#000080">(</font>hoh<font color="#000080">) </font><font color="#FF0000"><b>do begin
+   </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>ro<font color="#000080">,</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">]);</font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font>brr<font color="#000080">,</font>ro<font color="#000080">,</font>vcol<font color="#000080">(</font>raf<font color="#000080">),</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">3</font><font color="#000080">]);
+   </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>ro<font color="#000080">,</font>arbf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>brr<font color="#000080">)))
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>o<font color="#000080">+</font>hoh<font color="#000080">,</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">4</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],</font>pred<font color="#000080">(</font>brr<font color="#000080">)));
+  </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font>brr<font color="#000080">,</font>o<font color="#000080">+</font>hoh<font color="#000080">,</font>raf <font color="#FF0000"><b>and </b></font><font color="#800000">$f7</font><font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">5</font><font color="#000080">]);
+  </font><font color="#008000"><i>{Titel / Typart}
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>titel<font color="#000080">&lt;&gt;</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>br<font color="#000080">&gt;</font>length<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  case </b></font>typ <font color="#FF0000"><b>of
+   </b></font><font color="#800000">0</font><font color="#000080">:</font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+(</font>brr <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">);
+   </font><font color="#800000">1</font><font color="#000080">:</font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &Igrave;&Iacute;&sup1;}
+       </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">6</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],
+       </font>pred<font color="#000080">(</font>brr<font color="#000080">))+</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">7</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>brr<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">+(</font>brr <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">),</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end</b></font><font color="#000080">;
+   </font><font color="#800000">2</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &Ccedil;&Auml;∂}
+      </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">,</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">8</font><font color="#000080">]+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">],
+       </font>pred<font color="#000080">(</font>brr<font color="#000080">))+</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">9</font><font color="#000080">]);
+      </font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>brr<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">+(</font>brr <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">),</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end</b></font><font color="#000080">;
+   </font><font color="#800000">3</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &ordm; &Iacute; &ordm;}
+       </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">],</font>brr<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>brr<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">+(</font>brr <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">),</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end</b></font><font color="#000080">;
+   </font><font color="#800000">4</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Titel in Zeile 2 und Rahmen &ordm; &Auml; &ordm;}
+       </i></font>inc<font color="#000080">(</font>titlepos<font color="#000080">);</font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>succ<font color="#000080">(</font>titlepos<font color="#000080">),</font>raf<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>rp<font color="#000080">(</font>rahf<font color="#000080">[</font>rahmen<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">],</font>brr<font color="#000080">-</font><font color="#800000">3</font><font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>hoh<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+       </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">),</font>titlepos<font color="#000080">,</font>titf<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font>pred<font color="#000080">(</font>brr<font color="#000080">)));
+       </font>print<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">+(</font>brr <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">),</font>titlepos<font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">+</font>ups<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">' '</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+     end
+  end</b></font><font color="#000080">;</font>dc<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>shadow <font color="#FF0000"><b>then begin
+   </b></font>dc<font color="#000080">:=</font>succ<font color="#000080">(</font>o<font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>lrm<font color="#000080">&lt;</font><font color="#800000">79 </font><font color="#FF0000"><b>then
+    for </b></font>ro<font color="#000080">:=</font>dc <font color="#FF0000"><b>to </b></font><font color="#000080">(</font>o<font color="#000080">+</font>ho<font color="#000080">) </font><font color="#FF0000"><b>do begin
+     if </b></font><font color="#000080">(</font>ro<font color="#000080">&lt;</font><font color="#800000">26</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">+</font>brr<font color="#000080">),</font>ro<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font>vcol<font color="#000080">(</font>shadf<font color="#000080">));
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>lrm<font color="#000080">&lt;</font><font color="#800000">80 </font><font color="#FF0000"><b>then
+    for </b></font>ro<font color="#000080">:=</font>dc <font color="#FF0000"><b>to </b></font><font color="#000080">(</font>o<font color="#000080">+</font>ho<font color="#000080">) </font><font color="#FF0000"><b>do begin
+     if </b></font><font color="#000080">(</font>ro<font color="#000080">&lt;</font><font color="#800000">26</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>l<font color="#000080">+</font>brr<font color="#000080">),</font>ro<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>vcol<font color="#000080">(</font>shadf<font color="#000080">));
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>oho<font color="#000080">&lt;</font><font color="#800000">25 </font><font color="#FF0000"><b>then </b></font>balken<font color="#000080">(</font>nr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">,</font>succ<font color="#000080">(</font>o<font color="#000080">+</font>hoh<font color="#000080">),</font>pred<font color="#000080">(</font>brr<font color="#000080">),</font>vcol<font color="#000080">(</font>shadf<font color="#000080">))
+  </font><font color="#FF0000"><b>end
+ end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>vsinit<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>no<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ for </b></font>no<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">9 </font><font color="#FF0000"><b>do </b></font>getscn<font color="#000080">(</font>no<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>vsfree<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>no<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ for </b></font>no<font color="#000080">:=</font><font color="#800000">9 </font><font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do </b></font>killscn<font color="#000080">(</font>no<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Die Prozeduren aus dem Textbetrachter}
+
+</i></font><font color="#FF0000"><b>function </b></font>getmaxlength<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>lzeile<font color="#000080">:</font>integer<font color="#000080">;</font>maxlength<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>maxlength<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>for </b></font>lzeile<font color="#000080">:=</font><font color="#800000">2 </font><font color="#FF0000"><b>to </b></font>zmax <font color="#FF0000"><b>do begin
+  if </b></font><font color="#000080">(</font>length<font color="#000080">(</font>ze<font color="#000080">[</font>pred<font color="#000080">(</font>lzeile<font color="#000080">)]^)&gt;</font>length<font color="#000080">(</font>ze<font color="#000080">[</font>lzeile<font color="#000080">]^)) </font><font color="#FF0000"><b>and
+     </b></font><font color="#000080">(</font>maxlength<font color="#000080">&lt;</font>length<font color="#000080">(</font>ze<font color="#000080">[</font>pred<font color="#000080">(</font>lzeile<font color="#000080">)]^)) </font><font color="#FF0000"><b>then
+   </b></font>maxlength<font color="#000080">:=</font>length<font color="#000080">(</font>ze<font color="#000080">[</font>pred<font color="#000080">(</font>lzeile<font color="#000080">)]^)
+  </font><font color="#FF0000"><b>else
+   if </b></font>maxlength<font color="#000080">&lt;</font>length<font color="#000080">(</font>ze<font color="#000080">[</font>lzeile<font color="#000080">]^) </font><font color="#FF0000"><b>then
+   </b></font>maxlength<font color="#000080">:=</font>length<font color="#000080">(</font>ze<font color="#000080">[</font>lzeile<font color="#000080">]^);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>getmaxlength<font color="#000080">:=</font>maxlength<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>readin<font color="#000080">(</font>f<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>st<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>label </b></font>raus<font color="#000080">; </font><font color="#008000"><i>{Wenn was schieflief, wird dort hingesprungen.}
+</i></font><font color="#FF0000"><b>begin
+ </b></font>readin<font color="#000080">:=</font>false<font color="#000080">; </font><font color="#008000"><i>{Erstmal auf FALSCH setzen, das spart.}
+ </i></font>zmax<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{noch keine Zeile gelesen.}
+ </i></font>assign<font color="#000080">(</font>tf<font color="#000080">,</font>f<font color="#000080">); </font><font color="#008000"><i>{Der Textdatei einen Namen geben...}
+ {$i-}</i></font>reset<font color="#000080">(</font>tf<font color="#000080">);</font><font color="#008000"><i>{$i+} {&trade;ffnen (nicht neu anlegen).}
+ </i></font><font color="#FF0000"><b>if </b></font>ioresult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then goto </b></font>raus<font color="#000080">;
+ </font><font color="#FF0000"><b>while not</b></font><font color="#000080">(</font>eof<font color="#000080">(</font>tf<font color="#000080">)) </font><font color="#FF0000"><b>do begin  </b></font><font color="#008000"><i>{Lesen, bis Datei zuende.}
+  {$i-}</i></font>readln<font color="#000080">(</font>tf<font color="#000080">,</font>st<font color="#000080">);</font><font color="#008000"><i>{$i+}
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ioresult<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then goto </b></font>raus<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>st<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">#9</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+   </b></font>delete<font color="#000080">(</font>st<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);</font>st<font color="#000080">:=</font><font color="#800000">'        '</font><font color="#000080">+</font>st<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>zmax<font color="#000080">&lt;</font>tmaxzeilen <font color="#FF0000"><b>then begin </b></font><font color="#008000"><i>{Wenn weniger als 10 000 Zeilen}
+   </i></font>inc<font color="#000080">(</font>zmax<font color="#000080">); </font><font color="#008000"><i>{Zeilen:=Zeilen+1}
+   </i></font>new<font color="#000080">(</font>ze<font color="#000080">[</font>zmax<font color="#000080">]);</font>ze<font color="#000080">[</font>zmax<font color="#000080">]^:=</font>st<font color="#000080">; </font><font color="#008000"><i>{Platz fÅr neue Zeile holen und mit St fÅllen.}
+  </i></font><font color="#FF0000"><b>end else </b></font><font color="#008000"><i>{goto raus;}</i></font>break<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>readin<font color="#000080">:=</font>true<font color="#000080">; </font><font color="#008000"><i>{Wenn alles ok, dann TRUE zurÅckgeben.}
+</i></font>raus<font color="#000080">:
+ </font><font color="#008000"><i>{$i-}</i></font>close<font color="#000080">(</font>tf<font color="#000080">);</font><font color="#008000"><i>{$i+} </i></font><font color="#FF0000"><b>if </b></font>ioresult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font><font color="#000080">;
+ </font><font color="#008000"><i>{Datei wieder zu.}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>doxor<font color="#000080">(</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">):</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>st<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;</font>l<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>st<font color="#000080">:=</font>s<font color="#000080">;</font><font color="#FF0000"><b>for </b></font>l<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>st<font color="#000080">) </font><font color="#FF0000"><b>do </b></font>st<font color="#000080">[</font>l<font color="#000080">]:=</font>chr<font color="#000080">(</font>ord<font color="#000080">(</font>st<font color="#000080">[</font>l<font color="#000080">]) </font><font color="#FF0000"><b>xor </b></font><font color="#800000">13</font><font color="#000080">);
+ </font>doxor<font color="#000080">:=</font>st<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>procedure </b></font>cleanup<font color="#000080">;
+</font><font color="#008000"><i>{Wird nur intern benîtigt, um den geholten Speicher ordentlich
+ wieder freizugeben (nÑmlich RöCKWéRTS!).}
+</i></font><font color="#FF0000"><b>var </b></font>az<font color="#000080">:</font>integer<font color="#000080">; </font><font color="#008000"><i>{ZÑhlvariable}
+</i></font><font color="#FF0000"><b>begin
+ for </b></font>az<font color="#000080">:=</font>zmax <font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do </b></font>dispose<font color="#000080">(</font>ze<font color="#000080">[</font>az<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Zeige<font color="#000080">(</font>nr<font color="#000080">,</font>pxpos<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">,</font>zrange<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">;</font>crun<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#008000"><i>{Ist auch nur intern. Zeigt jeweils einen &quot;Bereich&quot; der Datei an.}
+</i></font><font color="#FF0000"><b>var </b></font>cnt<font color="#000080">:</font>byte<font color="#000080">;
+    </font>proz<font color="#000080">:</font>integer<font color="#000080">;
+    </font>ps<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font><font color="#008000"><i>{retrace;}
+ </i></font><font color="#FF0000"><b>for </b></font>cnt<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>zrange<font color="#000080">) </font><font color="#FF0000"><b>do
+ </b></font><font color="#008000"><i>{Die Procedure &quot;PRINT&quot; ist ein Teil aus der IO-Unit, die ich mir mal geschrieben hab.}
+ </i></font><font color="#FF0000"><b>begin
+  </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">+</font>cnt<font color="#000080">,</font>color<font color="#000080">,</font>rp<font color="#000080">(</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">82</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">)));
+  </font><font color="#FF0000"><b>if </b></font>crun <font color="#FF0000"><b>then
+   </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">+</font>cnt<font color="#000080">,</font>color<font color="#000080">,</font>doxor<font color="#000080">(</font>copy<font color="#000080">(</font>ze<font color="#000080">[</font>zakt<font color="#000080">+</font>cnt<font color="#000080">]^,</font><font color="#800000">1</font><font color="#000080">+</font>xoffs<font color="#000080">,</font><font color="#800000">82</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">))))
+  </font><font color="#FF0000"><b>else
+   </b></font>print<font color="#000080">(</font>nr<font color="#000080">,</font>x<font color="#000080">,</font>y<font color="#000080">+</font>cnt<font color="#000080">,</font>color<font color="#000080">,</font>copy<font color="#000080">(</font>ze<font color="#000080">[</font>zakt<font color="#000080">+</font>cnt<font color="#000080">]^,</font><font color="#800000">1</font><font color="#000080">+</font>Xoffs<font color="#000080">,</font><font color="#800000">82</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">)))
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>proz<font color="#000080">:=</font>pred<font color="#000080">(</font>zakt<font color="#000080">);</font>str<font color="#000080">(</font>succ<font color="#000080">(</font>proz<font color="#000080">):</font><font color="#800000">4</font><font color="#000080">,</font>ps<font color="#000080">);
+ </font>print<font color="#000080">(</font>nr<font color="#000080">,</font><font color="#800000">66</font><font color="#000080">-</font>x<font color="#000080">,</font>pxpos<font color="#000080">,</font>color<font color="#000080">,</font><font color="#800000">' Zeile: '</font><font color="#000080">+</font>ps<font color="#000080">+</font><font color="#800000">' '</font><font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>display<font color="#000080">(</font>nr<font color="#000080">,</font>pxpos<font color="#000080">,</font>x<font color="#000080">,</font>ys<font color="#000080">,</font>zrange<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">;</font>mitxor<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#008000"><i>{Hier kann man nun die ganze Datei angucken. Mit Cursosteuerung...}
+</i></font><font color="#FF0000"><b>var </b></font>repaint<font color="#000080">:</font>boolean<font color="#000080">;</font>maxl<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#008000"><i>{REPAINT sagt, ob neu angezeigt werden mu&aacute;. Hat ja keinen Sinn,
+ wenn einer 1000x HOME drÅckt, da rumzuflackern... }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>hilfe<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ if </b></font>nr<font color="#000080">&lt;</font><font color="#800000">9 </font><font color="#FF0000"><b>then begin
+  </b></font>copyscn<font color="#000080">(</font>nr<font color="#000080">,</font>succ<font color="#000080">(</font>nr<font color="#000080">));
+  </font>hwin<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">15</font><font color="#000080">,</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">50</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">$9b</font><font color="#000080">,</font><font color="#800000">$9e</font><font color="#000080">,</font><font color="#800000">$80</font><font color="#000080">,</font><font color="#800000">$9f</font><font color="#000080">,</font><font color="#800000">'Steuerungshilfe'</font><font color="#000080">,</font>true<font color="#000080">);
+  </font>print<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">),</font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">9</font><font color="#000080">, </font><font color="#800000">$9e</font><font color="#000080">,</font><font color="#800000">'VorwÑrts und rÅckwÑrts:  und  , Pos1/Ende'</font><font color="#000080">);
+  </font>print<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">),</font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">$9e</font><font color="#000080">,</font><font color="#800000">'Seitenweise blÑttern  : Bild und Bild'</font><font color="#000080">);
+  </font>print<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">),</font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">11</font><font color="#000080">,</font><font color="#800000">$9e</font><font color="#000080">,</font><font color="#800000">'Horizontal verschieben: &lt;- und -&gt;'</font><font color="#000080">);
+  </font>print<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">),</font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">12</font><font color="#000080">,</font><font color="#800000">$9e</font><font color="#000080">,</font><font color="#800000">'Schnell links / rechts: Strg+&lt;- und Strg+-&gt;'</font><font color="#000080">);
+  </font>print<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">),</font><font color="#800000">18</font><font color="#000080">,</font><font color="#800000">13</font><font color="#000080">,</font><font color="#800000">$9e</font><font color="#000080">,</font><font color="#800000">'Programmteil abbrechen: ESC'</font><font color="#000080">);
+  </font>putscn<font color="#000080">(</font>succ<font color="#000080">(</font>nr<font color="#000080">));
+  </font><font color="#FF0000"><b>repeat until </b></font>readkey<font color="#000080">=</font><font color="#800000">#27</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do </b></font>readkey<font color="#000080">;
+  </font>putscn<font color="#000080">(</font>nr<font color="#000080">);</font>copyscn<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font>succ<font color="#000080">(</font>nr<font color="#000080">));
+ </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+ </b></font>maxl<font color="#000080">:=</font>getmaxlength<font color="#000080">;
+ </font>zakt<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">; </font><font color="#008000"><i>{1. Zeile!}
+ </i></font>zeige<font color="#000080">(</font>nr<font color="#000080">,</font>pxpos<font color="#000080">,</font>x<font color="#000080">,</font>ys<font color="#000080">,</font>zrange<font color="#000080">,</font>color<font color="#000080">,</font>mitxor<font color="#000080">);</font>putscn<font color="#000080">(</font>nr<font color="#000080">);
+  </font><font color="#008000"><i>{erstmal den Anfang zeigen}
+ </i></font><font color="#FF0000"><b>repeat </b></font><font color="#008000"><i>{und nun gucken, was der User will...}
+  </i></font>ch<font color="#000080">:=</font>readkey<font color="#000080">;</font><font color="#FF0000"><b>if </b></font>ch<font color="#000080">=</font><font color="#800000">#0 </font><font color="#FF0000"><b>then </b></font>ch<font color="#000080">:=</font>readkey<font color="#000080">;
+  </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+   </b></font><font color="#800000">#59</font><font color="#000080">:</font>hilfe<font color="#000080">;
+   </font><font color="#800000">#71</font><font color="#000080">:</font><font color="#008000"><i>{home}
+       </i></font><font color="#FF0000"><b>begin </b></font>repaint<font color="#000080">:=(</font>zakt<font color="#000080">&lt;&gt;</font><font color="#800000">1</font><font color="#000080">);</font>zakt<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#79</font><font color="#000080">:</font><font color="#008000"><i>{end}
+       </i></font><font color="#FF0000"><b>begin </b></font>repaint<font color="#000080">:=(</font>zakt<font color="#000080">&lt;&gt;</font>succ<font color="#000080">(</font>zmax<font color="#000080">-</font>zrange<font color="#000080">));</font>zakt<font color="#000080">:=</font>zmax<font color="#000080">-</font>zrange<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#72</font><font color="#000080">:</font><font color="#008000"><i>{Pfeil hoch}
+       </i></font><font color="#FF0000"><b>begin </b></font>repaint<font color="#000080">:=(</font>zakt<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">);</font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>dec<font color="#000080">(</font>zakt<font color="#000080">); </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#80</font><font color="#000080">:</font><font color="#008000"><i>{Pfeil runter}
+       </i></font><font color="#FF0000"><b>begin </b></font>repaint<font color="#000080">:=(</font>zakt<font color="#000080">&lt;</font>succ<font color="#000080">(</font>zmax<font color="#000080">-</font>zrange<font color="#000080">));
+       </font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>zakt<font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#73</font><font color="#000080">:</font><font color="#008000"><i>{Bild hoch}
+       </i></font><font color="#FF0000"><b>begin </b></font>repaint<font color="#000080">:=(</font>zakt<font color="#000080">-</font>zrange<font color="#000080">&gt;=</font><font color="#800000">1</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>zakt<font color="#000080">-</font>zrange<font color="#000080">&gt;=</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>dec<font color="#000080">(</font>zakt<font color="#000080">,</font>zrange<font color="#000080">) </font><font color="#FF0000"><b>else begin </b></font>repaint<font color="#000080">:=</font>zakt<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">;</font>zakt<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#81</font><font color="#000080">:</font><font color="#008000"><i>{Bild runter}
+       </i></font><font color="#FF0000"><b>begin </b></font>repaint<font color="#000080">:=((</font>zakt<font color="#000080">+</font>zrange<font color="#000080">)&lt;&gt;</font>succ<font color="#000080">(</font>zmax<font color="#000080">-</font>zrange<font color="#000080">));
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>zakt<font color="#000080">+</font>zrange<font color="#000080">)&lt;=(</font>zmax<font color="#000080">-</font>zrange<font color="#000080">)) </font><font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>zakt<font color="#000080">,</font>zrange<font color="#000080">) </font><font color="#FF0000"><b>else
+         if </b></font>zakt<font color="#000080">+</font>zrange<font color="#000080">&gt;</font>zmax<font color="#000080">-</font>zrange <font color="#FF0000"><b>then begin </b></font>repaint<font color="#000080">:=</font>zakt<font color="#000080">+</font>zrange<font color="#000080">&lt;</font>zmax<font color="#000080">;</font>zakt<font color="#000080">:=</font>succ<font color="#000080">(</font>zmax<font color="#000080">-</font>zrange<font color="#000080">); </font><font color="#FF0000"><b>end end</b></font><font color="#000080">;
+   </font><font color="#800000">#75</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Pfeil Links}
+        </i></font>repaint<font color="#000080">:=</font>xoffs<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">; </font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>dec<font color="#000080">(</font>xoffs<font color="#000080">);
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#77</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{Pfeil rechts}
+        </i></font>repaint<font color="#000080">:=</font>xoffs<font color="#000080">&lt;(</font>maxl<font color="#000080">-(</font><font color="#800000">82</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">)));
+        </font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>xoffs<font color="#000080">);
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#115</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{CTRL+Pfeil links}
+         </i></font>repaint<font color="#000080">:=(</font>xoffs<font color="#000080">-</font><font color="#800000">8</font><font color="#000080">)&gt;</font><font color="#800000">0</font><font color="#000080">; </font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>dec<font color="#000080">(</font>xoffs<font color="#000080">,</font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>else begin
+         if </b></font>xoffs<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>xoffs<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;</font>repaint<font color="#000080">:=</font>true <font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">#116</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font><font color="#008000"><i>{CTRL+Pfeil rechts}
+        </i></font>repaint<font color="#000080">:=(</font>xoffs<font color="#000080">+</font><font color="#800000">8</font><font color="#000080">)&lt;(</font>maxl<font color="#000080">-(</font><font color="#800000">82</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">)));
+        </font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>xoffs<font color="#000080">,</font><font color="#800000">8</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else if </b></font>xoffs<font color="#000080">&lt;(</font>maxl<font color="#000080">-(</font><font color="#800000">82</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">))) </font><font color="#FF0000"><b>then begin </b></font>xoffs<font color="#000080">:=(</font>maxl<font color="#000080">-(</font><font color="#800000">80</font><font color="#000080">-(</font>x <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">)));
+        </font>repaint<font color="#000080">:=</font>true<font color="#000080">; </font><font color="#FF0000"><b>end else </b></font>repaint<font color="#000080">:=</font>false<font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>repaint <font color="#FF0000"><b>then </b></font>zeige<font color="#000080">(</font>nr<font color="#000080">,</font>pxpos<font color="#000080">,</font>x<font color="#000080">,</font>ys<font color="#000080">,</font>zrange<font color="#000080">,</font>color<font color="#000080">,</font>mitxor<font color="#000080">);</font>putscn<font color="#000080">(</font>nr<font color="#000080">);
+ </font><font color="#FF0000"><b>until </b></font>ch<font color="#000080">=</font><font color="#800000">#27</font><font color="#000080">;
+ </font>cleanup<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>winsave<font color="#000080">(</font>anr<font color="#000080">,</font>typo<font color="#000080">,</font>rahme<font color="#000080">:</font>byte<font color="#000080">;</font>li<font color="#000080">,</font>ob<font color="#000080">,</font>brt<font color="#000080">,</font>hoh<font color="#000080">:</font>byte<font color="#000080">;</font>ra<font color="#000080">,</font>arb<font color="#000080">,</font>shad<font color="#000080">,</font>tit<font color="#000080">:</font>byte<font color="#000080">;</font>titl<font color="#000080">:</font>s80<font color="#000080">;</font>sha<font color="#000080">:</font>boolean<font color="#000080">;</font>mv<font color="#000080">,</font>res<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ if </b></font>anr<font color="#000080">&gt;</font>tmaxwin <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+ </font>new<font color="#000080">(</font>winds<font color="#000080">[</font>anr<font color="#000080">]);</font>aktwin<font color="#000080">:=</font>anr<font color="#000080">;
+ </font><font color="#FF0000"><b>with </b></font>winds<font color="#000080">[</font>anr<font color="#000080">]^</font><font color="#FF0000"><b>do begin
+ </b></font>closerpos<font color="#000080">:=</font>li<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">;
+ </font>typ<font color="#000080">:=</font>typo<font color="#000080">;
+ </font>rahmen<font color="#000080">:=</font>rahme<font color="#000080">;
+ </font>l<font color="#000080">:=</font>li<font color="#000080">;</font>o<font color="#000080">:=</font>ob<font color="#000080">;</font>br<font color="#000080">:=</font>brt<font color="#000080">;</font>ho<font color="#000080">:=</font>hoh<font color="#000080">;
+ </font>raf<font color="#000080">:=</font>ra<font color="#000080">;</font>arbf<font color="#000080">:=</font>arb<font color="#000080">;</font>titf<font color="#000080">:=</font>tit<font color="#000080">;
+ </font>shadf<font color="#000080">:=</font>shad<font color="#000080">;;
+ </font>titel<font color="#000080">:=</font>titl<font color="#000080">;
+ </font>shadow<font color="#000080">:=</font>sha<font color="#000080">;
+ </font>ismove<font color="#000080">:=</font>mv<font color="#000080">;</font>isresize<font color="#000080">:=</font>res<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>winwrite<font color="#000080">(</font>ys<font color="#000080">,</font>nr<font color="#000080">,</font>snr<font color="#000080">,</font>color<font color="#000080">:</font>byte<font color="#000080">;</font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>spos<font color="#000080">,</font>wpos<font color="#000080">,</font>lin<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ with </b></font>winds<font color="#000080">[</font>nr<font color="#000080">]^ </font><font color="#FF0000"><b>do begin
+  </b></font>spos<font color="#000080">:=(</font>br<font color="#000080">-</font><font color="#800000">4</font><font color="#000080">);</font>lin<font color="#000080">:=</font>o<font color="#000080">+</font>ys<font color="#000080">;</font>wpos<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+   if </b></font>lin<font color="#000080">&gt;=</font>o<font color="#000080">+</font>pred<font color="#000080">(</font>ho<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+   </font>print<font color="#000080">(</font>snr<font color="#000080">,</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">,</font>lin<font color="#000080">,</font>color<font color="#000080">,</font>copy<font color="#000080">(</font>s<font color="#000080">,(</font>wpos<font color="#000080">*</font>spos<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">,</font>spos<font color="#000080">));
+   </font>inc<font color="#000080">(</font>wpos<font color="#000080">);</font>inc<font color="#000080">(</font>lin<font color="#000080">);
+  </font><font color="#FF0000"><b>until </b></font>wpos<font color="#000080">*</font>spos<font color="#000080">&gt;</font>length<font color="#000080">(</font>s<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>winget<font color="#000080">(</font>nr<font color="#000080">,</font>vnr<font color="#000080">:</font>byte<font color="#000080">;</font>all<font color="#000080">:</font>boolean<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>wn<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ if </b></font>all <font color="#FF0000"><b>then
+ for </b></font>wn<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>nr<font color="#000080">) </font><font color="#FF0000"><b>do
+  </b></font>window<font color="#000080">(</font>wn<font color="#000080">,</font>vnr<font color="#000080">);
+ </font>window<font color="#000080">(</font>nr<font color="#000080">,</font>vnr<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>all <font color="#FF0000"><b>and </b></font><font color="#000080">(</font>nr<font color="#000080">&lt;</font>aktwin<font color="#000080">) </font><font color="#FF0000"><b>then for </b></font>wn<font color="#000080">:=</font>succ<font color="#000080">(</font>nr<font color="#000080">) </font><font color="#FF0000"><b>to </b></font>aktwin <font color="#FF0000"><b>do
+  </b></font>window<font color="#000080">(</font>nr<font color="#000080">,</font>vnr<font color="#000080">);
+ </font>putscn<font color="#000080">(</font>vnr<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>winkill<font color="#000080">(</font>nr<font color="#000080">:</font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+ </b></font>dispose<font color="#000080">(</font>winds<font color="#000080">[</font>nr<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>checkvga
+<font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ----------------------   DEMO PROGRAM --------------- }
+
+</i></font><font color="#FF0000"><b>uses </b></font>dos<font color="#000080">,</font>crt<font color="#000080">,</font>vscreen<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>c<font color="#000080">:</font>char<font color="#000080">;</font>wc<font color="#000080">:</font>byte<font color="#000080">;</font>msx<font color="#000080">,</font>msy<font color="#000080">:</font>integer<font color="#000080">;</font>mxs<font color="#000080">,</font>mys<font color="#000080">,</font>mbs<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">5</font><font color="#000080">];</font>mis<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>const </b></font>fenstring<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">=
+</font><font color="#800000">'Das hier ist ein ziemlich langer Satz. Der wird im Fenster angezeigt und am Rahmen umgebrochen, wie das ja so sein soll.'</font><font color="#000080">+
+</font><font color="#800000">'Dieser Satz kann maximal 255 Zeichen lang sein. Pa&aacute;t er nicht, wird er abgeschnitten... SCHNAPP.'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>cursor<font color="#000080">(</font>false<font color="#000080">);
+ </font>blinken<font color="#000080">(</font>false<font color="#000080">);
+ </font>hwin<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">80</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">,</font><font color="#800000">$9f</font><font color="#000080">,</font><font color="#800000">$9f</font><font color="#000080">,</font><font color="#800000">$08</font><font color="#000080">,</font><font color="#800000">$9f</font><font color="#000080">,</font><font color="#800000">''</font><font color="#000080">,</font>false<font color="#000080">);
+ </font>minit<font color="#000080">;
+ </font>getscn<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);</font>getscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);</font>getscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+ </font>winsave<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">60</font><font color="#000080">,</font><font color="#800000">15</font><font color="#000080">,</font><font color="#800000">$1f</font><font color="#000080">,</font><font color="#800000">$b0</font><font color="#000080">,</font><font color="#800000">$08</font><font color="#000080">,</font><font color="#800000">$1e</font><font color="#000080">,</font><font color="#800000">'ein fenster'</font><font color="#000080">,</font>true<font color="#000080">,</font>false<font color="#000080">,</font>false<font color="#000080">);
+ </font>winsave<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">45</font><font color="#000080">,</font><font color="#800000">15</font><font color="#000080">,</font><font color="#800000">$1f</font><font color="#000080">,</font><font color="#800000">$F0</font><font color="#000080">,</font><font color="#800000">$08</font><font color="#000080">,</font><font color="#800000">$1e</font><font color="#000080">,</font><font color="#800000">'fenster2'</font><font color="#000080">,</font>true<font color="#000080">,</font>true<font color="#000080">,</font>true<font color="#000080">);
+ </font>window<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);</font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);</font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+ </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+ </font>zeig<font color="#000080">;
+ </font><font color="#FF0000"><b>repeat
+  with </b></font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^ </font><font color="#FF0000"><b>do begin
+   </b></font>msx<font color="#000080">:=(</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)-</font>pred<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">));
+   </font>msy<font color="#000080">:=(</font>l<font color="#000080">+(</font>br <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">)+</font>pred<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>c<font color="#000080">:=</font><font color="#800000">#0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>keypressed <font color="#FF0000"><b>then </b></font>c<font color="#000080">:=</font>readkey<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>c<font color="#000080">&lt;&gt;</font><font color="#800000">#0 </font><font color="#FF0000"><b>then
+  case </b></font>c <font color="#FF0000"><b>of
+   </b></font><font color="#800000">'0'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>weg<font color="#000080">;
+        </font>putscn<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);</font>zeig<font color="#000080">;</font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do </b></font>readkey <font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'1'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>weg<font color="#000080">;
+        </font>putscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);</font>zeig<font color="#000080">;</font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do </b></font>readkey <font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'5'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>weg<font color="#000080">;
+        </font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;</font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do </b></font>readkey <font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'4'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font>dec<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">);
+         </font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>closerpos<font color="#000080">:=</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">;</font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+         </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'6'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>pred<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">+</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>br<font color="#000080">))&lt;</font><font color="#800000">80</font><font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font>inc<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">);
+         </font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>closerpos<font color="#000080">:=</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">;
+         </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+         </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'8'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>o<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then begin </b></font>dec<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>o<font color="#000080">);
+         </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+         </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'2'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>pred<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>o<font color="#000080">+</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>ho<font color="#000080">))&lt;</font><font color="#800000">25</font><font color="#000080">) </font><font color="#FF0000"><b>then begin </b></font>inc<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>o<font color="#000080">);
+         </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+         </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'7'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>br<font color="#000080">&gt;</font>length<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>titel<font color="#000080">)+</font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>and
+         </b></font><font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>ho<font color="#000080">&gt;</font><font color="#800000">3</font><font color="#000080">)) </font><font color="#FF0000"><b>then begin </b></font>dec<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>br<font color="#000080">);</font>dec<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>ho<font color="#000080">);
+         </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+         </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#800000">'9'</font><font color="#000080">:</font><font color="#FF0000"><b>begin </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>pred<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>br<font color="#000080">)+</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>l<font color="#000080">&lt;</font><font color="#800000">80</font><font color="#000080">) </font><font color="#FF0000"><b>and
+         </b></font><font color="#000080">(</font>pred<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>ho<font color="#000080">)+</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>o<font color="#000080">&lt;</font><font color="#800000">25</font><font color="#000080">)) </font><font color="#FF0000"><b>then begin </b></font>inc<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>br<font color="#000080">);</font>inc<font color="#000080">(</font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^.</font>ho<font color="#000080">);
+         </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+         </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>end else begin
+   with </b></font>winds<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]^</font><font color="#FF0000"><b>do begin
+    </b></font>mis<font color="#000080">:=(</font>mausxy<font color="#000080">(</font>msx<font color="#000080">,</font>pred<font color="#000080">(</font>o<font color="#000080">),</font>msy<font color="#000080">,</font>pred<font color="#000080">(</font>o<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>button<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>mis <font color="#FF0000"><b>then begin
+     </b></font>mx<font color="#000080">:=</font>mausx<font color="#000080">-</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>repeat
+      </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+       </font>l<font color="#000080">:=</font>succ<font color="#000080">(</font>mausx<font color="#000080">)-(</font>mx<font color="#000080">);</font>o<font color="#000080">:=</font>succ<font color="#000080">(</font>mausy<font color="#000080">);</font>closerpos<font color="#000080">:=</font>l<font color="#000080">+</font><font color="#800000">2</font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">((</font>o<font color="#000080">+</font>ho<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">&lt;</font><font color="#800000">25</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>l<font color="#000080">+</font>br<font color="#000080">-</font><font color="#800000">2</font><font color="#000080">&lt;</font><font color="#800000">80</font><font color="#000080">)) </font><font color="#FF0000"><b>and
+       </b></font><font color="#000080">((</font>l<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>o<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">)) </font><font color="#FF0000"><b>then begin
+       </b></font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+       </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+       </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>until </b></font>button<font color="#000080">&lt;&gt;</font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end else begin
+     </b></font>msx<font color="#000080">:=</font>l<font color="#000080">+</font>pred<font color="#000080">(</font>br<font color="#000080">);</font>msy<font color="#000080">:=</font>o<font color="#000080">+</font>pred<font color="#000080">(</font>ho<font color="#000080">);
+     </font>mis<font color="#000080">:=(</font>mausxy<font color="#000080">(</font>pred<font color="#000080">(</font>msx<font color="#000080">),</font>pred<font color="#000080">(</font>msy<font color="#000080">),(</font>msx<font color="#000080">),(</font>msy<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>button<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">));
+     </font><font color="#FF0000"><b>if </b></font>mis <font color="#FF0000"><b>then begin
+      repeat
+       </b></font>copyscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+       </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>succ<font color="#000080">(</font>mausx<font color="#000080">)-</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) &gt; </font>length<font color="#000080">(</font>titel<font color="#000080">)+</font><font color="#800000">8</font><font color="#000080">+(</font>succ<font color="#000080">(</font>length<font color="#000080">(</font>titel<font color="#000080">)) </font><font color="#FF0000"><b>mod </b></font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>br<font color="#000080">:=(</font>succ<font color="#000080">(</font>mausx<font color="#000080">)-</font>l<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+       </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>succ<font color="#000080">(</font>mausy<font color="#000080">)-</font>o<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) &gt;</font><font color="#800000">2 </font><font color="#FF0000"><b>then </b></font>ho<font color="#000080">:=(</font>succ<font color="#000080">(</font>mausy<font color="#000080">)-</font>o<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">);
+       </font>window<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+       </font>winwrite<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">$f1</font><font color="#000080">,</font>fenstring<font color="#000080">);
+       </font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);</font>zeig<font color="#000080">;
+      </font><font color="#FF0000"><b>until </b></font>button<font color="#000080">&lt;&gt;</font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>mausxy<font color="#000080">(</font>closerpos<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">,</font>pred<font color="#000080">(</font>o<font color="#000080">),</font>closerpos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">,</font>pred<font color="#000080">(</font>o<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>button<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">)) </font><font color="#FF0000"><b>then begin
+     </b></font>weg<font color="#000080">;</font>putscn<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);</font>zeig<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>c<font color="#000080">=</font><font color="#800000">#27</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>button<font color="#000080">=</font><font color="#800000">2</font><font color="#000080">);
+
+ </font><font color="#008000"><i>{vsfree;}
+ </i></font><font color="#FF0000"><b>for </b></font>wc<font color="#000080">:=</font><font color="#800000">2 </font><font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do </b></font>killscn<font color="#000080">(</font>wc<font color="#000080">);
+ </font><font color="#FF0000"><b>for </b></font>wc<font color="#000080">:=</font>aktwin <font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do </b></font>winkill<font color="#000080">(</font>wc<font color="#000080">);
+ </font>clrscr<font color="#000080">;
+ </font>blinken<font color="#000080">(</font>true<font color="#000080">);
+ </font>cursor<font color="#000080">(</font>true<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SCREEN SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0103.PAS">Original</a><b>]</b></p></body>
+</html>

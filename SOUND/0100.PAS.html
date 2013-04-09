@@ -1,0 +1,430 @@
+<html>
+<head><title> "DPMI Play VOCS for Sound cards" by THE KILOBUG TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0100.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{$IFNDEF DPMI}
+</i></font><font color="#800000">'This program run only in DOS Protected Mode (Compile - Target = Protected)!'
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>sbdpmi<font color="#000080">; </font><font color="#008000"><i>{SBDPMI Unit, by GLM, release 1.1}
+(*
+  A simple unit to play VOC files via DMA in Protected mode.
+
+  WARNING! This file can be compile only by Borland Pascal 7.00 in DOS
+  Protected Mode. It needs the RTM.EXE and DPMI16BI.OVL!
+
+  Note that this program use a buffer. That's not for better quality but=
+ only
+  because the DMA can't access memory above 640 KB. We must allocate 32 KB=
+ of
+  standard DOS memory and use this buffer.
+
+  Donnated by LE MIGNOT Ga=89l to SWAGS and the Public Domain.
+
+  For any questions, bugs or commenatry: kilobug@mail.planetepc.fr
+
+  Great thanks to: PC-Interdit (c) Micro Application, 1995
+
+  There is two files:   SBSPMI unit        line 1
+                        And a demo program line 378
+*)
+
+</i></font><font color="#FF0000"><b>Interface
+uses </b></font>crt<font color="#000080">, </font>dos<font color="#000080">, </font>winapi<font color="#000080">; </font><font color="#008000"><i>(* WINAPI =3D DPMI Memory Unit for MS-DOS *)
+</i></font><font color="#FF0000"><b>type </b></font>str70<font color="#000080">=</font><font color="#800000">3</font>Dstring<font color="#000080">[</font><font color="#800000">70</font><font color="#000080">];
+</font><font color="#FF0000"><b>const </b></font>sbirq<font color="#000080">:</font>byte<font color="#000080">=</font><font color="#800000">3</font>D<font color="#800000">$7</font><font color="#000080">;
+      </font>sbdma<font color="#000080">:</font>byte<font color="#000080">=</font><font color="#800000">3</font>D1<font color="#000080">;
+      </font>sbport<font color="#000080">:</font>word<font color="#000080">=</font><font color="#800000">3</font>D<font color="#800000">$220</font><font color="#000080">;
+      </font>sb<font color="#000080">:</font>boolean<font color="#000080">=</font><font color="#800000">3</font>Dfalse<font color="#000080">; </font><font color="#008000"><i>(* Is there a soundcard? *)
+
+</i></font><font color="#FF0000"><b>var </b></font>t_w<font color="#000080">:</font>word<font color="#000080">;        </font><font color="#008000"><i>(* Simple tempory variables *)
+    </i></font>t_b<font color="#000080">:</font>byte<font color="#000080">;
+    </font>t_l<font color="#000080">:</font>longint<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>InitSb<font color="#000080">:</font>boolean<font color="#000080">;  </font><font color="#008000"><i>(* Allocate memory, reset DSP, set the IRQ. *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>SendBlock<font color="#000080">(</font>size<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>(* Send the blk1 block to the DMA. *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>LoadVoc<font color="#000080">(</font>n<font color="#000080">:</font>str70<font color="#000080">); </font><font color="#008000"><i>(* Load a VOC file into memory *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>PlayVoc<font color="#000080">(</font>n<font color="#000080">:</font>str70<font color="#000080">); </font><font color="#008000"><i>(* Load a Voc and then play it *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>PlayLoadedVoc<font color="#000080">; </font><font color="#008000"><i>(* Play the loaded VOC *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>PausePlay<font color="#000080">; </font><font color="#008000"><i>(* Pause the VOC Playing *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>ContinuePlay<font color="#000080">; </font><font color="#008000"><i>(* Contiune playing after a pause *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>StopPlay<font color="#000080">; </font><font color="#008000"><i>(* Stop VOC Playing and free VOC memory *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>RestoreSb<font color="#000080">; </font><font color="#008000"><i>(* Release all memory, restore SB IRQ and reset the DSP=
+ *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetSample<font color="#000080">(</font>sr<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>(* Set the sampling rate (legal values: 4000 -=
+ 44000) *)
+</i></font><font color="#FF0000"><b>Procedure </b></font>SpeakOn<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>SpeakOff<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>AllocateSbMem<font color="#000080">; </font><font color="#008000"><i>(* Allocate memory, called by INITSB *)
+
+</i></font><font color="#FF0000"><b>type </b></font>pt<font color="#000080">=</font><font color="#800000">3</font>Drecord     <font color="#008000"><i>(* A simple way to adress pointers *)
+     </i></font>ofs<font color="#000080">,</font>sg<font color="#000080">:</font>word<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>blk1<font color="#000080">:</font>pointer<font color="#000080">;  </font><font color="#008000"><i>(* Memory block to send to the DMA *)
+    </i></font>size<font color="#000080">:</font>longint<font color="#000080">;  </font><font color="#008000"><i>(* Size of VOC File *)
+    </i></font>cbloc<font color="#000080">,</font>nbbloc<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>(* Number of blocks in VOC File *)
+    </i></font>buff<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">200</font><font color="#000080">]</font><font color="#FF0000"><b>of </b></font>pointer<font color="#000080">; </font><font color="#008000"><i>(* Buffer to load VOC. Limited to 6 MO *)
+    </i></font>wasinit<font color="#000080">, </font><font color="#008000"><i>(* Is the soundcard initialised ? *)
+    </i></font>nbloc<font color="#000080">,
+    </font>ready<font color="#000080">, </font><font color="#008000"><i>(* Is the soundcard ready? (false while playing) *)
+    </i></font>playing<font color="#000080">, </font><font color="#008000"><i>(* Is the soundcard playing anything? *)
+    </i></font>paused<font color="#000080">, </font><font color="#008000"><i>(* Is the VOC paused? *)
+    </i></font>lastone <font color="#008000"><i>(* Are we sending the lastest block? *) </i></font><font color="#000080">:</font>boolean<font color="#000080">;
+    </font>oldirq<font color="#000080">:</font>pointer<font color="#000080">; </font><font color="#008000"><i>(* Save the old IRQ value *)
+    </i></font>value<font color="#000080">:</font>byte<font color="#000080">; </font><font color="#008000"><i>(* Wich value to send to the DSP? *)
+    </i></font>irqmsk<font color="#000080">:</font>byte<font color="#000080">;
+    </font>vocsample<font color="#000080">:</font>word<font color="#000080">; </font><font color="#008000"><i>(* Sample rate of the vco *)
+    </i></font>sndhdl<font color="#000080">:</font>longint<font color="#000080">; </font><font color="#008000"><i>(* Physical adress of BLK1 *)
+
+</i></font><font color="#FF0000"><b>Implementation
+const </b></font>dma_page<font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">=</font><font color="#800000">3</font>D<font color="#000080">(</font><font color="#800000">$87</font><font color="#000080">,</font><font color="#800000">$83</font><font color="#000080">,</font><font color="#800000">$81</font><font color="#000080">,</font><font color="#800000">$81</font><font color="#000080">);
+</font><font color="#FF0000"><b>var   </b></font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>NewSBIrq<font color="#000080">;</font>interrupt<font color="#000080">; </font><font color="#008000"><i>(* This will be called each time the SB has
+                                      played a block *)
+</i></font><font color="#FF0000"><b>begin
+     ASM  </b></font><font color="#008000"><i>(* Preparing the sound card *)
+     </i></font><font color="#FF00FF">mov dx,20h
+     mov ax,dx
+     out dx,al
+     mov cl,100
+     mov bx,sbport
+     add bx,0Ah
+     @bcl:
+     dec cl
+     mov dx,bx
+     in al,dx
+     add dx,4
+     in al,dx
+     or cl,cl
+     jz @finb
+     cmp al,0AAh
+     jnz @bcl
+     @finb:
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;
+     </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>lastone<font color="#000080">)</font><font color="#FF0000"><b>then begin </b></font>playing<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;</font>exit<font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#008000"><i>(* If we have played the last block, exiting procedure *)
+     </i></font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>cbloc<font color="#000080">&lt;</font>nbbloc<font color="#000080">)</font><font color="#FF0000"><b>then </b></font>t_w<font color="#000080">:=</font><font color="#800000">3</font>D32000
+     <font color="#FF0000"><b>else begin </b></font>t_w<font color="#000080">:=</font><font color="#800000">3</font>Dsize <font color="#FF0000"><b>mod </b></font><font color="#800000">32000</font><font color="#000080">;</font>lastone<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>t_w<font color="#000080">=</font><font color="#800000">3</font>D0<font color="#000080">)</font><font color="#FF0000"><b>then </b></font>t_w<font color="#000080">:=</font><font color="#800000">3</font>D32000<font color="#000080">;
+     </font><font color="#008000"><i>(* t_w is size of the next block *)
+     </i></font>inc<font color="#000080">(</font>cbloc<font color="#000080">);</font>Move<font color="#000080">(</font>buff<font color="#000080">[</font>cbloc<font color="#000080">]^,</font>blk1<font color="#000080">^,</font>t_w<font color="#000080">);
+     </font>SendBlock<font color="#000080">(</font>t_w<font color="#000080">);
+     </font>nbloc<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>WDsp<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;  </font><font color="#008000"><i>(* This procedure write &quot;value&quot; to the DSP *)
+</i></font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">mov dx,sbport
+   add dx,0ch
+   @bcl:
+   in al,dx
+   and al,80h
+   jnz @bcl
+   mov al,value
+   out dx,al
+   </font><font color="#008000"><i>(* Equivalent to Pascal code:
+   repeat until (port[sbport+$C]&lt;&gt;$80);
+   port[sbport+$c]:=3Dvalue;
+   *)
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>InitSb<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+     </b></font>AllocateSbMem<font color="#000080">;
+     </font>getintvec<font color="#000080">(</font><font color="#800000">$8</font><font color="#000080">+</font>sbirq<font color="#000080">,</font>oldirq<font color="#000080">); </font><font color="#008000"><i>(* Saving the old interrupt vector *)
+     (* Reset the DSP *)
+     </i></font>port<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$6</font><font color="#000080">]:=</font><font color="#800000">3</font>D1<font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>t_b<font color="#000080">:=</font><font color="#800000">3</font>D1 <font color="#FF0000"><b>to </b></font><font color="#800000">100 </font><font color="#FF0000"><b>do begin end</b></font><font color="#000080">;
+     </font>port<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$6</font><font color="#000080">]:=</font><font color="#800000">3</font>D0<font color="#000080">;
+
+     </font><font color="#008000"><i>(* Waiting until DSP ready *)
+     </i></font><font color="#FF0000"><b>for </b></font>t_b<font color="#000080">:=</font><font color="#800000">3</font>D1 <font color="#FF0000"><b>to </b></font><font color="#800000">100 </font><font color="#FF0000"><b>do begin
+     </b></font>value<font color="#000080">:=</font><font color="#800000">3</font>Dport<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$E</font><font color="#000080">];</font>value<font color="#000080">:=</font><font color="#800000">3</font>Dport<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$A</font><font color="#000080">];</font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>value<font color="#000080">=</font><font color="#800000">3</font>D<font color="#800000">$AA</font><font color="#000080">)</font><font color="#FF0000"><b>then</b></font><font color="#000080">=
+ </font>break<font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+     </font><font color="#008000"><i>(* DSP never ready? May be bad port! *)
+     </i></font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dvalue<font color="#000080">=</font><font color="#800000">3</font>D<font color="#800000">$AA</font><font color="#000080">;</font>initsb<font color="#000080">:=</font><font color="#800000">3</font>Dready<font color="#000080">;</font>wasinit<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;
+     </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>ready<font color="#000080">)</font><font color="#FF0000"><b>then </b></font>setintvec<font color="#000080">(</font><font color="#800000">$8</font><font color="#000080">+</font>sbirq<font color="#000080">,</font>addr<font color="#000080">(</font>newsbirq<font color="#000080">));
+     </font>irqmsk <font color="#000080">:=</font><font color="#800000">3</font>D <font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font>sbirq<font color="#000080">;
+     </font>port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] :=</font><font color="#800000">3</font>D port<font color="#000080">[</font><font color="#800000">$21</font><font color="#000080">] </font><font color="#FF0000"><b>and not </b></font>irqmsk<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SendBlock<font color="#000080">(</font>size<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>(* Send blk1 to the SB card, via DMA *)
+</i></font><font color="#FF0000"><b>var </b></font>seg_<font color="#000080">,</font>ofs_<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+     </b></font>sndhdl<font color="#000080">:=</font><font color="#800000">3</font>DGetSelectorBase<font color="#000080">(</font>seg<font color="#000080">(</font>blk1<font color="#000080">^)); </font><font color="#008000"><i>(* Physical adresse *)
+     </i></font>seg_<font color="#000080">:=</font><font color="#800000">3</font>Dpt<font color="#000080">(</font>sndhdl<font color="#000080">).</font>sg<font color="#000080">; </font><font color="#008000"><i>(* Computing segment and offset for the DMA *)
+     </i></font>ofs_<font color="#000080">:=</font><font color="#800000">3</font>Dpt<font color="#000080">(</font>sndhdl<font color="#000080">).</font>ofs<font color="#000080">;
+
+     </font><font color="#FF0000"><b>ASM
+     </b></font><font color="#FF00FF">mov al,ready
+     or al,al
+     jz @fin
+
+     mov dx,0Ah  </font><font color="#008000"><i>(* Sending Blk1 to the DMA *)
+     </i></font><font color="#FF00FF">mov al,sbdma  </font><font color="#008000"><i>(* Pascal corresponding code: *)
+     </i></font><font color="#FF00FF">add al,4      </font><font color="#008000"><i>(* port[$0A]:=3Dsbdma+4 *)
+     </i></font><font color="#FF00FF">out dx,al
+
+     add dx,2      </font><font color="#008000"><i>(* port[$0C]:=3Dsbdma+4 *)
+     </i></font><font color="#FF00FF">xor al,al
+     out dx,al
+
+     dec dx        </font><font color="#008000"><i>(* port[$0B]:=3Dsbdma+$48 *)
+     </i></font><font color="#FF00FF">mov al,sbdma
+     add al,48h
+     out dx,al
+
+     xor dx,dx     </font><font color="#008000"><i>(* port[sbdma*2]:=3Dlo(ofs_) *)
+     </i></font><font color="#FF00FF">mov ax,ofs_
+     mov dl,sbdma
+     shl dl,1
+     out dx,al
+
+     mov al,ah     </font><font color="#008000"><i>(* port[sbdma*2]:=3Dhi(ofs_) *)
+     </i></font><font color="#FF00FF">out dx,al
+
+     inc dx        </font><font color="#008000"><i>(* port[sbdma*2+1]:=3Dlo(size) *)
+     </i></font><font color="#FF00FF">mov ax,size
+     dec ax
+     mov cx,ax
+     out dx,al
+
+     mov al,ah     </font><font color="#008000"><i>(* port[sbdma*2+1]:=3Dhi(size) *)
+     </i></font><font color="#FF00FF">out dx,al
+
+     xor bx,bx     </font><font color="#008000"><i>(* portw[sma_page[sbdma]]:=3Dseg_ *)
+     </i></font><font color="#FF00FF">mov bl,sbdma
+     xor dx,dx
+     mov dl,byte ptr dma_page[bx]
+     mov ax,seg_
+     out dx,ax
+
+     mov dx,sbport </font><font color="#008000"><i>{Envoie de la commande au DSP}
+     </i></font><font color="#FF00FF">add dx,0ch
+     @bcl1:
+     in al,dx
+     and al,80h
+     jnz @bcl1
+     mov al,14h
+     out dx,al
+     @bcl2:
+     in al,dx
+     and al,80h
+     jnz @bcl2
+     mov ax,cx
+     out dx,al
+     @bcl3:
+     in al,dx
+     and al,80h
+     jnz @bcl3
+     mov al,ch
+     out dx,al
+
+     mov dx,0Ah
+     mov al,sbdma
+     out dx,al
+
+     mov playing,1
+     mov ready,0
+     @fin:
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>LoadVoc<font color="#000080">(</font>n<font color="#000080">:</font>str70<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+     </b></font><font color="#008000"><i>(* Desalocating all memory *)
+     </i></font><font color="#FF0000"><b>while</b></font><font color="#000080">(</font>nbbloc<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>do begin </b></font>freemem<font color="#000080">(</font>buff<font color="#000080">[</font>nbbloc<font color="#000080">],</font><font color="#800000">32000</font><font color="#000080">);</font>dec<font color="#000080">(</font>nbbloc<font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>nbbloc<font color="#000080">:=</font><font color="#800000">3</font>D0<font color="#000080">;
+     </font><font color="#008000"><i>(* Openning file *)
+     </i></font>assign<font color="#000080">(</font>f<font color="#000080">,</font>n<font color="#000080">+</font><font color="#800000">'.voc'</font><font color="#000080">);</font>size<font color="#000080">:=</font><font color="#800000">3</font>D0<font color="#000080">;</font>reset<font color="#000080">(</font>f<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+     </font>seek<font color="#000080">(</font>f<font color="#000080">,</font><font color="#800000">26</font><font color="#000080">);
+     </font><font color="#008000"><i>(* Finding first block *)
+     </i></font><font color="#FF0000"><b>repeat
+     </b></font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>value<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+     </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>value<font color="#000080">=</font><font color="#800000">3</font>D1<font color="#000080">);
+     </font><font color="#008000"><i>(* Reading and computing sample rate *)
+     </i></font>seek<font color="#000080">(</font>f<font color="#000080">,</font>filepos<font color="#000080">(</font>f<font color="#000080">)+</font><font color="#800000">3</font><font color="#000080">);</font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>value<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+     </font>sndhdl<font color="#000080">:=</font><font color="#800000">3</font>Dround<font color="#000080">(-</font><font color="#800000">1000000</font><font color="#000080">/(</font>longint<font color="#000080">(</font>value<font color="#000080">)-</font><font color="#800000">256</font><font color="#000080">));
+     </font>vocsample<font color="#000080">:=</font><font color="#800000">3</font>Dsndhdl<font color="#000080">;
+     </font><font color="#008000"><i>(* Loading VOC to memory and allocating note that with DPMI we can=
+ acces
+        all the memory with getmem *)
+     </i></font><font color="#FF0000"><b>while not</b></font><font color="#000080">(</font>eof<font color="#000080">(</font>f<font color="#000080">)) </font><font color="#FF0000"><b>do begin
+     </b></font>inc<font color="#000080">(</font>nbbloc<font color="#000080">);</font>getmem<font color="#000080">(</font>buff<font color="#000080">[</font>nbbloc<font color="#000080">],</font><font color="#800000">32000</font><font color="#000080">);
+     </font>blockread<font color="#000080">(</font>f<font color="#000080">,</font>buff<font color="#000080">[</font>nbbloc<font color="#000080">]^,</font><font color="#800000">32000</font><font color="#000080">,</font>t_w<font color="#000080">);
+     </font>size<font color="#000080">:=</font><font color="#800000">3</font>Dsize<font color="#000080">+</font>t_w<font color="#000080">;
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;</font>dec<font color="#000080">(</font>nbbloc<font color="#000080">);
+     </font><font color="#008000"><i>(* And then close file. Voc is ready to be played. *)
+     </i></font>close<font color="#000080">(</font>f<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayVoc<font color="#000080">(</font>n<font color="#000080">:</font>str70<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+     </b></font><font color="#008000"><i>(* You understand??? *)
+     </i></font>LoadVoc<font color="#000080">(</font>n<font color="#000080">);</font>PlayLoadedVoc<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayLoadedVoc<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+     </b></font><font color="#008000"><i>(* Initializing values *)
+     </i></font>lastone<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;</font>playing<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;
+     </font>cbloc<font color="#000080">:=</font><font color="#800000">3</font>D1<font color="#000080">;</font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>nbbloc<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+     </font><font color="#008000"><i>(* Only one block ??? *)
+     </i></font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>nbbloc<font color="#000080">&gt;</font><font color="#800000">1</font><font color="#000080">)</font><font color="#FF0000"><b>then </b></font>t_w<font color="#000080">:=</font><font color="#800000">3</font>D32000 <font color="#FF0000"><b>else </b></font>t_w<font color="#000080">:=</font><font color="#800000">3</font>Dsize<font color="#000080">;
+     </font><font color="#008000"><i>(* Moving VOC to sound buffer *)
+     </i></font>Move<font color="#000080">(</font>buff<font color="#000080">[</font>cbloc<font color="#000080">]^,</font>blk1<font color="#000080">^,</font>t_w<font color="#000080">);
+     </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>cbloc<font color="#000080">=</font><font color="#800000">3</font>Dnbbloc<font color="#000080">)</font><font color="#FF0000"><b>then </b></font>lastone<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;
+     </font>SetSample<font color="#000080">(</font>vocsample<font color="#000080">);
+     </font>SendBlock<font color="#000080">(</font>t_w<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PausePlay<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#008000"><i>(* Stop playing but keep the VOC in memory=
+ and
+                                  the current position *)
+</i></font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">mov al,playing
+   or al,al
+   jz @fin
+   mov dx,sbport
+   add dx,0ch
+   @bcl:
+   in al,dx
+   and al,80h
+   jnz @bcl
+   mov al,0D0h
+   out dx,al
+   mov paused,1
+   @fin:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>StopPlay<font color="#000080">; </font><font color="#008000"><i>(* Stop playing, restore SB, disallocate memory *)
+</i></font><font color="#FF0000"><b>begin
+     if</b></font><font color="#000080">(</font><font color="#FF0000"><b>not</b></font><font color="#000080">(</font>wasinit<font color="#000080">))</font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+     </font>PausePlay<font color="#000080">;
+     </font><font color="#FF0000"><b>while</b></font><font color="#000080">(</font>nbbloc<font color="#000080">&gt;</font><font color="#800000">0</font><font color="#000080">)</font><font color="#FF0000"><b>do begin </b></font>freemem<font color="#000080">(</font>buff<font color="#000080">[</font>nbbloc<font color="#000080">],</font><font color="#800000">32000</font><font color="#000080">);</font>dec<font color="#000080">(</font>nbbloc<font color="#000080">);</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>nbbloc<font color="#000080">:=</font><font color="#800000">3</font>D0<font color="#000080">;
+     </font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dtrue<font color="#000080">;</font>playing<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>RestoreSb<font color="#000080">; </font><font color="#008000"><i>(* Restore SB IRQ *)
+</i></font><font color="#FF0000"><b>begin
+     </b></font>StopPlay<font color="#000080">;
+     </font>port<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$6</font><font color="#000080">]:=</font><font color="#800000">3</font>D1<font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>t_b<font color="#000080">:=</font><font color="#800000">3</font>D1 <font color="#FF0000"><b>to </b></font><font color="#800000">100 </font><font color="#FF0000"><b>do </b></font>port<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$6</font><font color="#000080">]:=</font><font color="#800000">3</font>D0<font color="#000080">;
+     </font><font color="#FF0000"><b>for </b></font>t_b<font color="#000080">:=</font><font color="#800000">3</font>D1 <font color="#FF0000"><b>to </b></font><font color="#800000">100 </font><font color="#FF0000"><b>do begin
+     </b></font>value<font color="#000080">:=</font><font color="#800000">3</font>Dport<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$E</font><font color="#000080">];</font>value<font color="#000080">:=</font><font color="#800000">3</font>Dport<font color="#000080">[</font>sbport<font color="#000080">+</font><font color="#800000">$A</font><font color="#000080">];</font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>value<font color="#000080">=</font><font color="#800000">3</font>D<font color="#800000">$AA</font><font color="#000080">)</font><font color="#FF0000"><b>then</b></font><font color="#000080">=
+ </font>break<font color="#000080">;</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>setintvec<font color="#000080">(</font><font color="#800000">$8</font><font color="#000080">+</font>sbirq<font color="#000080">,</font>oldirq<font color="#000080">);
+    =
+ </font>globaldosfree<font color="#000080">(</font>seg<font color="#000080">(</font>blk1<font color="#000080">^));</font>wasinit<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>playing<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>paused<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">=
+;</font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ContinuePlay<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#008000"><i>(* Continue a VOC after PausePlay *)
+</i></font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">mov al,playing
+   or al,al
+   jz @fin
+   mov al,paused
+   or al,al
+   mov dx,sbport
+   add dx,0ch
+   @bcl:
+   in al,dx
+   and al,80h
+   jnz @bcl
+   mov al,0D4h
+   out dx,al
+   mov paused,0
+   @fin:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetSample<font color="#000080">(</font>sr<font color="#000080">:</font>word<font color="#000080">); </font><font color="#008000"><i>(* Change the sampling rate.
+                                 It normaly run with values lower than=
+ 22000,
+                                 but should work with higher rate (up to=
+ 44000)
+                               *)
+</i></font><font color="#FF0000"><b>var </b></font>btc<font color="#000080">:</font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+   </b></font>bTC  <font color="#000080">:=</font><font color="#800000">3</font>D Byte <font color="#000080">( </font><font color="#800000">256 </font><font color="#000080">- ( ( </font><font color="#800000">1000000 </font><font color="#000080">+ ( </font>sr <font color="#FF0000"><b>div </b></font><font color="#800000">2 </font><font color="#000080">) ) </font><font color="#FF0000"><b>div </b></font>sr <font color="#000080">) );
+   </font>value<font color="#000080">:=</font><font color="#800000">3</font>D<font color="#800000">$40</font><font color="#000080">;
+   </font>WDSP<font color="#000080">;</font>value<font color="#000080">:=</font><font color="#800000">3</font>Dbtc<font color="#000080">;</font>WDSP<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SpeakOn<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#008000"><i>(* Turn on the sound output *)
+</i></font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">mov dx,sbport
+   add dx,0ch
+   @bcl:
+   in al,dx
+   and al,80h
+   jnz @bcl
+   mov al,0D1h
+   out dx,al
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SpeakOff<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#008000"><i>(* Turn off the sound output *)
+</i></font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">mov dx,sbport
+   add dx,0ch
+   @bcl:
+   in al,dx
+   and al,80h
+   jnz @bcl
+   mov al,0D3h
+   out dx,al
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>AllocateSbMem<font color="#000080">; </font><font color="#008000"><i>(* Allocate 32KB of memory below 640 KB*)
+</i></font><font color="#FF0000"><b>var </b></font>_t_l<font color="#000080">:</font>longint<font color="#000080">;
+    </font>_t_w<font color="#000080">:</font>word<font color="#000080">;
+    </font>seg_<font color="#000080">,</font>ofs_<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+     </b></font>_t_l<font color="#000080">:=</font><font color="#800000">3</font>DGlobalDosAlloc<font color="#000080">(</font><font color="#800000">32000</font><font color="#000080">);
+     </font>_t_w<font color="#000080">:=</font><font color="#800000">3</font>D_t_l <font color="#FF0000"><b>and </b></font><font color="#800000">$0FFFF</font><font color="#000080">;
+     </font>blk1<font color="#000080">:=</font><font color="#800000">3</font>Dptr<font color="#000080">(</font>_t_w<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+     </font>sndhdl<font color="#000080">:=</font><font color="#800000">3</font>DGetSelectorBase<font color="#000080">(</font>seg<font color="#000080">(</font>blk1<font color="#000080">^));
+     </font>seg_<font color="#000080">:=</font><font color="#800000">3</font>Dpt<font color="#000080">(</font>sndhdl<font color="#000080">).</font>sg<font color="#000080">;
+     </font>ofs_<font color="#000080">:=</font><font color="#800000">3</font>Dpt<font color="#000080">(</font>sndhdl<font color="#000080">).</font>ofs<font color="#000080">;
+     </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>ofs_<font color="#000080">&gt;</font><font color="#800000">32000</font><font color="#000080">)</font><font color="#FF0000"><b>then begin
+     </b></font>GlobalDOSFree<font color="#000080">(</font>_t_w<font color="#000080">);
+     </font>_t_l<font color="#000080">:=</font><font color="#800000">3</font>DGlobalDosAlloc<font color="#000080">((</font><font color="#800000">65535</font><font color="#000080">-</font>ofs_<font color="#000080">)+</font><font color="#800000">1000</font><font color="#000080">);
+     </font>_t_l<font color="#000080">:=</font><font color="#800000">3</font>DGlobalDosAlloc<font color="#000080">(</font><font color="#800000">32000</font><font color="#000080">);
+     </font>_t_w<font color="#000080">:=</font><font color="#800000">3</font>D_t_l <font color="#FF0000"><b>and </b></font><font color="#800000">$0FFFF</font><font color="#000080">;
+     </font>blk1<font color="#000080">:=</font><font color="#800000">3</font>Dptr<font color="#000080">(</font>_t_w<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+     </font>sndhdl<font color="#000080">:=</font><font color="#800000">3</font>DGetSelectorBase<font color="#000080">(</font>seg<font color="#000080">(</font>blk1<font color="#000080">^));
+     </font>seg_<font color="#000080">:=</font><font color="#800000">3</font>Dpt<font color="#000080">(</font>sndhdl<font color="#000080">).</font>sg<font color="#000080">;
+     </font>ofs_<font color="#000080">:=</font><font color="#800000">3</font>Dpt<font color="#000080">(</font>sndhdl<font color="#000080">).</font>ofs<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     </b></font>ready<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>playing<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>paused<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font><font color="#008000"><i>{xmshdl:=3D0;}</i></font>nbloc<font color="#000080">:=</font><font color="#800000">3</font>D<font color="#000080">=
+</font>false<font color="#000080">;
+     </font>wasinit<font color="#000080">:=</font><font color="#800000">3</font>Dfalse<font color="#000080">;</font>nbbloc<font color="#000080">:=</font><font color="#800000">3</font>D0<font color="#000080">;</font>cbloc<font color="#000080">:=</font><font color="#800000">3</font>D0<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>(* A simple program to play vocs with this unit *)
+
+</i></font><font color="#FF0000"><b>uses </b></font>crt<font color="#000080">, </font>sbdpmi<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+     </b></font>writeln<font color="#000080">(</font><font color="#800000">'DPMI Voc-Player, by The Kilogub Team, 1996'</font><font color="#000080">);
+     </font>writeln<font color="#000080">;
+     </font>InitSb<font color="#000080">;
+     </font>LoadVoc<font color="#000080">(</font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));</font>writeln<font color="#000080">(</font><font color="#800000">'Voc loaded. Press any key to exit.'</font><font color="#000080">);
+     </font><font color="#FF0000"><b>repeat
+     </b></font>PlayLoadedVoc<font color="#000080">;
+     </font><font color="#FF0000"><b>repeat until </b></font><font color="#000080">(</font>ready<font color="#000080">)</font><font color="#FF0000"><b>or</b></font><font color="#000080">(</font>keypressed<font color="#000080">);
+     </font><font color="#FF0000"><b>if</b></font><font color="#000080">(</font>ready<font color="#000080">)</font><font color="#FF0000"><b>then </b></font>writeln<font color="#000080">(</font><font color="#800000">'Voc played!'</font><font color="#000080">);
+     </font><font color="#FF0000"><b>until </b></font>keypressed<font color="#000080">;
+     </font>StopPlay<font color="#000080">;
+     </font><font color="#FF0000"><b>while </b></font>keypressed <font color="#FF0000"><b>do </b></font>readkey<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0100.PAS">Original</a><b>]</b></p></body>
+</html>

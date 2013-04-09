@@ -1,0 +1,624 @@
+<html>
+<head><title> "Critical Error Handler" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0043.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$I- $F+}
+</i></font><font color="#FF0000"><b>UNIT </b></font>Errtrp<font color="#000080">;
+</font><font color="#FF0000"><b>INTERFACE
+
+USES
+</b></font>crt<font color="#000080">,
+</font>dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST
+</b></font>ScrSeg <font color="#000080">: </font>WORD <font color="#000080">= </font><font color="#800000">$B800</font><font color="#000080">;
+</font>FGNorm <font color="#000080">= </font>lightgray<font color="#000080">;
+</font>BGNorm <font color="#000080">= </font>blue<font color="#000080">;
+</font>FGErr <font color="#000080">= </font>white<font color="#000080">;
+</font>BGErr <font color="#000080">= </font>red<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+</b></font>SaveInt24 <font color="#000080">: </font>POINTER<font color="#000080">;
+</font>ErrorRetry <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+</font>IOCode    <font color="#000080">: </font>INTEGER<font color="#000080">;
+</font>version   <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DisplayError <font color="#000080">(</font>ErrNo <font color="#000080">: </font>INTEGER<font color="#000080">);
+</font><font color="#FF0000"><b>PROCEDURE </b></font>RuntimeError<font color="#000080">;
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DisableErrorHandler<font color="#000080">;
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ErrTrap <font color="#000080">(</font>ErrNo <font color="#000080">: </font>INTEGER<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+
+VAR
+  </b></font>ExitSave <font color="#000080">: </font>POINTER<font color="#000080">;
+  </font>regs <font color="#000080">: </font>REGISTERS<font color="#000080">;
+
+
+</font><font color="#008000"><i>(**************************************************************************)
+
+</i></font><font color="#FF0000"><b>CONST
+ </b></font>INT59ERROR  <font color="#000080">: </font>INTEGER  <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+ </font>ERRORACTION <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+ </font>ERRORTYPE   <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+ </font>ERRORAREA   <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+ </font>ERRORRESP   <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+ </font>ERRORRESULT <font color="#000080">: </font>INTEGER <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+</b></font>errmsg         <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">89</font><font color="#000080">] </font><font color="#FF0000"><b>OF STRING</b></font><font color="#000080">;
+</font>ermsgPtr       <font color="#000080">= ^</font>errmsg<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+</b></font>Errs <font color="#000080">: </font>ermsgPTR<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>HideCursor<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">MOV   ax, $0100
+  MOV   cx, $2607
+  INT   $10
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ShowCursor<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">MOV   ax, $0100
+  MOV   cx, $0506
+  INT   $10
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>box<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+ </b></font>i <font color="#000080">: </font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>TEXTCOLOR <font color="#000080">(</font>FGErr<font color="#000080">);
+  </font>TEXTBACKGROUND <font color="#000080">(</font>BGErr<font color="#000080">);
+  </font>GOTOXY <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font>WRITELN <font color="#000080">(</font><font color="#800000">'&Uacute;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;  Critical Error  &Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&iquest;'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>FOR </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">5 </font><font color="#FF0000"><b>DO
+  </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'&sup3;                                                &sup3;'</font><font color="#000080">);
+  </font>WRITE  <font color="#000080">(</font><font color="#800000">'&Agrave;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Ugrave;'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;</font><font color="#008000"><i>{box}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>DosVer <font color="#000080">: </font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+ </b></font>Maj <font color="#000080">: </font>shortint<font color="#000080">;
+ </font>Min <font color="#000080">: </font>shortint<font color="#000080">;
+ </font>regs <font color="#000080">: </font>REGISTERS<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>regs<font color="#000080">.</font>ah <font color="#000080">:= </font><font color="#800000">$30</font><font color="#000080">;
+ </font>MSDOS <font color="#000080">(</font>Regs<font color="#000080">);
+ </font>Maj <font color="#000080">:= </font>regs<font color="#000080">.</font>al<font color="#000080">;
+ </font>Min <font color="#000080">:= </font>regs<font color="#000080">.</font>ah<font color="#000080">;
+ </font>DosVer <font color="#000080">:= </font>Maj<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>InitErrs<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+</b></font>NEW <font color="#000080">(</font>Errs<font color="#000080">);
+</font>Errs<font color="#000080">^ [</font><font color="#800000">0</font><font color="#000080">] :=   </font><font color="#800000">'             No error occured           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">1</font><font color="#000080">] :=    </font><font color="#800000">'          Invalid function number       '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">2</font><font color="#000080">] :=    </font><font color="#800000">'              File not found            '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">3</font><font color="#000080">] :=    </font><font color="#800000">'              Path not found            '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">4</font><font color="#000080">] :=    </font><font color="#800000">'            No handle available         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">5</font><font color="#000080">] :=    </font><font color="#800000">'              Access denied             '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">6</font><font color="#000080">] :=    </font><font color="#800000">'             Invalid handle             '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">7</font><font color="#000080">] :=    </font><font color="#800000">'     Memory control blocks destroyed    '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">8</font><font color="#000080">] :=    </font><font color="#800000">'           Insufficient memory          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">9</font><font color="#000080">] :=    </font><font color="#800000">'      Invalid memory block address      '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">10</font><font color="#000080">] :=    </font><font color="#800000">'       Invalid SET command string       '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">11</font><font color="#000080">] :=    </font><font color="#800000">'             Invalid format             '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">12</font><font color="#000080">] :=    </font><font color="#800000">'          Invalid access code           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">13</font><font color="#000080">] :=    </font><font color="#800000">'              Invalid data              '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">14</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">15</font><font color="#000080">] :=    </font><font color="#800000">'       Invalid drive specification      '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">16</font><font color="#000080">] :=    </font><font color="#800000">'   Attempt to remove current directory  '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">17</font><font color="#000080">] :=    </font><font color="#800000">'             Not same device            '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">18</font><font color="#000080">] :=    </font><font color="#800000">'        No more files to be found       '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">19</font><font color="#000080">] :=    </font><font color="#800000">'          Disk write protected          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">20</font><font color="#000080">] :=    </font><font color="#800000">'            Unknown unit ID             '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">21</font><font color="#000080">] :=    </font><font color="#800000">'          Disk drive not ready          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">22</font><font color="#000080">] :=    </font><font color="#800000">'          Command not defined           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">23</font><font color="#000080">] :=    </font><font color="#800000">'            Disk data error             '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">24</font><font color="#000080">] :=    </font><font color="#800000">'      Bad request structure length      '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">25</font><font color="#000080">] :=    </font><font color="#800000">'             Disk seek error            '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">26</font><font color="#000080">] :=    </font><font color="#800000">'         Unknown disk media type        '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">27</font><font color="#000080">] :=    </font><font color="#800000">'          Disk sector not found         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">28</font><font color="#000080">] :=    </font><font color="#800000">'          Printer out of paper          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">29</font><font color="#000080">] :=    </font><font color="#800000">'      Write error - Printer Error?      '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">30</font><font color="#000080">] :=    </font><font color="#800000">'               Read error               '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">31</font><font color="#000080">] :=    </font><font color="#800000">'            General failure             '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">32</font><font color="#000080">] :=    </font><font color="#800000">'         File sharing violation         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">33</font><font color="#000080">] :=    </font><font color="#800000">'         File locking violation         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">34</font><font color="#000080">] :=    </font><font color="#800000">'          Improper disk change          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">35</font><font color="#000080">] :=    </font><font color="#800000">'             No FCB available           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">36</font><font color="#000080">] :=    </font><font color="#800000">'         Sharing buffer overflow        '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">37</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">38</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">39</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">40</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">41</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">42</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">43</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">44</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">45</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">46</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">47</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">48</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">49</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">50</font><font color="#000080">] :=    </font><font color="#800000">'      Network request not supported     '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">51</font><font color="#000080">] :=    </font><font color="#800000">'      Remote computer not listening     '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">52</font><font color="#000080">] :=    </font><font color="#800000">'        Duplicate name on network       '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">53</font><font color="#000080">] :=    </font><font color="#800000">'         Network name not found         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">54</font><font color="#000080">] :=    </font><font color="#800000">'             Network busy               '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">55</font><font color="#000080">] :=    </font><font color="#800000">'      Network device no longer exists   '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">56</font><font color="#000080">] :=    </font><font color="#800000">'      NetBIOS command limit exceeded    '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">57</font><font color="#000080">] :=    </font><font color="#800000">'      Network adapter hardware error    '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">58</font><font color="#000080">] :=    </font><font color="#800000">'      Incorrect response from network   '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">59</font><font color="#000080">] :=    </font><font color="#800000">'        Unexpected network error        '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">60</font><font color="#000080">] :=    </font><font color="#800000">'      Incompatible remote adapter       '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">61</font><font color="#000080">] :=    </font><font color="#800000">'            Print queue full            '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">62</font><font color="#000080">] :=    </font><font color="#800000">'      Not enough space for print file   '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">63</font><font color="#000080">] :=    </font><font color="#800000">'         Print file was deleted         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">64</font><font color="#000080">] :=    </font><font color="#800000">'        Network name was deleted        '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">65</font><font color="#000080">] :=    </font><font color="#800000">'             Access denied              '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">66</font><font color="#000080">] :=    </font><font color="#800000">'       Network device type incorrect    '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">67</font><font color="#000080">] :=    </font><font color="#800000">'          Network name not found        '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">68</font><font color="#000080">] :=    </font><font color="#800000">'        Network name limit exceeded     '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">69</font><font color="#000080">] :=    </font><font color="#800000">'      NetBIOS session limit exceeded    '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">70</font><font color="#000080">] :=    </font><font color="#800000">'           Temporarily paused           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">71</font><font color="#000080">] :=    </font><font color="#800000">'       Network request not accepted     '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">72</font><font color="#000080">] :=    </font><font color="#800000">'  Print or disk re-direction is paused  '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">73</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">74</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">75</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">76</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">77</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">78</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">79</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">80</font><font color="#000080">] :=    </font><font color="#800000">'           File already exists          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">81</font><font color="#000080">] :=    </font><font color="#800000">'                Reserved                '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">82</font><font color="#000080">] :=    </font><font color="#800000">'              Cannot make               '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">83</font><font color="#000080">] :=    </font><font color="#800000">'     Critical-error interrupt failure   '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">84</font><font color="#000080">] :=    </font><font color="#800000">'          Too many redirections         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">85</font><font color="#000080">] :=    </font><font color="#800000">'          Duplicate redirection         '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">86</font><font color="#000080">] :=    </font><font color="#800000">'           Duplicate password           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">87</font><font color="#000080">] :=    </font><font color="#800000">'            Invalid parameter           '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">88</font><font color="#000080">] :=    </font><font color="#800000">'            Network data fault          '</font><font color="#000080">;
+</font>Errs<font color="#000080">^ [</font><font color="#800000">89</font><font color="#000080">] :=    </font><font color="#800000">'             Undefined Error            '</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CritError <font color="#000080">(</font>Flags<font color="#000080">, </font>CS<font color="#000080">, </font>IP<font color="#000080">, </font>AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP <font color="#000080">: </font>WORD<font color="#000080">);
+ </font>INTERRUPT<font color="#000080">;
+</font><font color="#FF0000"><b>TYPE
+</b></font>ScrPtr         <font color="#000080">= ^</font>ScrBuff<font color="#000080">;
+</font>ScrBuff        <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4096</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Display<font color="#000080">,
+  </font>SaveScr    <font color="#000080">: </font>ScrPtr<font color="#000080">;
+
+  </font>c         <font color="#000080">: </font>CHAR<font color="#000080">;
+  </font>ErrorPrompt<font color="#000080">,
+  </font>msg        <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+  </font>ErrNum     <font color="#000080">: </font>BYTE<font color="#000080">;
+
+  </font>drive<font color="#000080">,
+  </font>area<font color="#000080">,
+  </font>al<font color="#000080">, </font>ah      <font color="#000080">: </font>BYTE<font color="#000080">;
+
+  </font>deviceattr <font color="#000080">: ^</font>WORD<font color="#000080">;
+  </font>devicename <font color="#000080">: ^</font>CHAR<font color="#000080">;
+  </font>ch<font color="#000080">,
+  </font>i          <font color="#000080">: </font>shortint<font color="#000080">;
+  </font>actmsg<font color="#000080">,
+  </font>tmsg<font color="#000080">,
+  </font>amsg<font color="#000080">,
+  </font>dname      <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+    </b></font>ah <font color="#000080">:= </font>HI <font color="#000080">(</font>ax<font color="#000080">);
+    </font>al <font color="#000080">:= </font>LO <font color="#000080">(</font>ax<font color="#000080">);                            </font><font color="#008000"><i>{ in case DOS version &lt; 3     }
+    </i></font>ErrNum <font color="#000080">:= </font>LO <font color="#000080">(</font>DI<font color="#000080">) + </font><font color="#800000">19</font><font color="#000080">;                     </font><font color="#008000"><i>{ save the error and add      }
+    </i></font>msg <font color="#000080">:= </font>Errs<font color="#000080">^ [</font>ErrNum<font color="#000080">];                    </font><font color="#008000"><i>{ add 19 to convert to        }
+                                           { standard DOS error          }
+    </i></font>tmsg <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font>actmsg <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;                            </font><font color="#008000"><i>{ we can't suggest a response }
+
+ </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>ah <font color="#FF0000"><b>AND </b></font><font color="#800000">$80</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN                    </b></font><font color="#008000"><i>{ if a disk error then        }
+   </i></font><font color="#FF0000"><b>BEGIN                                   </b></font><font color="#008000"><i>{ get the drive and area      }
+     </i></font>amsg <font color="#000080">:= </font><font color="#800000">' drive ' </font><font color="#000080">+ </font>CHR <font color="#000080">(</font>al <font color="#000080">+ </font><font color="#800000">65</font><font color="#000080">) + </font><font color="#800000">':'</font><font color="#000080">;
+     </font>area <font color="#000080">:= (</font>ah <font color="#FF0000"><b>AND </b></font><font color="#800000">6</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">1</font><font color="#000080">;
+     </font><font color="#FF0000"><b>CASE </b></font>area <font color="#FF0000"><b>OF
+     </b></font><font color="#800000">0 </font><font color="#000080">: </font>amsg <font color="#000080">:= </font>amsg <font color="#000080">+ </font><font color="#800000">' dos communications area '</font><font color="#000080">;
+     </font><font color="#800000">1 </font><font color="#000080">: </font>amsg <font color="#000080">:= </font>amsg <font color="#000080">+ </font><font color="#800000">' disk directory area '</font><font color="#000080">;
+     </font><font color="#800000">2 </font><font color="#000080">: </font>amsg <font color="#000080">:= </font>amsg <font color="#000080">+ </font><font color="#800000">' files area '</font><font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>END
+ELSE                                       </b></font><font color="#008000"><i>{ else if a device error }
+   </i></font><font color="#FF0000"><b>BEGIN                                   </b></font><font color="#008000"><i>{ get type of device     }
+     </i></font>deviceattr <font color="#000080">:= </font>PTR <font color="#000080">(</font>bp<font color="#000080">, </font>si <font color="#000080">+ </font><font color="#800000">4</font><font color="#000080">);
+     </font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>deviceattr<font color="#000080">^ </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$8000</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN     </b></font><font color="#008000"><i>{ if a character device }
+       </i></font><font color="#FF0000"><b>BEGIN                                </b></font><font color="#008000"><i>{ like a printer        }
+         </i></font>amsg <font color="#000080">:= </font><font color="#800000">'character device'</font><font color="#000080">;
+         </font>ch <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font><font color="#FF0000"><b>REPEAT
+         </b></font>i <font color="#000080">:= </font>i <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+         </font>devicename <font color="#000080">:= </font>PTR <font color="#000080">(</font>bp<font color="#000080">, </font>si <font color="#000080">+ </font><font color="#800000">$0a </font><font color="#000080">+ </font>ch<font color="#000080">);      </font><font color="#008000"><i>{ get the device name  }
+         </i></font>dname <font color="#000080">[</font>i<font color="#000080">] := </font>devicename<font color="#000080">^;
+         </font>dname <font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>CHR <font color="#000080">(</font>i<font color="#000080">);
+         </font>INC <font color="#000080">(</font>ch<font color="#000080">);
+         </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>devicename<font color="#000080">^ = </font>CHR <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">) ) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>ch <font color="#000080">&gt; </font><font color="#800000">7</font><font color="#000080">);
+       </font><font color="#FF0000"><b>END
+    ELSE                                     </b></font><font color="#008000"><i>{ else }
+      </i></font><font color="#FF0000"><b>BEGIN                                  </b></font><font color="#008000"><i>{ just inform of the error }
+        </i></font>dname <font color="#000080">:= </font><font color="#800000">'disk in ' </font><font color="#000080">+ </font>CHR <font color="#000080">(</font>al<font color="#000080">) + </font><font color="#800000">':'</font><font color="#000080">;
+        </font>msg <font color="#000080">:= </font><font color="#800000">' general failure ' </font><font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font>amsg <font color="#000080">:= </font>amsg <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>dname<font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>INLINE </b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);                           </font><font color="#008000"><i>{ Enable interrupts       }
+ </i></font>Display <font color="#000080">:= </font>PTR <font color="#000080">(</font>ScrSeg<font color="#000080">, </font><font color="#800000">$0000</font><font color="#000080">);            </font><font color="#008000"><i>{ save the current screen }
+ </i></font>NEW <font color="#000080">(</font>SaveScr<font color="#000080">);
+ </font>SaveScr<font color="#000080">^ := </font>Display<font color="#000080">^;
+ </font>WINDOW <font color="#000080">(</font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">65</font><font color="#000080">, </font><font color="#800000">16</font><font color="#000080">);                   </font><font color="#008000"><i>{ make a box to display the}
+ </i></font>TEXTCOLOR <font color="#000080">(</font>FGErr<font color="#000080">);                      </font><font color="#008000"><i>{ error message            }
+ </i></font>TEXTBACKGROUND <font color="#000080">(</font>BGErr<font color="#000080">);
+ </font>CLRSCR<font color="#000080">;
+ </font>box<font color="#000080">;
+
+  </font><font color="#FF0000"><b>IF </b></font>Version <font color="#000080">&gt;= </font><font color="#800000">3 </font><font color="#FF0000"><b>THEN                     </b></font><font color="#008000"><i>{ check the DOS version   }
+  </i></font><font color="#FF0000"><b>BEGIN                                  </b></font><font color="#008000"><i>{ major component         }
+  </i></font>regs<font color="#000080">.</font>ah <font color="#000080">:= </font><font color="#800000">$59</font><font color="#000080">;                          </font><font color="#008000"><i>{ and use DosExtErr since }
+  </i></font>regs<font color="#000080">.</font>bx <font color="#000080">:= </font><font color="#800000">$00</font><font color="#000080">;                          </font><font color="#008000"><i>{ it is available         }
+  </i></font>MSDOS <font color="#000080">(</font>Regs<font color="#000080">);
+  </font>INT59ERROR <font color="#000080">:= </font>regs<font color="#000080">.</font>ax<font color="#000080">;
+  </font>ERRORTYPE <font color="#000080">:= </font>regs<font color="#000080">.</font>bh<font color="#000080">;
+  </font>ERRORACTION <font color="#000080">:= </font>regs<font color="#000080">.</font>bl<font color="#000080">;
+  </font>ERRORAREA <font color="#000080">:= </font>regs<font color="#000080">.</font>ch<font color="#000080">;
+  </font>msg <font color="#000080">:= </font>Errs<font color="#000080">^ [</font>INT59ERROR<font color="#000080">];                </font><font color="#008000"><i>{ get the error information}
+(*
+  case ERRORAREA of
+  1: amsg:='Unknown';
+  2: amsg:='Block Device';               { usually disk access error}
+  3: amsg:='Network Problem';
+  4: amsg:='Serial Device';              { printer or COM problem   }
+  5: amsg:='Memory';                     { corrupted memory         }
+  end;
+*)
+  </i></font><font color="#FF0000"><b>CASE </b></font>ERRORTYPE <font color="#FF0000"><b>OF
+  </b></font><font color="#800000">1 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Out of Resource'</font><font color="#000080">;            </font><font color="#008000"><i>{ no channels, space       }
+  </i></font><font color="#800000">2 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Temporary situation'</font><font color="#000080">;        </font><font color="#008000"><i>{ file locked for instance;}
+                                          { not an error and will    }
+                                          { clear eventually         }
+  </i></font><font color="#800000">3 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Authorization Violation'</font><font color="#000080">;     </font><font color="#008000"><i>{ permission problem e.g.  }
+                                          { write to read only file  }
+  </i></font><font color="#800000">4 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Internal Software Error'</font><font color="#000080">;     </font><font color="#008000"><i>{ system software bug      }
+  </i></font><font color="#800000">5 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Hardware Error'</font><font color="#000080">;              </font><font color="#008000"><i>{ serious trouble -- fix   }
+                                          { the machine              }
+  </i></font><font color="#800000">6 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'System Error'</font><font color="#000080">;                </font><font color="#008000"><i>{ serious trouble software }
+                                          { at fault -- e.g. missing }
+                                          { CONFIG file              }
+  </i></font><font color="#800000">7 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Program Error'</font><font color="#000080">;               </font><font color="#008000"><i>{ inconsistent request     }
+                                          { from your program        }
+  </i></font><font color="#800000">8 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Not found'</font><font color="#000080">;                   </font><font color="#008000"><i>{ as stated                }
+  </i></font><font color="#800000">9 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Bad Format'</font><font color="#000080">;                  </font><font color="#008000"><i>{ as stated                }
+  </i></font><font color="#800000">10 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Locked'</font><font color="#000080">;                      </font><font color="#008000"><i>{ interlock situation      }
+  </i></font><font color="#800000">11 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Media Error'</font><font color="#000080">;                 </font><font color="#008000"><i>{ CRC error, wrong disk in }
+                                          { drive, bad disk cluster  }
+  </i></font><font color="#800000">12 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Exists'</font><font color="#000080">;                      </font><font color="#008000"><i>{ collision with existing  }
+                                          { item, e.g. duplicate     }
+                                          { device name              }
+  </i></font><font color="#800000">13 </font><font color="#000080">: </font>tmsg <font color="#000080">:= </font><font color="#800000">'Unknown Error'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>CASE </b></font>ERRORACTION <font color="#FF0000"><b>OF
+  </b></font><font color="#800000">1 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'Retry'</font><font color="#000080">;                     </font><font color="#008000"><i>{ retry a few times then   }
+                                          { give user abort option   }
+                                          { if not fixed             }
+  </i></font><font color="#800000">2 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'Delay Retry'</font><font color="#000080">;               </font><font color="#008000"><i>{ pause, retry, then give  }
+                                          { user abort option        }
+  </i></font><font color="#800000">3 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'User Action'</font><font color="#000080">;               </font><font color="#008000"><i>{ ask user to reenter item }
+                                          { e.g. bad drive letter or }
+                                          { filename used            }
+  </i></font><font color="#800000">4 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'Abort'</font><font color="#000080">;                      </font><font color="#008000"><i>{ invoke an orderly shut   }
+                                          { down -- close files, etc }
+  </i></font><font color="#800000">5 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'Immediate Exit'</font><font color="#000080">;             </font><font color="#008000"><i>{ don't clean up, you may  }
+                                          { really screw something up}
+  </i></font><font color="#800000">6 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'Ignore'</font><font color="#000080">;
+  </font><font color="#800000">7 </font><font color="#000080">: </font>actmsg <font color="#000080">:= </font><font color="#800000">'Retry'</font><font color="#000080">;                     </font><font color="#008000"><i>{ after user intervention: }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;                                    </font><font color="#008000"><i>{ let the user fix it first}
+
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font>amsg <font color="#000080">:= </font>tmsg <font color="#000080">+ </font>amsg<font color="#000080">;
+</font>actmsg <font color="#000080">:= </font><font color="#800000">'Suggested Action: ' </font><font color="#000080">+ </font>actmsg<font color="#000080">;
+
+</font>GOTOXY <font color="#000080">( (</font><font color="#800000">54 </font><font color="#000080">- </font>LENGTH <font color="#000080">(</font>msg<font color="#000080">) ) </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+</font>WRITE <font color="#000080">(</font>msg<font color="#000080">);
+
+</font>GOTOXY <font color="#000080">( (</font><font color="#800000">54 </font><font color="#000080">- </font>LENGTH <font color="#000080">(</font>amsg<font color="#000080">) ) </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+</font>WRITE <font color="#000080">(</font>amsg<font color="#000080">);
+
+</font>GOTOXY <font color="#000080">( (</font><font color="#800000">54 </font><font color="#000080">- </font>LENGTH <font color="#000080">(</font>actmsg<font color="#000080">) ) </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">);
+</font>WRITE <font color="#000080">(</font>actmsg<font color="#000080">);
+                                          </font><font color="#008000"><i>{ display it              }
+
+</i></font>ErrorPrompt <font color="#000080">:= </font><font color="#800000">' I)gnore R)etry A)bort F)ail ? '</font><font color="#000080">;
+</font>GOTOXY <font color="#000080">( (</font><font color="#800000">54 </font><font color="#000080">- </font>LENGTH <font color="#000080">(</font>ErrorPrompt<font color="#000080">) ) </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+</font>WRITE <font color="#000080">(</font>ErrorPrompt<font color="#000080">);
+</font><font color="#FF0000"><b>REPEAT                                     </b></font><font color="#008000"><i>{ get the user response  }
+</i></font>c <font color="#000080">:= </font>READKEY<font color="#000080">;
+</font>c <font color="#000080">:= </font>UPCASE <font color="#000080">(</font>c<font color="#000080">);
+</font><font color="#FF0000"><b>UNTIL </b></font>c <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">, </font><font color="#800000">'R'</font><font color="#000080">, </font><font color="#800000">'I'</font><font color="#000080">, </font><font color="#800000">'F'</font><font color="#000080">];
+</font>WINDOW <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">25</font><font color="#000080">);                         </font><font color="#008000"><i>{ restore the screen     }
+</i></font>TEXTCOLOR <font color="#000080">(</font>FGNorm<font color="#000080">);
+</font>TEXTBACKGROUND <font color="#000080">(</font>BGNorm<font color="#000080">);
+</font>Display<font color="#000080">^ := </font>SaveScr<font color="#000080">^;
+</font>DISPOSE <font color="#000080">(</font>SaveScr<font color="#000080">);
+</font><font color="#FF0000"><b>CASE </b></font>c <font color="#FF0000"><b>OF
+  </b></font><font color="#800000">'I' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+        </b></font>AX <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>ERRORRETRY <font color="#000080">:= </font>FALSE<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#800000">'R' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+        </b></font>AX <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font>ERRORRETRY <font color="#000080">:= </font>TRUE<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#800000">'A' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+        </b></font>Ax <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font>ERRORRETRY <font color="#000080">:= </font>FALSE<font color="#000080">;
+        </font>Showcursor<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#800000">'F' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+        </b></font>Ax <font color="#000080">:= </font><font color="#800000">3</font><font color="#000080">;
+        </font>ERRORRETRY <font color="#000080">:= </font>FALSE<font color="#000080">;
+        </font>Showcursor<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;</font><font color="#008000"><i>{procedure CritError}
+
+(**************************************************************************)
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DisplayError <font color="#000080">(</font>ErrNo <font color="#000080">: </font>INTEGER<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+</b></font>msg<font color="#000080">,
+</font>exitmsg <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+    CASE </b></font>ErrNo <font color="#FF0000"><b>OF
+    </b></font><font color="#800000">2 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'File not found'</font><font color="#000080">;
+    </font><font color="#800000">3 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Path not found'</font><font color="#000080">;
+    </font><font color="#800000">4 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Too many open files'</font><font color="#000080">;
+    </font><font color="#800000">5 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Access denied'</font><font color="#000080">;
+    </font><font color="#800000">6 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Invalid file handle'</font><font color="#000080">;
+    </font><font color="#800000">12 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Invalid file access code'</font><font color="#000080">;
+    </font><font color="#800000">15 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Invalid drive'</font><font color="#000080">;
+    </font><font color="#800000">16 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Cannot remove current directory'</font><font color="#000080">;
+    </font><font color="#800000">17 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Cannot rename across drives'</font><font color="#000080">;
+    </font><font color="#800000">100 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Disk read error'</font><font color="#000080">;
+    </font><font color="#800000">101 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Disk write error - Disk Full ?'</font><font color="#000080">;
+    </font><font color="#800000">102 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'File not assigned'</font><font color="#000080">;
+    </font><font color="#800000">103 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'File not opened'</font><font color="#000080">;
+    </font><font color="#800000">104 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'File not open for input'</font><font color="#000080">;
+    </font><font color="#800000">105 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'File not open for output'</font><font color="#000080">;
+    </font><font color="#800000">106 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Invalid numeric format'</font><font color="#000080">;
+    </font><font color="#800000">150 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Disk is write protected'</font><font color="#000080">;
+    </font><font color="#800000">151 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Unknown unit'</font><font color="#000080">;
+    </font><font color="#800000">152 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Drive not ready'</font><font color="#000080">;
+    </font><font color="#800000">153 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Unkown command'</font><font color="#000080">;
+    </font><font color="#800000">154 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'CRC error in data'</font><font color="#000080">;
+    </font><font color="#800000">155 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Bad drive request structure length'</font><font color="#000080">;
+    </font><font color="#800000">156 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Disk seek error'</font><font color="#000080">;
+    </font><font color="#800000">157 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Unknown media type'</font><font color="#000080">;
+    </font><font color="#800000">158 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Sector not found'</font><font color="#000080">;
+    </font><font color="#800000">159 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Printer out of paper'</font><font color="#000080">;
+    </font><font color="#800000">160 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Device write fault'</font><font color="#000080">;
+    </font><font color="#800000">161 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Device read fault'</font><font color="#000080">;
+    </font><font color="#800000">162 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Hardware failure'</font><font color="#000080">;
+    </font><font color="#800000">200 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Division by zero'</font><font color="#000080">;
+    </font><font color="#800000">201 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Range check error'</font><font color="#000080">;
+    </font><font color="#800000">202 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Stack overflow'</font><font color="#000080">;
+    </font><font color="#800000">203 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Heap overflow'</font><font color="#000080">;
+    </font><font color="#800000">204 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Invalid pointer operation'</font><font color="#000080">;
+    </font><font color="#800000">205 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Floating point overflow'</font><font color="#000080">;
+    </font><font color="#800000">206 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Floating point underflow'</font><font color="#000080">;
+    </font><font color="#800000">207 </font><font color="#000080">: </font>exitmsg <font color="#000080">:= </font><font color="#800000">'Invalid floating point operation'
+    </font><font color="#FF0000"><b>ELSE </b></font>exitmsg <font color="#000080">:= </font><font color="#800000">'Unknown Error # '</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font>msg <font color="#000080">:= </font>exitmsg<font color="#000080">;
+
+  </font>TEXTCOLOR <font color="#000080">(</font>FGErr<font color="#000080">);
+  </font>TEXTBACKGROUND <font color="#000080">(</font>BGErr<font color="#000080">);
+  </font>GOTOXY <font color="#000080">( (</font><font color="#800000">50 </font><font color="#000080">- </font>LENGTH <font color="#000080">(</font>msg<font color="#000080">) ) </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+  </font>WRITE <font color="#000080">(</font>msg<font color="#000080">);
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ErrTrap <font color="#000080">(</font>ErrNo <font color="#000080">: </font>INTEGER<font color="#000080">);
+</font><font color="#FF0000"><b>TYPE
+</b></font>ScrPtr         <font color="#000080">= ^</font>ScrBuff<font color="#000080">;
+</font>ScrBuff        <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4096</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Display<font color="#000080">,
+  </font>SaveScr    <font color="#000080">: </font>ScrPtr<font color="#000080">;
+
+  </font>c         <font color="#000080">: </font>CHAR<font color="#000080">;
+  </font>ErrorPrompt<font color="#000080">,
+  </font>msg <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+
+ </b></font>Display <font color="#000080">:= </font>PTR <font color="#000080">(</font>ScrSeg<font color="#000080">, </font><font color="#800000">$0000</font><font color="#000080">);            </font><font color="#008000"><i>{ save the current screen }
+ </i></font>NEW <font color="#000080">(</font>SaveScr<font color="#000080">);
+ </font>SaveScr<font color="#000080">^ := </font>Display<font color="#000080">^;
+ </font>WINDOW <font color="#000080">(</font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">65</font><font color="#000080">, </font><font color="#800000">16</font><font color="#000080">);                   </font><font color="#008000"><i>{ make a box to display the}
+ </i></font>TEXTCOLOR <font color="#000080">(</font>FGErr<font color="#000080">);                      </font><font color="#008000"><i>{ error message            }
+ </i></font>TEXTBACKGROUND <font color="#000080">(</font>BGErr<font color="#000080">);
+ </font>CLRSCR<font color="#000080">;
+ </font>box<font color="#000080">;
+
+  </font>ErrorRetry <font color="#000080">:= </font>TRUE<font color="#000080">;
+  </font>DisplayError <font color="#000080">(</font>ErrNo<font color="#000080">);
+
+                                          </font><font color="#008000"><i>{ display it              }
+
+</i></font>ErrorPrompt <font color="#000080">:= </font><font color="#800000">' I)gnore R)etry A)bort F)ail ? '</font><font color="#000080">;
+</font>GOTOXY <font color="#000080">( (</font><font color="#800000">54 </font><font color="#000080">- </font>LENGTH <font color="#000080">(</font>ErrorPrompt<font color="#000080">) ) </font><font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+</font>WRITE <font color="#000080">(</font>ErrorPrompt<font color="#000080">);
+</font><font color="#FF0000"><b>REPEAT                                     </b></font><font color="#008000"><i>{ get the user response  }
+</i></font>c <font color="#000080">:= </font>READKEY<font color="#000080">;
+</font>c <font color="#000080">:= </font>UPCASE <font color="#000080">(</font>c<font color="#000080">);
+</font><font color="#FF0000"><b>UNTIL </b></font>c <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">, </font><font color="#800000">'R'</font><font color="#000080">, </font><font color="#800000">'I'</font><font color="#000080">, </font><font color="#800000">'F'</font><font color="#000080">];
+</font><font color="#FF0000"><b>CASE </b></font>c <font color="#FF0000"><b>OF
+  </b></font><font color="#800000">'I' </font><font color="#000080">: </font>ErrorRetry <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font><font color="#800000">'R' </font><font color="#000080">: </font>ErrorRetry <font color="#000080">:= </font>TRUE<font color="#000080">;
+  </font><font color="#800000">'A' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+        </b></font>ErrorRetry <font color="#000080">:= </font>FALSE<font color="#000080">;
+        </font>Showcursor<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#800000">'F' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+        </b></font>ErrorRetry <font color="#000080">:= </font>FALSE<font color="#000080">;
+        </font>Showcursor<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>ErrorRetry <font color="#000080">= </font>FALSE <font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'If you are unable to correct the error'</font><font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'please report the error '</font><font color="#000080">, </font><font color="#800000">#40</font><font color="#000080">, </font>Errno<font color="#000080">, </font><font color="#800000">#41</font><font color="#000080">, </font><font color="#800000">' and      '</font><font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'exact circumstances when it occurred to us.'</font><font color="#000080">);
+      </font>WINDOW <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">25</font><font color="#000080">);                         </font><font color="#008000"><i>{ restore the screen     }
+      </i></font>TEXTCOLOR <font color="#000080">(</font>FGNorm<font color="#000080">);
+      </font>TEXTBACKGROUND <font color="#000080">(</font>BGNorm<font color="#000080">);
+      </font>Display<font color="#000080">^ := </font>SaveScr<font color="#000080">^;
+      </font>DISPOSE <font color="#000080">(</font>SaveScr<font color="#000080">);
+
+      </font>ErrorAddr <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+      </font>Showcursor<font color="#000080">;
+      </font>HALT<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font>WINDOW <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">25</font><font color="#000080">);                         </font><font color="#008000"><i>{ restore the screen     }
+</i></font>TEXTCOLOR <font color="#000080">(</font>FGNorm<font color="#000080">);
+</font>TEXTBACKGROUND <font color="#000080">(</font>BGNorm<font color="#000080">);
+</font>Display<font color="#000080">^ := </font>SaveScr<font color="#000080">^;
+</font>DISPOSE <font color="#000080">(</font>SaveScr<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>RuntimeError<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE
+</b></font>ScrPtr         <font color="#000080">= ^</font>ScrBuff<font color="#000080">;
+</font>ScrBuff        <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4096</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Display<font color="#000080">,
+  </font>SaveScr    <font color="#000080">: </font>ScrPtr<font color="#000080">;
+
+  </font>c         <font color="#000080">: </font>CHAR<font color="#000080">;
+  </font>ErrorPrompt<font color="#000080">,
+  </font>msg <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>ErrorAddr <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL THEN
+    BEGIN
+      </b></font>Display <font color="#000080">:= </font>PTR <font color="#000080">(</font>ScrSeg<font color="#000080">, </font><font color="#800000">$0000</font><font color="#000080">);            </font><font color="#008000"><i>{ save the current screen }
+      </i></font>NEW <font color="#000080">(</font>SaveScr<font color="#000080">);
+      </font>SaveScr<font color="#000080">^ := </font>Display<font color="#000080">^;
+      </font>WINDOW <font color="#000080">(</font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">65</font><font color="#000080">, </font><font color="#800000">16</font><font color="#000080">);                   </font><font color="#008000"><i>{ make a box to display the}
+      </i></font>TEXTCOLOR <font color="#000080">(</font>FGErr<font color="#000080">);                      </font><font color="#008000"><i>{ error message            }
+      </i></font>TEXTBACKGROUND <font color="#000080">(</font>BGErr<font color="#000080">);
+      </font>CLRSCR<font color="#000080">;
+      </font>box<font color="#000080">;
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'   Fatal  Error   '</font><font color="#000080">);
+      </font>DisplayError <font color="#000080">(</font>ExitCode<font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">20</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'Run time error '</font><font color="#000080">, </font>ExitCode<font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'If you are unable to correct the error'</font><font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'Please report the error and exact'</font><font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">);
+      </font>WRITE <font color="#000080">(</font><font color="#800000">'circumstances when it occurred to us.'</font><font color="#000080">);
+      </font>GOTOXY <font color="#000080">(</font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">7</font><font color="#000080">);
+      </font>WRITE <font color="#000080">( </font><font color="#800000">' Press a key to continue '</font><font color="#000080">);
+      </font>ErrorAddr <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+
+      </font>ExitProc <font color="#000080">:= </font>ExitSave<font color="#000080">;
+      </font>c <font color="#000080">:= </font>READKEY<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>WINDOW <font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">25</font><font color="#000080">);                         </font><font color="#008000"><i>{ restore the screen     }
+  </i></font>TEXTCOLOR <font color="#000080">(</font>FGNorm<font color="#000080">);
+  </font>TEXTBACKGROUND <font color="#000080">(</font>BGNorm<font color="#000080">);
+  </font>Display<font color="#000080">^ := </font>SaveScr<font color="#000080">^;
+  </font>DISPOSE <font color="#000080">(</font>SaveScr<font color="#000080">);
+
+  </font>ShowCursor<font color="#000080">;
+  </font>TEXTCOLOR <font color="#000080">(</font>lightgray<font color="#000080">);
+  </font>TEXTBACKGROUND <font color="#000080">(</font>black<font color="#000080">);
+
+  </font>SETINTVEC <font color="#000080">(</font><font color="#800000">$24</font><font color="#000080">, </font>SaveInt24<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DisableErrorHandler<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>SETINTVEC <font color="#000080">(</font><font color="#800000">$24</font><font color="#000080">, </font>SaveInt24<font color="#000080">);
+  </font>ExitProc <font color="#000080">:= </font>ExitSave<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(**************************************************************************)
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>InitErrs<font color="#000080">;
+  </font>Version <font color="#000080">:= </font>DosVer<font color="#000080">;
+  </font>Hidecursor<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>mem <font color="#000080">[</font><font color="#800000">$0000 </font><font color="#000080">: </font><font color="#800000">$0449</font><font color="#000080">] &lt;&gt; </font><font color="#800000">7 </font><font color="#FF0000"><b>THEN </b></font>ScrSeg <font color="#000080">:= </font><font color="#800000">$B800 </font><font color="#FF0000"><b>ELSE </b></font>ScrSeg <font color="#000080">:= </font><font color="#800000">$B000</font><font color="#000080">;
+  </font>GETINTVEC <font color="#000080">(</font><font color="#800000">$24</font><font color="#000080">, </font>SaveInt24<font color="#000080">);
+  </font>SETINTVEC <font color="#000080">(</font><font color="#800000">$24</font><font color="#000080">, @</font>CritError<font color="#000080">);
+  </font>ExitSave <font color="#000080">:= </font>ExitProc<font color="#000080">;
+  </font>ExitProc <font color="#000080">:= @</font>RuntimeError<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ---------------------   DEMO PROGRAM -------------------------- }
+
+{$I-}  { THIS MUST BE HERE FOR THE ERROR TRAP TO WORK !! }
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>testerr<font color="#000080">;
+</font><font color="#FF0000"><b>USES </b></font>dos<font color="#000080">, </font>crt<font color="#000080">, </font>printer<font color="#000080">, </font>errtrp<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+</b></font>regs <font color="#000080">: </font>REGISTERS<font color="#000080">;
+</font>fil <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+</font>Pchar <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+</b></font>CLRSCR<font color="#000080">;
+</font><font color="#008000"><i>(*COMMENT OUT THE FUNCTIONS NOT BEING TESTED*)
+(*       USING THE CRITICAL ERROR HANDLER PROCEDURE CRITERR  *)
+
+(* remove disc from A: drive to test this *)
+(******************************************)
+
+</i></font>WRITE <font color="#000080">(</font><font color="#800000">'trying to write to drive a: '</font><font color="#000080">);
+
+  </font>ASSIGN <font color="#000080">(</font>fil<font color="#000080">, </font><font color="#800000">'A:filename.ext'</font><font color="#000080">);
+  </font>REWRITE <font color="#000080">(</font>fil<font color="#000080">);
+
+</font>DisableErrorHandler<font color="#000080">;
+
+</font><font color="#008000"><i>(*  USING THE ERRTRAP PROCEDURE *)
+
+</i></font>WRITE <font color="#000080">(</font><font color="#800000">'trying to write to drive a: using ERRTRAP'</font><font color="#000080">);
+</font><font color="#FF0000"><b>REPEAT
+</b></font>ASSIGN <font color="#000080">(</font>fil<font color="#000080">, </font><font color="#800000">'A:filename.ext'</font><font color="#000080">);
+</font>REWRITE <font color="#000080">(</font>fil<font color="#000080">);
+</font>iocode <font color="#000080">:= </font>IORESULT<font color="#000080">;
+</font><font color="#FF0000"><b>IF </b></font>IOCode <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>ErrTrap <font color="#000080">(</font>IOCode<font color="#000080">);
+</font><font color="#FF0000"><b>UNTIL </b></font>ERRORRETRY <font color="#000080">= </font>FALSE<font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DOS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0043.PAS">Original</a><b>]</b></p></body>
+</html>

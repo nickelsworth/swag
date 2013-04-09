@@ -1,0 +1,179 @@
+<html>
+<head><title> "Writing Data to HiMem" by MAX MAISCHEIN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0026.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+MAX MAISCHEIN
+
+&gt; Yes, but my question deals with storage in the Heap - I want to load
+&gt; and manipulate as much data in memory as possible.  Hence, I am looking
+&gt; for 1 byte improvements, if possible.  The actual file content size is
+&gt; not an issue...
+
+For the case that some of your machines have UMBs available, I have a unit
+that extends the heap into these UMB blocks completely transparent.
+THe unit seems to work, I'd like to see any comments about bugs etc. on it.
+
+    Max Maischein                                          2:249/6.17
+
+    This unit was created to use the  high  memory  under  DOS  where
+    LoadHi loads the TSRs etc. as extra heap. This was  possible  due
+    to the revamped heap manager of Turbo  Pascal,  which  now  again
+    uses MCBs to control its freelist instead of  an  array  of  8192
+    pointers. I used this technique just like Himem / Quemm to insert
+    a huge used block, the high DOS / BIOS area in the heap and  then
+    to add the free RAN behind it. Now I have a maximum heap  size of
+    700K, which is nicer than the old 640K  limit.  Note  that  using
+    UseHi will not pay attention to the compiler $M settings in  your
+    source. The memory is freed automatically by DOS, but  I  had  to
+    adjust the MaxHeapxxx variable in the Memory unit, this is a word
+    that contains the maximum heap size,  which  increased  by  using
+    UseHi. If you don't need Turbo Vision, you can  remove  the  Uses
+    Memory line and also remove the MaxHeapxxx adjustment.  But  with
+    TVision, it will only work, if you have this line in it.
+
+    The text variable HeapWalk is for debugging purposes, if you want
+    to see a dump of the free blocks in the heap, you need to  assign
+    and reset / rewrite the HeapWalk variable and then call ListWalk.
+    Don't forget to close the HeapWalk variable again. It  will  dump
+    the whole freelist into the file.
+
+    This piece of code is donated to the public domain, but I request
+    that, if you use this code, you mention me in the DOCs somewhere.
+
+                                                                 -max
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>UseHi<font color="#000080">;
+</font><font color="#FF0000"><b>Interface
+
+Type
+  </b></font>PFreeRec <font color="#000080">= ^</font>TFreeRec<font color="#000080">;
+  </font>TFreeRec <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>Next   <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>Remain <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Paras  <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>HeapWalk <font color="#000080">: ^</font>Text<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ListWalk<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>NewHeap <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>NewSize <font color="#000080">: </font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+Uses
+  </b></font>MemAlloc<font color="#000080">,
+  </font>Memory<font color="#000080">,
+  </font>Objects<font color="#000080">,
+  </font>Strings2<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>MemStrategy <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>UMBState    <font color="#000080">: </font>Boolean <font color="#000080">= </font>False<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>himem_Init<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ax, 5800h
+  int  21h
+  mov  MemStrategy, ax
+  mov  ax, 5802h
+  int  21h
+  mov  UMBState, al
+  mov  ax, 5803h
+  mov  bx, 1
+  int  21h
+  mov  ax, 5801h
+  mov  bx, 0040h
+  int  21h
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>himem_Done<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ax, 5801h
+  mov  bx, MemStrategy
+  int  21h
+  mov  ax, 5803h
+  mov  bl, UMBState
+  xor  bh, bh
+  int  21h
+  mov  ax, 1
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>MakeFreeList<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>Mem <font color="#000080">: </font>LongInt<font color="#000080">;      </font><font color="#008000"><i>{ size of last block between heapPtr / HeapEnd }
+  </i></font>P   <font color="#000080">: </font>PFreeRec<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  If </b></font><font color="#000080">(</font>NewHeap <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Exit<font color="#000080">;
+
+  </font>P <font color="#000080">:= </font>HeapPtr<font color="#000080">;
+
+  </font>Mem <font color="#000080">:= </font>LongInt<font color="#000080">(</font>PtrRec<font color="#000080">(</font>HeapEnd<font color="#000080">).</font>Seg<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4 </font><font color="#000080">+ </font>PtrRec<font color="#000080">(</font>HeapEnd<font color="#000080">).</font>Ofs<font color="#000080">;
+  </font>Dec<font color="#000080">(</font>Mem<font color="#000080">, </font>LongInt<font color="#000080">(</font>PtrRec<font color="#000080">(</font>HeapPtr<font color="#000080">).</font>Seg<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4 </font><font color="#000080">+ </font>PtrRec<font color="#000080">(</font>HeapPtr<font color="#000080">).</font>Ofs<font color="#000080">);
+
+  </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>Mem <font color="#000080">&lt; </font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>RunError<font color="#000080">(</font><font color="#800000">203</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>With </b></font>P<font color="#000080">^ </font><font color="#FF0000"><b>do
+  Begin
+    </b></font>Next   <font color="#000080">:= </font>NewHeap<font color="#000080">;
+    </font>Paras  <font color="#000080">:= </font>Mem <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+    </font>Remain <font color="#000080">:= </font>Mem <font color="#FF0000"><b>and </b></font><font color="#800000">$0F</font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>HeapPtr <font color="#000080">:= </font>NewHeap<font color="#000080">;
+  </font>HeapEnd <font color="#000080">:= </font>NewHeap<font color="#000080">;
+  </font><font color="#FF0000"><b>With </b></font>PtrRec<font color="#000080">(</font>HeapEnd<font color="#000080">) </font><font color="#FF0000"><b>do
+    </b></font>Inc<font color="#000080">(</font>Seg<font color="#000080">, </font>Pred<font color="#000080">(</font>NewSize<font color="#000080">));
+  </font>MaxHeapSize <font color="#000080">:= </font>PtrRec<font color="#000080">(</font>HeapEnd<font color="#000080">).</font>Seg <font color="#000080">- </font>PtrRec<font color="#000080">(</font>HeapOrg<font color="#000080">).</font>Seg<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>BlockSize<font color="#000080">(</font>P <font color="#000080">: </font>PFreeRec<font color="#000080">) : </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  With </b></font>P<font color="#000080">^ </font><font color="#FF0000"><b>do
+    </b></font>BlockSize <font color="#000080">:= </font>LongInt<font color="#000080">(</font>Paras<font color="#000080">) * </font><font color="#800000">16 </font><font color="#000080">+ </font>LongInt<font color="#000080">(</font>Remain<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ListWalk<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>P   <font color="#000080">: </font>PFreeRec<font color="#000080">;
+  </font>Mem <font color="#000080">: </font>LongInt<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font><font color="#800000">'Free list    :'</font><font color="#000080">, </font>WPointer<font color="#000080">(</font>FreeList<font color="#000080">));
+  </font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font><font color="#800000">'Heap end     :'</font><font color="#000080">, </font>WPointer<font color="#000080">(</font>HeapEnd<font color="#000080">));
+  </font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font><font color="#800000">'Heap pointer :'</font><font color="#000080">, </font>WPointer<font color="#000080">(</font>HeapPtr<font color="#000080">));
+  </font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font><font color="#800000">'New heap     :'</font><font color="#000080">, </font>WPointer<font color="#000080">(</font>NewHeap<font color="#000080">));
+  </font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font><font color="#800000">'Walk of freelist :' </font><font color="#000080">);
+  </font>P <font color="#000080">:= </font>FreeList<font color="#000080">;
+  </font><font color="#FF0000"><b>If </b></font>P <font color="#000080">&lt;&gt; </font>HeapPtr <font color="#FF0000"><b>then
+    While </b></font>P <font color="#000080">&lt;&gt; </font>HeapPtr <font color="#FF0000"><b>do
+    Begin
+      </b></font>Write<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font>WPointer<font color="#000080">(</font>Addr<font color="#000080">(</font>P<font color="#000080">^)), </font><font color="#800000">' -- '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>With </b></font>PtrRec<font color="#000080">(</font>P<font color="#000080">), </font>P<font color="#000080">^ </font><font color="#FF0000"><b>do
+        </b></font>Write<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font>WPointer<font color="#000080">(</font>Ptr<font color="#000080">(</font>Seg <font color="#000080">+ </font>Paras<font color="#000080">, </font>Ofs <font color="#000080">+ </font>Remain<font color="#000080">)));
+      </font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font><font color="#800000">', '</font><font color="#000080">, </font>BlockSize<font color="#000080">(</font>P<font color="#000080">) : </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">' bytes.'</font><font color="#000080">);
+      </font>P <font color="#000080">:= </font>P<font color="#000080">^.</font>Next<font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font>Mem <font color="#000080">:= </font>LongInt<font color="#000080">(</font>PtrRec<font color="#000080">(</font>HeapEnd<font color="#000080">).</font>Seg<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4 </font><font color="#000080">+ </font>PtrRec<font color="#000080">(</font>HeapEnd<font color="#000080">).</font>Ofs<font color="#000080">;
+  </font>Dec<font color="#000080">(</font>Mem<font color="#000080">, </font>LongInt<font color="#000080">(</font>PtrRec<font color="#000080">(</font>HeapPtr<font color="#000080">).</font>Seg<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4 </font><font color="#000080">+ </font>PtrRec<font color="#000080">(</font>HeapPtr<font color="#000080">).</font>Ofs<font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font>HeapWalk<font color="#000080">^, </font>WPointer<font color="#000080">(</font>HeapPtr<font color="#000080">), </font><font color="#800000">' -- '</font><font color="#000080">, </font>WPointer<font color="#000080">(</font>HeapEnd<font color="#000080">), </font><font color="#800000">', '</font><font color="#000080">,
+                     </font>Mem <font color="#000080">: </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">' bytes left on top of heap.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+  </b></font>NewHeap  <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>HeapWalk <font color="#000080">:= @</font>Output<font color="#000080">;
+
+  </font>himem_Init<font color="#000080">;
+  </font>NewSize <font color="#000080">:= </font>DOSMemAvail <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+  </font>MAlloc<font color="#000080">(</font>NewHeap<font color="#000080">, </font>DosMemAvail<font color="#000080">);
+  </font>himem_Done<font color="#000080">;
+
+  </font>MakeFreeList<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0026.PAS">Original</a><b>]</b></p></body>
+</html>

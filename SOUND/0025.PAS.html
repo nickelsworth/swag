@@ -1,0 +1,746 @@
+<html>
+<head><title> "Lots of Sound" by DAVID DAHL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0025.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+I've gotten tired of writing these routines and have gone on to other
+projects so I don't have time to work on them now.  I figured others may get
+some use out of them though.  They're not totally done yet, but what is there
+does work (as far as I can tell).  They support playing digitized Sound
+(signed or unsigned) at sample rates from 18hz to 44.1khz (at least on my
+386sx/25), on the PC Speaker (polled), LPT DACs (1-4) or Adlib FM channels. I
+was planning on adding Sound Blaster DAC, Gravis UltraSound, and PC Speaker
+(pulse width modulated) support.  I also planned on adding VOC support.  I
+may add those at a later date, but no promises.  I'll release any new updates
+(if there are any) through the PDN since these routines are a little long
+(this will be the ONLY post of these routines in this echo).  I haven't
+tested the LPT DAC routines, so could someone who has an LPT DAC please test
+them and let me know if they work?  (They SHOULD work, but you never know.)
+These routines work For me under Turbo Pascal V6.0 on my 386sx/25.
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>Digital<font color="#000080">;
+</font><font color="#008000"><i>(*************************************************************************)
+(*                                                                       *)
+(*  Programmed by David Dahl                                             *)
+(*  This Unit and all routines are PUBLIC DOMAIN.                        *)
+(*                                                                       *)
+(*  Special thanks to Emil Gilliam For information (and code!) on Adlib  *)
+(*  digital output.                                                      *)
+(*                                                                       *)
+(*  if you use any of these routines in your own Programs, I would       *)
+(*  appreciate an acknowledgement in the docs and/or Program... and I'm  *)
+(*  sure Mr. Gilliam wouldn't Object to having his name mentioned, too.  *)
+(*                                                                       *)
+(*************************************************************************)
+</i></font><font color="#FF0000"><b>Interface
+
+Const
+  </b></font>BufSize       <font color="#000080">= </font><font color="#800000">2048</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>BufferType <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1 </font><font color="#000080">.. </font>BufSize<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>BufPointer <font color="#000080">= ^</font>BufferType<font color="#000080">;
+
+  </font>DeviceType <font color="#000080">= (</font>LPT1<font color="#000080">, </font>LPT2<font color="#000080">, </font>LPT3<font color="#000080">, </font>LPT4<font color="#000080">, </font>PcSpeaker<font color="#000080">, </font>PCSpeakPW<font color="#000080">, </font>Adlib<font color="#000080">,
+                </font>SoundBlaster<font color="#000080">, </font>UltraSound<font color="#000080">);
+
+</font><font color="#FF0000"><b>Var
+  </b></font>DonePlaying <font color="#000080">: </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetOutPutDevice<font color="#000080">(</font>DeviceName <font color="#000080">: </font>DeviceType<font color="#000080">; </font>SignedSamples <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>SetPlaySpeed<font color="#000080">(</font>Speed <font color="#000080">: </font>LongInt<font color="#000080">);
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayRAWSoundFile<font color="#000080">(</font>FileName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">; </font>SampleRate <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Function  </b></font>LoadBuffer<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>BufP <font color="#000080">: </font>BufPointer<font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>PlayBuffer<font color="#000080">(</font>BufPtr <font color="#000080">: </font>BufPointer<font color="#000080">; </font>Size <font color="#000080">: </font>Word<font color="#000080">);
+
+</font><font color="#FF0000"><b>Procedure </b></font>HaltPlaying<font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>CleanUp<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+Uses
+  </b></font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>C8253ModeControl   <font color="#000080">= </font><font color="#800000">$43</font><font color="#000080">;
+  </font>C8253Channel       <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">= (</font><font color="#800000">$40</font><font color="#000080">, </font><font color="#800000">$41</font><font color="#000080">, </font><font color="#800000">$42</font><font color="#000080">);
+  </font>C8253OperatingFreq <font color="#000080">= </font><font color="#800000">1193180</font><font color="#000080">;
+  </font>C8259Command       <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;
+
+  </font>TimerInterrupt     <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;
+  </font>AdlibIndex         <font color="#000080">= </font><font color="#800000">$388</font><font color="#000080">;
+  </font>AdlibReg           <font color="#000080">= </font><font color="#800000">$389</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>ZeroAndOne <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>DataLength  <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Buffer      <font color="#000080">: </font>BufPointer<font color="#000080">;
+
+  </font>LPTAddress  <font color="#000080">: </font>Word<font color="#000080">;
+  </font>LPTPort     <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1 </font><font color="#000080">.. </font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$0040 </font><font color="#000080">: </font><font color="#800000">$0008</font><font color="#000080">;
+
+  </font>OldTimerInterrupt <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>InterruptVector   <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Pointer <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$0000 </font><font color="#000080">: </font><font color="#800000">$0000</font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Misc Procedures ]=====================================================}
+
+{-[ Clear Interrupt Flag (Disable Maskable Interrupts) ]------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>CLI<font color="#000080">;
+</font><font color="#FF0000"><b>Inline</b></font><font color="#000080">(</font><font color="#800000">$FA</font><font color="#000080">);
+
+</font><font color="#008000"><i>{-[ Set Interrupt Flag ]--------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>STI<font color="#000080">;
+</font><font color="#FF0000"><b>Inline</b></font><font color="#000080">(</font><font color="#800000">$FB</font><font color="#000080">);
+
+
+</font><font color="#008000"><i>{=[ Initialize Sound Devices ]============================================}
+
+{-[ Initialize Adlib FM For Digital Output ]------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitializeAdlib<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>TempInt <font color="#000080">: </font>Pointer<font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Adlib<font color="#000080">(</font>Reg<font color="#000080">, </font>Data <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">mov  dx, AdlibIndex            </font><font color="#008000"><i>{ Adlib index port }
+    </i></font><font color="#FF00FF">mov  al, Reg
+
+    out  dx,al                     </font><font color="#008000"><i>{ Set the index }
+
+    { Wait For hardware to respond }
+    </i></font><font color="#FF00FF">in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx
+
+    inc  dx                        </font><font color="#008000"><i>{ Adlib register port }
+    </i></font><font color="#FF00FF">mov  al, Data
+    out  dx, al                    </font><font color="#008000"><i>{ Set the register value }
+
+    </i></font><font color="#FF00FF">dec  dx                        </font><font color="#008000"><i>{ Adlib index port }
+
+    { Wait For hardware to respond }
+    </i></font><font color="#FF00FF">in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+    in al, dx; in al, dx; in al, dx; in al, dx; in al, dx
+
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>Adlib<font color="#000080">(</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">);    </font><font color="#008000"><i>{ Set Adlib test Register }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$20</font><font color="#000080">, </font><font color="#800000">$21</font><font color="#000080">);    </font><font color="#008000"><i>{ Operator 0: MULTI=1, AM=VIB=KSR=0, EG=1 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$60</font><font color="#000080">, </font><font color="#800000">$F0</font><font color="#000080">);    </font><font color="#008000"><i>{ Attack = 15, Decay = 0 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$80</font><font color="#000080">, </font><font color="#800000">$F0</font><font color="#000080">);    </font><font color="#008000"><i>{ Sustain = 15, Release = 0 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$C0</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">);    </font><font color="#008000"><i>{ Feedback = 0, Additive Synthesis = 1 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$E0</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">);    </font><font color="#008000"><i>{ Waveform = Sine Wave }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$43</font><font color="#000080">, </font><font color="#800000">$3F</font><font color="#000080">);    </font><font color="#008000"><i>{ Operator 4: Total Level = 63, Attenuation = 0 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$B0</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">);    </font><font color="#008000"><i>{ Fnumber = 399 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$A0</font><font color="#000080">, </font><font color="#800000">$8F</font><font color="#000080">);
+  </font>Adlib<font color="#000080">(</font><font color="#800000">$B0</font><font color="#000080">, </font><font color="#800000">$2E</font><font color="#000080">);    </font><font color="#008000"><i>{ FNumber = 143, Key-On }
+
+  { Wait For the operator's sine wave to get to top and then stop it there
+    That way, we have an operator who's wave is stuck at the top, and we can
+    play digitized Sound by changing it's total level (volume) register. }
+
+  </i></font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">mov  al, 0                    </font><font color="#008000"><i>{ Get timer 0 value into DX }
+    </i></font><font color="#FF00FF">out  43h, al
+    jmp  @Delay1
+
+   @Delay1:
+    in   al, 40h
+    mov  dl, al
+    jmp  @Delay2
+
+   @Delay2:
+    in   al, 40h
+
+    mov  dh, al
+    sub  dx, 952h                 </font><font color="#008000"><i>{ Target value }
+
+   </i></font><font color="#FF00FF">@wait_loop:
+    mov  al, 0                    </font><font color="#008000"><i>{ Get timer 0 value into BX }
+    </i></font><font color="#FF00FF">out  43h, al
+    jmp  @Delay3
+
+   @Delay3:
+    in   al, 40h
+    mov  bl, al
+    jmp  @Delay4
+
+   @Delay4:
+    in   al, 40h
+    mov  bh, al
+    cmp  bx, dx                   </font><font color="#008000"><i>{ Have we waited that much time yet? }
+    </i></font><font color="#FF00FF">ja   @wait_loop               </font><font color="#008000"><i>{ if no, then go back }
+
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font><font color="#008000"><i>{ Now that the sine wave is at the top, change its frequency to 0 to keep
+   it from moving  }
+
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$B0</font><font color="#000080">, </font><font color="#800000">$20</font><font color="#000080">);  </font><font color="#008000"><i>{ F-Number = 0 }
+  </i></font>Adlib<font color="#000080">(</font><font color="#800000">$A0</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">);  </font><font color="#008000"><i>{ Frequency = 0 }
+
+  </i></font>Port<font color="#000080">[</font>AdlibIndex<font color="#000080">] := </font><font color="#800000">$40</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Sound Device Handlers ]===============================================}
+</i></font><font color="#FF0000"><b>Procedure </b></font>PlayPCSpeaker<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>Counter <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>DonePlaying<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    if </b></font>Counter <font color="#000080">&lt;= </font>DataLength <font color="#FF0000"><b>Then
+    begin
+      </b></font>Port<font color="#000080">[</font><font color="#800000">$61</font><font color="#000080">] := (</font>Port<font color="#000080">[</font><font color="#800000">$61</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">253</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">((</font>Buffer<font color="#000080">^[</font>Counter<font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">6</font><font color="#000080">);
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Counter     <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Port<font color="#000080">[</font>C8259Command<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Enable Interrupts }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayPCSpeakerSigned<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>Counter <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>DonePlaying<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    if </b></font>Counter <font color="#000080">&lt;= </font>DataLength <font color="#FF0000"><b>Then
+    begin
+      </b></font>Port<font color="#000080">[</font><font color="#800000">$61</font><font color="#000080">] := (</font>Port<font color="#000080">[</font><font color="#800000">$61</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">253</font><font color="#000080">) </font><font color="#FF0000"><b>OR
+                   </b></font><font color="#000080">((</font>Byte<font color="#000080">(</font>shortint<font color="#000080">(</font>Buffer<font color="#000080">^[</font>Counter<font color="#000080">]) + </font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">6</font><font color="#000080">);
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Counter     <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Port<font color="#000080">[</font>C8259Command<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Enable Interrupts }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayLPT<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>Counter <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>DonePlaying<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    if </b></font>Counter <font color="#000080">&lt;= </font>DataLength <font color="#FF0000"><b>Then
+    begin
+      </b></font>Port<font color="#000080">[</font>LPTAddress<font color="#000080">] := </font>Buffer<font color="#000080">^[</font>Counter<font color="#000080">];
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Counter     <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Port<font color="#000080">[</font>C8259Command<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Enable Interupts }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayLPTSigned<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>Counter <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>DonePlaying<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    if </b></font>Counter <font color="#000080">&lt;= </font>DataLength <font color="#FF0000"><b>Then
+    begin
+      </b></font>Port<font color="#000080">[</font>LPTAddress<font color="#000080">] := </font>Byte<font color="#000080">(</font>shortint<font color="#000080">(</font>Buffer<font color="#000080">^[</font>Counter<font color="#000080">]) + </font><font color="#800000">128</font><font color="#000080">);
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Counter     <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Port<font color="#000080">[</font>C8259Command<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Enable Interupts }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayAdlib<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>Counter <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>DonePlaying<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    if </b></font>Counter <font color="#000080">&lt;= </font>DataLength <font color="#FF0000"><b>Then
+    begin
+      </b></font>Port<font color="#000080">[</font>AdlibReg<font color="#000080">] := (</font>Buffer<font color="#000080">^[</font>Counter<font color="#000080">] </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">2</font><font color="#000080">);
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Counter     <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Port<font color="#000080">[</font>C8259Command<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Enable Interupts }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayAdlibSigned<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>Counter <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>DonePlaying<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    if </b></font>Counter <font color="#000080">&lt;= </font>DataLength <font color="#FF0000"><b>Then
+    begin
+      </b></font>Port<font color="#000080">[</font>AdlibReg<font color="#000080">] := </font>Byte<font color="#000080">(</font>shortint<font color="#000080">(</font>Buffer<font color="#000080">^[</font>Counter<font color="#000080">]) + </font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">2</font><font color="#000080">;
+      </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Counter     <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Port<font color="#000080">[</font>C8259Command<font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">; </font><font color="#008000"><i>{ Enable Interupts }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ 8253 Timer Programming Routines ]=====================================}
+</i></font><font color="#FF0000"><b>Procedure </b></font>Set8253Channel<font color="#000080">(</font>ChannelNumber <font color="#000080">: </font>Byte<font color="#000080">; </font>ProgramValue <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>Port<font color="#000080">[</font>C8253ModeControl<font color="#000080">] := </font><font color="#800000">54 </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>ChannelNumber <font color="#FF0000"><b>SHL </b></font><font color="#800000">6</font><font color="#000080">); </font><font color="#008000"><i>{ XX110110 }
+  </i></font>Port<font color="#000080">[</font>C8253Channel<font color="#000080">[</font>ChannelNumber<font color="#000080">]] := </font>Lo<font color="#000080">(</font>ProgramValue<font color="#000080">);
+  </font>Port<font color="#000080">[</font>C8253Channel<font color="#000080">[</font>ChannelNumber<font color="#000080">]] := </font>Hi<font color="#000080">(</font>ProgramValue<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-[ Set Clock Channel 0 (INT 8, IRQ 0) To Input Speed ]-------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetPlaySpeed<font color="#000080">(</font>Speed <font color="#000080">: </font>LongInt<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>ProgramValue <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ProgramValue <font color="#000080">:= </font>C8253OperatingFreq <font color="#FF0000"><b>div </b></font>Speed<font color="#000080">;
+  </font>Set8253Channel<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>ProgramValue<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-[ Set Clock Channel 0 Back To 18.2 Default Value ]----------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetDefaultTimerSpeed<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Set8253Channel <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{=[ File Handling ]=======================================================}
+
+{-[ Load Buffer With Data From Raw File ]---------------------------------}
+</i></font><font color="#FF0000"><b>Function </b></font>LoadBuffer<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>BufP <font color="#000080">: </font>BufPointer<font color="#000080">) : </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>NumRead <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>BlockRead<font color="#000080">(</font>F<font color="#000080">, </font>BufP<font color="#000080">^, </font>BufSize<font color="#000080">, </font>NumRead<font color="#000080">);
+  </font>LoadBuffer <font color="#000080">:= </font>NumRead<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{=[ Sound Playing / Setup Routines ]======================================}
+
+{-[ Output Sound Data In Buffer ]-----------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>PlayBuffer<font color="#000080">(</font>BufPtr <font color="#000080">: </font>BufPointer<font color="#000080">; </font>Size <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>Buffer      <font color="#000080">:= </font>BufPtr<font color="#000080">;
+  </font>DataLength  <font color="#000080">:= </font>Size<font color="#000080">;
+  </font>DonePlaying <font color="#000080">:= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-[ Halt Playing ]--------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>HaltPlaying<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DonePlaying <font color="#000080">:= </font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Initialize Data ]=====================================================}
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitializeData<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>CalledOnce <font color="#000080">: </font>Boolean <font color="#000080">= </font>False<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if Not</b></font><font color="#000080">(</font>CalledOnce<font color="#000080">) </font><font color="#FF0000"><b>Then
+  begin
+    </b></font>DonePlaying       <font color="#000080">:= </font>True<font color="#000080">;
+    </font>OldTimerInterrupt <font color="#000080">:= </font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">];
+    </font>CalledOnce        <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Set Interrupt Vectors ]===============================================}
+
+{-[ Set Timer Interrupt Vector To Our Device ]----------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetOutPutDevice<font color="#000080">(</font>DeviceName <font color="#000080">: </font>DeviceType<font color="#000080">; </font>SignedSamples <font color="#000080">: </font>Boolean<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>CLI<font color="#000080">;
+
+  </font><font color="#FF0000"><b>Case </b></font>DeviceName <font color="#FF0000"><b>of
+
+    </b></font>LPT1<font color="#000080">..</font>LPT4 <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        </b></font>LPTAddress <font color="#000080">:= </font>LPTPort<font color="#000080">[</font>Ord<font color="#000080">(</font>DeviceName<font color="#000080">)];
+        </font><font color="#FF0000"><b>if </b></font>SignedSamples <font color="#FF0000"><b>Then
+          </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayLPTSigned
+        <font color="#FF0000"><b>else
+          </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayLPT<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>PCSpeaker <font color="#000080">:
+      </font><font color="#FF0000"><b>if </b></font>SignedSamples <font color="#FF0000"><b>Then
+        </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayPCSpeakerSigned
+      <font color="#FF0000"><b>else
+        </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayPCSpeaker<font color="#000080">;
+
+    </font>Adlib <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        </b></font>InitializeAdlib<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>SignedSamples <font color="#FF0000"><b>Then
+          </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayAdlibSigned
+        <font color="#FF0000"><b>else
+          </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayAdlib<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>else
+      begin
+        </b></font>STI<font color="#000080">;
+
+        </font>Writeln<font color="#000080">;
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'That Sound Device Is Not Supported In This Version.'</font><font color="#000080">);
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'Using PC Speaker In Polled Mode Instead.'</font><font color="#000080">);
+
+        </font>CLI<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>SignedSamples <font color="#FF0000"><b>Then
+          </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayPCSpeakerSigned
+        <font color="#FF0000"><b>else
+          </b></font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := @</font>PlayPCSpeaker<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>STI<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-[ Set Timer Interupt Vector To Default Handler ]------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>SetTimerInterruptVectorDefault<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>CLI<font color="#000080">;
+  </font>InterruptVector<font color="#000080">[</font>TimerInterrupt<font color="#000080">] := </font>OldTimerInterrupt<font color="#000080">;
+  </font>STI<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>PlayRAWSoundFile<font color="#000080">(</font>FileName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">; </font>SampleRate <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>RawDataFile <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+  </font>SoundBuffer <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font>ZeroAndOne<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>BufPointer<font color="#000080">;
+  </font>BufNum      <font color="#000080">: </font>ZeroAndOne<font color="#000080">;
+  </font>Size        <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>New<font color="#000080">(</font>SoundBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]);
+  </font>New<font color="#000080">(</font>SoundBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+
+  </font>SetPlaySpeed<font color="#000080">(</font>SampleRate<font color="#000080">);
+
+  </font>Assign<font color="#000080">(</font>RawDataFile<font color="#000080">, </font>FileName<font color="#000080">);
+  </font>Reset<font color="#000080">(</font>RawDataFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+
+  </font>BufNum <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Size <font color="#000080">:= </font>LoadBuffer<font color="#000080">(</font>RawDataFile<font color="#000080">, </font>SoundBuffer<font color="#000080">[</font>BufNum<font color="#000080">]);
+
+  </font>PlayBuffer<font color="#000080">(</font>SoundBuffer<font color="#000080">[</font>BufNum<font color="#000080">], </font>Size<font color="#000080">);
+
+  </font><font color="#FF0000"><b>While Not</b></font><font color="#000080">(</font>Eof<font color="#000080">(</font>RawDataFile<font color="#000080">)) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>BufNum <font color="#000080">:= (</font>BufNum <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">;
+    </font>Size   <font color="#000080">:= </font>LoadBuffer<font color="#000080">(</font>RawDataFile<font color="#000080">, </font>SoundBuffer<font color="#000080">[</font>BufNum<font color="#000080">]);
+
+    </font><font color="#FF0000"><b>Repeat Until </b></font>DonePlaying<font color="#000080">;
+
+    </font>PlayBuffer<font color="#000080">(</font>SoundBuffer<font color="#000080">[</font>BufNum<font color="#000080">], </font>Size<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Close <font color="#000080">(</font>RawDataFile<font color="#000080">);
+
+  </font><font color="#FF0000"><b>Repeat Until </b></font>DonePlaying<font color="#000080">;
+
+  </font>SetDefaultTimerSpeed<font color="#000080">;
+
+  </font>Dispose<font color="#000080">(</font>SoundBuffer<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+  </font>Dispose<font color="#000080">(</font>SoundBuffer<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ MUST CALL BEFORE ExitING Program!!! ]=================================}
+</i></font><font color="#FF0000"><b>Procedure </b></font>CleanUp<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>SetDefaultTimerSpeed<font color="#000080">;
+  </font>SetTimerInterruptVectorDefault<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Set Up ]==============================================================}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>InitializeData<font color="#000080">;
+  </font>NoSound<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+
+
+
+
+
+</font><font color="#FF0000"><b>Program </b></font>RAWDigitalOutput<font color="#000080">;
+
+</font><font color="#008000"><i>(*************************************************************************)
+(*                                                                       *)
+(*  Programmed by David Dahl                                             *)
+(*  This Program and all routines are PUBLIC DOMAIN.                     *)
+(*                                                                       *)
+(*  if you use any of these routines in your own Programs, I would       *)
+(*  appreciate an acknowledgement in the docs and/or Program.            *)
+(*                                                                       *)
+(*************************************************************************)
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>Crt<font color="#000080">,
+  </font>Digital<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>String4  <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+  </font>String35 <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">35</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>Const
+  </b></font>MaxDevices <font color="#000080">= </font><font color="#800000">9</font><font color="#000080">;
+
+  </font>DeviceCommand  <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxDevices<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>String4 <font color="#000080">=
+    (</font><font color="#800000">'-L1'</font><font color="#000080">, </font><font color="#800000">'-L2'</font><font color="#000080">, </font><font color="#800000">'-L3'</font><font color="#000080">, </font><font color="#800000">'-L4'</font><font color="#000080">,
+     </font><font color="#800000">'-P' </font><font color="#000080">, </font><font color="#800000">'-PM'</font><font color="#000080">, </font><font color="#800000">'-A' </font><font color="#000080">, </font><font color="#800000">'-SB'</font><font color="#000080">, </font><font color="#800000">'-GUS' </font><font color="#000080">);
+
+  </font>DeviceName <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxDevices<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>String35 <font color="#000080">=
+    (</font><font color="#800000">'LPT DAC on LPT1'</font><font color="#000080">,
+     </font><font color="#800000">'LPT DAC on LPT2'</font><font color="#000080">,
+     </font><font color="#800000">'LPT DAC on LPT3'</font><font color="#000080">,
+     </font><font color="#800000">'LPT DAC on LPT4'</font><font color="#000080">,
+     </font><font color="#800000">'PC Speaker (Polled Mode)'</font><font color="#000080">,
+     </font><font color="#800000">'PC Speaker (Pulse Width Modulated)'</font><font color="#000080">,
+     </font><font color="#800000">'Adlib / SoundBlaster FM'</font><font color="#000080">,
+     </font><font color="#800000">'SoundBlaster DAC'</font><font color="#000080">,
+     </font><font color="#800000">'Gravis UltraSound'</font><font color="#000080">);
+
+  </font>SignedUnsigned  <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font>False <font color="#000080">.. </font>True<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>String35 <font color="#000080">=
+    (</font><font color="#800000">'Unsigned Sample'</font><font color="#000080">, </font><font color="#800000">'Signed Sample'</font><font color="#000080">);
+
+
+</font><font color="#008000"><i>{-[ Return An All Capaitalized String ]-----------------------------------}
+</i></font><font color="#FF0000"><b>Function </b></font>UpString<font color="#000080">(</font>StringIn <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">) : </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>TempString <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>Counter    <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>TempString <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length <font color="#000080">(</font>StringIn<font color="#000080">) </font><font color="#FF0000"><b>do
+    </b></font>TempString <font color="#000080">:= </font>TempString <font color="#000080">+ </font>UpCase<font color="#000080">(</font>StringIn<font color="#000080">[</font>Counter<font color="#000080">]);
+
+  </font>UpString <font color="#000080">:= </font>TempString<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{-[ Check if File Exists ]------------------------------------------------}
+</i></font><font color="#FF0000"><b>Function </b></font>FileExists<font color="#000080">(</font>FileName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>F <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{$I-}
+  </i></font>Assign <font color="#000080">(</font>F<font color="#000080">, </font>FileName<font color="#000080">);
+  </font>Reset<font color="#000080">(</font>F<font color="#000080">);
+  </font>Close<font color="#000080">(</font>F<font color="#000080">);
+  </font><font color="#008000"><i>{$I+}
+  </i></font>FileExists <font color="#000080">:= (</font>IOResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>FileName <font color="#000080">&lt;&gt; </font><font color="#800000">''</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Comand Line Parameter Decode ]========================================}
+</i></font><font color="#FF0000"><b>Function </b></font>FindOutPutDevice <font color="#000080">: </font>DeviceType<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>Counter       <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>DeviceCounter <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>Found         <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>Device        <font color="#000080">: </font>DeviceType<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Counter <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Found   <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Device  <font color="#000080">:= </font>PcSpeaker<font color="#000080">;
+
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Counter <font color="#000080">&lt;= </font>ParamCount<font color="#000080">) </font><font color="#FF0000"><b>and Not</b></font><font color="#000080">(</font>Found<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    For </b></font>DeviceCounter <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>To </b></font>MaxDevices <font color="#FF0000"><b>do
+      if </b></font>UpString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)) = </font>DeviceCommand<font color="#000080">[</font>DeviceCounter<font color="#000080">] </font><font color="#FF0000"><b>Then
+      begin
+        </b></font>Device <font color="#000080">:= </font>DeviceType<font color="#000080">(</font>DeviceCounter <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+        </font>Found  <font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>FindOutPutDevice <font color="#000080">:= </font>Device<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>FindRawFileName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>FileNameFound <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>TempName      <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>Found         <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>Counter       <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FileNameFound   <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>Counter <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Found   <font color="#000080">:= </font>False<font color="#000080">;
+
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Counter <font color="#000080">&lt;= </font>ParamCount<font color="#000080">) </font><font color="#FF0000"><b>and Not</b></font><font color="#000080">(</font>Found<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>TempName <font color="#000080">:= </font>UpString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>TempName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] &lt;&gt; </font><font color="#800000">'-' </font><font color="#FF0000"><b>Then
+    begin
+      </b></font>FileNameFound <font color="#000080">:= </font>TempName<font color="#000080">;
+      </font>Found         <font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Inc <font color="#000080">(</font>Counter<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>FindRawFileName <font color="#000080">:= </font>FileNameFound<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>FindPlayBackRate <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>RateString <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>Rate       <font color="#000080">: </font>Word<font color="#000080">;
+  </font>Found      <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>Counter    <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>ErrorCode  <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Rate <font color="#000080">:= </font><font color="#800000">22000</font><font color="#000080">;
+  </font>Counter <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Found   <font color="#000080">:= </font>False<font color="#000080">;
+
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Counter <font color="#000080">&lt;= </font>ParamCount<font color="#000080">) </font><font color="#FF0000"><b>and Not</b></font><font color="#000080">(</font>Found<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>RateString <font color="#000080">:= </font>UpString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>Copy<font color="#000080">(</font>RateString<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">) = </font><font color="#800000">'-F' </font><font color="#FF0000"><b>Then
+    begin
+      </b></font>RateString <font color="#000080">:= </font>Copy<font color="#000080">(</font>RateString<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">, </font>Length<font color="#000080">(</font>RateString<font color="#000080">) - </font><font color="#800000">2</font><font color="#000080">);
+      </font>Val<font color="#000080">(</font>RateString<font color="#000080">, </font>Rate<font color="#000080">, </font>ErrorCode<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>ErrorCode <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+      begin
+        </b></font>Rate <font color="#000080">:= </font><font color="#800000">22000</font><font color="#000080">;
+        </font>Writeln <font color="#000080">(</font><font color="#800000">'Error In Frequency. Using Default'</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>Found <font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Inc <font color="#000080">(</font>Counter<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>Rate <font color="#000080">&lt; </font><font color="#800000">18 </font><font color="#FF0000"><b>Then
+    </b></font>Rate <font color="#000080">:= </font><font color="#800000">18
+  </font><font color="#FF0000"><b>else
+  if </b></font>Rate <font color="#000080">&gt; </font><font color="#800000">44100 </font><font color="#FF0000"><b>Then
+    </b></font>Rate <font color="#000080">:= </font><font color="#800000">44100</font><font color="#000080">;
+
+  </font>FindPlayBackRate <font color="#000080">:= </font>Rate<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>SignedSample <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>Found   <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>Counter <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>SignedSample <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Found   <font color="#000080">:= </font>False<font color="#000080">;
+  </font>Counter <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Counter <font color="#000080">&lt;= </font>ParamCount<font color="#000080">) </font><font color="#FF0000"><b>and Not</b></font><font color="#000080">(</font>Found<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>UpString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)) = </font><font color="#800000">'-S' </font><font color="#FF0000"><b>Then
+    begin
+      </b></font>SignedSample <font color="#000080">:= </font>True<font color="#000080">;
+      </font>Found        <font color="#000080">:= </font>True<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{=[ Main Program ]========================================================}
+</i></font><font color="#FF0000"><b>Var
+  </b></font>SampleName <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>SampleRate <font color="#000080">: </font>Word<font color="#000080">;
+  </font>OutDevice  <font color="#000080">: </font>DeviceType<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Writeln<font color="#000080">;
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'RAW Sound File Player V0.07'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Programmed By David Dahl'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'Thanks to Emil Gilliam For Adlib digital output information'</font><font color="#000080">);
+  </font>Writeln<font color="#000080">(</font><font color="#800000">'This Program is PUBLIC DOMAIN'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>ParamCount <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+  begin
+    </b></font>SampleRate <font color="#000080">:= </font>FindPlayBackRate<font color="#000080">;
+    </font>SampleName <font color="#000080">:= </font>FindRawFileName<font color="#000080">;
+    </font>OutDevice  <font color="#000080">:= </font>FindOutPutDevice<font color="#000080">;
+    </font>Writeln<font color="#000080">;
+
+    </font><font color="#FF0000"><b>if </b></font>SampleName <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>Then
+    begin
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Raw File   : '</font><font color="#000080">,</font>SampleName<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Format     : '</font><font color="#000080">,</font>SignedUnsigned<font color="#000080">[</font>SignedSample<font color="#000080">]);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Sample Rate: '</font><font color="#000080">,</font>SampleRate<font color="#000080">);
+      </font>Writeln<font color="#000080">(</font><font color="#800000">'Device     : '</font><font color="#000080">,</font>DeviceName<font color="#000080">[</font>Ord<font color="#000080">(</font>OutDevice<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">]);
+
+      </font><font color="#FF0000"><b>if </b></font>FileExists<font color="#000080">(</font>SampleName<font color="#000080">) </font><font color="#FF0000"><b>Then
+      begin
+        </b></font>SetOutputDevice<font color="#000080">(</font>OutDevice<font color="#000080">, </font>SignedSample<font color="#000080">);
+        </font>PlayRAWSoundFile<font color="#000080">(</font>SampleName<font color="#000080">, </font>SampleRate<font color="#000080">);
+      </font><font color="#FF0000"><b>end
+      else
+        </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Sound File Not Found.'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+      </b></font>Writeln<font color="#000080">(</font><font color="#800000">'Filename Not Specified.'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+    </b></font>Writeln<font color="#000080">;
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'USAGE:'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">),</font><font color="#800000">' [SWITCHES] &lt;RAW DATA File&gt;'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">;
+    </font>Writeln<font color="#000080">(</font><font color="#800000">'SWITCHES:'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -P      PC Speaker, Polled (Default)'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -L1     LPT DAC on LPT 1'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -L2     LPT DAC on LPT 2'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -L3     LPT DAC on LPT 3'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -L4     LPT DAC on LPT 4'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -A      Adlib/Sound Blaster FM'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">;
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -S      Signed Sample (Unsigned Default)'</font><font color="#000080">);
+    </font>Writeln<font color="#000080">;
+    </font>Writeln<font color="#000080">(</font><font color="#800000">' -FXXXXX Frequency Of Sample. XXXXX can be any Integer '</font><font color="#000080">,
+             </font><font color="#800000">'between 18 to 44100'</font><font color="#000080">);
+    </font>Writeln <font color="#000080">(</font><font color="#800000">'         (22000 Default)'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>CleanUp<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SOUND SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0025.PAS">Original</a><b>]</b></p></body>
+</html>

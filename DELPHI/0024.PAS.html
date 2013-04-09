@@ -1,0 +1,221 @@
+<html>
+<head><title> "Disk volume labels in Delphi" by SWAG SUPPORT GROUP</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0024.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#000000">This document <font color="#FF0000"><b>contains </b></font>the source code <font color="#FF0000"><b>for </b></font>a <font color="#FF0000"><b>unit </b></font>that <font color="#FF0000"><b>is </b></font>useful <font color="#FF0000"><b>for
+</b></font>getting<font color="#000080">, </font>setting<font color="#000080">, </font><font color="#FF0000"><b>and </b></font>deleting volume labels from a floppy <font color="#FF0000"><b>or </b></font>hard disk<font color="#000080">.
+</font>The code <font color="#FF0000"><b>for </b></font>getting a volume <font color="#FF0000"><b>label uses </b></font>the Delphi FindFirst <font color="#FF0000"><b>function</b></font><font color="#000080">,
+</font><font color="#FF0000"><b>and </b></font>the code <font color="#FF0000"><b>for </b></font>setting <font color="#FF0000"><b>and </b></font>deleting volume labels involves calling DOS
+interrupt <font color="#800000">21</font>h<font color="#000080">, </font>functions <font color="#800000">16</font>h <font color="#FF0000"><b>and </b></font><font color="#800000">13</font>h respectively<font color="#000080">.  </font>Since <font color="#FF0000"><b>function </b></font><font color="#800000">16</font>h
+isn<font color="#800000">'t supported by Windows, it must be called through DPMI interrupt 31h,
+</font><font color="#FF0000"><b>function </b></font><font color="#800000">300</font>h<font color="#000080">.
+
+</font><font color="#008000"><i>{ *** BEGIN CODE FOR VOLLABEL UNIT *** }
+
+</i></font><font color="#FF0000"><b>unit </b></font>VolLabel<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+uses </b></font>Classes<font color="#000080">, </font>SysUtils<font color="#000080">, </font>WinProcs<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>EInterruptError <font color="#000080">= </font><font color="#FF0000"><b>class</b></font><font color="#000080">(</font>Exception<font color="#000080">);
+  </font>EDPMIError <font color="#000080">= </font><font color="#FF0000"><b>class</b></font><font color="#000080">(</font>EInterruptError<font color="#000080">);
+  </font>Str11 <font color="#000080">= </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">11</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>procedure </b></font>SetVolumeLabel<font color="#000080">(</font>NewLabel<font color="#000080">: </font>Str11<font color="#000080">; </font>Drive<font color="#000080">: </font>Char<font color="#000080">);
+</font><font color="#FF0000"><b>function </b></font>GetVolumeLabel<font color="#000080">(</font>Drive<font color="#000080">: </font>Char<font color="#000080">): </font>Str11<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>DeleteVolumeLabel<font color="#000080">(</font>Drv<font color="#000080">: </font>Char<font color="#000080">);
+
+</font><font color="#FF0000"><b>implementation
+
+type
+  </b></font>PRealModeRegs <font color="#000080">= ^</font>TRealModeRegs<font color="#000080">;
+  </font>TRealModeRegs <font color="#000080">= </font><font color="#FF0000"><b>record
+    case </b></font>Integer <font color="#FF0000"><b>of
+      </b></font><font color="#800000">0</font><font color="#000080">: (
+        </font>EDI<font color="#000080">, </font>ESI<font color="#000080">, </font>EBP<font color="#000080">, </font>EXX<font color="#000080">, </font>EBX<font color="#000080">, </font>EDX<font color="#000080">, </font>ECX<font color="#000080">, </font>EAX<font color="#000080">: </font>Longint<font color="#000080">;
+
+        </font>Flags<font color="#000080">, </font>ES<font color="#000080">, </font>DS<font color="#000080">, </font>FS<font color="#000080">, </font>GS<font color="#000080">, </font>IP<font color="#000080">, </font>CS<font color="#000080">, </font>SP<font color="#000080">, </font>SS<font color="#000080">: </font>Word<font color="#000080">);
+      </font><font color="#800000">1</font><font color="#000080">: (
+        </font>DI<font color="#000080">, </font>DIH<font color="#000080">, </font>SI<font color="#000080">, </font>SIH<font color="#000080">, </font>BP<font color="#000080">, </font>BPH<font color="#000080">, </font>XX<font color="#000080">, </font>XXH<font color="#000080">: </font>Word<font color="#000080">;
+        </font><font color="#FF0000"><b>case </b></font>Integer <font color="#FF0000"><b>of
+          </b></font><font color="#800000">0</font><font color="#000080">: (
+            </font>BX<font color="#000080">, </font>BXH<font color="#000080">, </font>DX<font color="#000080">, </font>DXH<font color="#000080">, </font>CX<font color="#000080">, </font>CXH<font color="#000080">, </font>AX<font color="#000080">, </font>AXH<font color="#000080">: </font>Word<font color="#000080">);
+          </font><font color="#800000">1</font><font color="#000080">: (
+            </font>BL<font color="#000080">, </font>BH<font color="#000080">, </font>BLH<font color="#000080">, </font>BHH<font color="#000080">, </font>DL<font color="#000080">, </font>DH<font color="#000080">, </font>DLH<font color="#000080">, </font>DHH<font color="#000080">,
+            </font>CL<font color="#000080">, </font>CH<font color="#000080">, </font>CLH<font color="#000080">, </font>CHH<font color="#000080">, </font>AL<font color="#000080">, </font>AH<font color="#000080">, </font>ALH<font color="#000080">, </font>AHH<font color="#000080">: </font>Byte<font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>PExtendedFCB <font color="#000080">= ^</font>TExtendedFCB<font color="#000080">;
+  </font>TExtendedFCB <font color="#000080">= </font><font color="#FF0000"><b>Record
+    </b></font>ExtendedFCBflag <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Reserved1       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">5</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+
+    </font>Attr            <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>DriveID         <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>FileName        <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>FileExt         <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font>CurrentBlockNum <font color="#000080">: </font>Word<font color="#000080">;
+    </font>RecordSize      <font color="#000080">: </font>Word<font color="#000080">;
+    </font>FileSize        <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>PackedDate      <font color="#000080">: </font>Word<font color="#000080">;
+    </font>PackedTime      <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Reserved2       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+    </font>CurrentRecNum   <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>RandomRecNum    <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>RealModeInt<font color="#000080">(</font>Int<font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Regs<font color="#000080">: </font>TRealModeRegs<font color="#000080">);
+</font><font color="#008000"><i>{ procedure invokes int 31h function 0300h to simulate a real mode }
+
+{ interrupt  from protected mode. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>ErrorFlag<font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">mov ErrorFlag, 0       </font><font color="#008000"><i>{ assume success }
+    </i></font><font color="#FF00FF">mov ax, 0300h          </font><font color="#008000"><i>{ function 300h }
+    </i></font><font color="#FF00FF">mov bl, Int            </font><font color="#008000"><i>{ real mode interrupt to execute }
+    </i></font><font color="#FF00FF">mov bh, 0              </font><font color="#008000"><i>{ required }
+    </i></font><font color="#FF00FF">mov cx, 0              </font><font color="#008000"><i>{ stack words to copy, assume zero }
+    </i></font><font color="#FF00FF">les di, Regs           </font><font color="#008000"><i>{ es:di = Regs }
+    </i></font><font color="#FF00FF">int 31h                </font><font color="#008000"><i>{ DPMI int 31h }
+    </i></font><font color="#FF00FF">jnc @@</font><font color="#FF0000"><b>End              </b></font><font color="#008000"><i>{ carry flag set on error }
+
+  </i></font><font color="#000080">@@</font>Error<font color="#000080">:
+    </font>mov ErrorFlag<font color="#000080">, </font><font color="#800000">1       </font><font color="#008000"><i>{ return false on error }
+  </i></font><font color="#000080">@@</font><font color="#FF0000"><b>End</b></font><font color="#000080">:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ErrorFlag <font color="#FF0000"><b>then
+    raise </b></font>EDPMIError<font color="#000080">.</font>Create<font color="#000080">(</font><font color="#800000">'Failed to execute DPMI interrupt'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>DriveLetterToNumber<font color="#000080">(</font>DriveLet<font color="#000080">: </font>Char<font color="#000080">): </font>Byte<font color="#000080">;
+</font><font color="#008000"><i>{ function converts a character drive letter into its numerical equiv. }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>DriveLet <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'a'</font><font color="#000080">..</font><font color="#800000">'z'</font><font color="#000080">] </font><font color="#FF0000"><b>then
+    </b></font>DriveLet <font color="#000080">:= </font>Chr<font color="#000080">(</font>Ord<font color="#000080">(</font>DriveLet<font color="#000080">) -</font><font color="#800000">32</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>DriveLet <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'A'</font><font color="#000080">..</font><font color="#800000">'Z'</font><font color="#000080">]) </font><font color="#FF0000"><b>then
+    raise </b></font>EConvertError<font color="#000080">.</font>CreateFmt<font color="#000080">(</font><font color="#800000">'Cannot convert %s to drive number'</font><font color="#000080">,
+
+                                  [</font>DriveLet<font color="#000080">]);
+  </font>Result <font color="#000080">:= </font>Ord<font color="#000080">(</font>DriveLet<font color="#000080">) - </font><font color="#800000">64</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>PadVolumeLabel<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Name<font color="#000080">: </font>Str11<font color="#000080">);
+</font><font color="#008000"><i>{ procedure pads Volume Label string with spaces }
+</i></font><font color="#FF0000"><b>var
+  </b></font>i<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>i <font color="#000080">:= </font>Length<font color="#000080">(</font>Name<font color="#000080">) + </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">11 </font><font color="#FF0000"><b>do
+    </b></font>Name <font color="#000080">:= </font>Name <font color="#000080">+ </font><font color="#800000">' '</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>GetVolumeLabel<font color="#000080">(</font>Drive<font color="#000080">: </font>Char<font color="#000080">): </font>Str11<font color="#000080">;
+</font><font color="#008000"><i>{ function returns volume label of a disk }
+</i></font><font color="#FF0000"><b>var
+  </b></font>SR<font color="#000080">: </font>TSearchRec<font color="#000080">;
+  </font>DriveLetter<font color="#000080">: </font>Char<font color="#000080">;
+  </font>SearchString<font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">7</font><font color="#000080">];
+  </font>P<font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>SearchString <font color="#000080">:= </font>Drive <font color="#000080">+ </font><font color="#800000">':\*.*'</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ find vol label }
+  </i></font><font color="#FF0000"><b>if </b></font>FindFirst<font color="#000080">(</font>SearchString<font color="#000080">, </font>faVolumeID<font color="#000080">, </font>SR<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+    </b></font>P <font color="#000080">:= </font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>SR<font color="#000080">.</font>Name<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>P <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin                      </b></font><font color="#008000"><i>{ if it has a dot... }
+      </i></font>Result <font color="#000080">:= </font><font color="#800000">'           '</font><font color="#000080">;               </font><font color="#008000"><i>{ pad spaces between name }
+      </i></font>Move<font color="#000080">(</font>SR<font color="#000080">.</font>Name<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>Result<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>P <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);    </font><font color="#008000"><i>{ and extension }
+      </i></font>Move<font color="#000080">(</font>SR<font color="#000080">.</font>Name<font color="#000080">[</font>P <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">], </font>Result<font color="#000080">[</font><font color="#800000">9</font><font color="#000080">], </font><font color="#800000">3</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else begin
+      </b></font>Result <font color="#000080">:= </font>SR<font color="#000080">.</font>Name<font color="#000080">;                     </font><font color="#008000"><i>{ otherwise, pad to end }
+      </i></font>PadVolumeLabel<font color="#000080">(</font>Result<font color="#000080">);
+
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else
+    </b></font>Result <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DeleteVolumeLabel<font color="#000080">(</font>Drv<font color="#000080">: </font>Char<font color="#000080">);
+</font><font color="#008000"><i>{ procedure deletes volume label from given drive }
+</i></font><font color="#FF0000"><b>var
+  </b></font>CurName<font color="#000080">: </font>Str11<font color="#000080">;
+  </font>FCB<font color="#000080">: </font>TExtendedFCB<font color="#000080">;
+  </font>ErrorFlag<font color="#000080">: </font>WordBool<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ErrorFlag <font color="#000080">:= </font>False<font color="#000080">;
+  </font>CurName <font color="#000080">:= </font>GetVolumeLabel<font color="#000080">(</font>Drv<font color="#000080">);        </font><font color="#008000"><i>{ get current volume label }
+  </i></font>FillChar<font color="#000080">(</font>FCB<font color="#000080">, </font>SizeOf<font color="#000080">(</font>FCB<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);         </font><font color="#008000"><i>{ initialize FCB with zeros }
+  </i></font><font color="#FF0000"><b>with </b></font>FCB <font color="#FF0000"><b>do begin
+    </b></font>ExtendedFCBflag <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;              </font><font color="#008000"><i>{ always }
+    </i></font>Attr <font color="#000080">:= </font>faVolumeID<font color="#000080">;                  </font><font color="#008000"><i>{ Volume ID attribute }
+
+    </i></font>DriveID <font color="#000080">:= </font>DriveLetterToNumber<font color="#000080">(</font>Drv<font color="#000080">); </font><font color="#008000"><i>{ Drive number }
+    </i></font>Move<font color="#000080">(</font>CurName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>FileName<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);       </font><font color="#008000"><i>{ must enter volume label }
+    </i></font>Move<font color="#000080">(</font>CurName<font color="#000080">[</font><font color="#800000">9</font><font color="#000080">], </font>FileExt<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">push ds                              </font><font color="#008000"><i>{ preserve ds }
+    </i></font><font color="#FF00FF">mov ax, ss                           </font><font color="#008000"><i>{ put seg of FCB (ss) in ds }
+    </i></font><font color="#FF00FF">mov ds, ax
+    lea dx, FCB                          </font><font color="#008000"><i>{ put offset of FCB in dx }
+    </i></font><font color="#FF00FF">mov ax, 1300h                        </font><font color="#008000"><i>{ function 13h }
+    </i></font><font color="#FF00FF">Call DOS3Call                        </font><font color="#008000"><i>{ invoke int 21h }
+
+    </i></font><font color="#FF00FF">pop ds                               </font><font color="#008000"><i>{ restore ds }
+    </i></font><font color="#FF00FF">cmp al, 00h                          </font><font color="#008000"><i>{ check for success }
+    </i></font><font color="#FF00FF">je @@</font><font color="#FF0000"><b>End
+  </b></font><font color="#000080">@@</font>Error<font color="#000080">:                               </font><font color="#008000"><i>{ set flag on error }
+    </i></font>mov ErrorFlag<font color="#000080">, </font><font color="#800000">1
+  </font><font color="#000080">@@</font><font color="#FF0000"><b>End</b></font><font color="#000080">:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ErrorFlag <font color="#FF0000"><b>then
+    raise </b></font>EInterruptError<font color="#000080">.</font>Create<font color="#000080">(</font><font color="#800000">'Failed to delete volume name'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetVolumeLabel<font color="#000080">(</font>NewLabel<font color="#000080">: </font>Str11<font color="#000080">; </font>Drive<font color="#000080">: </font>Char<font color="#000080">);
+</font><font color="#008000"><i>{ procedure sets volume label of a disk.  Note that this procedure }
+{ deletes the current label before setting the new one.  This is }
+
+{ required for the set function to work. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>Regs<font color="#000080">: </font>TRealModeRegs<font color="#000080">;
+  </font>FCB<font color="#000080">: </font>PExtendedFCB<font color="#000080">;
+  </font>Buf<font color="#000080">: </font>Longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>PadVolumeLabel<font color="#000080">(</font>NewLabel<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>GetVolumeLabel<font color="#000080">(</font>Drive<font color="#000080">) &lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>then           </b></font><font color="#008000"><i>{ if has label... }
+    </i></font>DeleteVolumeLabel<font color="#000080">(</font>Drive<font color="#000080">);                   </font><font color="#008000"><i>{ delete label }
+  </i></font>Buf <font color="#000080">:= </font>GlobalDOSAlloc<font color="#000080">(</font>SizeOf<font color="#000080">(</font>PExtendedFCB<font color="#000080">));  </font><font color="#008000"><i>{ allocate real buffer }
+  </i></font>FCB <font color="#000080">:= </font>Ptr<font color="#000080">(</font>LoWord<font color="#000080">(</font>Buf<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+  </font>FillChar<font color="#000080">(</font>FCB<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>FCB<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);               </font><font color="#008000"><i>{ init FCB with zeros }
+  </i></font><font color="#FF0000"><b>with </b></font>FCB<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+
+    </b></font>ExtendedFCBflag <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;                     </font><font color="#008000"><i>{ required }
+    </i></font>Attr <font color="#000080">:= </font>faVolumeID<font color="#000080">;                         </font><font color="#008000"><i>{ Volume ID attribute }
+    </i></font>DriveID <font color="#000080">:= </font>DriveLetterToNumber<font color="#000080">(</font>Drive<font color="#000080">);      </font><font color="#008000"><i>{ Drive number }
+    </i></font>Move<font color="#000080">(</font>NewLabel<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>FileName<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);             </font><font color="#008000"><i>{ set new label }
+    </i></font>Move<font color="#000080">(</font>NewLabel<font color="#000080">[</font><font color="#800000">9</font><font color="#000080">], </font>FileExt<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>FillChar<font color="#000080">(</font>Regs<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Regs<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do begin                            </b></font><font color="#008000"><i>{ SEGMENT of FCB }
+    </i></font>ds <font color="#000080">:= </font>HiWord<font color="#000080">(</font>Buf<font color="#000080">);                          </font><font color="#008000"><i>{ offset = zero }
+
+    </i></font>dx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>ax <font color="#000080">:= </font><font color="#800000">$1600</font><font color="#000080">;                                </font><font color="#008000"><i>{ function 16h }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>RealModeInt<font color="#000080">(</font><font color="#800000">$21</font><font color="#000080">, </font>Regs<font color="#000080">);                       </font><font color="#008000"><i>{ create file }
+  </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Regs<font color="#000080">.</font>al <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then                        </b></font><font color="#008000"><i>{ check for success }
+    </i></font><font color="#FF0000"><b>raise </b></font>EInterruptError<font color="#000080">.</font>Create<font color="#000080">(</font><font color="#800000">'Failed to create volume label'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font><font color="#008000"><i>{ *** END CODE FOR VOLLABEL UNIT *** }
+
+
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0024.PAS">Original</a><b>]</b></p></body>
+</html>

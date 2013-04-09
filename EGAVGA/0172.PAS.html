@@ -1,0 +1,510 @@
+<html>
+<head><title> "Raycasting (Re: Doom) Example" by KAI ROHRBACHER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0172.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(*
+
+&gt; Can anyone recomend any books/source/reference/people that would be
+&gt; necessary to read/talk to to learn how to do 3 dimensional graphics for
+&gt; 1st person game programming similar to the Wolfenstein/Doom/Flight
+&gt; simulator type games.
+
+  If  you  can read &quot;C&quot;, you should look out for ACK3D (a &quot;3D&quot; shareware
+  graphic  engine)  which  comes  with  some sources. Note however, that
+  neither  ACK3D nor Wolfenstein or Doom are true 3D games: They all use
+  a clever technique called &quot;raycasting&quot;.
+
+  The  underlying  idea  of raycasting is quite simple: use a 2D program
+  and  just  paste in a 3rd dimension, only for the screen display. Just
+  take  a  2nd  look  at  DOOM  at you'll notice that there is no single
+  location  in the map where you may have two different height-positions
+  throughout  the  game.  Or more mathematically: There is no coordinate
+  (x,y) in the plane for which there are more than one z-coordinate. The
+  basic  map  of  such games is a normal 2D map: the player moves within
+  this  plane  (which  is divided by a grid into basic &quot;blocks&quot;) and his
+  view  will  be computed for each animation frame. For example, say his
+  angle  of view is 60 degrees. Then from his actual position, imaginary
+  rays  will  be  sent out from -30..+30 degrees through the 2D (!) map.
+  Each  ray  is  traced until it hits a block of the grid. The according
+  object  will  then  be drawn to the screen at the proper position; the
+  length  of  the  ray  from the player's position to the hit-point is a
+  measurement  how  far  the object is from the viewer and thus, how big
+  (and bright) the object should be drawn.
+  As the player only moves within the (x,y) plane, there is no change of
+  information  in  the  z-coordinate. Therefore, for each screen column,
+  there is only one single computation necessary! (Even small changes in
+  the z-coordinate could be simulated easily by shifting the column data
+  a  bit). The profits are dramatic: for a screen resolution of 320x200,
+  you  only  have  320  computations  (instead  of  64000)  --that's  an
+  improvement of 99.5%!
+  The problem with this method is the exact detection where the rays hit
+  the  grid blocks. Instead of decreasing the mesh size of the grid, one
+  may  think  that  the  original  blocks  consist of a second &quot;subgrid&quot;
+  (ACK3D  uses  a  64x64  subgrid for each block). If you start counting
+  blocks  row-wise,  starting  with zero, then you can compute the block
+  number  and  the  relative  coordinates  (rx1,ry1)  of  a point P with
+  absolute corrdinates (x1,y1) by
+
+  b = (y1 DIV 64)*gridwidth_in_blocks + (x1 DIV 64)
+  rx1 = x1 MOD 64
+  ry1 = y1 MOD 64
+
+  See the profits of powers of two for the subgrid size here?:
+  b = (y1 SHR 6)*gridwidth_in_blocks + (x1 AND 63)
+  rx1 = x1 AND 63
+  ry1 = y1 AND 63
+
+  Computing the collision points rays &lt;-&gt; blocks is pure trigonometry:
+  Given are the position of the player P = (x1,y1) and his viewing angle
+  alpha  (measured  from the x-axis, for example). If he is looking with
+  angle of 20 degrees, one would have to compute all rays from 20-30=-10
+  degrees  up  to  20+30=50  degrees.  If your screen has a width of 320
+  columns, then a simple algorithm would look something like this:
+
+column:=0
+FOR beta:=alpha-30 TO alpha+30 STEP 60/320
+  cast ray from P=(x1,y1) with angle beta
+  IF ray hits nontransparent block b
+    THEN draw block columns which we hit
+         at screen position &quot;column&quot;;
+         compute distance to hit location and
+         darken graphic accordingly
+  ELSEIF ray leaves the plane edge
+    THEN draw complete column black
+  ELSE {ray runs through empty/transparent block}
+    trace ray further
+  INC(column)
+ENDFOR
+
+  As  we  do  have a fixed size of the game area, we do know the maximum
+  length  of  a  ray  in before. If the ray's length is bigger than this
+  maximum, you may stop tracing the ray any further. Using a bit college
+  math  trigometry,  one  can  optimize this even further to compute the
+  last   point   Q   =  (x2,y2)  on  the  ray  which  must  be  checked:
+  x2:=x1+cos(beta)*diag;    y2:=y1+sin(beta)*diag;    (diag:=length   of
+  diagonal of the (x,y) plane).
+
+  Now  just  use  some  standard line-algorithm like Brensenham's on the
+  line  between  P and Q and check the points if they hit a block and if
+  so,  where.  Note  that  you don't have to check every point, but only
+  those which lie on the grid edges!
+
+
+&gt; Can this type of program be created with Pascal or are they Assembler/C
+&gt; only areas?
+  I  once  saw  a  small piece of (buggy) PASCAL code, but didn't try to
+  debug it more than necessary; however, it should suffice for a start:
+*)
+
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>RayCast2<font color="#000080">;
+</font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">, </font>CRT<font color="#000080">;
+</font><font color="#FF0000"><b>TYPE
+ </b></font><font color="#008000"><i>{ Map : 10 * 10 squares - 1 square consists of 64 * 64 units !! }
+     </i></font>TMap <font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>OF ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+     </font>TPlayer<font color="#000080">= </font><font color="#FF0000"><b>OBJECT
+                </b></font>x            <font color="#000080">,
+                </font>y            <font color="#000080">: </font>SHORTINT<font color="#000080">;
+                </font>ViewPoint  <font color="#000080">: </font>INTEGER<font color="#000080">;
+                </font>MapX       <font color="#000080">,
+                </font>Mapy       <font color="#000080">: </font>SHORTINT<font color="#000080">;
+                </font><font color="#FF0000"><b>PROCEDURE </b></font>Init<font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>HeightTab <font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">90</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+      </font>WallBmp<font color="#000080">= </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>Up   <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+      </font>Down <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+      </font>Right <font color="#000080">=</font><font color="#800000">3</font><font color="#000080">;
+      </font>Left  <font color="#000080">=</font><font color="#800000">4</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>Map <font color="#000080">: </font>TMap<font color="#000080">;
+    </font>P     <font color="#000080">: </font>TPlayer<font color="#000080">;
+    </font>ch    <font color="#000080">: </font>CHAR<font color="#000080">;
+    </font>xAtt  <font color="#000080">,
+    </font>yAtt  <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>Angle <font color="#000080">: </font>REAL<font color="#000080">;
+    </font>Height <font color="#000080">,
+    </font>Width  <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>Distance<font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font>yDis   <font color="#000080">,
+    </font>xDis   <font color="#000080">,
+    </font>Hyp    <font color="#000080">: </font>REAL<font color="#000080">;
+    </font>DeltaX <font color="#000080">,
+    </font>DeltaY <font color="#000080">: </font>REAL<font color="#000080">;
+    </font>DeltaKX<font color="#000080">,
+    </font>DeltaKY<font color="#000080">: </font>LONGINT<font color="#000080">;
+    </font>WMapX<font color="#000080">,
+    </font>WMapY<font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font>Column <font color="#000080">,
+    </font>XColumn<font color="#000080">,
+    </font>YColumn<font color="#000080">: </font>SHORTINT<font color="#000080">;
+    </font>HeightTabTable <font color="#000080">: </font>HeightTab<font color="#000080">;
+    </font>Wall        <font color="#000080">: </font>WallBmp<font color="#000080">;
+    </font>sinus<font color="#000080">, </font>cosinus<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">359</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>REAL<font color="#000080">;
+    </font>i<font color="#000080">:</font>INTEGER<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Modus<font color="#000080">(</font>m<font color="#000080">:</font>WORD<font color="#000080">); </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">MOV AX,m
+  INT $10
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>TPlayer<font color="#000080">.</font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>MapX<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">; </font>MapY<font color="#000080">:=</font><font color="#800000">2</font><font color="#000080">;
+  </font>x<font color="#000080">:=</font><font color="#800000">32</font><font color="#000080">; </font>y<font color="#000080">:=</font><font color="#800000">32</font><font color="#000080">;
+  </font>Angle<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>init<font color="#000080">:</font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>x<font color="#000080">,</font>y <font color="#000080">: </font>BYTE<font color="#000080">;
+    </font>HeightTabF <font color="#000080">: </font><font color="#FF0000"><b>FILE OF </b></font>HeightTab<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Modus<font color="#000080">(</font><font color="#800000">$13</font><font color="#000080">);
+  </font><font color="#008000"><i>{ Erase Map }
+  </i></font><font color="#FF0000"><b>FOR </b></font>x<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO
+    FOR </b></font>y<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO
+      </b></font>Map<font color="#000080">[</font>x<font color="#000080">,</font>y<font color="#000080">]:=</font><font color="#800000">0</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Draw a few walls }
+  </i></font><font color="#FF0000"><b>FOR </b></font>x<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Map<font color="#000080">[</font>x<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">]:=</font><font color="#800000">129</font><font color="#000080">;
+    </font>Map<font color="#000080">[</font>x<font color="#000080">,</font><font color="#800000">10</font><font color="#000080">]:=</font><font color="#800000">129</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>y<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Map<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">,</font>y<font color="#000080">]:=</font><font color="#800000">129</font><font color="#000080">;
+    </font>Map<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">,</font>y<font color="#000080">]:=</font><font color="#800000">129</font><font color="#000080">;
+    </font>Map<font color="#000080">[</font><font color="#800000">10</font><font color="#000080">,</font>y<font color="#000080">]:=</font><font color="#800000">129</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Map<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">3</font><font color="#000080">]:=</font><font color="#800000">129</font><font color="#000080">;
+  </font><font color="#008000"><i>{ Build Character }
+  </i></font>P<font color="#000080">.</font>Init<font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>x<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">90 </font><font color="#FF0000"><b>DO
+    </b></font>HeightTabTable<font color="#000080">[</font>x<font color="#000080">]:=</font><font color="#800000">90</font><font color="#000080">-</font>x<font color="#000080">;
+
+  </font><font color="#008000"><i>{ Different Palette }
+  { JansPalette; }
+  { Init Wall Bitmap }
+  </i></font><font color="#FF0000"><b>FOR </b></font>x<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">31 </font><font color="#FF0000"><b>DO
+    </b></font>Wall<font color="#000080">[</font>x<font color="#000080">]:=</font><font color="#800000">100</font><font color="#000080">+</font>x<font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>x<font color="#000080">:=</font><font color="#800000">32 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">63 </font><font color="#FF0000"><b>DO
+    </b></font>Wall<font color="#000080">[</font>x<font color="#000080">]:=</font><font color="#800000">100</font><font color="#000080">-(</font>x<font color="#000080">-</font><font color="#800000">32</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Clear<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+ </b></font><font color="#FF00FF">CLD
+ MOV AX,$A000
+ MOV ES,AX
+ MOV CX,32000
+ XOR AX,AX
+ REP STOSW
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>deInit<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Modus<font color="#000080">( </font><font color="#800000">3 </font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DownProc<font color="#000080">;  </font><font color="#008000"><i>{ looking down }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>yDis<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#008000"><i>{ Step through each square }
+  </i></font><font color="#FF0000"><b>FOR </b></font>Height<font color="#000080">:=</font>P<font color="#000080">.</font>MapY<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Distance<font color="#000080">:= </font><font color="#800000">65</font><font color="#000080">-</font>P<font color="#000080">.</font>Y <font color="#000080">+ </font><font color="#800000">64 </font><font color="#000080">* (</font>Height<font color="#000080">-</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+    </font>Hyp    <font color="#000080">:= </font>Distance <font color="#000080">/ </font>cosinus<font color="#000080">[</font>Round<font color="#000080">(</font>angle<font color="#000080">)];
+    </font>DeltaX <font color="#000080">:= </font>sinus<font color="#000080">[</font>Round<font color="#000080">(</font>angle<font color="#000080">)] * </font>Hyp<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>DeltaX<font color="#000080">&gt;</font>MaxLongInt <font color="#FF0000"><b>THEN </b></font>DeltaX<font color="#000080">:=</font>MaxLongInt<font color="#000080">;
+    </font><font color="#008000"><i>{ Subtract when looking to the right , else add}
+    </i></font><font color="#FF0000"><b>IF </b></font>xAtt<font color="#000080">=</font>Right <font color="#FF0000"><b>THEN
+      </b></font>DeltaKX<font color="#000080">:= (</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">64</font><font color="#000080">+</font>P<font color="#000080">.</font>X <font color="#000080">- </font>Round<font color="#000080">(</font>DeltaX<font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE
+      </b></font>DeltaKX<font color="#000080">:= (</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">64</font><font color="#000080">+</font>P<font color="#000080">.</font>X <font color="#000080">+ </font>Round<font color="#000080">(</font>DeltaX<font color="#000080">);
+
+    </font>WMapX<font color="#000080">:= </font>DeltaKX <font color="#FF0000"><b>DIV </b></font><font color="#800000">64</font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+    </font>XColumn<font color="#000080">:= </font>DeltaKX <font color="#FF0000"><b>MOD </b></font><font color="#800000">64</font><font color="#000080">;
+    </font>WMapY<font color="#000080">:= </font>Height<font color="#000080">;
+    </font>Hyp<font color="#000080">:=</font>Abs<font color="#000080">(</font>Hyp<font color="#000080">);
+    </font><font color="#008000"><i>{ If out of bounds or wall found }
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WMapX<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>WMapX<font color="#000080">&gt;</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Hyp<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+    BEGIN
+      </b></font>yDis<font color="#000080">:=</font>Hyp<font color="#000080">;
+      </font>Height<font color="#000080">:=</font><font color="#800000">10</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END
+  END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>xDis<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>yDis<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>Distance<font color="#000080">:=</font><font color="#800000">906</font><font color="#000080">;
+    </font>Column <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END ELSE
+    IF </b></font>yDis<font color="#000080">&lt;</font>xDis <font color="#FF0000"><b>THEN BEGIN
+      </b></font>Distance<font color="#000080">:=</font>Round<font color="#000080">(</font>yDis<font color="#000080">);
+      </font>Column<font color="#000080">:= </font>xColumn<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>Distance<font color="#000080">:=</font>Round<font color="#000080">(</font>xDis<font color="#000080">);
+      </font>Column <font color="#000080">:=</font>yColumn<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>UpProc<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>yDis<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Height<font color="#000080">:=</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Distance<font color="#000080">:= -</font>P<font color="#000080">.</font>Y <font color="#000080">- </font><font color="#800000">64 </font><font color="#000080">* (</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font>Height<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+    </font>Hyp    <font color="#000080">:= </font>Distance <font color="#000080">/ </font>cosinus<font color="#000080">[</font>Round<font color="#000080">(</font>angle<font color="#000080">)];
+    </font>DeltaX <font color="#000080">:= </font>sinus<font color="#000080">[</font>Round<font color="#000080">(</font>angle<font color="#000080">)] * </font>Hyp<font color="#000080">;
+    </font>DeltaKX<font color="#000080">:= (</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">64</font><font color="#000080">+</font>P<font color="#000080">.</font>X<font color="#000080">- </font>Round<font color="#000080">(</font>DeltaX<font color="#000080">);
+    </font>WMapX<font color="#000080">:= </font>DeltaKX <font color="#FF0000"><b>DIV </b></font><font color="#800000">64</font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+    </font>XColumn<font color="#000080">:= </font>DeltaKY <font color="#FF0000"><b>MOD </b></font><font color="#800000">64</font><font color="#000080">;
+    </font>WMapY<font color="#000080">:= </font>Height<font color="#000080">;
+    </font>Hyp    <font color="#000080">:=</font>ABs<font color="#000080">(</font>Hyp<font color="#000080">);
+    </font><font color="#008000"><i>{ If out of bounds, or wall struck }
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WMapX<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>WMapX<font color="#000080">&gt;</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Hyp<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+BEGIN      </b></font>yDis<font color="#000080">:=</font>Hyp<font color="#000080">;
+      </font>Height<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>END
+  END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>xDis<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>yDis<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>Distance<font color="#000080">:=</font><font color="#800000">906</font><font color="#000080">;
+    </font>Column<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END ELSE
+    IF </b></font>yDis<font color="#000080">&lt;</font>xDis <font color="#FF0000"><b>THEN BEGIN
+      </b></font>Distance<font color="#000080">:=</font>Round<font color="#000080">(</font>yDis<font color="#000080">);
+      </font>Column<font color="#000080">:=</font>xColumn<font color="#000080">;
+    </font><font color="#FF0000"><b>END ELSE BEGIN
+      </b></font>Distance<font color="#000080">:=</font>Round<font color="#000080">(</font>xDis<font color="#000080">);
+      </font>Column<font color="#000080">:=</font>YColumn<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>RightProc<font color="#000080">(</font>angle<font color="#000080">:</font>WORD<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>xDis<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Width<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Distance<font color="#000080">:= </font><font color="#800000">65</font><font color="#000080">-</font>P<font color="#000080">.</font>X <font color="#000080">+ </font><font color="#800000">64 </font><font color="#000080">* (</font>Width<font color="#000080">-</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+    </font>Hyp    <font color="#000080">:= </font>Distance <font color="#000080">/ </font>cosinus<font color="#000080">[</font>angle<font color="#000080">];
+    </font>DeltaY <font color="#000080">:= </font>sinus<font color="#000080">[</font>angle<font color="#000080">] * </font>Hyp<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>DeltaY<font color="#000080">&gt;</font>MaxLongInt <font color="#FF0000"><b>THEN </b></font>DeltaY<font color="#000080">:=</font>MaxLongInt<font color="#000080">;
+    </font>DeltaKY<font color="#000080">:= (</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">64 </font><font color="#000080">+</font>P<font color="#000080">.</font>Y <font color="#000080">-</font>Round<font color="#000080">(</font>DeltaY<font color="#000080">);
+
+    </font>WMapX<font color="#000080">:= </font>Width<font color="#000080">;
+    </font>WMapY<font color="#000080">:= </font>DeltaKY <font color="#FF0000"><b>DIV </b></font><font color="#800000">64 </font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+    </font>YColumn<font color="#000080">:= </font>DeltaKY <font color="#FF0000"><b>MOD </b></font><font color="#800000">64</font><font color="#000080">;
+    </font>Hyp    <font color="#000080">:= </font>Abs<font color="#000080">(</font>Hyp<font color="#000080">);
+
+    </font><font color="#008000"><i>{ If out of bounds, or wall struck }
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WMapY<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>WMapY<font color="#000080">&gt;</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Hyp<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+BEGIN      </b></font>Width<font color="#000080">:=</font><font color="#800000">10</font><font color="#000080">;
+      </font>xDis<font color="#000080">:=</font>Hyp<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ Now check yRay }
+  </i></font><font color="#FF0000"><b>CASE </b></font>yAtt <font color="#FF0000"><b>OF
+    </b></font>Down <font color="#000080">: </font>DownProc<font color="#000080">;
+    </font>Up  <font color="#000080">: </font>UpProc<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>LeftProc<font color="#000080">(</font>angle<font color="#000080">:</font>WORD<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>xDis<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Width<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>Distance<font color="#000080">:= -</font>P<font color="#000080">.</font>X <font color="#000080">- </font><font color="#800000">64 </font><font color="#000080">* (</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font>Width<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+    </font>Hyp    <font color="#000080">:= </font>Distance <font color="#000080">/ </font>cosinus<font color="#000080">[</font>angle<font color="#000080">];
+    </font>DeltaY <font color="#000080">:= </font>sinus<font color="#000080">[</font>angle<font color="#000080">] * </font>Hyp<font color="#000080">;
+    </font>DeltaKY<font color="#000080">:= (</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)*</font><font color="#800000">64 </font><font color="#000080">+ </font>P<font color="#000080">.</font>Y <font color="#000080">- </font>Round<font color="#000080">(</font>DeltaY<font color="#000080">);
+
+    </font>WMapX<font color="#000080">:= </font>Width<font color="#000080">;
+    </font>WMapY<font color="#000080">:= </font>DeltaKY <font color="#FF0000"><b>DIV </b></font><font color="#800000">64 </font><font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+    </font>YColumn<font color="#000080">:= </font>DeltaKY <font color="#FF0000"><b>MOD </b></font><font color="#800000">64</font><font color="#000080">;
+    </font>Hyp    <font color="#000080">:= </font>Abs<font color="#000080">(</font>Hyp<font color="#000080">);
+    </font><font color="#008000"><i>{ If out of bounds, or wall struck }
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>WMapY<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>WMapY<font color="#000080">&gt;</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Hyp<font color="#000080">&gt;</font><font color="#800000">906</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+BEGIN      </b></font>Width<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+      </font>xDis<font color="#000080">:=</font>Hyp<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ Now check yRay }
+  </i></font><font color="#FF0000"><b>CASE </b></font>yAtt <font color="#FF0000"><b>OF
+    </b></font>Down <font color="#000080">: </font>DownProc<font color="#000080">;
+    </font>Up  <font color="#000080">: </font>UpProc<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Proc0<font color="#000080">; </font><font color="#008000"><i>{ Angle = 0 degrees }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>WMapY<font color="#000080">:=</font>P<font color="#000080">.</font>MapY<font color="#000080">;
+  </font>Column<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Distance<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Width<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>WMapX<font color="#000080">:=</font>Width<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Distance<font color="#000080">:=</font><font color="#800000">65</font><font color="#000080">-</font>P<font color="#000080">.</font>x <font color="#000080">+ </font><font color="#800000">64 </font><font color="#000080">* (</font>Width<font color="#000080">-</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+      </font>Width<font color="#000080">:=</font><font color="#800000">10</font><font color="#000080">;
+      </font>Column<font color="#000080">:=</font>P<font color="#000080">.</font>y<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Proc18<font color="#000080">; </font><font color="#008000"><i>{ Angle = 180 degrees }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>WMapY<font color="#000080">:=</font>P<font color="#000080">.</font>MapY<font color="#000080">;
+  </font>Column <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>Distance<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Width<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>WMapX<font color="#000080">:=</font>Width<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Distance<font color="#000080">:=</font>Abs<font color="#000080">( -</font>P<font color="#000080">.</font>X <font color="#000080">- </font><font color="#800000">64 </font><font color="#000080">* (</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font>Width<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">) );
+      </font>Width<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+      </font>Column<font color="#000080">:=</font>P<font color="#000080">.</font>Y<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Proc27<font color="#000080">; </font><font color="#008000"><i>{ Angle = 270 degrees }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>WMapX<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">;
+  </font>Distance<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font>Column <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Height<font color="#000080">:=</font>P<font color="#000080">.</font>MapY<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">10 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>WMapY<font color="#000080">:=</font>Height<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Distance<font color="#000080">:=</font><font color="#800000">65</font><font color="#000080">-</font>P<font color="#000080">.</font>y <font color="#000080">+ </font><font color="#800000">64 </font><font color="#000080">* (</font>Height<font color="#000080">-</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">);
+      </font>Height<font color="#000080">:=</font><font color="#800000">10</font><font color="#000080">;
+      </font>Column<font color="#000080">:=</font>P<font color="#000080">.</font>Y<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Proc90<font color="#000080">; </font><font color="#008000"><i>{ Angle = 90 degrees }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>WMapX<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">;
+  </font>Column<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+  </font>Distance<font color="#000080">:=</font><font color="#800000">907</font><font color="#000080">;
+  </font><font color="#FF0000"><b>FOR </b></font>Height<font color="#000080">:=</font>P<font color="#000080">.</font>MapX<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>DOWNTO </b></font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+    </b></font>WMapY<font color="#000080">:=</font>Height<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>Map<font color="#000080">[</font>WMapX<font color="#000080">,</font>WMapY<font color="#000080">]&gt;</font><font color="#800000">128 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>Distance<font color="#000080">:=</font>Abs<font color="#000080">( -</font>P<font color="#000080">.</font>Y <font color="#000080">- </font><font color="#800000">64 </font><font color="#000080">* (</font>P<font color="#000080">.</font>MapY<font color="#000080">-</font>Height<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)  );
+      </font>Height<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+      </font>Column<font color="#000080">:=</font>p<font color="#000080">.</font>Y<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>VLine<font color="#000080">(</font>x<font color="#000080">,</font>y1<font color="#000080">,</font>y2<font color="#000080">:</font>WORD<font color="#000080">; </font>c<font color="#000080">:</font>BYTE<font color="#000080">); </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+ </b></font><font color="#FF00FF">MOV CX,y2
+ MOV DI,y1
+ SUB CX,DI
+ JCXZ @ende
+ JG @doit
+ NEG CX
+ MOV DI,y2
+@doit:
+ MOV AX,320
+ MUL DI
+ ADD AX,x
+ MOV DI,AX
+ CLD
+ MOV AL,c
+ MOV DX,320
+@l1:
+ MOV ES:[DI],AL
+ ADD DI,DX
+ LOOP @l1
+@ende:
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Draw<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>counter<font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font>intAngle<font color="#000080">:</font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font><font color="#008000"><i>{ 70 degree viewfield (not just 60) }
+  </i></font>angle<font color="#000080">:=(</font><font color="#800000">70</font><font color="#000080">*</font><font color="#800000">160 </font><font color="#000080">/ </font><font color="#800000">320</font><font color="#000080">) + </font>P<font color="#000080">.</font>ViewPoint<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>angle<font color="#000080">&gt;=</font><font color="#800000">360 </font><font color="#FF0000"><b>THEN </b></font>angle<font color="#000080">:=</font>angle<font color="#000080">-</font><font color="#800000">360</font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>FOR </b></font>counter<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">319 </font><font color="#FF0000"><b>DO BEGIN </b></font><font color="#008000"><i>{ loop each column }
+   </i></font>intAngle<font color="#000080">:=</font>Round<font color="#000080">(</font>angle<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>intAngle<font color="#000080">=</font><font color="#800000">90 </font><font color="#FF0000"><b>THEN             </b></font><font color="#008000"><i>{ xDirection }
+      </i></font>xAtt<font color="#000080">:=</font><font color="#800000">90
+    </font><font color="#FF0000"><b>ELSE
+      IF </b></font>intAngle<font color="#000080">=</font><font color="#800000">270 </font><font color="#FF0000"><b>THEN
+        </b></font>xAtt<font color="#000080">:=</font><font color="#800000">27
+      </font><font color="#FF0000"><b>ELSE
+        IF </b></font><font color="#000080">(</font>intAngle<font color="#000080">&lt;</font><font color="#800000">90</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>intAngle<font color="#000080">&gt;</font><font color="#800000">270</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+          </b></font>xAtt<font color="#000080">:=</font>Right
+        <font color="#FF0000"><b>ELSE
+          </b></font>xAtt<font color="#000080">:=</font>Left<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>intAngle<font color="#000080">=</font><font color="#800000">180 </font><font color="#FF0000"><b>THEN            </b></font><font color="#008000"><i>{ y Direction }
+      </i></font>xAtt<font color="#000080">:=</font><font color="#800000">18
+    </font><font color="#FF0000"><b>ELSE
+      IF </b></font>intAngle<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+        </b></font>xAtt<font color="#000080">:=</font><font color="#800000">0
+      </font><font color="#FF0000"><b>ELSE
+        IF </b></font>intAngle<font color="#000080">&lt;</font><font color="#800000">180 </font><font color="#FF0000"><b>THEN
+          </b></font>yAtt<font color="#000080">:=</font>Up
+        <font color="#FF0000"><b>ELSE
+          </b></font>yAtt<font color="#000080">:=</font>Down<font color="#000080">;
+
+    </font><font color="#FF0000"><b>CASE </b></font>xAtt <font color="#FF0000"><b>OF
+      </b></font>Right <font color="#000080">: </font>RightProc<font color="#000080">(</font>intAngle<font color="#000080">);
+      </font>Left  <font color="#000080">: </font>LeftProc<font color="#000080">(</font>intAngle<font color="#000080">);
+      </font><font color="#800000">0      </font><font color="#000080">: </font>Proc0<font color="#000080">;
+      </font><font color="#800000">18     </font><font color="#000080">: </font>Proc18<font color="#000080">;
+      </font><font color="#800000">90     </font><font color="#000080">: </font>Proc90<font color="#000080">;
+      </font><font color="#800000">27     </font><font color="#000080">: </font>Proc27<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+    </font><font color="#008000"><i>{ Draw Line }
+    </i></font>VLine<font color="#000080">(</font>counter<font color="#000080">,</font><font color="#800000">99</font><font color="#000080">,</font><font color="#800000">99</font><font color="#000080">-</font>HeightTabtable<font color="#000080">[</font>Distance <font color="#FF0000"><b>DIV </b></font><font color="#800000">10</font><font color="#000080">],</font>Wall<font color="#000080">[</font>Abs<font color="#000080">(</font>Column<font color="#000080">)]);
+
+    </font><font color="#008000"><i>{ decrease angle }
+    </i></font>angle<font color="#000080">:=</font>angle<font color="#000080">- (</font><font color="#800000">70 </font><font color="#000080">/ </font><font color="#800000">320</font><font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>angle<font color="#000080">&lt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>angle<font color="#000080">:=</font>angle<font color="#000080">+</font><font color="#800000">360</font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ next column }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  FOR </b></font>i<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>TO </b></font><font color="#800000">359 </font><font color="#FF0000"><b>DO
+   BEGIN
+    </b></font>cosinus<font color="#000080">[</font>i<font color="#000080">]:=</font>cos<font color="#000080">(</font>i<font color="#000080">*</font>Pi<font color="#000080">/</font><font color="#800000">180</font><font color="#000080">);
+    </font>sinus<font color="#000080">[</font>i<font color="#000080">]  :=</font>sin<font color="#000080">(</font>i<font color="#000080">*</font>Pi<font color="#000080">/</font><font color="#800000">180</font><font color="#000080">);
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>ch<font color="#000080">:=</font><font color="#800000">#1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>Init <font color="#FF0000"><b>THEN BEGIN
+    </b></font>P<font color="#000080">.</font>ViewPoint<font color="#000080">:=</font><font color="#800000">90</font><font color="#000080">;
+    </font><font color="#FF0000"><b>REPEAT   </b></font><font color="#008000"><i>{ Loop until ESC pressed }
+      </i></font>Clear<font color="#000080">;
+      </font>Draw<font color="#000080">;
+      </font>ch<font color="#000080">:=</font>ReadKey<font color="#000080">;
+      </font><font color="#FF0000"><b>CASE </b></font>ch <font color="#FF0000"><b>OF
+        </b></font><font color="#800000">'a' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN  </b></font><font color="#008000"><i>{ Left turn }
+                </i></font>Inc<font color="#000080">(</font>P<font color="#000080">.</font>ViewPoint<font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+                </font><font color="#FF0000"><b>IF </b></font>P<font color="#000080">.</font>ViewPoint<font color="#000080">&gt;</font><font color="#800000">359 </font><font color="#FF0000"><b>THEN </b></font>P<font color="#000080">.</font>ViewPoint<font color="#000080">:=</font>P<font color="#000080">.</font>ViewPoint<font color="#000080">-</font><font color="#800000">360</font><font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#800000">'s' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{right turn }
+                </i></font>Dec<font color="#000080">(</font>P<font color="#000080">.</font>ViewPoint<font color="#000080">,</font><font color="#800000">5</font><font color="#000080">);
+                </font><font color="#FF0000"><b>IF </b></font>P<font color="#000080">.</font>ViewPoint<font color="#000080">&lt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>P<font color="#000080">.</font>ViewPoint<font color="#000080">:=</font>P<font color="#000080">.</font>ViewPoint<font color="#000080">+</font><font color="#800000">360</font><font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#800000">'w' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{ Move forward }
+                </i></font>Dec<font color="#000080">(</font>P<font color="#000080">.</font>y<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+                </font><font color="#FF0000"><b>IF </b></font>P<font color="#000080">.</font>y<font color="#000080">&lt;</font><font color="#800000">1 </font><font color="#FF0000"><b>THEN BEGIN
+                  </b></font>Dec<font color="#000080">(</font>P<font color="#000080">.</font>MapY<font color="#000080">);
+                  </font>P<font color="#000080">.</font>y<font color="#000080">:=</font><font color="#800000">64</font><font color="#000080">+</font>P<font color="#000080">.</font>y<font color="#000080">;
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+        </font><font color="#800000">'y' </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{Move backward }
+                </i></font>Inc<font color="#000080">(</font>P<font color="#000080">.</font>y<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+                </font><font color="#FF0000"><b>IF </b></font>P<font color="#000080">.</font>y<font color="#000080">&gt;</font><font color="#800000">64 </font><font color="#FF0000"><b>THEN BEGIN
+                  </b></font>Inc<font color="#000080">(</font>P<font color="#000080">.</font>MapY<font color="#000080">);
+                  </font>P<font color="#000080">.</font>y<font color="#000080">:=</font>P<font color="#000080">.</font>y<font color="#000080">-</font><font color="#800000">64</font><font color="#000080">;
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>UNTIL </b></font>ch<font color="#000080">=</font><font color="#800000">#27</font><font color="#000080">;
+    </font>DeInit<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EGAVGA SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0172.PAS">Original</a><b>]</b></p></body>
+</html>

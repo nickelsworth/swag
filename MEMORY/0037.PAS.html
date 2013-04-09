@@ -1,0 +1,100 @@
+<html>
+<head><title> "Driver Memory Size" by LAWRENCE JOHNSTONE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0037.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&sup3;&gt;anybody know how I can determine the size of the driver in
+&sup3;&gt;memory?
+&sup3; I would assume they take the Drivers name and search through the
+&sup3; Memory Control Blocks maintained by DOS and seeing if the driver
+&sup3; owns any of them.  But there might be an easier way.
+
+There is.  An undocumented DOS function (52h) gives you the &quot;list of
+lists&quot;, which contains the first device driver in a linked list, which
+you can then traverse.  (See Schulman's _Undocumented DOS_.)
+
+Take the address of the device driver header, and look at the 0 offset
+in the &quot;segment&quot; which is 1 segment address unit before the beginning
+of the device driver header.  For example, if the device driver header
+is at $1234:$0000, look at address $1233:0.  If the byte at that
+address is &quot;M&quot;, &quot;Z&quot;, or &quot;D&quot;, we have either a valid memory control
+block header (&quot;M&quot; or &quot;Z&quot;), or a &quot;device driver subheader&quot; (&quot;D&quot;) which
+follows the same format.  In either case, the word at &lt;segment&gt;:0003
+gives the number of 16-byte paragraphs used by that memory block;
+multiply by 16 to get the size in bytes.  The following TP code should
+illustrate this (*only* HexW is used from OPString; substitute your
+own or any PD/Shareware hex conversion routine if you don't have OPro):
+}
+
+</i></font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">, </font>OPString<font color="#000080">;
+</font><font color="#FF0000"><b>TYPE
+  </b></font>PMCBhdr <font color="#000080">= ^</font>TMCBhdr<font color="#000080">;
+  </font>TMCBhdr <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+    </b></font>Signature<font color="#000080">: </font>CHAR<font color="#000080">;  </font><font color="#008000"><i>{ 'M', 'Z', or one of the valid 'subblock' letters}
+    </i></font>OwnerSeg<font color="#000080">:  </font>WORD<font color="#000080">;  </font><font color="#008000"><i>{ Segment of &quot;owner&quot; of this block }
+    </i></font>SizeParas<font color="#000080">: </font>WORD<font color="#000080">;  </font><font color="#008000"><i>{ Size of block, in 16-byte paragraphs }
+    </i></font>Unused<font color="#000080">:    </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+    </font>Name<font color="#000080">:      </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">; </font><font color="#008000"><i>{Name of owner program (DOS 4+)}
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>PDevHdr <font color="#000080">= ^</font>TDevHdr<font color="#000080">;
+  </font>TDevHdr <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+    </b></font>NextDriver<font color="#000080">: </font>POINTER<font color="#000080">;              </font><font color="#008000"><i>{ Next driver in device chain }
+    </i></font>Attr<font color="#000080">:       </font>WORD<font color="#000080">;                 </font><font color="#008000"><i>{ Driver attribute word }
+    </i></font>Strategy<font color="#000080">:   </font>WORD<font color="#000080">;                 </font><font color="#008000"><i>{ Offset within this segment }
+    </i></font>Interrupt<font color="#000080">:  </font>WORD<font color="#000080">;                 </font><font color="#008000"><i>{   of the driver strategy &amp; }
+                                      {   interrupt routines.      }
+    </i></font>Name<font color="#000080">:       </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">; </font><font color="#008000"><i>{ Device name for char devs; }
+                 {   for block devices, first byte is # of logical }
+                 {   devices associated with this driver, others   }
+                 {   are unused.                                   }
+  </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DisplayDeviceHeader<font color="#000080">( </font>DevHdr<font color="#000080">: </font>PDevHdr <font color="#000080">);
+  </font><font color="#FF0000"><b>VAR
+    </b></font>MCBptr<font color="#000080">: ^</font>TMCBhdr<font color="#000080">;
+    </font>Size<font color="#000080">:   </font>LONGINT<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font><font color="#008000"><i>{ The line to be displayed will look something like this:      }
+    { ssss:oooo dev_name mem_size owner_name                       }
+    { The last two columns are displayed only under DOS 4+, and    }
+    { only when the information is found -- may fail under 386^Max }
+    </i></font>Write<font color="#000080">( </font>HexW<font color="#000080">( </font>Seg<font color="#000080">( </font>DevHdr<font color="#000080">^ ) ), </font><font color="#800000">':'</font><font color="#000080">, </font>HexW<font color="#000080">( </font>Ofs<font color="#000080">( </font>DevHdr<font color="#000080">^ ) ), </font><font color="#800000">' ' </font><font color="#000080">);
+
+    </font><font color="#008000"><i>{ See if it's a character device.  If it is, then it has a name }
+    { to display.                                                   }
+    </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>DevHdr<font color="#000080">^.</font>Attr <font color="#FF0000"><b>AND </b></font><font color="#800000">$8000</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+      </b></font>Write<font color="#000080">( </font>DevHdr<font color="#000080">^.</font>Name<font color="#000080">:</font><font color="#800000">12</font><font color="#000080">, </font><font color="#800000">' ' </font><font color="#000080">)
+    </font><font color="#FF0000"><b>ELSE  </b></font><font color="#008000"><i>{ Block device -- write # of logical drives }
+      </i></font>Write<font color="#000080">( </font>Ord<font color="#000080">( </font>DevHdr<font color="#000080">^.</font>Name<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] ):</font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' drive(s) ' </font><font color="#000080">);
+
+    </font><font color="#008000"><i>{ See if the DOS version supports the 'sub-MCBs' introduced for }
+    { device drivers in the first MCB in DOS version 4, and/or the  }
+    { Name field in the MCB introduced in v4.                       }
+    </i></font><font color="#FF0000"><b>IF </b></font>Lo<font color="#000080">( </font>DosVersion <font color="#000080">) &gt;= </font><font color="#800000">4 </font><font color="#FF0000"><b>THEN BEGIN
+      </b></font>MCBptr <font color="#000080">:= </font>Ptr<font color="#000080">( </font>Seg<font color="#000080">( </font>DevHdr<font color="#000080">^ ) - </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0 </font><font color="#000080">);
+
+      </font><font color="#008000"><i>{ Check for MCB sig., and make sure the MCB &quot;owns itself&quot; }
+      </i></font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>MCBptr<font color="#000080">^.</font>Signature <font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'M'</font><font color="#000080">, </font><font color="#800000">'Z'</font><font color="#000080">, </font><font color="#800000">'D'</font><font color="#000080">]) </font><font color="#FF0000"><b>AND
+         </b></font><font color="#000080">(</font>MCBptr<font color="#000080">^.</font>OwnerSeg <font color="#000080">= </font>Seg<font color="#000080">( </font>DevHdr<font color="#000080">^ ) ) </font><font color="#FF0000"><b>THEN BEGIN
+        </b></font>Size <font color="#000080">:= </font>MCBptr<font color="#000080">^.</font>SizeParas <font color="#000080">* </font><font color="#800000">16</font><font color="#000080">;
+        </font>Write<font color="#000080">( </font>Size<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">, </font>MCBptr<font color="#000080">^.</font>Name<font color="#000080">:</font><font color="#800000">9 </font><font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ IF MCB signature }
+    </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ IF DosVersion }
+    </i></font>WriteLn<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{DisplayDeviceHeader}
+
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>Regs<font color="#000080">: </font>REGISTERS<font color="#000080">;  </font>CurDevice<font color="#000080">: </font>PDevHdr<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN </b></font><font color="#008000"><i>{ main program }
+  </i></font>Regs<font color="#000080">.</font>AH <font color="#000080">:= </font><font color="#800000">$52</font><font color="#000080">;
+  </font>MSDos<font color="#000080">( </font>Regs <font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>Lo<font color="#000080">( </font>DosVersion <font color="#000080">) &lt; </font><font color="#800000">3 </font><font color="#FF0000"><b>THEN                </b></font><font color="#008000"><i>{ Get first device in list; }
+    </i></font>CurDevice <font color="#000080">:= </font>Ptr<font color="#000080">( </font>Regs<font color="#000080">.</font>ES<font color="#000080">, </font>Regs<font color="#000080">.</font>BX<font color="#000080">+</font><font color="#800000">$17 </font><font color="#000080">)  </font><font color="#008000"><i>{ location varies by DOS    }
+  </i></font><font color="#FF0000"><b>ELSE                                        </b></font><font color="#008000"><i>{ version.                  }
+    </i></font>CurDevice <font color="#000080">:= </font>Ptr<font color="#000080">( </font>Regs<font color="#000080">.</font>ES<font color="#000080">, </font>Regs<font color="#000080">.</font>BX<font color="#000080">+</font><font color="#800000">$22 </font><font color="#000080">);
+  </font><font color="#FF0000"><b>REPEAT
+    </b></font>DisplayDeviceHeader<font color="#000080">( </font>CurDevice <font color="#000080">);
+    </font>CurDevice <font color="#000080">:= </font>CurDevice<font color="#000080">^.</font>NextDriver<font color="#000080">;
+  </font><font color="#FF0000"><b>UNTIL </b></font>Ofs<font color="#000080">( </font>CurDevice<font color="#000080">^ ) = </font><font color="#800000">$FFFF</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0037.PAS">Original</a><b>]</b></p></body>
+</html>

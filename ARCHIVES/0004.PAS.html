@@ -1,0 +1,823 @@
+<html>
+<head><title> "Code for LZH.PAS" by DOUGLAS WEBB</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0004.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>Unit </b></font>LZH<font color="#000080">;
+
+ </font><font color="#008000"><i>{$A+,B-,D-,E-,F-,I+,L-,N-,O-,R-,S-,V-}
+
+(*
+ * LZHUF.C English version 1.0
+ * Based on Japanese version 29-NOV-1988
+ * LZSS coded by Haruhiko OKUMURA
+ * Adaptive Huffman Coding coded by Haruyasu YOSHIZAKI
+ * Edited and translated to English by Kenji RIKITAKE
+ * Translated from C to Turbo Pascal by Douglas Webb   2/18/91
+ *    Update and bug correction of TP version 4/29/91 (Sorry!!)
+ *)
+
+{
+     This Unit allows the user to commpress data using a combination of
+   LZSS Compression and adaptive Huffman coding, or conversely to deCompress
+   data that was previously Compressed by this Unit.
+
+     There are a number of options as to where the data being Compressed/
+   deCompressed is coming from/going to.
+
+    In fact it requires that you pass the &quot;LZHPack&quot; Procedure 2 procedural
+  parameter of Type 'GetProcType' and 'PutProcType' (declared below) which
+  will accept 3 parameters and act in every way like a 'BlockRead'/'BlockWrite'
+  Procedure call. Your 'GetProcType' Procedure should return the data
+  to be Compressed, and Your 'PutProcType' Procedure should do something with
+  the Compressed data (ie., put it in a File).  In Case you need to know (and
+  you do if you want to deCompress this data again) the number of Bytes in the
+  Compressed data (original, not Compressed size) is returned in 'Bytes_Written'.
+
+  GetBytesProc = Procedure(Var DTA; NBytes:Word; Var Bytes_Got : Word);
+  
+  DTA is the start of a memory location where the inFormation returned should
+  be.  NBytes is the number of Bytes requested.  The actual number of Bytes
+  returned must be passed in Bytes_Got (if there is no more data then 0
+  should be returned).
+
+  PutBytesProc = Procedure(Var DTA; NBytes:Word; Var Bytes_Got : Word);
+
+  As above except instead of asking For data the Procedure is dumping out
+  Compressed data, do somthing With it.
+
+
+    &quot;LZHUnPack&quot; is basically the same thing in reverse.  It requires
+  procedural parameters of Type 'PutProcType'/'GetProcType' which
+  will act as above.  'GetProcType' must retrieve data Compressed using
+  &quot;LZHPack&quot; (above) and feed it to the unpacking routine as requested.
+  'PutProcType' must accept the deCompressed data and do something
+  withit.  You must also pass in the original size of the deCompressed data,
+  failure to do so will have adverse results.
+
+
+     Don't Forget that as procedural parameters the 'GetProcType'/'PutProcType'
+  Procedures must be Compiled in the 'F+' state to avoid a catastrophe.
+
+
+
+}
+
+{ note: All the large data structures For these routines are allocated when
+  needed from the heap, and deallocated when finished.  So when not in use
+  memory requirements are minimal.  However, this Unit Uses about 34K of
+  heap space, and 400 Bytes of stack when in use. }
+
+
+</i></font><font color="#FF0000"><b>Interface
+
+Type
+
+
+  </b></font>PutBytesProc <font color="#000080">= </font><font color="#FF0000"><b>Procedure</b></font><font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>DTA<font color="#000080">; </font>NBytes <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>Bytes_Put <font color="#000080">: </font>Word<font color="#000080">);
+  </font>GetBytesProc <font color="#000080">= </font><font color="#FF0000"><b>Procedure</b></font><font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>DTA<font color="#000080">; </font>NBytes <font color="#000080">: </font>Word<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>Bytes_Got <font color="#000080">: </font>Word<font color="#000080">);
+
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZHPack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Bytes_Written <font color="#000080">: </font>LongInt<font color="#000080">;
+                      </font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">;
+                      </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>LZHUnpack<font color="#000080">(</font>TextSize <font color="#000080">: </font>LongInt<font color="#000080">;
+                    </font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">;
+                    </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+
+
+</font><font color="#FF0000"><b>Implementation
+
+Const
+  </b></font>Exit_OK <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Exit_FAILED <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ LZSS Parameters }
+  </i></font>N <font color="#000080">= </font><font color="#800000">4096</font><font color="#000080">;                            </font><font color="#008000"><i>{ Size of String buffer }
+  </i></font>F <font color="#000080">= </font><font color="#800000">60</font><font color="#000080">;                              </font><font color="#008000"><i>{ Size of look-ahead buffer }
+  </i></font>THRESHOLD <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+  </font>NUL <font color="#000080">= </font>N<font color="#000080">;                             </font><font color="#008000"><i>{ end of tree's node  }
+
+  { Huffman coding parameters }
+  </i></font>N_Char <font color="#000080">= (</font><font color="#800000">256 </font><font color="#000080">- </font>THRESHOLD <font color="#000080">+ </font>F<font color="#000080">);
+
+  </font><font color="#008000"><i>{ Character code (:= 0..N_Char-1) }
+  </i></font>T <font color="#000080">= (</font>N_Char <font color="#000080">* </font><font color="#800000">2 </font><font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);                </font><font color="#008000"><i>{ Size of table }
+  </i></font>R <font color="#000080">= (</font>T <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);                         </font><font color="#008000"><i>{ root position }
+
+  { update when cumulative frequency }
+  { reaches to this value }
+  </i></font>MAX_FREQ <font color="#000080">= </font><font color="#800000">$8000</font><font color="#000080">;
+
+</font><font color="#008000"><i>{
+ * Tables For encoding/decoding upper 6 bits of
+ * sliding dictionary Pointer
+ }
+
+  { encoder table }
+  </i></font>p_len <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">=
+  (</font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">,
+   </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">);
+
+  </font>p_code <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">63</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">=
+  (</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$20</font><font color="#000080">, </font><font color="#800000">$30</font><font color="#000080">, </font><font color="#800000">$40</font><font color="#000080">, </font><font color="#800000">$50</font><font color="#000080">, </font><font color="#800000">$58</font><font color="#000080">, </font><font color="#800000">$60</font><font color="#000080">, </font><font color="#800000">$68</font><font color="#000080">,
+   </font><font color="#800000">$70</font><font color="#000080">, </font><font color="#800000">$78</font><font color="#000080">, </font><font color="#800000">$80</font><font color="#000080">, </font><font color="#800000">$88</font><font color="#000080">, </font><font color="#800000">$90</font><font color="#000080">, </font><font color="#800000">$94</font><font color="#000080">, </font><font color="#800000">$98</font><font color="#000080">, </font><font color="#800000">$9C</font><font color="#000080">,
+   </font><font color="#800000">$A0</font><font color="#000080">, </font><font color="#800000">$A4</font><font color="#000080">, </font><font color="#800000">$A8</font><font color="#000080">, </font><font color="#800000">$AC</font><font color="#000080">, </font><font color="#800000">$B0</font><font color="#000080">, </font><font color="#800000">$B4</font><font color="#000080">, </font><font color="#800000">$B8</font><font color="#000080">, </font><font color="#800000">$BC</font><font color="#000080">,
+   </font><font color="#800000">$C0</font><font color="#000080">, </font><font color="#800000">$C2</font><font color="#000080">, </font><font color="#800000">$C4</font><font color="#000080">, </font><font color="#800000">$C6</font><font color="#000080">, </font><font color="#800000">$C8</font><font color="#000080">, </font><font color="#800000">$CA</font><font color="#000080">, </font><font color="#800000">$CC</font><font color="#000080">, </font><font color="#800000">$CE</font><font color="#000080">,
+   </font><font color="#800000">$D0</font><font color="#000080">, </font><font color="#800000">$D2</font><font color="#000080">, </font><font color="#800000">$D4</font><font color="#000080">, </font><font color="#800000">$D6</font><font color="#000080">, </font><font color="#800000">$D8</font><font color="#000080">, </font><font color="#800000">$DA</font><font color="#000080">, </font><font color="#800000">$DC</font><font color="#000080">, </font><font color="#800000">$DE</font><font color="#000080">,
+   </font><font color="#800000">$E0</font><font color="#000080">, </font><font color="#800000">$E2</font><font color="#000080">, </font><font color="#800000">$E4</font><font color="#000080">, </font><font color="#800000">$E6</font><font color="#000080">, </font><font color="#800000">$E8</font><font color="#000080">, </font><font color="#800000">$EA</font><font color="#000080">, </font><font color="#800000">$EC</font><font color="#000080">, </font><font color="#800000">$EE</font><font color="#000080">,
+   </font><font color="#800000">$F0</font><font color="#000080">, </font><font color="#800000">$F1</font><font color="#000080">, </font><font color="#800000">$F2</font><font color="#000080">, </font><font color="#800000">$F3</font><font color="#000080">, </font><font color="#800000">$F4</font><font color="#000080">, </font><font color="#800000">$F5</font><font color="#000080">, </font><font color="#800000">$F6</font><font color="#000080">, </font><font color="#800000">$F7</font><font color="#000080">,
+   </font><font color="#800000">$F8</font><font color="#000080">, </font><font color="#800000">$F9</font><font color="#000080">, </font><font color="#800000">$FA</font><font color="#000080">, </font><font color="#800000">$FB</font><font color="#000080">, </font><font color="#800000">$FC</font><font color="#000080">, </font><font color="#800000">$FD</font><font color="#000080">, </font><font color="#800000">$FE</font><font color="#000080">, </font><font color="#800000">$FF</font><font color="#000080">);
+
+  </font><font color="#008000"><i>{ decoder table }
+  </i></font>d_code <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">=
+  (</font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">,
+   </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">,
+   </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">,
+   </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">, </font><font color="#800000">$00</font><font color="#000080">,
+   </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">,
+   </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">, </font><font color="#800000">$01</font><font color="#000080">,
+   </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">,
+   </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">, </font><font color="#800000">$02</font><font color="#000080">,
+   </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">,
+   </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">,
+   </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">, </font><font color="#800000">$09</font><font color="#000080">,
+   </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">, </font><font color="#800000">$0A</font><font color="#000080">,
+   </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">, </font><font color="#800000">$0B</font><font color="#000080">,
+   </font><font color="#800000">$0C</font><font color="#000080">, </font><font color="#800000">$0C</font><font color="#000080">, </font><font color="#800000">$0C</font><font color="#000080">, </font><font color="#800000">$0C</font><font color="#000080">, </font><font color="#800000">$0D</font><font color="#000080">, </font><font color="#800000">$0D</font><font color="#000080">, </font><font color="#800000">$0D</font><font color="#000080">, </font><font color="#800000">$0D</font><font color="#000080">,
+   </font><font color="#800000">$0E</font><font color="#000080">, </font><font color="#800000">$0E</font><font color="#000080">, </font><font color="#800000">$0E</font><font color="#000080">, </font><font color="#800000">$0E</font><font color="#000080">, </font><font color="#800000">$0F</font><font color="#000080">, </font><font color="#800000">$0F</font><font color="#000080">, </font><font color="#800000">$0F</font><font color="#000080">, </font><font color="#800000">$0F</font><font color="#000080">,
+   </font><font color="#800000">$10</font><font color="#000080">, </font><font color="#800000">$10</font><font color="#000080">, </font><font color="#800000">$10</font><font color="#000080">, </font><font color="#800000">$10</font><font color="#000080">, </font><font color="#800000">$11</font><font color="#000080">, </font><font color="#800000">$11</font><font color="#000080">, </font><font color="#800000">$11</font><font color="#000080">, </font><font color="#800000">$11</font><font color="#000080">,
+   </font><font color="#800000">$12</font><font color="#000080">, </font><font color="#800000">$12</font><font color="#000080">, </font><font color="#800000">$12</font><font color="#000080">, </font><font color="#800000">$12</font><font color="#000080">, </font><font color="#800000">$13</font><font color="#000080">, </font><font color="#800000">$13</font><font color="#000080">, </font><font color="#800000">$13</font><font color="#000080">, </font><font color="#800000">$13</font><font color="#000080">,
+   </font><font color="#800000">$14</font><font color="#000080">, </font><font color="#800000">$14</font><font color="#000080">, </font><font color="#800000">$14</font><font color="#000080">, </font><font color="#800000">$14</font><font color="#000080">, </font><font color="#800000">$15</font><font color="#000080">, </font><font color="#800000">$15</font><font color="#000080">, </font><font color="#800000">$15</font><font color="#000080">, </font><font color="#800000">$15</font><font color="#000080">,
+   </font><font color="#800000">$16</font><font color="#000080">, </font><font color="#800000">$16</font><font color="#000080">, </font><font color="#800000">$16</font><font color="#000080">, </font><font color="#800000">$16</font><font color="#000080">, </font><font color="#800000">$17</font><font color="#000080">, </font><font color="#800000">$17</font><font color="#000080">, </font><font color="#800000">$17</font><font color="#000080">, </font><font color="#800000">$17</font><font color="#000080">,
+   </font><font color="#800000">$18</font><font color="#000080">, </font><font color="#800000">$18</font><font color="#000080">, </font><font color="#800000">$19</font><font color="#000080">, </font><font color="#800000">$19</font><font color="#000080">, </font><font color="#800000">$1A</font><font color="#000080">, </font><font color="#800000">$1A</font><font color="#000080">, </font><font color="#800000">$1B</font><font color="#000080">, </font><font color="#800000">$1B</font><font color="#000080">,
+   </font><font color="#800000">$1C</font><font color="#000080">, </font><font color="#800000">$1C</font><font color="#000080">, </font><font color="#800000">$1D</font><font color="#000080">, </font><font color="#800000">$1D</font><font color="#000080">, </font><font color="#800000">$1E</font><font color="#000080">, </font><font color="#800000">$1E</font><font color="#000080">, </font><font color="#800000">$1F</font><font color="#000080">, </font><font color="#800000">$1F</font><font color="#000080">,
+   </font><font color="#800000">$20</font><font color="#000080">, </font><font color="#800000">$20</font><font color="#000080">, </font><font color="#800000">$21</font><font color="#000080">, </font><font color="#800000">$21</font><font color="#000080">, </font><font color="#800000">$22</font><font color="#000080">, </font><font color="#800000">$22</font><font color="#000080">, </font><font color="#800000">$23</font><font color="#000080">, </font><font color="#800000">$23</font><font color="#000080">,
+   </font><font color="#800000">$24</font><font color="#000080">, </font><font color="#800000">$24</font><font color="#000080">, </font><font color="#800000">$25</font><font color="#000080">, </font><font color="#800000">$25</font><font color="#000080">, </font><font color="#800000">$26</font><font color="#000080">, </font><font color="#800000">$26</font><font color="#000080">, </font><font color="#800000">$27</font><font color="#000080">, </font><font color="#800000">$27</font><font color="#000080">,
+   </font><font color="#800000">$28</font><font color="#000080">, </font><font color="#800000">$28</font><font color="#000080">, </font><font color="#800000">$29</font><font color="#000080">, </font><font color="#800000">$29</font><font color="#000080">, </font><font color="#800000">$2A</font><font color="#000080">, </font><font color="#800000">$2A</font><font color="#000080">, </font><font color="#800000">$2B</font><font color="#000080">, </font><font color="#800000">$2B</font><font color="#000080">,
+   </font><font color="#800000">$2C</font><font color="#000080">, </font><font color="#800000">$2C</font><font color="#000080">, </font><font color="#800000">$2D</font><font color="#000080">, </font><font color="#800000">$2D</font><font color="#000080">, </font><font color="#800000">$2E</font><font color="#000080">, </font><font color="#800000">$2E</font><font color="#000080">, </font><font color="#800000">$2F</font><font color="#000080">, </font><font color="#800000">$2F</font><font color="#000080">,
+   </font><font color="#800000">$30</font><font color="#000080">, </font><font color="#800000">$31</font><font color="#000080">, </font><font color="#800000">$32</font><font color="#000080">, </font><font color="#800000">$33</font><font color="#000080">, </font><font color="#800000">$34</font><font color="#000080">, </font><font color="#800000">$35</font><font color="#000080">, </font><font color="#800000">$36</font><font color="#000080">, </font><font color="#800000">$37</font><font color="#000080">,
+   </font><font color="#800000">$38</font><font color="#000080">, </font><font color="#800000">$39</font><font color="#000080">, </font><font color="#800000">$3A</font><font color="#000080">, </font><font color="#800000">$3B</font><font color="#000080">, </font><font color="#800000">$3C</font><font color="#000080">, </font><font color="#800000">$3D</font><font color="#000080">, </font><font color="#800000">$3E</font><font color="#000080">, </font><font color="#800000">$3F</font><font color="#000080">);
+
+  </font>d_len <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">=
+  (</font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">,
+   </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">,
+   </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">,
+   </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">, </font><font color="#800000">$03</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">, </font><font color="#800000">$04</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">, </font><font color="#800000">$05</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">, </font><font color="#800000">$06</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">, </font><font color="#800000">$07</font><font color="#000080">,
+   </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">,
+   </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">, </font><font color="#800000">$08</font><font color="#000080">);
+
+  </font>getbuf <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>getlen <font color="#000080">: </font>Byte <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>putlen <font color="#000080">: </font>Byte <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>putbuf <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>TextSize <font color="#000080">: </font>LongInt <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>codesize <font color="#000080">: </font>LongInt <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>printcount <font color="#000080">: </font>LongInt <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>match_position <font color="#000080">: </font>Integer <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+  </font>match_length <font color="#000080">: </font>Integer <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Type
+  </b></font>FreqType <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>T<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word<font color="#000080">; 
+  </font>FreqPtr <font color="#000080">= ^</font>FreqType<font color="#000080">;
+  </font>PntrType <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>pred<font color="#000080">(</font>T <font color="#000080">+ </font>N_Char<font color="#000080">)] </font><font color="#FF0000"><b>of </b></font>Integer<font color="#000080">;
+  </font>pntrPtr <font color="#000080">= ^</font>PntrType<font color="#000080">;
+  </font>SonType <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>pred<font color="#000080">(</font>T<font color="#000080">)] </font><font color="#FF0000"><b>of </b></font>Integer<font color="#000080">;
+  </font>SonPtr <font color="#000080">= ^</font>SonType<font color="#000080">;
+  </font>TextBufType <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>N <font color="#000080">+ </font>F <font color="#000080">- </font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>TBufPtr <font color="#000080">= ^</font>TextBufType<font color="#000080">;
+  </font>WordRay <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>N<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Integer<font color="#000080">;
+  </font>WordRayPtr <font color="#000080">= ^</font>WordRay<font color="#000080">;
+  </font>BWordRay <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>N <font color="#000080">+ </font><font color="#800000">256</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Integer<font color="#000080">;
+  </font>BWordRayPtr <font color="#000080">= ^</font>BWordRay<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>Text_buf <font color="#000080">: </font>TBufPtr<font color="#000080">;
+  </font>lson<font color="#000080">, </font>dad <font color="#000080">: </font>WordRayPtr<font color="#000080">;
+  </font>rson <font color="#000080">: </font>BWordRayPtr<font color="#000080">;
+  </font>freq <font color="#000080">: </font>FreqPtr<font color="#000080">;                      </font><font color="#008000"><i>{ cumulative freq table }
+
+{
+ * pointing parent nodes.
+ * area [T..(T + N_Char - 1)] are Pointers For leaves
+ }
+  </i></font>prnt <font color="#000080">: </font>pntrPtr<font color="#000080">;
+
+  </font><font color="#008000"><i>{ pointing children nodes (son[], son[] + 1)}
+  </i></font>son <font color="#000080">: </font>SonPtr<font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>InitTree<font color="#000080">;                  </font><font color="#008000"><i>{ Initializing tree }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    For </b></font>i <font color="#000080">:= </font>N <font color="#000080">+ </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>N <font color="#000080">+ </font><font color="#800000">256 </font><font color="#FF0000"><b>do
+      </b></font>rson<font color="#000080">^[</font>i<font color="#000080">] := </font>NUL<font color="#000080">;                 </font><font color="#008000"><i>{ root }
+    </i></font><font color="#FF0000"><b>For </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>N <font color="#FF0000"><b>do
+      </b></font>dad<font color="#000080">^[</font>i<font color="#000080">] := </font>NUL<font color="#000080">;                  </font><font color="#008000"><i>{ node }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>InsertNode<font color="#000080">(</font>R <font color="#000080">: </font>Integer<font color="#000080">);   </font><font color="#008000"><i>{ Inserting node to the tree }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>tmp<font color="#000080">, </font>i<font color="#000080">, </font>p<font color="#000080">, </font>cmp <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>key <font color="#000080">: </font>TBufPtr<font color="#000080">;
+    </font>c <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>cmp <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font>key <font color="#000080">:= @</font>Text_buf<font color="#000080">^[</font>R<font color="#000080">];
+    </font>p <font color="#000080">:= </font>succ<font color="#000080">(</font>N<font color="#000080">) + </font>key<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">];
+    </font>rson<font color="#000080">^[</font>R<font color="#000080">] := </font>NUL<font color="#000080">;
+    </font>lson<font color="#000080">^[</font>R<font color="#000080">] := </font>NUL<font color="#000080">;
+    </font>match_length <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font>match_length <font color="#000080">&lt; </font>F <font color="#FF0000"><b>do
+      begin
+        if </b></font><font color="#000080">(</font>cmp <font color="#000080">&gt;= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            if </b></font><font color="#000080">(</font>rson<font color="#000080">^[</font>p<font color="#000080">] &lt;&gt; </font>NUL<font color="#000080">) </font><font color="#FF0000"><b>then
+              </b></font>p <font color="#000080">:= </font>rson<font color="#000080">^[</font>p<font color="#000080">]
+            </font><font color="#FF0000"><b>else
+              begin
+                </b></font>rson<font color="#000080">^[</font>p<font color="#000080">] := </font>R<font color="#000080">;
+                </font>dad<font color="#000080">^[</font>R<font color="#000080">] := </font>p<font color="#000080">;
+                </font>Exit<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end
+        else
+          begin
+            if </b></font><font color="#000080">(</font>lson<font color="#000080">^[</font>p<font color="#000080">] &lt;&gt; </font>NUL<font color="#000080">) </font><font color="#FF0000"><b>then
+              </b></font>p <font color="#000080">:= </font>lson<font color="#000080">^[</font>p<font color="#000080">]
+            </font><font color="#FF0000"><b>else
+              begin
+                </b></font>lson<font color="#000080">^[</font>p<font color="#000080">] := </font>R<font color="#000080">;
+                </font>dad<font color="#000080">^[</font>R<font color="#000080">] := </font>p<font color="#000080">;
+                </font>Exit<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>cmp <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font>F<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>cmp <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+          begin
+            </b></font>inc<font color="#000080">(</font>i<font color="#000080">);
+            </font>cmp <font color="#000080">:= </font>key<font color="#000080">^[</font>i<font color="#000080">] - </font>Text_buf<font color="#000080">^[</font>p <font color="#000080">+ </font>i<font color="#000080">];
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>i <font color="#000080">&gt; </font>THRESHOLD<font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            </b></font>tmp <font color="#000080">:= </font>pred<font color="#000080">((</font>R <font color="#000080">- </font>p<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">));
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>i <font color="#000080">&gt; </font>match_length<font color="#000080">) </font><font color="#FF0000"><b>then
+              begin
+                </b></font>match_position <font color="#000080">:= </font>tmp<font color="#000080">;
+                </font>match_length <font color="#000080">:= </font>i<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>match_length <font color="#000080">&lt; </font>F<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>i <font color="#000080">= </font>match_length<font color="#000080">) </font><font color="#FF0000"><b>then
+              begin
+                </b></font>c <font color="#000080">:= </font>tmp<font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>c <font color="#000080">&lt; </font>match_position<font color="#000080">) </font><font color="#FF0000"><b>then
+                  </b></font>match_position <font color="#000080">:= </font>c<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;                             </font><font color="#008000"><i>{ While True do }
+    </i></font>dad<font color="#000080">^[</font>R<font color="#000080">] := </font>dad<font color="#000080">^[</font>p<font color="#000080">];
+    </font>lson<font color="#000080">^[</font>R<font color="#000080">] := </font>lson<font color="#000080">^[</font>p<font color="#000080">];
+    </font>rson<font color="#000080">^[</font>R<font color="#000080">] := </font>rson<font color="#000080">^[</font>p<font color="#000080">];
+    </font>dad<font color="#000080">^[</font>lson<font color="#000080">^[</font>p<font color="#000080">]] := </font>R<font color="#000080">;
+    </font>dad<font color="#000080">^[</font>rson<font color="#000080">^[</font>p<font color="#000080">]] := </font>R<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>rson<font color="#000080">^[</font>dad<font color="#000080">^[</font>p<font color="#000080">]] = </font>p<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>rson<font color="#000080">^[</font>dad<font color="#000080">^[</font>p<font color="#000080">]] := </font>R
+    <font color="#FF0000"><b>else
+      </b></font>lson<font color="#000080">^[</font>dad<font color="#000080">^[</font>p<font color="#000080">]] := </font>R<font color="#000080">;
+    </font>dad<font color="#000080">^[</font>p<font color="#000080">] := </font>NUL<font color="#000080">;                    </font><font color="#008000"><i>{ remove p }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>DeleteNode<font color="#000080">(</font>p <font color="#000080">: </font>Integer<font color="#000080">);   </font><font color="#008000"><i>{ Deleting node from the tree }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>q <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font><font color="#000080">(</font>dad<font color="#000080">^[</font>p<font color="#000080">] = </font>NUL<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>Exit<font color="#000080">;                            </font><font color="#008000"><i>{ unregistered }
+    </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>rson<font color="#000080">^[</font>p<font color="#000080">] = </font>NUL<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>q <font color="#000080">:= </font>lson<font color="#000080">^[</font>p<font color="#000080">]
+    </font><font color="#FF0000"><b>else if </b></font><font color="#000080">(</font>lson<font color="#000080">^[</font>p<font color="#000080">] = </font>NUL<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>q <font color="#000080">:= </font>rson<font color="#000080">^[</font>p<font color="#000080">]
+    </font><font color="#FF0000"><b>else
+      begin
+        </b></font>q <font color="#000080">:= </font>lson<font color="#000080">^[</font>p<font color="#000080">];
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>rson<font color="#000080">^[</font>q<font color="#000080">] &lt;&gt; </font>NUL<font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            Repeat
+              </b></font>q <font color="#000080">:= </font>rson<font color="#000080">^[</font>q<font color="#000080">];
+            </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>rson<font color="#000080">^[</font>q<font color="#000080">] = </font>NUL<font color="#000080">);
+            </font>rson<font color="#000080">^[</font>dad<font color="#000080">^[</font>q<font color="#000080">]] := </font>lson<font color="#000080">^[</font>q<font color="#000080">];
+            </font>dad<font color="#000080">^[</font>lson<font color="#000080">^[</font>q<font color="#000080">]] := </font>dad<font color="#000080">^[</font>q<font color="#000080">];
+            </font>lson<font color="#000080">^[</font>q<font color="#000080">] := </font>lson<font color="#000080">^[</font>p<font color="#000080">];
+            </font>dad<font color="#000080">^[</font>lson<font color="#000080">^[</font>p<font color="#000080">]] := </font>q<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>rson<font color="#000080">^[</font>q<font color="#000080">] := </font>rson<font color="#000080">^[</font>p<font color="#000080">];
+        </font>dad<font color="#000080">^[</font>rson<font color="#000080">^[</font>p<font color="#000080">]] := </font>q<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>dad<font color="#000080">^[</font>q<font color="#000080">] := </font>dad<font color="#000080">^[</font>p<font color="#000080">];
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>rson<font color="#000080">^[</font>dad<font color="#000080">^[</font>p<font color="#000080">]] = </font>p<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>rson<font color="#000080">^[</font>dad<font color="#000080">^[</font>p<font color="#000080">]] := </font>q
+    <font color="#FF0000"><b>else
+      </b></font>lson<font color="#000080">^[</font>dad<font color="#000080">^[</font>p<font color="#000080">]] := </font>q<font color="#000080">;
+    </font>dad<font color="#000080">^[</font>p<font color="#000080">] := </font>NUL<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ Huffman coding parameters }
+
+  </i></font><font color="#FF0000"><b>Function </b></font>GetBit<font color="#000080">(</font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">) : </font>Integer<font color="#000080">; </font><font color="#008000"><i>{ get one bit }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>i <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>i2 <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>result <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    While </b></font><font color="#000080">(</font>getlen <font color="#000080">&lt;= </font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>GetBytes<font color="#000080">(</font>i<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>result<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>result <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+          </b></font>i2 <font color="#000080">:= </font>i
+        <font color="#FF0000"><b>else </b></font>i2 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>getbuf <font color="#000080">:= </font>getbuf <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>i2 <font color="#FF0000"><b>shl </b></font><font color="#000080">(</font><font color="#800000">8 </font><font color="#000080">- </font>getlen<font color="#000080">));
+        </font>inc<font color="#000080">(</font>getlen<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>i2 <font color="#000080">:= </font>getbuf<font color="#000080">;
+    </font>getbuf <font color="#000080">:= </font>getbuf <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;
+    </font>dec<font color="#000080">(</font>getlen<font color="#000080">);
+    </font>GetBit <font color="#000080">:= </font>Integer<font color="#000080">((</font>i2 <font color="#000080">&lt; </font><font color="#800000">0</font><font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Function </b></font>GetByte<font color="#000080">(</font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">) : </font>Integer<font color="#000080">; </font><font color="#008000"><i>{ get a Byte }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>j <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>i<font color="#000080">, </font>result <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    While </b></font><font color="#000080">(</font>getlen <font color="#000080">&lt;= </font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>GetBytes<font color="#000080">(</font>j<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>result<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>result <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+          </b></font>i <font color="#000080">:= </font>j
+        <font color="#FF0000"><b>else
+          </b></font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>getbuf <font color="#000080">:= </font>getbuf <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>i <font color="#FF0000"><b>shl </b></font><font color="#000080">(</font><font color="#800000">8 </font><font color="#000080">- </font>getlen<font color="#000080">));
+        </font>inc<font color="#000080">(</font>getlen<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>i <font color="#000080">:= </font>getbuf<font color="#000080">;
+    </font>getbuf <font color="#000080">:= </font>getbuf <font color="#FF0000"><b>shl </b></font><font color="#800000">8</font><font color="#000080">;
+    </font>dec<font color="#000080">(</font>getlen<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);
+    </font>GetByte <font color="#000080">:= </font>Integer<font color="#000080">(</font>i <font color="#FF0000"><b>shr </b></font><font color="#800000">8</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Putcode<font color="#000080">(</font>l <font color="#000080">: </font>Integer<font color="#000080">; </font>c <font color="#000080">: </font>Word<font color="#000080">;
+                    </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">); </font><font color="#008000"><i>{ output c bits }
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>Temp <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Got <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>putbuf <font color="#000080">:= </font>putbuf <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>c <font color="#FF0000"><b>shr </b></font>putlen<font color="#000080">);
+    </font>inc<font color="#000080">(</font>putlen<font color="#000080">, </font>l<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>putlen <font color="#000080">&gt;= </font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>Temp <font color="#000080">:= </font>putbuf <font color="#FF0000"><b>shr </b></font><font color="#800000">8</font><font color="#000080">;
+        </font>PutBytes<font color="#000080">(</font>Temp<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Got<font color="#000080">);
+        </font>dec<font color="#000080">(</font>putlen<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>putlen <font color="#000080">&gt;= </font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            </b></font>Temp <font color="#000080">:= </font>lo<font color="#000080">(</font>putbuf<font color="#000080">);
+            </font>PutBytes<font color="#000080">(</font>Temp<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Got<font color="#000080">);
+            </font>inc<font color="#000080">(</font>codesize<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+            </font>dec<font color="#000080">(</font>putlen<font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);
+            </font>putbuf <font color="#000080">:= </font>c <font color="#FF0000"><b>shl </b></font><font color="#000080">(</font>l <font color="#000080">- </font>putlen<font color="#000080">);
+          </font><font color="#FF0000"><b>end
+        else
+          begin
+            </b></font>putbuf <font color="#000080">:= </font>putbuf <font color="#FF0000"><b>shl </b></font><font color="#800000">8</font><font color="#000080">;
+            </font>inc<font color="#000080">(</font>codesize<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#008000"><i>{ initialize freq tree }
+
+  </i></font><font color="#FF0000"><b>Procedure </b></font>StartHuff<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>i<font color="#000080">, </font>j <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    For </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>N_Char<font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>freq<font color="#000080">^[</font>i<font color="#000080">] := </font><font color="#800000">1</font><font color="#000080">;
+        </font>son<font color="#000080">^[</font>i<font color="#000080">] := </font>i <font color="#000080">+ </font>T<font color="#000080">;
+        </font>prnt<font color="#000080">^[</font>i <font color="#000080">+ </font>T<font color="#000080">] := </font>i<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>j <font color="#000080">:= </font>N_Char<font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>j <font color="#000080">&lt;= </font>R<font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>freq<font color="#000080">^[</font>j<font color="#000080">] := </font>freq<font color="#000080">^[</font>i<font color="#000080">] + </font>freq<font color="#000080">^[</font>i <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">];
+        </font>son<font color="#000080">^[</font>j<font color="#000080">] := </font>i<font color="#000080">;
+        </font>prnt<font color="#000080">^[</font>i<font color="#000080">] := </font>j<font color="#000080">;
+        </font>prnt<font color="#000080">^[</font>i <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] := </font>j<font color="#000080">;
+        </font>inc<font color="#000080">(</font>i<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+        </font>inc<font color="#000080">(</font>j<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>freq<font color="#000080">^[</font>T<font color="#000080">] := </font><font color="#800000">$ffff</font><font color="#000080">;
+    </font>prnt<font color="#000080">^[</font>R<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#008000"><i>{ reConstruct freq tree }
+
+  </i></font><font color="#FF0000"><b>Procedure </b></font>reConst<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>tmp <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>F<font color="#000080">, </font>l <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font><font color="#008000"><i>{ halven cumulative freq For leaf nodes }
+    </i></font>j <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>For </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>T<font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        if </b></font><font color="#000080">(</font>son<font color="#000080">^[</font>i<font color="#000080">] &gt;= </font>T<font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            </b></font>freq<font color="#000080">^[</font>j<font color="#000080">] := </font>succ<font color="#000080">(</font>freq<font color="#000080">^[</font>i<font color="#000080">]) </font><font color="#FF0000"><b>div </b></font><font color="#800000">2</font><font color="#000080">; </font><font color="#008000"><i>{@@ Bug Fix MOD -&gt; div @@}
+            </i></font>son<font color="#000080">^[</font>j<font color="#000080">] := </font>son<font color="#000080">^[</font>i<font color="#000080">];
+            </font>inc<font color="#000080">(</font>j<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{ make a tree : first, connect children nodes }
+    </i></font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>j <font color="#000080">:= </font>N_Char<font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>j <font color="#000080">&lt; </font>T<font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>k <font color="#000080">:= </font>succ<font color="#000080">(</font>i<font color="#000080">);
+        </font>F <font color="#000080">:= </font>freq<font color="#000080">^[</font>i<font color="#000080">] + </font>freq<font color="#000080">^[</font>k<font color="#000080">];
+        </font>freq<font color="#000080">^[</font>j<font color="#000080">] := </font>F<font color="#000080">;
+        </font>k <font color="#000080">:= </font>pred<font color="#000080">(</font>j<font color="#000080">);
+        </font><font color="#FF0000"><b>While </b></font>F <font color="#000080">&lt; </font>freq<font color="#000080">^[</font>k<font color="#000080">] </font><font color="#FF0000"><b>do
+          </b></font>dec<font color="#000080">(</font>k<font color="#000080">);
+        </font>inc<font color="#000080">(</font>k<font color="#000080">);
+        </font>l <font color="#000080">:= (</font>j <font color="#000080">- </font>k<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;
+        </font>tmp <font color="#000080">:= </font>succ<font color="#000080">(</font>k<font color="#000080">);
+        </font>move<font color="#000080">(</font>freq<font color="#000080">^[</font>k<font color="#000080">], </font>freq<font color="#000080">^[</font>tmp<font color="#000080">], </font>l<font color="#000080">);
+        </font>freq<font color="#000080">^[</font>k<font color="#000080">] := </font>F<font color="#000080">;
+        </font>move<font color="#000080">(</font>son<font color="#000080">^[</font>k<font color="#000080">], </font>son<font color="#000080">^[</font>tmp<font color="#000080">], </font>l<font color="#000080">);
+        </font>son<font color="#000080">^[</font>k<font color="#000080">] := </font>i<font color="#000080">;
+        </font>inc<font color="#000080">(</font>i<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+        </font>inc<font color="#000080">(</font>j<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{ connect parent nodes }
+    </i></font><font color="#FF0000"><b>For </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>T<font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>k <font color="#000080">:= </font>son<font color="#000080">^[</font>i<font color="#000080">];
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>k <font color="#000080">&gt;= </font>T<font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            </b></font>prnt<font color="#000080">^[</font>k<font color="#000080">] := </font>i<font color="#000080">;
+          </font><font color="#FF0000"><b>end
+        else
+          begin
+            </b></font>prnt<font color="#000080">^[</font>k<font color="#000080">] := </font>i<font color="#000080">;
+            </font>prnt<font color="#000080">^[</font>succ<font color="#000080">(</font>k<font color="#000080">)] := </font>i<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#008000"><i>{ update freq tree }
+
+  </i></font><font color="#FF0000"><b>Procedure </b></font>update<font color="#000080">(</font>c <font color="#000080">: </font>Integer<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>l <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font><font color="#000080">(</font>freq<font color="#000080">^[</font>R<font color="#000080">] = </font>MAX_FREQ<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>reConst<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>c <font color="#000080">:= </font>prnt<font color="#000080">^[</font>c <font color="#000080">+ </font>T<font color="#000080">];
+    </font><font color="#FF0000"><b>Repeat
+      </b></font>inc<font color="#000080">(</font>freq<font color="#000080">^[</font>c<font color="#000080">]);
+      </font>k <font color="#000080">:= </font>freq<font color="#000080">^[</font>c<font color="#000080">];
+      </font><font color="#008000"><i>{ swap nodes to keep the tree freq-ordered }
+      </i></font>l <font color="#000080">:= </font>succ<font color="#000080">(</font>c<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>k <font color="#000080">&gt; </font>freq<font color="#000080">^[</font>l<font color="#000080">]) </font><font color="#FF0000"><b>then
+        begin
+          While </b></font><font color="#000080">(</font>k <font color="#000080">&gt; </font>freq<font color="#000080">^[</font>l<font color="#000080">]) </font><font color="#FF0000"><b>do
+            </b></font>inc<font color="#000080">(</font>l<font color="#000080">);
+          </font>dec<font color="#000080">(</font>l<font color="#000080">);
+          </font>freq<font color="#000080">^[</font>c<font color="#000080">] := </font>freq<font color="#000080">^[</font>l<font color="#000080">];
+          </font>freq<font color="#000080">^[</font>l<font color="#000080">] := </font>k<font color="#000080">;
+          </font>i <font color="#000080">:= </font>son<font color="#000080">^[</font>c<font color="#000080">];
+          </font>prnt<font color="#000080">^[</font>i<font color="#000080">] := </font>l<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font>T<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>prnt<font color="#000080">^[</font>succ<font color="#000080">(</font>i<font color="#000080">)] := </font>l<font color="#000080">;
+          </font>j <font color="#000080">:= </font>son<font color="#000080">^[</font>l<font color="#000080">];
+          </font>son<font color="#000080">^[</font>l<font color="#000080">] := </font>i<font color="#000080">;
+          </font>prnt<font color="#000080">^[</font>j<font color="#000080">] := </font>c<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>j <font color="#000080">&lt; </font>T<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>prnt<font color="#000080">^[</font>succ<font color="#000080">(</font>j<font color="#000080">)] := </font>c<font color="#000080">;
+          </font>son<font color="#000080">^[</font>c<font color="#000080">] := </font>j<font color="#000080">;
+          </font>c <font color="#000080">:= </font>l<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>c <font color="#000080">:= </font>prnt<font color="#000080">^[</font>c<font color="#000080">];
+    </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>c <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);                     </font><font color="#008000"><i>{ Repeat it Until reaching the root }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Var
+  </b></font>code<font color="#000080">, </font>len <font color="#000080">: </font>Word<font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>EncodeChar<font color="#000080">(</font>c <font color="#000080">: </font>Word<font color="#000080">; </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>i <font color="#000080">: </font>Word<font color="#000080">;
+    </font>j<font color="#000080">, </font>k <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>j <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>k <font color="#000080">:= </font>prnt<font color="#000080">^[</font>c <font color="#000080">+ </font>T<font color="#000080">];
+    </font><font color="#008000"><i>{ search connections from leaf node to the root }
+    </i></font><font color="#FF0000"><b>Repeat
+      </b></font>i <font color="#000080">:= </font>i <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+ </font><font color="#008000"><i>{
+        if node's address is odd, output 1
+        else output 0
+        }
+      </i></font><font color="#FF0000"><b>if </b></font>Boolean<font color="#000080">(</font>k <font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>i<font color="#000080">, </font><font color="#800000">$8000</font><font color="#000080">);
+      </font>inc<font color="#000080">(</font>j<font color="#000080">);
+      </font>k <font color="#000080">:= </font>prnt<font color="#000080">^[</font>k<font color="#000080">];
+    </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>k <font color="#000080">= </font>R<font color="#000080">);
+    </font>Putcode<font color="#000080">(</font>j<font color="#000080">, </font>i<font color="#000080">, </font>PutBytes<font color="#000080">);
+    </font>code <font color="#000080">:= </font>i<font color="#000080">;
+    </font>len <font color="#000080">:= </font>j<font color="#000080">;
+    </font>update<font color="#000080">(</font>c<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>EncodePosition<font color="#000080">(</font>c <font color="#000080">: </font>Word<font color="#000080">; </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>i<font color="#000080">, </font>j <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font><font color="#008000"><i>{ output upper 6 bits With encoding }
+    </i></font>i <font color="#000080">:= </font>c <font color="#FF0000"><b>shr </b></font><font color="#800000">6</font><font color="#000080">;
+    </font>j <font color="#000080">:= </font>p_code<font color="#000080">[</font>i<font color="#000080">];
+    </font>Putcode<font color="#000080">(</font>p_len<font color="#000080">[</font>i<font color="#000080">], </font>j <font color="#FF0000"><b>shl </b></font><font color="#800000">8</font><font color="#000080">, </font>PutBytes<font color="#000080">);
+    </font><font color="#008000"><i>{ output lower 6 bits directly }
+    </i></font>Putcode<font color="#000080">(</font><font color="#800000">6</font><font color="#000080">, (</font>c <font color="#FF0000"><b>and </b></font><font color="#800000">$3f</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">10</font><font color="#000080">, </font>PutBytes<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>Encodeend<font color="#000080">(</font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>Temp <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>Got <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>Boolean<font color="#000080">(</font>putlen<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>Temp <font color="#000080">:= </font>lo<font color="#000080">(</font>putbuf <font color="#FF0000"><b>shr </b></font><font color="#800000">8</font><font color="#000080">);
+        </font>PutBytes<font color="#000080">(</font>Temp<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Got<font color="#000080">);
+        </font>inc<font color="#000080">(</font>codesize<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Function </b></font>DecodeChar<font color="#000080">(</font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">) : </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>c <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>c <font color="#000080">:= </font>son<font color="#000080">^[</font>R<font color="#000080">];
+    </font><font color="#008000"><i>{
+     * start searching tree from the root to leaves.
+     * choose node #(son[]) if input bit = 0
+     * else choose #(son[]+1) (input bit = 1)
+    }
+    </i></font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>c <font color="#000080">&lt; </font>T<font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>c <font color="#000080">:= </font>c <font color="#000080">+ </font>GetBit<font color="#000080">(</font>GetBytes<font color="#000080">);
+        </font>c <font color="#000080">:= </font>son<font color="#000080">^[</font>c<font color="#000080">];
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>c <font color="#000080">:= </font>c <font color="#000080">- </font>T<font color="#000080">;
+    </font>update<font color="#000080">(</font>c<font color="#000080">);
+    </font>DecodeChar <font color="#000080">:= </font>Integer<font color="#000080">(</font>c<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Function </b></font>DecodePosition<font color="#000080">(</font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">) : </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>Var
+    </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>c <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font><font color="#008000"><i>{ decode upper 6 bits from given table }
+    </i></font>i <font color="#000080">:= </font>GetByte<font color="#000080">(</font>GetBytes<font color="#000080">);
+    </font>c <font color="#000080">:= </font>Word<font color="#000080">(</font>d_code<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>shl </b></font><font color="#800000">6</font><font color="#000080">);
+    </font>j <font color="#000080">:= </font>d_len<font color="#000080">[</font>i<font color="#000080">];
+    </font><font color="#008000"><i>{ input lower 6 bits directly }
+    </i></font>dec<font color="#000080">(</font>j<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+    </font><font color="#FF0000"><b>While </b></font>j <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+      begin
+        </b></font>i <font color="#000080">:= (</font>i <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">) + </font>GetBit<font color="#000080">(</font>GetBytes<font color="#000080">);
+        </font>dec<font color="#000080">(</font>j<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>DecodePosition <font color="#000080">:= </font>c <font color="#FF0000"><b>or </b></font>i <font color="#FF0000"><b>and </b></font><font color="#800000">$3f</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#008000"><i>{ Compression }
+
+  </i></font><font color="#FF0000"><b>Procedure </b></font>InitLZH<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>getbuf <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>getlen <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>putlen <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>putbuf <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>TextSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>codesize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>printcount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>match_position <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>match_length <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>new<font color="#000080">(</font>lson<font color="#000080">);
+    </font>new<font color="#000080">(</font>dad<font color="#000080">);
+    </font>new<font color="#000080">(</font>rson<font color="#000080">);
+    </font>new<font color="#000080">(</font>Text_buf<font color="#000080">);
+    </font>new<font color="#000080">(</font>freq<font color="#000080">);
+    </font>new<font color="#000080">(</font>prnt<font color="#000080">);
+    </font>new<font color="#000080">(</font>son<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>endLZH<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>dispose<font color="#000080">(</font>son<font color="#000080">);
+    </font>dispose<font color="#000080">(</font>prnt<font color="#000080">);
+    </font>dispose<font color="#000080">(</font>freq<font color="#000080">);
+    </font>dispose<font color="#000080">(</font>Text_buf<font color="#000080">);
+    </font>dispose<font color="#000080">(</font>rson<font color="#000080">);
+    </font>dispose<font color="#000080">(</font>dad<font color="#000080">);
+    </font>dispose<font color="#000080">(</font>lson<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>LZHPack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Bytes_Written <font color="#000080">: </font>LongInt<font color="#000080">;
+                        </font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">;
+                        </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>ct <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>i<font color="#000080">, </font>len<font color="#000080">, </font>R<font color="#000080">, </font>s<font color="#000080">, </font>last_match_length <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>Got <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>InitLZH<font color="#000080">;
+    </font>TextSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                     </font><font color="#008000"><i>{ rewind and rescan }
+    </i></font>StartHuff<font color="#000080">;
+    </font>InitTree<font color="#000080">;
+    </font>s <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>R <font color="#000080">:= </font>N <font color="#000080">- </font>F<font color="#000080">;
+    </font>fillChar<font color="#000080">(</font>Text_buf<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">], </font>R<font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+    </font>len <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>Got <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>len <font color="#000080">&lt; </font>F<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Got <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+      begin
+        </b></font>GetBytes<font color="#000080">(</font>ct<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Got<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>Got <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          begin
+            </b></font>Text_buf<font color="#000080">^[</font>R <font color="#000080">+ </font>len<font color="#000080">] := </font>ct<font color="#000080">;
+            </font>inc<font color="#000080">(</font>len<font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>TextSize <font color="#000080">:= </font>len<font color="#000080">;
+    </font><font color="#FF0000"><b>For </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>F <font color="#FF0000"><b>do
+      </b></font>InsertNode<font color="#000080">(</font>R <font color="#000080">- </font>i<font color="#000080">);
+    </font>InsertNode<font color="#000080">(</font>R<font color="#000080">);
+    </font><font color="#FF0000"><b>Repeat
+      if </b></font><font color="#000080">(</font>match_length <font color="#000080">&gt; </font>len<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>match_length <font color="#000080">:= </font>len<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>match_length <font color="#000080">&lt;= </font>THRESHOLD<font color="#000080">) </font><font color="#FF0000"><b>then
+        begin
+          </b></font>match_length <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+          </font>EncodeChar<font color="#000080">(</font>Text_buf<font color="#000080">^[</font>R<font color="#000080">], </font>PutBytes<font color="#000080">);
+        </font><font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>EncodeChar<font color="#000080">(</font><font color="#800000">255 </font><font color="#000080">- </font>THRESHOLD <font color="#000080">+ </font>match_length<font color="#000080">, </font>PutBytes<font color="#000080">);
+          </font>EncodePosition<font color="#000080">(</font>match_position<font color="#000080">, </font>PutBytes<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>last_match_length <font color="#000080">:= </font>match_length<font color="#000080">;
+      </font>i <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>Got <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font>last_match_length<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Got <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do
+        begin
+          </b></font>GetBytes<font color="#000080">(</font>ct<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Got<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>Got <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            begin
+              </b></font>DeleteNode<font color="#000080">(</font>s<font color="#000080">);
+              </font>Text_buf<font color="#000080">^[</font>s<font color="#000080">] := </font>ct<font color="#000080">;
+              </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>s <font color="#000080">&lt; </font>pred<font color="#000080">(</font>F<font color="#000080">)) </font><font color="#FF0000"><b>then
+                </b></font>Text_buf<font color="#000080">^[</font>s <font color="#000080">+ </font>N<font color="#000080">] := </font>ct<font color="#000080">;
+              </font>s <font color="#000080">:= </font>succ<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+              </font>R <font color="#000080">:= </font>succ<font color="#000080">(</font>R<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+              </font>InsertNode<font color="#000080">(</font>R<font color="#000080">);
+              </font>inc<font color="#000080">(</font>i<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>inc<font color="#000080">(</font>TextSize<font color="#000080">, </font>i<font color="#000080">);
+      </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font>last_match_length<font color="#000080">) </font><font color="#FF0000"><b>do
+        begin
+          </b></font>inc<font color="#000080">(</font>i<font color="#000080">);
+          </font>DeleteNode<font color="#000080">(</font>s<font color="#000080">);
+          </font>s <font color="#000080">:= </font>succ<font color="#000080">(</font>s<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+          </font>R <font color="#000080">:= </font>succ<font color="#000080">(</font>R<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+          </font>dec<font color="#000080">(</font>len<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>Boolean<font color="#000080">(</font>len<font color="#000080">) </font><font color="#FF0000"><b>then </b></font>InsertNode<font color="#000080">(</font>R<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>len <font color="#000080">&lt;= </font><font color="#800000">0</font><font color="#000080">);
+    </font>Encodeend<font color="#000080">(</font>PutBytes<font color="#000080">);
+    </font>endLZH<font color="#000080">;
+    </font>Bytes_Written <font color="#000080">:= </font>TextSize<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>Procedure </b></font>LZHUnpack<font color="#000080">(</font>TextSize <font color="#000080">: </font>LongInt<font color="#000080">;
+                      </font>GetBytes <font color="#000080">: </font>GetBytesProc<font color="#000080">;
+                      </font>PutBytes <font color="#000080">: </font>PutBytesProc<font color="#000080">);
+  </font><font color="#FF0000"><b>Var
+    </b></font>c<font color="#000080">, </font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>R <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>c2<font color="#000080">, </font>a <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>count <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>Put <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>InitLZH<font color="#000080">;
+    </font>StartHuff<font color="#000080">;
+    </font>R <font color="#000080">:= </font>N <font color="#000080">- </font>F<font color="#000080">;
+    </font>fillChar<font color="#000080">(</font>Text_buf<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">], </font>R<font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+    </font>count <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font>count <font color="#000080">&lt; </font>TextSize <font color="#FF0000"><b>do
+      begin
+        </b></font>c <font color="#000080">:= </font>DecodeChar<font color="#000080">(</font>GetBytes<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>c <font color="#000080">&lt; </font><font color="#800000">256</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          begin
+            </b></font>c2 <font color="#000080">:= </font>lo<font color="#000080">(</font>c<font color="#000080">);
+            </font>PutBytes<font color="#000080">(</font>c2<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Put<font color="#000080">);
+            </font>Text_buf<font color="#000080">^[</font>R<font color="#000080">] := </font>c<font color="#000080">;
+            </font>inc<font color="#000080">(</font>R<font color="#000080">);
+            </font>R <font color="#000080">:= </font>R <font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+            </font>inc<font color="#000080">(</font>count<font color="#000080">);
+          </font><font color="#FF0000"><b>end
+        else
+          begin
+            </b></font>i <font color="#000080">:= (</font>R <font color="#000080">- </font>succ<font color="#000080">(</font>DecodePosition<font color="#000080">(</font>GetBytes<font color="#000080">))) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+            </font>j <font color="#000080">:= </font>c <font color="#000080">- </font><font color="#800000">255 </font><font color="#000080">+ </font>THRESHOLD<font color="#000080">;
+            </font><font color="#FF0000"><b>For </b></font>k <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pred<font color="#000080">(</font>j<font color="#000080">) </font><font color="#FF0000"><b>do
+              begin
+                </b></font>c <font color="#000080">:= </font>Text_buf<font color="#000080">^[(</font>i <font color="#000080">+ </font>k<font color="#000080">) </font><font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">)];
+                </font>c2 <font color="#000080">:= </font>lo<font color="#000080">(</font>c<font color="#000080">);
+                </font>PutBytes<font color="#000080">(</font>c2<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>Put<font color="#000080">);
+                </font>Text_buf<font color="#000080">^[</font>R<font color="#000080">] := </font>c<font color="#000080">;
+                </font>inc<font color="#000080">(</font>R<font color="#000080">);
+                </font>R <font color="#000080">:= </font>R <font color="#FF0000"><b>and </b></font>pred<font color="#000080">(</font>N<font color="#000080">);
+                </font>inc<font color="#000080">(</font>count<font color="#000080">);
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>endLZH<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0004.PAS">Original</a><b>]</b></p></body>
+</html>

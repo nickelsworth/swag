@@ -1,0 +1,331 @@
+<html>
+<head><title> "IPX packet unit" by KEN JOHNSON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0064.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>unit </b></font>KJIPX<font color="#000080">;
+</font><font color="#008000"><i>{
+ Ken Johnson's IPX unit.
+ Written November 19th 1996
+ kjohnso3@chat.carleton.ca
+
+ A list of the functions/procedures and what they do:
+
+procedure closesocket(socketnum : word);
+   Closes a socket.
+
+procedure opensocket(socketnum : word);
+   Opens a socket
+
+procedure sendpacket(var ecbpointer);
+   This will send a packet, the ecb and ipx records
+   should be filled.
+
+
+procedure scheduleIPXevent(Var ECB;tick_tock : Word);
+   Schedule an IPX event. Not really used that often.
+
+Procedure RelinquishControl;
+   Give the IPX driver time to do some work
+
+procedure listenforpacket(Var ecb);
+   This will listen for a packet but won't wait for one to be
+   received.
+
+procedure myaddrASM(var bufferout);
+     Get your own address
+
+function  IPXinstalled : Boolean;
+    True if IPX is installed
+
+procedure setuplistenECB(Var ecb : tecb;var ipx : tipxheader;
+                         var d : datagramrec);
+    This sets up your Event control block to get it ready to
+    receive data.
+
+procedure setupipxhead(contosendto : Byte;Var ipxhead : tipxheader);
+    Sets up an ipx header
+
+procedure setupecb(con : Word;Var ecb : tecb;var ipx : tipxheader;
+                   Var d : datagramrec);
+    Sets up ecb to send a packet
+
+procedure callint(sub : Byte;Var bufferin,bufferout);
+    Internal function
+
+procedure getinternetaddress(con : Byte;VAr A : tinternetworkaddress);
+    Get an internet address. If you have someones connection number,
+    you can get their address on the network.
+
+Function compareaddress(thisone,thatone : welcomerec) : Boolean;
+   Compare two address to see if they are the same.
+   IF they are then CompareAddress is true.
+
+}
+
+
+</i></font><font color="#FF0000"><b>interface
+uses </b></font>kjnet<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+     </b></font>TnetworkAddress<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ hi-endian }
+     </i></font>TnodeAddress   <font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">6</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ Hi-endian }
+
+  </i></font>TinterNetworkAddress<font color="#000080">=</font><font color="#FF0000"><b>record
+     </b></font>net   <font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{hi-lo}
+     </i></font>node  <font color="#000080">:</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">6</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;</font><font color="#008000"><i>{hi-lo}
+     </i></font>socket<font color="#000080">:</font>word<font color="#000080">;            </font><font color="#008000"><i>{lo-hi}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>welcomerec <font color="#000080">= </font><font color="#FF0000"><b>record </b></font><font color="#008000"><i>{just some stuff for a chat program...}
+    </i></font>name    <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>a       <font color="#000080">: </font>tinternetworkaddress<font color="#000080">;
+    </font>con     <font color="#000080">: </font>Byte<font color="#000080">;
+    </font>quote   <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+    </font>control <font color="#000080">: </font>Char<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font>datagramRec <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">546</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;  </font><font color="#008000"><i>{where you put the data to send}
+ </i></font>tipxheader <font color="#000080">= </font><font color="#FF0000"><b>record
+   </b></font>checksum <font color="#000080">: </font>word<font color="#000080">;
+   </font>Len      <font color="#000080">: </font>word<font color="#000080">;
+   </font>control  <font color="#000080">: </font>byte<font color="#000080">;
+   </font>packettype <font color="#000080">: </font>byte<font color="#000080">;
+   </font>dest<font color="#000080">,
+   </font>source <font color="#000080">: </font>tinternetworkaddress<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>tfrag <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>FragPtr <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>Size <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>tECB <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Link         <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>ESR          <font color="#000080">: </font>pointer<font color="#000080">;
+    </font>inuse        <font color="#000080">: </font>byte<font color="#000080">;
+    </font>code         <font color="#000080">: </font>byte<font color="#000080">;
+    </font>socketnum    <font color="#000080">: </font>word<font color="#000080">;
+    </font>ipxworkspace <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">]  </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>driver       <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">12</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>localnode    <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">6</font><font color="#000080">]  </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>fragcount    <font color="#000080">: </font>word<font color="#000080">;
+    </font>fragdata     <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">]  </font><font color="#FF0000"><b>of </b></font>tfrag<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>closesocket<font color="#000080">(</font>socketnum <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>opensocket<font color="#000080">(</font>socketnum <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>sendpacket<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>ecbpointer<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>scheduleIPXevent<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ECB<font color="#000080">;</font>tick_tock <font color="#000080">: </font>Word<font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>RelinquishControl<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>listenforpacket<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ecb<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>myaddrASM<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>bufferout<font color="#000080">);
+</font><font color="#FF0000"><b>function  </b></font>IPXinstalled <font color="#000080">: </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>setuplistenECB<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ecb <font color="#000080">: </font>tecb<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>ipx <font color="#000080">: </font>tipxheader<font color="#000080">;
+                         </font><font color="#FF0000"><b>var </b></font>d <font color="#000080">: </font>datagramrec<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>setupipxhead<font color="#000080">(</font>contosendto <font color="#000080">: </font>Byte<font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>ipxhead <font color="#000080">: </font>tipxheader<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>setupecb<font color="#000080">(</font>con <font color="#000080">: </font>Word<font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>ecb <font color="#000080">: </font>tecb<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>ipx <font color="#000080">: </font>tipxheader<font color="#000080">;
+                   </font><font color="#FF0000"><b>Var </b></font>d <font color="#000080">: </font>datagramrec<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>callint<font color="#000080">(</font>sub <font color="#000080">: </font>Byte<font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>bufferin<font color="#000080">,</font>bufferout<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>getinternetaddress<font color="#000080">(</font>con <font color="#000080">: </font>Byte<font color="#000080">;</font><font color="#FF0000"><b>VAr </b></font>A <font color="#000080">: </font>tinternetworkaddress<font color="#000080">);
+</font><font color="#FF0000"><b>Function </b></font>compareaddress<font color="#000080">(</font>thisone<font color="#000080">,</font>thatone <font color="#000080">: </font>welcomerec<font color="#000080">) : </font>Boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>openuntilclosed     <font color="#000080">= </font><font color="#800000">$ff</font><font color="#000080">;
+  </font>openuntilterminated <font color="#000080">= </font><font color="#800000">$00</font><font color="#000080">;
+  </font>doomsocket <font color="#000080">= </font><font color="#800000">$869c</font><font color="#000080">;
+  </font>filesocket <font color="#000080">= </font><font color="#800000">$451</font><font color="#000080">;
+  </font>novellsocket <font color="#000080">= </font><font color="#800000">$8000</font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>sockettype <font color="#000080">: </font>byte<font color="#000080">;
+  </font>result <font color="#000080">: </font>byte<font color="#000080">;
+  </font>listensocket<font color="#000080">,</font>sendon <font color="#000080">: </font>word<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>implementation
+</b></font><font color="#008000"><i>{---------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Function </b></font>compareaddress<font color="#000080">(</font>thisone<font color="#000080">,</font>thatone <font color="#000080">: </font>welcomerec<font color="#000080">) : </font>Boolean<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>a <font color="#000080">: </font>Boolean<font color="#000080">;
+    </font>x <font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>compareaddress <font color="#000080">:= </font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>For </b></font>x <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">4 </font><font color="#FF0000"><b>do
+    if not </b></font><font color="#000080">(</font>thisone<font color="#000080">.</font>a<font color="#000080">.</font>net<font color="#000080">[</font>x<font color="#000080">] = </font>thatone<font color="#000080">.</font>a<font color="#000080">.</font>net<font color="#000080">[</font>x<font color="#000080">]) </font><font color="#FF0000"><b>then </b></font>EXit<font color="#000080">;
+    </font><font color="#FF0000"><b>for </b></font>x <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">6 </font><font color="#FF0000"><b>do
+      if not </b></font><font color="#000080">(</font>thisone<font color="#000080">.</font>a<font color="#000080">.</font>node<font color="#000080">[</font>x<font color="#000080">] = </font>thatone<font color="#000080">.</font>a<font color="#000080">.</font>node<font color="#000080">[</font>x<font color="#000080">]) </font><font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+    </font>Compareaddress <font color="#000080">:= </font>true<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{--------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>callint<font color="#000080">(</font>sub <font color="#000080">: </font>Byte<font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>bufferin<font color="#000080">,</font>bufferout<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">push ds
+    push si  </font><font color="#008000"><i>{push source index as well}
+    </i></font><font color="#FF00FF">Mov ah,$e3
+    lds si,bufferin
+    les di,bufferout
+    int $21
+    pop si
+    pop ds
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{--------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>getinternetaddress<font color="#000080">(</font>con <font color="#000080">: </font>Byte<font color="#000080">;</font><font color="#FF0000"><b>VAr </b></font>A <font color="#000080">: </font>tinternetworkaddress<font color="#000080">);
+</font><font color="#FF0000"><b>type
+  </b></font>request <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>len <font color="#000080">: </font>word<font color="#000080">;
+    </font>sub <font color="#000080">: </font>byte<font color="#000080">;
+    </font>c   <font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>reply <font color="#000080">= </font><font color="#FF0000"><b>record
+   </b></font>len <font color="#000080">: </font>word<font color="#000080">;
+   </font>a <font color="#000080">: </font>tinternetworkaddress<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>bufferin <font color="#000080">: </font>request<font color="#000080">;
+  </font>bufferout <font color="#000080">: </font>reply<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Fillchar<font color="#000080">(</font>bufferout<font color="#000080">,</font>sizeof<font color="#000080">(</font>Bufferout<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+    </font>bufferout<font color="#000080">.</font>len <font color="#000080">:= </font>sizeof<font color="#000080">(</font>bufferout<font color="#000080">)-</font><font color="#800000">2</font><font color="#000080">;
+    </font><font color="#FF0000"><b>with </b></font>bufferin <font color="#FF0000"><b>do
+      begin
+        </b></font>len <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font>sub <font color="#000080">:= </font><font color="#800000">$13</font><font color="#000080">;
+        </font>c <font color="#000080">:= </font>con<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>Callint<font color="#000080">(</font><font color="#800000">$e3</font><font color="#000080">,</font>bufferin<font color="#000080">,</font>bufferout<font color="#000080">);
+   </font>Bufferout<font color="#000080">.</font>a<font color="#000080">.</font>socket <font color="#000080">:= </font>swap<font color="#000080">(</font>bufferout<font color="#000080">.</font>a<font color="#000080">.</font>socket<font color="#000080">);
+   </font>move<font color="#000080">(</font>bufferout<font color="#000080">.</font>a<font color="#000080">,</font>a<font color="#000080">,</font>sizeof<font color="#000080">(</font>a<font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{--------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>function </b></font>IPXinstalled <font color="#000080">: </font>Boolean<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ax,7a00h
+    int $2f
+    mov [byte ptr ipxinstalled],al
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>closesocket<font color="#000080">(</font>socketnum <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>i<font color="#000080">:</font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+   </b></font>i <font color="#000080">:= </font>swap<font color="#000080">(</font>Socketnum<font color="#000080">);
+     </font><font color="#FF0000"><b>asm
+       </b></font><font color="#FF00FF">xor cx,cx
+       mov bx,0001h
+       mov dx,i
+       int $7a
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>opensocket<font color="#000080">(</font>socketnum <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>i <font color="#000080">:= </font>swap<font color="#000080">(</font>socketnum<font color="#000080">);
+      </font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">mov bx,0000h
+        mov dx,i
+        mov al,sockettype
+        int $7a
+        mov [byte ptr result],al
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>sendpacket<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>ecbpointer<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov bx,$0003
+    push bp
+    les si,ecbpointer
+    int $7a
+    mov [byte ptr result],al
+    pop bp
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>scheduleIPXevent<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ECB<font color="#000080">;</font>tick_tock <font color="#000080">: </font>Word<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov bx,0005h
+    mov ax,tick_tock
+    les si,ECB  </font><font color="#008000"><i>{event control block}
+    </i></font><font color="#FF00FF">int $7a
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>Procedure </b></font>RelinquishControl<font color="#000080">;</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm             </b></font><font color="#008000"><i>{app is idle and IPX can do work}
+    </i></font><font color="#FF00FF">mov bx,$000a
+    int $7a
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>listenforpacket<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ecb<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov bx,$0004
+    push bp
+    les si,ecb
+    int $7a
+    mov [byte ptr result],al
+    pop bp
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>myaddrASM<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>bufferout<font color="#000080">);</font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+</b></font><font color="#008000"><i>{    push es}
+    </i></font><font color="#FF00FF">mov bx,0009h
+    les si,bufferout
+    int $7a
+</font><font color="#008000"><i>{    pop es   }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>setuplistenECB<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>ecb <font color="#000080">: </font>tecb<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>ipx <font color="#000080">: </font>tipxheader<font color="#000080">;
+                         </font><font color="#FF0000"><b>var </b></font>d <font color="#000080">: </font>datagramrec<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>t <font color="#000080">: </font>tnodeaddress<font color="#000080">;
+  </font>tick <font color="#000080">: </font>word<font color="#000080">;
+  </font>dest <font color="#000080">: </font>tinternetworkaddress<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>fillchar<font color="#000080">(</font>ecb<font color="#000080">,</font>sizeof<font color="#000080">(</font>ecb<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+    </font>fillchar<font color="#000080">(</font>ipx<font color="#000080">,</font>sizeof<font color="#000080">(</font>ipx<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>with </b></font>ecb <font color="#FF0000"><b>do
+      begin
+        </b></font>socketnum <font color="#000080">:= </font>swap<font color="#000080">(</font>listensocket<font color="#000080">);
+        </font>Fragcount <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font>fragdata<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>size <font color="#000080">:= </font>sizeof<font color="#000080">(</font>ipx<font color="#000080">);
+        </font>fragdata<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>fragptr <font color="#000080">:= @</font>ipx<font color="#000080">;
+        </font>fragdata<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>size <font color="#000080">:= </font>sizeof<font color="#000080">(</font>D<font color="#000080">);
+        </font>fragdata<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>fragptr <font color="#000080">:= @</font>d<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>setupecb<font color="#000080">(</font>con <font color="#000080">: </font>Word<font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>ecb <font color="#000080">: </font>tecb<font color="#000080">;</font><font color="#FF0000"><b>var </b></font>ipx <font color="#000080">: </font>tipxheader<font color="#000080">;
+                   </font><font color="#FF0000"><b>Var </b></font>d <font color="#000080">: </font>datagramrec<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>t <font color="#000080">: </font>tnodeaddress<font color="#000080">;
+  </font>tick <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>fillchar<font color="#000080">(</font>ecb<font color="#000080">,</font>sizeof<font color="#000080">(</font>ecb<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>With </b></font>ecb <font color="#FF0000"><b>do
+      begin
+        </b></font>socketnum <font color="#000080">:= </font>swap<font color="#000080">(</font>sendon<font color="#000080">);
+        </font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>Con <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+            </b></font>Move<font color="#000080">(</font>ipx<font color="#000080">.</font>dest<font color="#000080">.</font>node<font color="#000080">,</font>localnode<font color="#000080">,</font>sizeof<font color="#000080">(</font>localnode<font color="#000080">)) </font><font color="#FF0000"><b>else
+        </b></font>Fillchar<font color="#000080">(</font>localnode<font color="#000080">,</font>sizeof<font color="#000080">(</font>localnode<font color="#000080">),</font><font color="#800000">$ff</font><font color="#000080">);
+        </font>fragcount <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font>fragdata<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>size    <font color="#000080">:= </font>sizeof<font color="#000080">(</font>tipxheader<font color="#000080">);
+        </font>fragdata<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>fragPTR <font color="#000080">:= @(</font>IPX<font color="#000080">);</font><font color="#008000"><i>{pointer to IPX}
+        </i></font>fragdata<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>size    <font color="#000080">:= </font>sizeof<font color="#000080">(</font>d<font color="#000080">);
+        </font>fragdata<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">].</font>fragptr <font color="#000080">:= @(</font>d<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>procedure </b></font>setupipxhead<font color="#000080">(</font>contosendto <font color="#000080">: </font>Byte<font color="#000080">;</font><font color="#FF0000"><b>Var </b></font>ipxhead <font color="#000080">: </font>tipxheader<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    </b></font>fillchar<font color="#000080">(</font>ipxhead<font color="#000080">,</font>sizeof<font color="#000080">(</font>ipxhead<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>contosendto <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+        </b></font>getinternetaddress<font color="#000080">(</font>contosendto<font color="#000080">,</font>ipxhead<font color="#000080">.</font>dest<font color="#000080">) </font><font color="#FF0000"><b>else
+        </b></font>fillchar<font color="#000080">(</font>ipxhead<font color="#000080">.</font>dest<font color="#000080">.</font>node<font color="#000080">,</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">$ff</font><font color="#000080">);
+    </font><font color="#FF0000"><b>with </b></font>ipxhead <font color="#FF0000"><b>do
+      begin
+        </b></font>checksum      <font color="#000080">:= </font>swap<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+        </font>len           <font color="#000080">:= </font>swap<font color="#000080">(</font>sizeof<font color="#000080">(</font>ipxhead<font color="#000080">));
+        </font>dest<font color="#000080">.</font>socket   <font color="#000080">:= </font>swap<font color="#000080">(</font>sendon<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>sockettype <font color="#000080">:= </font>openuntilterminated<font color="#000080">;
+  </font>sendon <font color="#000080">:= </font><font color="#800000">$5678</font><font color="#000080">;
+  </font>listensocket <font color="#000080">:= </font><font color="#800000">$5678</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to NETWORK SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0064.PAS">Original</a><b>]</b></p></body>
+</html>

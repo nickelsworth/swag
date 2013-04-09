@@ -1,0 +1,476 @@
+<html>
+<head><title> "Smooth Scroll with Asm" by JOHN BECK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SCROLL SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+;
+; Adapted from Programmer's Guide to PC &amp; PS/2 Video Systems (1-55615-103-9)
+;
+; Routine written by Richard Wilton
+;
+;
+; Name:         ScreenOrigin
+;
+; Function:     Set screen origin on EGA and VGA.
+;
+; Caller:       Pascal:
+;
+;                       ScreenOrigin(x,y : integer);
+;
+;                       x,y                (* pixel x,y coordinates *)
+;
+
+; Pascal calling convention
+
+ARGx            EQU     word ptr [bp+8] ; stack frame addressing
+ARGy            EQU     word ptr [bp+6]
+
+;
+; C calling convention
+;
+; ARGx            EQU     word ptr [bp+4]
+; ARGy            EQU     word ptr [bp+6]
+
+CRT_MODE        EQU     49h             ; addresses in video BIOS data area
+ADDR_6845       EQU     63h
+POINTS          EQU     85h
+BIOS_FLAGS      EQU     89h
+
+
+DGROUP          GROUP   _DATA
+
+
+_TEXT           SEGMENT byte public 'CODE'
+                ASSUME  cs:_TEXT,ds:DGROUP
+
+                PUBLIC  ScreenOrigin
+ScreenOrigin    PROC    far
+
+                push    bp              ; preserve caller registers
+                mov     bp,sp
+                push    si
+                push    di
+
+                mov     ax,40h
+                mov     es,ax           ; ES -&gt; video BIOS data area
+                mov     cl,es:[CRT_MODE]
+
+                mov     ax,ARGx         ; AX := pixel x-coordinate
+                mov     bx,ARGy         ; BX := pixel y-coordinate
+
+                cmp     cl,7
+                ja      L01             ; jump if graphics mode
+
+                je      L02             ; jump if monochrome alpha
+                test    byte ptr es:[BIOS_FLAGS],1
+                jnz     L02             ; jump if VGA
+                jmp     short L03
+
+; setup for graphics modes (8 pixels per byte)
+
+L01:
+                mov     cx,8            ; CL := 8 (displayed pixels per byte)
+                                        ; CH := 0
+                div     cl              ; AH := bit offset in byte
+                                        ; AL := byte offset in pixel row
+                mov     cl,ah           ; CL := bit offset (for Horiz Pel Pan)
+                xor     ah,ah
+                xchg    ax,bx           ; AX := Y
+                                        ; BX := byte offset in pixel row
+
+                mul     word ptr BytesPerRow
+                                        ; AX := byte offset of start of row
+                jmp     short L05
+
+; setup for VGA alphanumeric modes and EGA monochrome alphanumeric mode
+;   (9 pixels per byte)
+
+L02:                                    ; routine for alpha modes
+                mov     cx,9            ; CL := 9 (displayed pixels per byte)
+                                        ; CH := 0
+                div     cl              ; AH := bit offset in byte
+                                        ; AL := byte offset in pixel row
+                dec     ah              ; AH := -1, 0-7
+                jns     L04             ; jump if bit offset 0-7
+                mov     ah,8            ; AH := 8
+                jmp     short L04
+
+; setup for EGA color alphanumeric modes (8 pixels per byte)
+
+L03:
+                mov     cx,8            ; CL := 8 (displayed pixels per byte)
+                                        ; CH := 0
+                div     cl              ; AH := bit offset in byte
+                                        ; AL := byte offset in pixel row
+L04:
+                mov     cl,ah           ; CL := value for Horiz Pel Pan reg
+                xor     ah,ah
+                xchg    ax,bx           ; AX := y
+                                        ; BX := byte offset in row
+                div     byte ptr es:[POINTS] ; AL := character row
+                                             ; AH := scan line in char matrix
+                xchg    ah,ch           ; AX := character row
+                                        ; CH := scan line (value for Preset
+                                        ;       Row Scan register)
+                mul     word ptr BytesPerRow ; AX := byte offset of char row
+                shr     ax,1            ; AX := word offset of character row
+L05:
+                call    SetOrigin
+
+                pop     di              ; restore registers and exit
+                pop     si
+                mov     sp,bp
+                pop     bp
+
+                ret     4
+
+ScreenOrigin    ENDP
+
+SetOrigin       PROC    near            ; Caller: AX = offset of character row
+                                        ;         BX = byte offset within row
+                                        ;         CH = Preset Row Scan value
+                                        ;         CL = Horizontal Pel Pan value
+
+                add     bx,ax           ; BX := buffer offset
+
+                mov     dx,es:[ADDR_6845] ; CRTC I/O port (3B4h or 3D4h)
+                add     dl,6            ; video status port (3BAh or 3DAh)
+
+; update Start Address High and Low registers
+
+L20:
+                in      al,dx           ; wait for start of vertical retrace
+                test    al,8
+                jz      L20
+
+L21:
+                in      al,dx           ; wait for end of vertical retrace
+                test    al,8
+                jnz     L21
+
+                cli                     ; disable interrupts
+                sub     dl,6            ; DX := 3B4h or 3D4h
+
+                mov     ah,bh           ; AH := value for Start Address High
+                mov     al,0Ch          ; AL := Start Address High reg number
+                out     dx,ax           ; update this register
+
+                mov     ah,bl           ; AH := value for Start Address Low
+                inc     al              ; AL := Start Address Low reg number
+                out     dx,ax           ; update this register
+                sti                     ; enable interrupts
+
+                add     dl,6            ; DX := video status port
+L22:
+                in      al,dx           ; wait for start of vertical retrace
+                test    al,8
+                jz      L22
+
+                cli                     ; disable interrupts
+
+                sub     dl,6            ; DX := 3B4h or 3D4h
+                mov     ah,ch           ; AH := value for Preset Row Scan reg
+                mov     al,8            ; AL := Preset Row Scan reg number
+                out     dx,ax           ; update this register
+
+                mov     dl,0C0h         ; DX := 3C0h (Attribute Controller
+port)
+                mov     al,13h OR 20h   ; AL bit 0-4 := Horiz Pel Pan reg
+number
+                                        ; AL bit 5   := 1
+                out     dx,al           ; write Attribute Controller Address
+reg
+                                        ;   (The Attribute Controller address
+                                        ;    flip-flop.)
+                mov     al,cl           ; AL := value for Horiz Pel Pan reg
+                out     dx,al           ; update this register
+
+                sti                     ; enable interrupts
+                ret
+
+SetOrigin       ENDP
+
+_TEXT           ENDS
+
+
+_DATA           SEGMENT word public 'DATA'
+
+                EXTRN   BytesPerRow : word  ; bytes per pixel row
+
+_DATA           ENDS
+
+                END
+
+}
+{$A+,B-,D+,E+,F+,G-,I+,L+,N-,O+,P+,Q+,R+,S+,T-,V+,X+,Y+}
+{$M 65520,0,655360}
+
+(****************************************************************************)
+ {                                                                          }
+ { MODULE       : SCROLL                                                    }
+ {                                                                          }
+ { DESCRIPTION  : Generic unit for perform smooth scrolling.                }
+ {                                                                          }
+ { AUTHOR       : John M. Beck                                              }
+ {                                                                          }
+ { MODIFICATIONS: None                                                      }
+ {                                                                          }
+ { HISTORY      : 29-Dec-1993  Coded.                                       }
+ {                                                                          }
+(****************************************************************************)
+
+</i></font><font color="#FF0000"><b>unit </b></font>scroll<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+const
+   </b></font>charwidth  <font color="#000080">= </font><font color="#800000">8</font><font color="#000080">;
+   </font>charheight <font color="#000080">= </font><font color="#800000">14</font><font color="#000080">;  </font><font color="#008000"><i>{ depends on adapter }
+
+</i></font><font color="#FF0000"><b>var
+   </b></font>screenseg    <font color="#000080">: </font>word<font color="#000080">;
+   </font>bytesperrow  <font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>getvideomode <font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>smoothscroll<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>gotoxy <font color="#000080">(</font>x<font color="#000080">,</font>y <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>wherexy<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>x<font color="#000080">,</font>y <font color="#000080">: </font>byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>cursoroff<font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>setcursor<font color="#000080">(</font>top<font color="#000080">,</font>bot <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>getcursor<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>top<font color="#000080">,</font>bot <font color="#000080">: </font>byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>procedure </b></font>clearline<font color="#000080">(</font>line <font color="#000080">: </font>word<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>setvideomode<font color="#000080">(</font>mode <font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>panscreen<font color="#000080">(</font>x0<font color="#000080">,</font>y0<font color="#000080">,</font>x1<font color="#000080">,</font>y1 <font color="#000080">: </font>integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>implementation
+
+</b></font><font color="#008000"><i>{$L SCRORG.OBJ}
+
+{
+;
+; Name:         ScreenOrigin
+;
+; Function:     Set screen origin on EGA and VGA.
+;
+; Caller:       Pascal:
+;
+;                       procedure ScreenOrigin(x,y : integer);
+;
+;                       x,y               (* pixel x,y coordinates *)
+;
+}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>screenorigin<font color="#000080">(</font>x<font color="#000080">,</font>y <font color="#000080">: </font>integer<font color="#000080">);  </font><font color="#FF0000"><b>external</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>getvideomode <font color="#000080">: </font>byte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ax,0F00h
+      int  10h
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>cursoroff<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  cx,2000h
+      mov  ah,1
+      int  10h
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>gotoxy<font color="#000080">(</font>x<font color="#000080">,</font>y <font color="#000080">: </font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ah,2
+      xor  bx,bx
+      mov  dl,x
+      dec  dl
+      mov  dh,y
+      dec  dh
+      int  10h
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>wherexy<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>x<font color="#000080">,</font>y <font color="#000080">: </font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ax,0300h
+      xor  bx,bx
+      int  10h
+      xchg dx,ax
+      les  di,x
+      stosb
+      mov  al,ah
+      les  di,y
+      stosb
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>setvideomode<font color="#000080">(</font>mode <font color="#000080">: </font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ah,00
+      mov  al,mode
+      int  10h
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>setcursor<font color="#000080">(</font>top<font color="#000080">,</font>bot <font color="#000080">: </font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ax,0100h
+      mov  ch,top
+      mov  cl,bot
+      int  10h
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>getcursor<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>top<font color="#000080">,</font>bot <font color="#000080">: </font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov  ax,0300h
+      xor  bx,bx
+      int  10h
+      xchg cx,ax
+      les  di,bot
+      stosb
+      mov  al,ah
+      les  di,top
+      stosb
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>clearline<font color="#000080">(</font>line <font color="#000080">: </font>word<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov   ax,screenseg     </font><font color="#008000"><i>{ ; AX := screen segment              }
+      </i></font><font color="#FF00FF">mov   es,ax            </font><font color="#008000"><i>{ ; ES := AX                          }
+
+      </i></font><font color="#FF00FF">mov   ax,bytesperrow   </font><font color="#008000"><i>{ ; AX := # chars per row * 2         }
+      </i></font><font color="#FF00FF">push  ax               </font><font color="#008000"><i>{ ; preserve this value               }
+      </i></font><font color="#FF00FF">mov   cx,line          </font><font color="#008000"><i>{ ; CX := Line                        }
+      </i></font><font color="#FF00FF">dec   cx               </font><font color="#008000"><i>{ ; CX-- (zero based)                 }
+      </i></font><font color="#FF00FF">mul   cx               </font><font color="#008000"><i>{ ; AX := bytesperrow * 25            }
+      </i></font><font color="#FF00FF">mov   di,ax            </font><font color="#008000"><i>{ ; ES:DI -&gt; 25th line                }
+      </i></font><font color="#FF00FF">pop   cx               </font><font color="#008000"><i>{ ; CX := bytesperrow                 }
+      </i></font><font color="#FF00FF">shr   cx,1             </font><font color="#008000"><i>{ ; CX := CX / 2 (word moves)         }
+      </i></font><font color="#FF00FF">mov   ax,1824          </font><font color="#008000"><i>{ ; AH := 7 (white on black)          }
+                             { ; AL := 32 (space)                  }
+      </i></font><font color="#FF00FF">rep   stosw            </font><font color="#008000"><i>{ ; clear line                        }
+   </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>panscreen<font color="#000080">(</font>x0<font color="#000080">,</font>y0<font color="#000080">,</font>x1<font color="#000080">,</font>y1 <font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#008000"><i>{
+   Routine originally in Microsoft C by Richard Wilton
+}
+   </i></font><font color="#FF0000"><b>var
+      </b></font>i<font color="#000080">,</font>j   <font color="#000080">: </font>integer<font color="#000080">;
+      </font>xinc<font color="#000080">,
+      </font>yinc  <font color="#000080">: </font>integer<font color="#000080">;
+   </font><font color="#FF0000"><b>begin
+      </b></font>i <font color="#000080">:= </font>x0<font color="#000080">; </font>j <font color="#000080">:= </font>y0<font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>x0 <font color="#000080">&lt; </font>x1<font color="#000080">) </font><font color="#FF0000"><b>then
+         </b></font>xinc <font color="#000080">:= </font><font color="#800000">1
+      </font><font color="#FF0000"><b>else
+         </b></font>xinc <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>y0 <font color="#000080">&lt; </font>y1<font color="#000080">) </font><font color="#FF0000"><b>then
+         </b></font>yinc <font color="#000080">:= </font><font color="#800000">1
+      </font><font color="#FF0000"><b>else
+         </b></font>yinc <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>i <font color="#000080">&lt;&gt; </font>x1<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>j <font color="#000080">&lt;&gt; </font>y1<font color="#000080">) </font><font color="#FF0000"><b>do
+         begin
+            if </b></font>i <font color="#000080">&lt;&gt; </font>x1 <font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>i<font color="#000080">,</font>xinc<font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>j <font color="#000080">&lt;&gt; </font>y1 <font color="#FF0000"><b>then </b></font>inc<font color="#000080">(</font>j<font color="#000080">,</font>yinc<font color="#000080">);
+            </font>screenorigin<font color="#000080">(</font>i<font color="#000080">,</font>j<font color="#000080">);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>smoothscroll<font color="#000080">;
+</font><font color="#008000"><i>{
+   Smooth scrolls one line up and puts cursor on bottom line.
+}
+   </i></font><font color="#FF0000"><b>var
+      </b></font>top<font color="#000080">,</font>bot <font color="#000080">: </font>byte<font color="#000080">;
+
+   </font><font color="#FF0000"><b>begin
+      </b></font>clearline<font color="#000080">(</font><font color="#800000">26</font><font color="#000080">);               </font><font color="#008000"><i>{ blank 26th line             }
+      </i></font>panscreen<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font>charheight<font color="#000080">); </font><font color="#008000"><i>{ smooth scroll one line down }
+      </i></font>screenorigin<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);           </font><font color="#008000"><i>{ restore screen origin       }
+
+      </i></font><font color="#FF0000"><b>asm
+         </b></font><font color="#FF00FF">push  ds               </font><font color="#008000"><i>{ ; preserve data segment             }
+
+         </i></font><font color="#FF00FF">mov   ax,screenseg     </font><font color="#008000"><i>{ ; AX := 0B000h or 0B800             }
+
+         </i></font><font color="#FF00FF">mov   ds,ax            </font><font color="#008000"><i>{ ; DS := screen segment              }
+         </i></font><font color="#FF00FF">mov   si,160           </font><font color="#008000"><i>{ ; SI := offset of (0,1)             }
+                                { ; DS:SI -&gt; (0,1) of video buffer    }
+
+         </i></font><font color="#FF00FF">mov   es,ax            </font><font color="#008000"><i>{ ; ES := screen segment              }
+         </i></font><font color="#FF00FF">xor   di,di            </font><font color="#008000"><i>{ ; DI := offset of (0,0)             }
+
+         </i></font><font color="#FF00FF">mov   cx,1920          </font><font color="#008000"><i>{ ; CX := bytesperrow * 24 / 2        }
+
+         </i></font><font color="#FF00FF">rep   movsw            </font><font color="#008000"><i>{ ; move screen one line up           }
+
+         </i></font><font color="#FF00FF">pop   ds               </font><font color="#008000"><i>{ ; restore data segment              }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>getcursor<font color="#000080">(</font>top<font color="#000080">,</font>bot<font color="#000080">);  </font><font color="#008000"><i>{ save cursor settings  }
+      </i></font>clearline<font color="#000080">(</font><font color="#800000">25</font><font color="#000080">);       </font><font color="#008000"><i>{ blank new bottom line }
+      </i></font>gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">);        </font><font color="#008000"><i>{ goto last line        }
+   </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   if </b></font>getvideomode <font color="#000080">= </font><font color="#800000">7 </font><font color="#FF0000"><b>then
+      </b></font>screenseg <font color="#000080">:= </font><font color="#800000">$B000
+   </font><font color="#FF0000"><b>else
+      </b></font>screenseg <font color="#000080">:= </font><font color="#800000">$B800</font><font color="#000080">;
+
+   </font>bytesperrow <font color="#000080">:= </font><font color="#800000">80</font><font color="#000080">*</font><font color="#800000">2</font><font color="#000080">;        </font><font color="#008000"><i>{ 80 bytes for text and attributes }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{$A+,B-,D+,E+,F+,G-,I+,L+,N-,O+,P+,Q+,R+,S+,T-,V+,X+,Y+}
+{$M 65520,0,655360}
+
+(****************************************************************************)
+ {                                                                          }
+ { PROGRAM      : PANTEST                                                   }
+ {                                                                          }
+ { DESCRIPTION  : Tests the scroll unit.                                    }
+ {                                                                          }
+ { AUTHOR       : John M. Beck                                              }
+ {                                                                          }
+ { MODIFICATIONS: None                                                      }
+ {                                                                          }
+ { HISTORY      : 29-Dec-1993  Coded.                                       }
+ {                                                                          }
+(****************************************************************************)
+
+</i></font><font color="#FF0000"><b>program </b></font>pantest<font color="#000080">;
+
+</font><font color="#FF0000"><b>uses </b></font>crt<font color="#000080">, </font>scroll<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+   </b></font>count <font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+   </b></font>clrscr<font color="#000080">;
+   </font>gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+   </font>textattr <font color="#000080">:= (</font>black <font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font>lightgray<font color="#000080">;
+   </font><font color="#FF0000"><b>for </b></font>count <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">24 </font><font color="#FF0000"><b>do </b></font>writeln<font color="#000080">(</font><font color="#800000">'Hello '</font><font color="#000080">,</font>count<font color="#000080">);
+
+   </font>write<font color="#000080">(</font><font color="#800000">'Press any key to smooth scroll up one line ... '</font><font color="#000080">);
+   </font>readkey<font color="#000080">;
+
+   </font>smoothscroll<font color="#000080">;
+
+   </font>write<font color="#000080">(</font><font color="#800000">'Press any key to pan demonstration ... '</font><font color="#000080">);
+   </font>readkey<font color="#000080">;
+
+   </font>clrscr<font color="#000080">;
+   </font>gotoxy<font color="#000080">(</font><font color="#800000">65</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">);
+   </font>textattr <font color="#000080">:= (</font>black <font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font>lightgreen<font color="#000080">;
+   </font>write<font color="#000080">(</font><font color="#800000">'... Groovy ...'</font><font color="#000080">);
+   </font>panscreen<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">65 </font><font color="#000080">* </font>charwidth<font color="#000080">,</font><font color="#800000">25 </font><font color="#000080">* </font>charheight<font color="#000080">);
+   </font>panscreen<font color="#000080">(</font><font color="#800000">65 </font><font color="#000080">* </font>charwidth<font color="#000080">,</font><font color="#800000">25 </font><font color="#000080">* </font>charheight<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+   </font>gotoxy<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">25</font><font color="#000080">);
+   </font>textattr <font color="#000080">:= (</font>black <font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font>lightblue<font color="#000080">;
+   </font>write<font color="#000080">(</font><font color="#800000">'Any key to exit ... '</font><font color="#000080">);
+   </font>readkey<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SCROLL SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0013.PAS">Original</a><b>]</b></p></body>
+</html>

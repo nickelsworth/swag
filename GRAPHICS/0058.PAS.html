@@ -1,0 +1,465 @@
+<html>
+<head><title> "PCX Files" by LIOR BAR-ON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0058.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>unit </b></font>PCX<font color="#000080">;
+
+</font><font color="#008000"><i>{   The following display modes are supported:
+
+          Mode      TP GraphMode     Resolution    Colors
+          ~~~~      ~~~~~~~~~~~~     ~~~~~~~~~~    ~~~~~~
+          $04       CGAC0 to C3      320 x 200         4
+          $06       CGAHi            640 x 200         2
+          $0D        ---             320 x 200        16
+          $0E       EGALo/VGALo      640 x 200        16
+          $10       EGAHi/VGAMed     640 x 350        16
+          $12       VGAHi            640 x 480        16
+          $13        ---             320 x 200       256
+
+   Mode $13 is supported only for files containing palette information,
+   i.e. not those produced by versions of Paintbrush earlier than 3.0.}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+uses </b></font>DOS<font color="#000080">, </font>GRAPH<font color="#000080">;
+
+</font><font color="#FF0000"><b>type    </b></font>RGBrec <font color="#000080">= </font><font color="#FF0000"><b>record
+                   </b></font>redval<font color="#000080">, </font>greenval<font color="#000080">, </font>blueval<font color="#000080">: </font>byte<font color="#000080">;
+                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var     </b></font>pcxfilename<font color="#000080">: </font>pathstr<font color="#000080">;
+        </font>file_error<font color="#000080">: </font>boolean<font color="#000080">;
+        </font>pal<font color="#000080">: </font>palettetype<font color="#000080">;
+        </font>RGBpal<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>RGBrec<font color="#000080">;
+        </font>RGB256<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>RGBrec<font color="#000080">;
+        </font>page_addr<font color="#000080">: </font>word<font color="#000080">;
+        </font>bytes_per_line<font color="#000080">: </font>word<font color="#000080">;
+        </font>buff0<font color="#000080">, </font>buff1<font color="#000080">: </font>pointer<font color="#000080">;
+
+        </font><font color="#008000"><i>{ CGA display memory banks: }
+        </i></font>screenbuff0<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7999</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$b800</font><font color="#000080">:</font><font color="#800000">$0000</font><font color="#000080">;
+        </font>screenbuff1<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7999</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte <font color="#FF0000"><b>absolute </b></font><font color="#800000">$b800</font><font color="#000080">:</font><font color="#800000">$2000</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const   </b></font>page0 <font color="#000080">= </font><font color="#800000">$A000</font><font color="#000080">;           </font><font color="#008000"><i>{ EGA/VGA display segment }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SETMODE<font color="#000080">(</font>mode<font color="#000080">: </font>byte<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>SETREGISTERS<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>palrec<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>READ_PCX_FILE<font color="#000080">(</font>gdriver<font color="#000080">: </font>integer<font color="#000080">; </font>pfilename<font color="#000080">: </font>pathstr<font color="#000080">);
+</font><font color="#FF0000"><b>procedure </b></font>READ_PCX256<font color="#000080">(</font>pfilename<font color="#000080">: </font>pathstr<font color="#000080">);
+
+</font><font color="#008000"><i>{========================================================================}
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+var     </b></font>scratch<font color="#000080">, </font>abuff0<font color="#000080">, </font>abuff1<font color="#000080">: </font>pointer<font color="#000080">;
+        </font>is_CGA<font color="#000080">, </font>is_VGA<font color="#000080">: </font>boolean<font color="#000080">;
+        </font>repeatcount<font color="#000080">: </font>byte<font color="#000080">;
+        </font>datalength<font color="#000080">: </font>word<font color="#000080">;
+        </font>columncount<font color="#000080">, </font>plane<font color="#000080">, </font>video_index<font color="#000080">: </font>word<font color="#000080">;
+        </font>regs<font color="#000080">: </font>registers<font color="#000080">;
+
+</font><font color="#FF0000"><b>const   </b></font>buffsize <font color="#000080">= </font><font color="#800000">65521</font><font color="#000080">;   </font><font color="#008000"><i>{ Largest possible }
+
+{ -------------------------- BIOS calls --------------------------------- }
+
+{ For modes not supported by the BGI, use SetMode to initialize the
+  graphics. Since SetRGBPalette won't work if Turbo hasn't done the
+  graphics initialization itself, use SetRegisters to change the colors
+  in mode $13. }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SETMODE<font color="#000080">(</font>mode<font color="#000080">: </font>byte<font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+</b></font>regs<font color="#000080">.</font>ah<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                 </font><font color="#008000"><i>{ BIOS set mode function }
+</i></font>regs<font color="#000080">.</font>al<font color="#000080">:= </font>mode<font color="#000080">;              </font><font color="#008000"><i>{ Display mode }
+</i></font>intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>regs<font color="#000080">);             </font><font color="#008000"><i>{ Call BIOS }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SETREGISTERS<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>palrec<font color="#000080">);
+
+</font><font color="#008000"><i>{ Palrec is any string of 768 bytes containing the RGB data. }
+
+</i></font><font color="#FF0000"><b>begin
+</b></font>regs<font color="#000080">.</font>ah<font color="#000080">:= </font><font color="#800000">$10</font><font color="#000080">;               </font><font color="#008000"><i>{ BIOS color register function }
+</i></font>regs<font color="#000080">.</font>al<font color="#000080">:= </font><font color="#800000">$12</font><font color="#000080">;               </font><font color="#008000"><i>{ Subfunction }
+</i></font>regs<font color="#000080">.</font>es<font color="#000080">:= </font>seg<font color="#000080">(</font>palrec<font color="#000080">);       </font><font color="#008000"><i>{ Address of palette info. }
+</i></font>regs<font color="#000080">.</font>dx<font color="#000080">:= </font>ofs<font color="#000080">(</font>palrec<font color="#000080">);
+</font>regs<font color="#000080">.</font>bx<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                 </font><font color="#008000"><i>{ First register to change }
+</i></font>regs<font color="#000080">.</font>cx<font color="#000080">:= </font><font color="#800000">$100</font><font color="#000080">;              </font><font color="#008000"><i>{ Number of registers to change }
+</i></font>intr<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>regs<font color="#000080">);             </font><font color="#008000"><i>{ Call BIOS }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ====================== EGA/VGA 16-color files ========================= }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DECODE_16<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>asm
+</b></font><font color="#FF00FF">push    bp
+
+</font><font color="#008000"><i>{ ----------------- Assembler procedure for 16-color files -------------- }
+
+{ The first section is initialization done on each run through the
+  input buffer. }
+
+</i></font><font color="#FF00FF">@startproc:
+mov     bp, plane           </font><font color="#008000"><i>{ plane in BP }
+</i></font><font color="#FF00FF">mov     es, page_addr       </font><font color="#008000"><i>{ video display segment }
+</i></font><font color="#FF00FF">mov     di, video_index     </font><font color="#008000"><i>{ index into video segment }
+</i></font><font color="#FF00FF">mov     ah, byte ptr bytes_per_line  </font><font color="#008000"><i>{ line length in AH }
+</i></font><font color="#FF00FF">mov     dx, columncount     </font><font color="#008000"><i>{ column counter }
+</i></font><font color="#FF00FF">mov     bx, datalength      </font><font color="#008000"><i>{ no. of bytes to read }
+</i></font><font color="#FF00FF">xor     cx, cx              </font><font color="#008000"><i>{ clean up CX for loop counter }
+</i></font><font color="#FF00FF">mov     cl, repeatcount     </font><font color="#008000"><i>{ count in CX }
+</i></font><font color="#FF00FF">push    ds                  </font><font color="#008000"><i>{ save DS }
+</i></font><font color="#FF00FF">lds     si, scratch         </font><font color="#008000"><i>{ input buffer pointer in DS:SI }
+</i></font><font color="#FF00FF">add     bx, si
+cld                         </font><font color="#008000"><i>{ clear DF for stosb }
+</i></font><font color="#FF00FF">cmp     cl, 0               </font><font color="#008000"><i>{ was last byte a count? }
+</i></font><font color="#FF00FF">jne     @multi_data         </font><font color="#008000"><i>{ yes, so next is data }
+</i></font><font color="#FF00FF">jmp     @getbyte            </font><font color="#008000"><i>{ no, so find out what next is }
+
+{ -------------- Procedure to write EGA/VGA image to video -------------- }
+
+</i></font><font color="#FF00FF">@writebyte:
+stosb                       </font><font color="#008000"><i>{ AL into ES:DI, inc DI }
+</i></font><font color="#FF00FF">inc     dl                  </font><font color="#008000"><i>{ increment column }
+</i></font><font color="#FF00FF">cmp     dl, ah              </font><font color="#008000"><i>{ reached end of scanline? }
+</i></font><font color="#FF00FF">je      @doneline           </font><font color="#008000"><i>{ yes }
+</i></font><font color="#FF00FF">loop    @writebyte          </font><font color="#008000"><i>{ no, do another }
+</i></font><font color="#FF00FF">jmp     @getbyte            </font><font color="#008000"><i>{   or get more data }
+</i></font><font color="#FF00FF">@doneline:
+shl     bp, 1               </font><font color="#008000"><i>{ shift to next plane }
+</i></font><font color="#FF00FF">cmp     bp, 8               </font><font color="#008000"><i>{ done 4 planes? }
+</i></font><font color="#FF00FF">jle     @setindex           </font><font color="#008000"><i>{ no }
+</i></font><font color="#FF00FF">mov     bp, 1               </font><font color="#008000"><i>{ yes, reset plane to 1 but don't reset index }
+</i></font><font color="#FF00FF">jmp     @setplane
+@setindex:
+sub     di, dx              </font><font color="#008000"><i>{ reset to start of line }
+</i></font><font color="#FF00FF">@setplane:
+push    ax                  </font><font color="#008000"><i>{ save AX }
+</i></font><font color="#FF00FF">cli                         </font><font color="#008000"><i>{ no interrupts }
+</i></font><font color="#FF00FF">mov     ax, bp              </font><font color="#008000"><i>{ plane is 1, 2, 4, or 8 }
+</i></font><font color="#FF00FF">mov     dx, 3C5h            </font><font color="#008000"><i>{ sequencer data register }
+</i></font><font color="#FF00FF">out     dx, al              </font><font color="#008000"><i>{ mask out 3 planes }
+</i></font><font color="#FF00FF">sti                         </font><font color="#008000"><i>{ enable interrupts }
+</i></font><font color="#FF00FF">pop     ax                  </font><font color="#008000"><i>{ restore AX }
+</i></font><font color="#FF00FF">xor     dx, dx              </font><font color="#008000"><i>{ reset column count }
+</i></font><font color="#FF00FF">loop    @writebyte          </font><font color="#008000"><i>{ do it again, or fetch more data }
+
+</i></font><font color="#FF00FF">@getbyte:                   </font><font color="#008000"><i>{ last byte was not a count }
+</i></font><font color="#FF00FF">cmp     si, bx              </font><font color="#008000"><i>{ end of input buffer? }
+</i></font><font color="#FF00FF">je      @exit               </font><font color="#008000"><i>{ yes, quit }
+</i></font><font color="#FF00FF">lodsb                       </font><font color="#008000"><i>{ get a byte from DS:SI into AL, increment SI }
+</i></font><font color="#FF00FF">cmp     al, 192             </font><font color="#008000"><i>{ test high bits }
+</i></font><font color="#FF00FF">jb      @one_data           </font><font color="#008000"><i>{ not set, it's data to be written once }
+ { It's a count byte: }
+</i></font><font color="#FF00FF">xor     al, 192             </font><font color="#008000"><i>{ get count from 6 low bits }
+</i></font><font color="#FF00FF">mov     cl, al              </font><font color="#008000"><i>{ store repeat count }
+</i></font><font color="#FF00FF">cmp     si, bx              </font><font color="#008000"><i>{ end of input buffer? }
+</i></font><font color="#FF00FF">je      @exit               </font><font color="#008000"><i>{ yes, quit }
+</i></font><font color="#FF00FF">@multi_data:
+lodsb                       </font><font color="#008000"><i>{ get data byte }
+</i></font><font color="#FF00FF">jmp     @writebyte          </font><font color="#008000"><i>{ write it CL times }
+</i></font><font color="#FF00FF">@one_data:
+mov     cl, 1               </font><font color="#008000"><i>{ write byte once }
+</i></font><font color="#FF00FF">jmp     @writebyte
+
+</font><font color="#008000"><i>{ ---------------------- Finished with buffer --------------------------- }
+
+</i></font><font color="#FF00FF">@exit:
+pop     ds                  </font><font color="#008000"><i>{ restore Turbo's data segment }
+</i></font><font color="#FF00FF">mov     plane, bp           </font><font color="#008000"><i>{ save status for next run thru buffer }
+</i></font><font color="#FF00FF">mov     repeatcount, cl
+mov     columncount, dx
+mov     video_index, di
+pop     bp
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ asm }
+
+{ ===================== CGA 2- and 4-color files ======================== }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DECODE_CGA<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>asm
+
+</b></font><font color="#FF00FF">push    bp
+jmp     @startproc
+
+</font><font color="#008000"><i>{ ------------- Procedure to store CGA image in buffers ----------------- }
+
+</i></font><font color="#FF00FF">@storebyte:
+stosb                       </font><font color="#008000"><i>{ AL into ES:DI, increment DI }
+</i></font><font color="#FF00FF">inc     dx                  </font><font color="#008000"><i>{ increment column count }
+</i></font><font color="#FF00FF">cmp     dl, ah              </font><font color="#008000"><i>{ reached end of line? }
+</i></font><font color="#FF00FF">je      @row_ends           </font><font color="#008000"><i>{ yes }
+</i></font><font color="#FF00FF">loop    @storebyte          </font><font color="#008000"><i>{ not end of row, do another byte }
+</i></font><font color="#FF00FF">ret
+@row_ends:
+xor     bp, 1               </font><font color="#008000"><i>{ switch banks }
+</i></font><font color="#FF00FF">cmp     bp, 1               </font><font color="#008000"><i>{ is bank 1? }
+</i></font><font color="#FF00FF">je      @bank1              </font><font color="#008000"><i>{ yes }
+</i></font><font color="#FF00FF">mov     word ptr abuff1, di </font><font color="#008000"><i>{ no, save index into bank 1 }
+</i></font><font color="#FF00FF">les     di, abuff0          </font><font color="#008000"><i>{ bank 0 pointer into ES:DI }
+</i></font><font color="#FF00FF">xor     dx, dx              </font><font color="#008000"><i>{ reset column counter }
+</i></font><font color="#FF00FF">loop    @storebyte
+ret
+@bank1:
+mov     word ptr abuff0, di </font><font color="#008000"><i>{ save index into bank 0 }
+</i></font><font color="#FF00FF">les     di, abuff1          </font><font color="#008000"><i>{ bank 1 pointer into ES:DI }
+</i></font><font color="#FF00FF">xor     dx, dx              </font><font color="#008000"><i>{ reset column counter }
+</i></font><font color="#FF00FF">loop    @storebyte
+ret
+
+</font><font color="#008000"><i>{ ---------------- Main assembler procedure for CGA --------------------- }
+
+</i></font><font color="#FF00FF">@startproc:
+mov     bp, 0                        </font><font color="#008000"><i>{ bank in BP }
+</i></font><font color="#FF00FF">mov     es, word ptr abuff0[2]       </font><font color="#008000"><i>{ segment of bank 0 buffer }
+</i></font><font color="#FF00FF">mov     di, word ptr abuff0          </font><font color="#008000"><i>{ offset of buffer }
+</i></font><font color="#FF00FF">mov     ah, byte ptr bytes_per_line  </font><font color="#008000"><i>{ line length in AH }
+</i></font><font color="#FF00FF">mov     bx, datalength               </font><font color="#008000"><i>{ no. of bytes to read }
+</i></font><font color="#FF00FF">xor     cx, cx                       </font><font color="#008000"><i>{ clean up CX for loop counter }
+</i></font><font color="#FF00FF">xor     dx, dx                       </font><font color="#008000"><i>{ initialize column counter }
+</i></font><font color="#FF00FF">mov     si, dx                       </font><font color="#008000"><i>{ initialize input index }
+</i></font><font color="#FF00FF">cld                                  </font><font color="#008000"><i>{ clear DF for stosb }
+
+{ -------------------- Loop through input buffer ------------------------ }
+
+</i></font><font color="#FF00FF">@getbyte:
+cmp     si, bx              </font><font color="#008000"><i>{ end of input buffer? }
+</i></font><font color="#FF00FF">je      @exit               </font><font color="#008000"><i>{ yes, quit }
+</i></font><font color="#FF00FF">push    es                  </font><font color="#008000"><i>{ save output pointer }
+</i></font><font color="#FF00FF">push    di
+les     di, scratch         </font><font color="#008000"><i>{ get input pointer in ES:DI }
+</i></font><font color="#FF00FF">add     di, si              </font><font color="#008000"><i>{ add current offset }
+</i></font><font color="#FF00FF">mov     al, [es:di]         </font><font color="#008000"><i>{ get a byte }
+</i></font><font color="#FF00FF">inc     si                  </font><font color="#008000"><i>{ advance input index }
+</i></font><font color="#FF00FF">pop     di                  </font><font color="#008000"><i>{ restore output pointer }
+</i></font><font color="#FF00FF">pop     es
+cmp     cl, 0               </font><font color="#008000"><i>{ was previous byte a count? }
+</i></font><font color="#FF00FF">jg      @multi_data         </font><font color="#008000"><i>{ yes, this is data }
+</i></font><font color="#FF00FF">cmp     al, 192             </font><font color="#008000"><i>{ no, test high bits }
+</i></font><font color="#FF00FF">jb      @one_data           </font><font color="#008000"><i>{ not set, not a count }
+ { It's a count byte: }
+</i></font><font color="#FF00FF">xor     al, 192             </font><font color="#008000"><i>{ get count from 6 low bits }
+</i></font><font color="#FF00FF">mov     cl, al              </font><font color="#008000"><i>{ store repeat count }
+</i></font><font color="#FF00FF">jmp     @getbyte            </font><font color="#008000"><i>{ go get data byte }
+</i></font><font color="#FF00FF">@one_data:
+mov     cl, 1               </font><font color="#008000"><i>{ write byte once }
+</i></font><font color="#FF00FF">call    @storebyte
+jmp     @getbyte
+@multi_data:
+call    @storebyte          </font><font color="#008000"><i>{ CL already set }
+</i></font><font color="#FF00FF">jmp     @getbyte
+
+</font><font color="#008000"><i>{ ---------------------- Finished with buffer --------------------------- }
+
+</i></font><font color="#FF00FF">@exit:
+pop     bp
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ asm }
+
+{ ============= Main procedure for CGA and 16-color files =============== }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>READ_PCX_FILE<font color="#000080">(</font>gdriver<font color="#000080">: </font>integer<font color="#000080">; </font>pfilename<font color="#000080">: </font>pathstr<font color="#000080">);
+
+</font><font color="#FF0000"><b>type    </b></font>ptrrec <font color="#000080">= </font><font color="#FF0000"><b>record
+                   </b></font>segm<font color="#000080">, </font>offs<font color="#000080">: </font>word<font color="#000080">;
+                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var     </b></font>entry<font color="#000080">, </font>gun<font color="#000080">, </font>pcxcode<font color="#000080">, </font>mask<font color="#000080">, </font>colorID<font color="#000080">: </font>byte<font color="#000080">;
+        </font>palbuf<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">66</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+        </font>pcxfile<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin   </b></font><font color="#008000"><i>{ READ_PCX_FILE }
+</i></font>is_CGA<font color="#000080">:= (</font>gdriver <font color="#000080">= </font>CGA<font color="#000080">);   </font><font color="#008000"><i>{ 2 or 4 colors }
+</i></font>is_VGA<font color="#000080">:= (</font>gdriver <font color="#000080">= </font>VGA<font color="#000080">);   </font><font color="#008000"><i>{ 16 of 256K possible colors }
+                            { Otherwise EGA - 16 of 64 possible colors }
+</i></font>assign<font color="#000080">(</font>pcxfile<font color="#000080">, </font>pfilename<font color="#000080">);
+</font><font color="#008000"><i>{$I-} </i></font>reset<font color="#000080">(</font>pcxfile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{$I+}
+</i></font>file_error<font color="#000080">:= (</font>IOresult <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>if </b></font>file_error <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+
+</font>getmem<font color="#000080">(</font>scratch<font color="#000080">, </font>buffsize<font color="#000080">);                 </font><font color="#008000"><i>{ Allocate scratchpad }
+</i></font>blockread<font color="#000080">(</font>pcxfile<font color="#000080">, </font>scratch<font color="#000080">^, </font><font color="#800000">128</font><font color="#000080">);         </font><font color="#008000"><i>{ Get header into scratchpad }
+
+</i></font>move<font color="#000080">(</font>scratch<font color="#000080">^, </font>palbuf<font color="#000080">, </font><font color="#800000">67</font><font color="#000080">);
+</font>bytes_per_line<font color="#000080">:= </font>palbuf<font color="#000080">[</font><font color="#800000">66</font><font color="#000080">];
+
+</font><font color="#008000"><i>{------------------------ Setup for CGA ---------------------------------}
+
+</i></font><font color="#FF0000"><b>if </b></font>is_CGA <font color="#FF0000"><b>then
+begin
+  </b></font>getmem<font color="#000080">(</font>buff0<font color="#000080">, </font><font color="#800000">8000</font><font color="#000080">);      </font><font color="#008000"><i>{ Allocate memory for output }
+  </i></font>getmem<font color="#000080">(</font>buff1<font color="#000080">, </font><font color="#800000">8000</font><font color="#000080">);
+  </font>abuff0<font color="#000080">:= </font>buff0<font color="#000080">;           </font><font color="#008000"><i>{ Make copies of pointers }
+  </i></font>abuff1<font color="#000080">:= </font>buff1<font color="#000080">;
+</font><font color="#FF0000"><b>end else
+
+</b></font><font color="#008000"><i>{----------------------- Setup for EGA/VGA ------------------------------}
+
+</i></font><font color="#FF0000"><b>begin
+  </b></font>video_index<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>port<font color="#000080">[</font><font color="#800000">$3C4</font><font color="#000080">]:= </font><font color="#800000">2</font><font color="#000080">;           </font><font color="#008000"><i>{ Index to map mask register }
+  </i></font>plane<font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                </font><font color="#008000"><i>{ Initialize plane }
+  </i></font>port<font color="#000080">[</font><font color="#800000">$3C5</font><font color="#000080">]:= </font>plane<font color="#000080">;       </font><font color="#008000"><i>{ Set sequencer to mask out other planes }
+
+  </i></font><font color="#FF0000"><b>for </b></font>entry<font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">15 </font><font color="#FF0000"><b>do
+  begin
+    </b></font>colorID<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>for </b></font>gun<font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">2 </font><font color="#FF0000"><b>do
+    begin
+      </b></font>pcxcode<font color="#000080">:= </font>palbuf<font color="#000080">[</font><font color="#800000">16 </font><font color="#000080">+ </font>entry <font color="#000080">* </font><font color="#800000">3 </font><font color="#000080">+ </font>gun<font color="#000080">];   </font><font color="#008000"><i>{ Get primary color value }
+      </i></font><font color="#FF0000"><b>if not </b></font>is_VGA <font color="#FF0000"><b>then
+      begin                                     </b></font><font color="#008000"><i>{ Interpret for EGA }
+        </i></font><font color="#FF0000"><b>case </b></font><font color="#000080">(</font>pcxcode <font color="#FF0000"><b>div </b></font><font color="#800000">$40</font><font color="#000080">) </font><font color="#FF0000"><b>of
+          </b></font><font color="#800000">0</font><font color="#000080">: </font>mask<font color="#000080">:= </font><font color="#800000">$00</font><font color="#000080">;    </font><font color="#008000"><i>{ 000000 }
+          </i></font><font color="#800000">1</font><font color="#000080">: </font>mask<font color="#000080">:= </font><font color="#800000">$20</font><font color="#000080">;    </font><font color="#008000"><i>{ 100000 }
+          </i></font><font color="#800000">2</font><font color="#000080">: </font>mask<font color="#000080">:= </font><font color="#800000">$04</font><font color="#000080">;    </font><font color="#008000"><i>{ 000100 }
+          </i></font><font color="#800000">3</font><font color="#000080">: </font>mask<font color="#000080">:= </font><font color="#800000">$24</font><font color="#000080">;    </font><font color="#008000"><i>{ 100100 }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>colorID<font color="#000080">:= </font>colorID <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>mask <font color="#FF0000"><b>shr </b></font>gun<font color="#000080">);    </font><font color="#008000"><i>{ Define two bits }
+      </i></font><font color="#FF0000"><b>end  </b></font><font color="#008000"><i>{ not is_VGA }
+      </i></font><font color="#FF0000"><b>else
+      begin  </b></font><font color="#008000"><i>{ is_VGA }
+        </i></font><font color="#FF0000"><b>with </b></font>RGBpal<font color="#000080">[</font>entry<font color="#000080">] </font><font color="#FF0000"><b>do                   </b></font><font color="#008000"><i>{ Interpret for VGA }
+        </i></font><font color="#FF0000"><b>case </b></font>gun <font color="#FF0000"><b>of
+          </b></font><font color="#800000">0</font><font color="#000080">: </font>redval<font color="#000080">:= </font>pcxcode <font color="#FF0000"><b>div </b></font><font color="#800000">4</font><font color="#000080">;
+          </font><font color="#800000">1</font><font color="#000080">: </font>greenval<font color="#000080">:= </font>pcxcode <font color="#FF0000"><b>div </b></font><font color="#800000">4</font><font color="#000080">;
+          </font><font color="#800000">2</font><font color="#000080">: </font>blueval<font color="#000080">:= </font>pcxcode <font color="#FF0000"><b>div </b></font><font color="#800000">4</font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ is_VGA }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ gun }
+    </i></font><font color="#FF0000"><b>if </b></font>is_VGA <font color="#FF0000"><b>then </b></font>pal<font color="#000080">.</font>colors<font color="#000080">[</font>entry<font color="#000080">]:= </font>entry
+              <font color="#FF0000"><b>else </b></font>pal<font color="#000080">.</font>colors<font color="#000080">[</font>entry<font color="#000080">]:= </font>colorID<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ entry }
+  </i></font>pal<font color="#000080">.</font>size<font color="#000080">:= </font><font color="#800000">16</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;   </font><font color="#008000"><i>{ not is_CGA }
+
+{ ---------------- Read and decode the image data ----------------------- }
+
+</i></font>repeatcount<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                        </font><font color="#008000"><i>{ Initialize assembler vars. }
+</i></font>columncount<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>repeat
+  </b></font>blockread<font color="#000080">(</font>pcxfile<font color="#000080">, </font>scratch<font color="#000080">^, </font>buffsize<font color="#000080">, </font>datalength<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>is_CGA <font color="#FF0000"><b>then </b></font>decode_CGA <font color="#FF0000"><b>else </b></font>decode_16<font color="#000080">;   </font><font color="#008000"><i>{ Call assembler routine }
+</i></font><font color="#FF0000"><b>until </b></font>eof<font color="#000080">(</font>pcxfile<font color="#000080">);
+</font>close<font color="#000080">(</font>pcxfile<font color="#000080">);
+</font><font color="#FF0000"><b>if not </b></font>is_CGA <font color="#FF0000"><b>then </b></font>port<font color="#000080">[</font><font color="#800000">$3C5</font><font color="#000080">]:= </font><font color="#800000">$F</font><font color="#000080">;     </font><font color="#008000"><i>{ Reset mask map }
+</i></font>freemem<font color="#000080">(</font>scratch<font color="#000080">,</font>buffsize<font color="#000080">);              </font><font color="#008000"><i>{ Discard scratchpad }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ READ_PCX_FILE }
+
+{ ========================= 256-color files ============================= }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>DECODE_PCX256<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>asm
+</b></font><font color="#FF00FF">mov     es, page_addr       </font><font color="#008000"><i>{ video segment }
+</i></font><font color="#FF00FF">mov     di, video_index     </font><font color="#008000"><i>{ index into video }
+</i></font><font color="#FF00FF">xor     cx, cx              </font><font color="#008000"><i>{ clean up loop counter }
+</i></font><font color="#FF00FF">mov     cl, repeatcount     </font><font color="#008000"><i>{ count in CL }
+</i></font><font color="#FF00FF">mov     bx, datalength      </font><font color="#008000"><i>{ end of input buffer }
+</i></font><font color="#FF00FF">push    ds                  </font><font color="#008000"><i>{ save DS }
+</i></font><font color="#FF00FF">lds     si, scratch         </font><font color="#008000"><i>{ pointer to input in DS:SI }
+</i></font><font color="#FF00FF">add     bx, si              </font><font color="#008000"><i>{ adjust datalength - SI may not be 0 }
+</i></font><font color="#FF00FF">cld                         </font><font color="#008000"><i>{ clear DF }
+</i></font><font color="#FF00FF">cmp     cl, 0               </font><font color="#008000"><i>{ was last byte a count? }
+</i></font><font color="#FF00FF">jne     @multi_data         </font><font color="#008000"><i>{ yes, so next is data }
+
+{ --------------------- Loop through input buffer ----------------------- }
+
+</i></font><font color="#FF00FF">@getbyte:                   </font><font color="#008000"><i>{ last byte was not a count }
+</i></font><font color="#FF00FF">cmp     si, bx              </font><font color="#008000"><i>{ end of input buffer? }
+</i></font><font color="#FF00FF">je      @exit               </font><font color="#008000"><i>{ yes, quit }
+</i></font><font color="#FF00FF">lodsb                       </font><font color="#008000"><i>{ get byte into AL, increment SI }
+</i></font><font color="#FF00FF">cmp     al, 192             </font><font color="#008000"><i>{ test high bits }
+</i></font><font color="#FF00FF">jb      @one_data           </font><font color="#008000"><i>{ not set, not a count }
+{ It's a count byte }
+</i></font><font color="#FF00FF">xor     al, 192             </font><font color="#008000"><i>{ get count from 6 low bits }
+</i></font><font color="#FF00FF">mov     cl, al              </font><font color="#008000"><i>{ store repeat count }
+</i></font><font color="#FF00FF">cmp     si, bx              </font><font color="#008000"><i>{ end of input buffer? }
+</i></font><font color="#FF00FF">je      @exit               </font><font color="#008000"><i>{ yes, quit }
+</i></font><font color="#FF00FF">@multi_data:
+lodsb                       </font><font color="#008000"><i>{ get byte into AL, increment SI }
+</i></font><font color="#FF00FF">rep     stosb               </font><font color="#008000"><i>{ write byte CX times }
+</i></font><font color="#FF00FF">jmp     @getbyte
+@one_data:
+stosb                       </font><font color="#008000"><i>{ byte into video }
+</i></font><font color="#FF00FF">jmp     @getbyte
+
+</font><font color="#008000"><i>{ ------------------------- Finished with buffer ------------------------ }
+
+</i></font><font color="#FF00FF">@exit:
+pop     ds                  </font><font color="#008000"><i>{ restore Turbo's data segment }
+</i></font><font color="#FF00FF">mov     video_index, di     </font><font color="#008000"><i>{ save status for next run thru buffer }
+</i></font><font color="#FF00FF">mov     repeatcount, cl
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ asm }
+
+{ ================= Main procedure for 256-color files ================== }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>READ_PCX256<font color="#000080">(</font>pfilename<font color="#000080">: </font>pathstr<font color="#000080">);
+
+</font><font color="#FF0000"><b>var     </b></font>x<font color="#000080">, </font>gun<font color="#000080">, </font>pcxcode<font color="#000080">: </font>byte<font color="#000080">;
+        </font>pcxfile<font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+        </font>palette_start<font color="#000080">, </font>total_read<font color="#000080">: </font>longint<font color="#000080">;
+        </font>palette_flag<font color="#000080">: </font>byte<font color="#000080">;
+        </font>version<font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CLEANUP<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+</b></font>close<font color="#000080">(</font>pcxfile<font color="#000080">);
+</font>freemem<font color="#000080">(</font>scratch<font color="#000080">, </font>buffsize<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin    </b></font><font color="#008000"><i>{ READ_PCX256 }
+</i></font>assign<font color="#000080">(</font>pcxfile<font color="#000080">, </font>pfilename<font color="#000080">);
+</font><font color="#008000"><i>{$I-} </i></font>reset<font color="#000080">(</font>pcxfile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{$I+}
+</i></font>file_error<font color="#000080">:= (</font>IOresult <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>if </b></font>file_error <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+</font>getmem<font color="#000080">(</font>scratch<font color="#000080">, </font>buffsize<font color="#000080">);                  </font><font color="#008000"><i>{ Allocate scratchpad }
+</i></font>blockread<font color="#000080">(</font>pcxfile<font color="#000080">, </font>version<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);             </font><font color="#008000"><i>{ Read first two bytes }
+</i></font>file_error<font color="#000080">:= (</font>hi<font color="#000080">(</font>version<font color="#000080">) &lt; </font><font color="#800000">5</font><font color="#000080">);             </font><font color="#008000"><i>{ No palette info. }
+</i></font><font color="#FF0000"><b>if </b></font>file_error <font color="#FF0000"><b>then
+begin
+  </b></font>cleanup<font color="#000080">; </font>exit<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>palette_start<font color="#000080">:= </font>filesize<font color="#000080">(</font>pcxfile<font color="#000080">) - </font><font color="#800000">769</font><font color="#000080">;
+
+</font>seek<font color="#000080">(</font>pcxfile<font color="#000080">, </font><font color="#800000">128</font><font color="#000080">);                        </font><font color="#008000"><i>{ Scrap file header }
+</i></font>total_read<font color="#000080">:= </font><font color="#800000">128</font><font color="#000080">;
+
+</font>repeatcount<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                           </font><font color="#008000"><i>{ Initialize assembler vars. }
+</i></font>video_index<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>repeat
+  </b></font>blockread<font color="#000080">(</font>pcxfile<font color="#000080">, </font>scratch<font color="#000080">^, </font>buffsize<font color="#000080">, </font>datalength<font color="#000080">);
+  </font>inc<font color="#000080">(</font>total_read<font color="#000080">, </font>datalength<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>total_read <font color="#000080">&gt; </font>palette_start<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>dec<font color="#000080">(</font>datalength<font color="#000080">, </font>total_read <font color="#000080">- </font>palette_start<font color="#000080">);
+  </font>decode_pcx256<font color="#000080">;
+</font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>eof<font color="#000080">(</font>pcxfile<font color="#000080">)) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>total_read<font color="#000080">&gt;= </font>palette_start<font color="#000080">);
+
+</font>seek<font color="#000080">(</font>pcxfile<font color="#000080">, </font>palette_start<font color="#000080">);
+</font>blockread<font color="#000080">(</font>pcxfile<font color="#000080">, </font>palette_flag<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+</font>file_error<font color="#000080">:= (</font>palette_flag <font color="#000080">&lt;&gt; </font><font color="#800000">12</font><font color="#000080">);
+</font><font color="#FF0000"><b>if </b></font>file_error <font color="#FF0000"><b>then
+begin
+  </b></font>cleanup<font color="#000080">; </font>exit<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>blockread<font color="#000080">(</font>pcxfile<font color="#000080">, </font>RGB256<font color="#000080">, </font><font color="#800000">768</font><font color="#000080">);         </font><font color="#008000"><i>{ Get palette info. }
+</i></font><font color="#FF0000"><b>for </b></font>x<font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do
+with </b></font>RGB256<font color="#000080">[</font>x<font color="#000080">] </font><font color="#FF0000"><b>do
+begin
+  </b></font>redval<font color="#000080">:= </font>redval <font color="#FF0000"><b>shr </b></font><font color="#800000">2</font><font color="#000080">;
+  </font>greenval<font color="#000080">:= </font>greenval <font color="#FF0000"><b>shr </b></font><font color="#800000">2</font><font color="#000080">;
+  </font>blueval<font color="#000080">:= </font>blueval <font color="#FF0000"><b>shr </b></font><font color="#800000">2</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>cleanup<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{ READ_PCX256 }
+
+{ ========================== Initialization ============================= }
+
+</i></font><font color="#FF0000"><b>BEGIN
+</b></font>page_addr<font color="#000080">:= </font>page0<font color="#000080">;                      </font><font color="#008000"><i>{ Destination for EGA/VGA data }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0058.PAS">Original</a><b>]</b></p></body>
+</html>

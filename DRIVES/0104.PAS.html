@@ -1,0 +1,281 @@
+<html>
+<head><title> "Detailed Drive Info" by ANDREW EIGUS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0104.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+(replaces old DRIVE DETECT source posted and written by Andrew Eigus and
+ placed in one of the last SWAG archives)
+
+Howdy Everyone!
+
+The DRVTYPES.PAS Borland (Turbo) Pascal 6+ code gives you a possibility to
+get the specified drive type. Version 1.1 currently supports detection of
+fixed, removable, remote, compressed, CD-ROM and RAM-emulated disk drives.
+Program DRIVES.PAS demonstrates the use of the DrvTypes unit.
+
+Code written by Mr. Byte (aeigus@fgate.castle.riga.lv)
+Stacker4 implementation and bug fixes by Bobby Z.
+RAM drive check code by Janis Smits
+
+All bugfix reports, comments, wishes, support code please send to:
+
+E-mail: aeigus@fgate.castle.riga.lv   Mr. Byte
+Fido:   2:5100/33
+
+Thanks and we hope you enjoy this code,
+Mr. Byte
+
+P.S. DISCLAIMER: NO WARRANTIES ARE PROVIDED, AND AS-IS BASIS IS ASSUMED.
+
+23.01.95
+
+DRVTYPES.PAS - a unit
+
+{$S-,R-,I-,X+}
+</i></font><font color="#FF0000"><b>unit </b></font>DrvTypes<font color="#000080">;
+</font><font color="#008000"><i>{ drive types }
+
+</i></font><font color="#FF0000"><b>interface
+
+const
+  </b></font>dtError      <font color="#000080">= </font><font color="#800000">$00</font><font color="#000080">; </font><font color="#008000"><i>{ Bad drive }
+  </i></font>dtFixed      <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">; </font><font color="#008000"><i>{ Fixed drive }
+  </i></font>dtRemovable  <font color="#000080">= </font><font color="#800000">$02</font><font color="#000080">; </font><font color="#008000"><i>{ Removeable (floppy) drive }
+  </i></font>dtRemote     <font color="#000080">= </font><font color="#800000">$03</font><font color="#000080">; </font><font color="#008000"><i>{ Remote (network) drive }
+  </i></font>dtCDROM      <font color="#000080">= </font><font color="#800000">$04</font><font color="#000080">; </font><font color="#008000"><i>{ MSCDEX V2.00+ driven CD-ROM drive }
+  </i></font>dtDblSpace   <font color="#000080">= </font><font color="#800000">$05</font><font color="#000080">; </font><font color="#008000"><i>{ DoubleSpace compressed drive }
+  </i></font>dtSUBST      <font color="#000080">= </font><font color="#800000">$06</font><font color="#000080">; </font><font color="#008000"><i>{ SUBST'ed drive }
+  </i></font>dtStacker4   <font color="#000080">= </font><font color="#800000">$07</font><font color="#000080">; </font><font color="#008000"><i>{ Stacker 4 compressed drive }
+  </i></font>dtRAM        <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">; </font><font color="#008000"><i>{ RAM drive }
+
+</i></font><font color="#FF0000"><b>function </b></font>GetDriveType<font color="#000080">(</font>Drive <font color="#000080">: </font>Byte<font color="#000080">) : </font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+type
+ </b></font>ControlBlk25 <font color="#000080">= </font><font color="#FF0000"><b>record </b></font><font color="#008000"><i>{ control block for INT 25 extended call }
+   </i></font>StartSector <font color="#000080">: </font>LongInt<font color="#000080">; </font><font color="#008000"><i>{ start sector to read }
+   </i></font>Count     <font color="#000080">: </font>Word<font color="#000080">;    </font><font color="#008000"><i>{ number of sectors to read }
+   </i></font>BufferOffs  <font color="#000080">: </font>Word<font color="#000080">;    </font><font color="#008000"><i>{ data buffer offset }
+   </i></font>BufferSeg   <font color="#000080">: </font>Word<font color="#000080">;    </font><font color="#008000"><i>{ data buffer segment }
+         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>checkABforStacker <font color="#000080">: </font>boolean <font color="#000080">= </font>False<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>checkStacker4<font color="#000080">( </font>Drive <font color="#000080">: </font>Byte <font color="#000080">) : </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ returns True if Drive is Stacker 4 compressed volume, False otherwise.
+  This also may return True with previous versions of Stacker - I didn't
+  check it. /Bobby Z. 29/11/94 }
+</i></font><font color="#FF0000"><b>var </b></font>CB   <font color="#000080">: </font>ControlBlk25<font color="#000080">;
+    </font>Boot <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">512</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">push ds
+ mov al,Drive
+ or checkABforStacker,0 </font><font color="#008000"><i>{ check A: &amp; B: for Stacker volume? }
+ </i></font><font color="#FF00FF">jnz @@1
+ cmp al,1
+ ja @@1
+ sub al,al
+ jmp @@Q
+@@1:
+ push ss
+ pop ds
+ lea bx,CB
+ sub ax,ax
+ mov word ptr ds:ControlBlk25[bx].StartSector,ax
+ mov word ptr ds:ControlBlk25[bx].StartSector[2],ax
+ mov word ptr ds:ControlBlk25[bx].Count,1
+ lea dx,Boot
+ mov word ptr ds:ControlBlk25[bx].BufferOffs,dx
+ mov word ptr ds:ControlBlk25[bx].BufferSeg,ds
+ mov al,Drive
+ sub cx,cx
+ dec cx
+ mov si,sp
+ int 25h
+ cli
+ mov sp,si
+ sti
+ pushf
+ lea si,Boot
+ add si,1F0h  </font><font color="#008000"><i>{ Stacker signature CD13CD14CD01CD03 should }
+ </i></font><font color="#FF00FF">sub al,al  </font><font color="#008000"><i>{ appear at offset 1F0 of boot sector.      }
+ </i></font><font color="#FF00FF">popf
+ jc @@Q  </font><font color="#008000"><i>{ was error reading boot sector - assume    }
+    { not Stacker drive                         }
+ </i></font><font color="#FF00FF">cmp word ptr ds:[si],13CDh
+ jnz @@Q
+ cmp word ptr ds:[si][2],14CDh
+ jnz @@Q
+ cmp word ptr ds:[si][4],01CDh
+ jnz @@Q
+ cmp word ptr ds:[si][6],03CDh
+ jnz @@Q
+ mov al,1
+@@Q:
+ pop ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>GetDriveType<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Detects the type of a specified drive. Drive is a drive number, where
+  0=default (current) drive, 1=drive A, 2=B, ... This function will return
+  one of the dtXXX-constants.
+
+  Note: Function will work under DOS version 3.1 or later
+
+  THIS CODE IS PUBLIC DOMAIN
+
+  Written by Mr. Byte, 12/08/94
+  Additions and fixes by Bobby Z., 29/11/94
+  RAM drive check code by Janis Smits, 07/12/94 }
+</i></font><font color="#FF0000"><b>asm
+ </b></font><font color="#FF00FF">cmp Drive,0
+ jne @@1
+ mov ah,19h    </font><font color="#008000"><i>{ get active drive number in al }
+ </i></font><font color="#FF00FF">int 21h
+ inc al
+ mov Drive,al
+@@1:
+ mov ax,1500h  </font><font color="#008000"><i>{ check for CD-ROM v2.00+ }
+ </i></font><font color="#FF00FF">sub bx,bx
+ int 2Fh
+ or bx,bx
+ jz @@2
+ mov ax,150Bh
+ sub ch,ch
+ mov cl,Drive
+ int 2Fh
+ cmp bx,0ADADh
+ jne @@2
+ or ax,ax
+ jz @@2
+ mov bl,dtCDROM
+ jmp @@7
+@@2:
+ mov ax,4409h     </font><font color="#008000"><i>{ check for SUBST'ed drive }
+ </i></font><font color="#FF00FF">mov bl,Drive
+ int 21h
+ jc @@9
+ test dh,10000000b
+ jz @@9
+ mov bl,dtSUBST
+ jmp @@7
+@@9:
+ mov ax,4A11h  </font><font color="#008000"><i>{ check for DoubleSpace drive }
+ </i></font><font color="#FF00FF">mov bx,1
+ mov dl,Drive
+ dec dl
+ int 2Fh
+ sub cl,cl     </font><font color="#008000"><i>{ mov cl,False }
+ </i></font><font color="#FF00FF">or ax,ax     </font><font color="#008000"><i>{ is DoubleSpace loaded? }
+ </i></font><font color="#FF00FF">jnz @@3
+ cmp dl,bl     </font><font color="#008000"><i>{ if a host drive equal to compressed, then get out... }
+ </i></font><font color="#FF00FF">je @@3
+ test bl,10000000b </font><font color="#008000"><i>{ bit 7=1: DL=compressed,BL=host
+                                    =0: DL=host,BL=compressed }
+ </i></font><font color="#FF00FF">jz @@3       </font><font color="#008000"><i>{ so avoid host drives, assume host=fixed :) }
+ </i></font><font color="#FF00FF">inc dl
+ cmp Drive,dl
+ jne @@3
+ mov bl,dtDblSpace
+ jmp @@7
+@@3:
+ mov ax,4409h     </font><font color="#008000"><i>{ check for remote drive }
+ </i></font><font color="#FF00FF">mov bl,Drive
+ int 21h
+ jc @@5
+ and dx,1000h     </font><font color="#008000"><i>{ this is correct way to check if drive is remote
+          one, Andrew. Your version didn't work...
+          /Bobby Z., 29/11/94 }
+ </i></font><font color="#FF00FF">jz @@4
+ mov bl,dtRemote
+ jmp @@7
+@@4:
+ mov al,Drive     </font><font color="#008000"><i>{ check for Stacker 4 volume }
+ </i></font><font color="#FF00FF">or al,al
+ jz @@getDrv
+ dec al
+@@goStac:
+ push ax
+ call checkStacker4
+ or al,al
+ jz @@8
+ mov bl,dtStacker4
+ jmp @@7
+@@8:
+ mov ax,4408h     </font><font color="#008000"><i>{ check for fixed (hard) drive }
+ </i></font><font color="#FF00FF">mov bl,Drive
+ int 21h
+ jc @@5
+ or al,al
+ jz @@6
+ push ds           </font><font color="#008000"><i>{ check for RAM drive }
+ </i></font><font color="#FF00FF">mov ax,ss
+ mov ds,ax
+ mov si,sp
+ sub sp,28h       </font><font color="#008000"><i>{ allocate 28h bytes on stack }
+ </i></font><font color="#FF00FF">mov dx,sp
+ mov ax,440Dh     </font><font color="#008000"><i>{ generic IOCTL }
+ </i></font><font color="#FF00FF">mov cx,860h      </font><font color="#008000"><i>{ get device parameters }
+ </i></font><font color="#FF00FF">mov bl,Drive
+ int 21h          </font><font color="#008000"><i>{ RAMDrive and VDISK don't support this command }
+ </i></font><font color="#FF00FF">mov sp,si
+ pop ds
+ mov bl,dtRAM
+ jc  @@7
+ mov bl,dtFixed
+ jmp @@7
+@@5:
+ sub bl,bl     </font><font color="#008000"><i>{ mov bl,dtError cuz dtError=0 }
+ </i></font><font color="#FF00FF">jmp @@7
+@@getDrv:
+ mov ah,19h
+ int 21h
+ jmp @@goStac
+@@6:
+ mov bl,dtRemovable   </font><font color="#008000"><i>{ else - removeable media }
+</i></font><font color="#FF00FF">@@7:
+ mov al,bl
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ GetDriveType }
+
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{$S-,I-,R-}
+</i></font><font color="#FF0000"><b>uses </b></font>DrvTypes<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>C <font color="#000080">: </font>Char<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>FloppyDrives <font color="#000080">: </font>byte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">int 11h
+        test al,00000001b
+        jz  @@1
+</font><font color="#008000"><i>{$IFOPT G+}
+        </i></font><font color="#FF00FF">shr al,6
+</font><font color="#008000"><i>{$ELSE}
+        </i></font><font color="#FF00FF">mov cl,6
+        shr al,cl
+</font><font color="#008000"><i>{$ENDIF}
+        </i></font><font color="#FF00FF">and al,3
+        inc al
+        retn
+@@1:
+        xor al,al
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive Map  Version 1.1  Written by Andrew Eigus and Bobby Z.'#13#10</font><font color="#000080">);
+ </font><font color="#FF0000"><b>for </b></font>C <font color="#000080">:= </font><font color="#800000">'A' </font><font color="#FF0000"><b>to </b></font><font color="#800000">'Z' </font><font color="#FF0000"><b>do
+  case </b></font>GetDriveType<font color="#000080">(</font>Byte<font color="#000080">(</font>C<font color="#000080">)-</font>Byte<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>of
+   </b></font>dtCDROM<font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">, </font>C<font color="#000080">, </font><font color="#800000">': is CD-ROM drive'</font><font color="#000080">);
+   </font>dtSUBST<font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">,</font>C<font color="#000080">,</font><font color="#800000">': is SUBST''ed drive'</font><font color="#000080">);
+   </font>dtRAM<font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">, </font>C<font color="#000080">, </font><font color="#800000">': is RAM drive'</font><font color="#000080">);
+   </font>dtRemote<font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">, </font>C<font color="#000080">, </font><font color="#800000">': is remote (network) drive'</font><font color="#000080">);
+   </font>dtFixed<font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">, </font>C<font color="#000080">, </font><font color="#800000">': is local hard drive'</font><font color="#000080">);
+   </font>dtRemovable<font color="#000080">:
+     </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Byte<font color="#000080">(</font>C<font color="#000080">) - </font>Byte<font color="#000080">(</font><font color="#800000">'A'</font><font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>FloppyDrives<font color="#000080">] </font><font color="#FF0000"><b>then </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">,
+</font>C<font color="#000080">, </font><font color="#800000">': is removable (floppy) drive'</font><font color="#000080">);   </font>dtDblSpace<font color="#000080">: </font>WriteLn<font color="#000080">(</font><font color="#800000">'Drive '</font><font color="#000080">, </font>C<font color="#000080">, </font><font color="#800000">': is
+</font>DoubleSpace compressed drive<font color="#800000">');   dtStacker4: WriteLn('</font>Drive <font color="#800000">', C, '</font><font color="#000080">: </font><font color="#FF0000"><b>is
+</b></font><font color="#800000">','</font>Stacker <font color="#800000">4 </font>compressed drive<font color="#800000">');  end
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0104.PAS">Original</a><b>]</b></p></body>
+</html>

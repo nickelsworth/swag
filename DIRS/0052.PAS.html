@@ -1,0 +1,182 @@
+<html>
+<head><title> "Access FCB in ASM" by MARK LEWIS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DIRS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0052.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(*
+reread it again and a bit closer this time... it says that DS:DX point
+to a FCB (File Control Block) not a filename...
+
+there are two types of FCBs... standard and extended... the sFCB is
+37bytes long and the eFCB is 45bytes long... an unopened FCB has only
+the drive number, the filename, and the file extension filled in... so
+basically, we could start off like this for the sFCB...
+
+  sFCBrec = record
+              drivenum  : byte;                   { 0 }
+              filename  : array[ 1..8 ] of char;  { 1 - 8 }
+              fileext   : array[ 9..11] of char;  { 9 - 11}
+              restofFCB : array[12..36] of byte;  {12 - 36}
+            end;
+
+and the eFCB looks like this...
+
+  eFCBrec = record
+              flagbyte  : byte;                   {-7 }
+              reserved  : array[-6..-2] of byte;  {-6 - -2 }
+              fattrib   : byte;                   {-1 }
+              drivenum  : byte;                   { 0 }
+              filename  : array[ 1..8 ] of char;  { 1 - 8 }
+              fileext   : array[ 9..11] of char;  { 9 - 11}
+              restofFCB : array[12..36] of byte;  {12 - 36}
+            end;
+
+sharp eyes will note the array[-6..-2] entry... i don't know (as i've
+not tested it in actual compilation) if it'll work like that but the
+point is to show that there is an additional 7byte block added to the
+*beginning* of the sFCB...
+
+the PSP offers location 5C as the start of a FCB but you can allocate
+your own location(s) if you need to work with more than one file FCB at
+a time. in any case, the address of the space you allocate for the FCB
+is what you put in DS:DX ... maybe something like this...
+
+===== START =====
+*)
+
+{ TESTED CODE - FULLY FUNCTIONAL }
+{ this is the first FCB code i've done. you'll have to locate the
+  structures of the standard FCB and the extended FCB. there's a
+  bit much in the books i have on them to type it all in here. as
+  this is only a test program, i've only set up for those fields
+  i really needed.
+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>FCB_Test<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>DateTime <font color="#000080">= </font><font color="#FF0000"><b>record
+               </b></font>Year  <font color="#000080">: </font>word<font color="#000080">;
+               </font>Month <font color="#000080">: </font>word<font color="#000080">;
+               </font>Day   <font color="#000080">: </font>word<font color="#000080">;
+               </font>Hour  <font color="#000080">: </font>word<font color="#000080">;
+               </font>Min   <font color="#000080">: </font>word<font color="#000080">;
+               </font>Sec   <font color="#000080">: </font>word<font color="#000080">;
+             </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>TandD <font color="#000080">= </font><font color="#FF0000"><b>record
+            </b></font>date <font color="#000080">: </font>word<font color="#000080">;
+            </font>time <font color="#000080">: </font>word<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>sFCBptr <font color="#000080">= ^</font>sFCBrec<font color="#000080">;
+  </font>sFCBrec <font color="#000080">= </font><font color="#FF0000"><b>record
+              </b></font>drivenum  <font color="#000080">: </font>byte<font color="#000080">;                   </font><font color="#008000"><i>{ 0 }
+              </i></font>filename  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[ </font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8 </font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;  </font><font color="#008000"><i>{ 1 - 8 }
+              </i></font>fileext   <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[ </font><font color="#800000">9</font><font color="#000080">..</font><font color="#800000">11</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;  </font><font color="#008000"><i>{ 9 - 11}
+              </i></font>partofFCB <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">..</font><font color="#800000">19</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;  </font><font color="#008000"><i>{12 - 19}
+              </i></font>fDandT    <font color="#000080">: </font>TandD<font color="#000080">;                  </font><font color="#008000"><i>{20 - 23}
+              </i></font>moreofFCB <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">24</font><font color="#000080">..</font><font color="#800000">36</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;  </font><font color="#008000"><i>{24 - 36}
+            </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>StdFCB    <font color="#000080">: </font>sFCBrec<font color="#000080">; </font><font color="#008000"><i>{ used only for sizeof function to init fields }
+  </i></font>StdFCBptr <font color="#000080">: </font>sFCBptr<font color="#000080">; </font><font color="#008000"><i>{ points to our Standard FCB on the heap }
+  </i></font>StdFCBseg <font color="#000080">: </font>word<font color="#000080">;    </font><font color="#008000"><i>{ holds segment of our FCB on the heap }
+  </i></font>StdFCBofs <font color="#000080">: </font>word<font color="#000080">;    </font><font color="#008000"><i>{ holds offset of our FCB on the heap }
+  </i></font>success   <font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#008000"><i>{ signals success or failure }
+  </i></font>fileDT    <font color="#000080">: </font>DateTime<font color="#000080">;</font><font color="#008000"><i>{ holds date and time information }
+
+</i></font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{ init to failure response }
+  </i></font>success <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#008000"><i>{ create FCB on the heap }
+  </i></font>new<font color="#000080">(</font>StdFCBptr<font color="#000080">);
+  </font><font color="#008000"><i>{ ensure that FCB record has no garbage in it }
+  </i></font>fillchar<font color="#000080">(</font>StdFCBptr<font color="#000080">^,</font>sizeof<font color="#000080">(</font>StdFCB<font color="#000080">),</font><font color="#800000">#0</font><font color="#000080">);
+  </font><font color="#008000"><i>{ get segment of our FCB on the heap }
+  </i></font>StdFCBseg <font color="#000080">:= </font>seg<font color="#000080">(</font>StdFCBptr<font color="#000080">^);
+  </font><font color="#008000"><i>{ get offset of our FCB on the heap }
+  </i></font>StdFCBofs <font color="#000080">:= </font>ofs<font color="#000080">(</font>StdFCBptr<font color="#000080">^);
+  </font><font color="#008000"><i>{ fill in filename. NOTE: use SPACES to fill to 8 chars }
+  </i></font>StdFCBptr<font color="#000080">^.</font>filename <font color="#000080">:= </font><font color="#800000">'FCB_TEST'</font><font color="#000080">; </font><font color="#008000"><i>{#84#69#88#84#32#32#32#32;  { 'TEXT    ' }
+  { file in file extension. NOTE: use SPACES to fill to three chars }
+  </i></font>StdFCBptr<font color="#000080">^.</font>fileext  <font color="#000080">:= </font><font color="#800000">'PAS'</font><font color="#000080">;</font><font color="#008000"><i>{#84#88#84;             { 'TXT' }
+  { lets do some ASM }
+  </i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#008000"><i>{ save these regs! }
+    </i></font><font color="#FF00FF">push BP
+    push SP
+    push SS
+    push DS
+    push DX
+    </font><font color="#008000"><i>{ load OFFSET first!! }
+    </i></font><font color="#FF00FF">mov  DX, [StdFCBofs]
+    </font><font color="#008000"><i>{ load SEGMENT second! otherwise you'll loose access to the offset! }
+    </i></font><font color="#FF00FF">mov  DS, [StdFCBseg]
+    </font><font color="#008000"><i>{ do something example code here }
+      { first, try to open the file }
+      </i></font><font color="#FF00FF">mov  AH, $0f
+      int  $21
+      </font><font color="#008000"><i>{ check for success or failure }
+      </i></font><font color="#FF00FF">cmp  AL, $ff
+      </font><font color="#008000"><i>{ is file opened? }
+      </i></font><font color="#FF00FF">jne  @opened
+      </font><font color="#008000"><i>{ move failure signal into AL for later use }
+      </i></font><font color="#FF00FF">mov  AL, $00
+      </font><font color="#008000"><i>{ get out of dodge }
+      </i></font><font color="#FF00FF">jmp  @notopened
+      @opened:
+      </font><font color="#008000"><i>{ move successful signal into AL for later use }
+      </i></font><font color="#FF00FF">mov  AL, $01
+      @notopened:
+      </font><font color="#008000"><i>{ check AL for success or failure signal }
+      </i></font><font color="#FF00FF">cmp  AL, $01
+      </font><font color="#008000"><i>{ if failure, head towards the door }
+      </i></font><font color="#FF00FF">jne  @leave
+      </font><font color="#008000"><i>{ close the file }
+      </i></font><font color="#FF00FF">mov  AH, $10
+      int  $21
+      </font><font color="#008000"><i>{ was close file successful? }
+      </i></font><font color="#FF00FF">cmp  AL, $00
+      </font><font color="#008000"><i>{ no, leave AL with failure signal and go closer to door }
+      </i></font><font color="#FF00FF">jne  @leave
+      @closed:
+      </font><font color="#008000"><i>{ move successful signal into AL for later use }
+      </i></font><font color="#FF00FF">mov  al, $01
+      </font><font color="#008000"><i>{ leave this do something example routine }
+      </i></font><font color="#FF00FF">@leave:
+    </font><font color="#008000"><i>{ retrieve our regs from the stack }
+    </i></font><font color="#FF00FF">pop  DX
+    pop  DS
+    pop  SS
+    pop  SP
+    pop  BP
+      </font><font color="#008000"><i>{ move AL success or failure signal into success boolean }
+      </i></font><font color="#FF00FF">mov  success, al
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{ show and tell }
+  </i></font><font color="#FF0000"><b>if </b></font>success <font color="#FF0000"><b>then
+    begin
+      </b></font>fileDT<font color="#000080">.</font>year  <font color="#000080">:= </font><font color="#800000">1980 </font><font color="#000080">+ (</font>StdFCBptr<font color="#000080">^.</font>fDandT<font color="#000080">.</font>date <font color="#FF0000"><b>AND </b></font><font color="#800000">$fe00</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">9</font><font color="#000080">;
+      </font>fileDT<font color="#000080">.</font>month <font color="#000080">:= (</font>StdFCBptr<font color="#000080">^.</font>fDandT<font color="#000080">.</font>date <font color="#FF0000"><b>AND </b></font><font color="#800000">$01e0</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">5</font><font color="#000080">;
+      </font>fileDT<font color="#000080">.</font>day   <font color="#000080">:= (</font>StdFCBptr<font color="#000080">^.</font>fDandT<font color="#000080">.</font>date <font color="#FF0000"><b>AND </b></font><font color="#800000">$001f</font><font color="#000080">);
+      </font>writeln<font color="#000080">(</font><font color="#800000">'the file was opened and closed successfully'</font><font color="#000080">);
+      </font>writeln<font color="#000080">(</font><font color="#800000">'the file is located on drive '</font><font color="#000080">,
+              </font>chr<font color="#000080">(</font>StdFCBptr<font color="#000080">^.</font>drivenum <font color="#000080">+ </font>ord<font color="#000080">(</font><font color="#800000">'@'</font><font color="#000080">)),</font><font color="#800000">':'</font><font color="#000080">);
+      </font>writeln<font color="#000080">(</font><font color="#800000">'the date of creation or last update is '</font><font color="#000080">,
+              </font>fileDT<font color="#000080">.</font>year<font color="#000080">,</font><font color="#800000">'-'</font><font color="#000080">,</font>fileDT<font color="#000080">.</font>month<font color="#000080">,</font><font color="#800000">'-'</font><font color="#000080">,</font>fileDT<font color="#000080">.</font>day<font color="#000080">);
+    </font><font color="#FF0000"><b>end
+  else
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'Sorry, the file was not located'</font><font color="#000080">);
+  </font><font color="#008000"><i>{ we're done with our FCB so we can now throw it away... }
+  </i></font>dispose<font color="#000080">(</font>StdFCBptr<font color="#000080">);
+  </font><font color="#008000"><i>{ bye bye! }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+===== </font>STOP <font color="#000080">=====
+
+</font>the books i have <font color="#FF0000"><b>on </b></font>them have much more text <font color="#FF0000"><b>on </b></font>the FCBs<font color="#000080">. </font>too much <font color="#FF0000"><b>to
+try to </b></font>post <font color="#FF0000"><b>to </b></font>you<font color="#000080">... </font>what exactly <font color="#FF0000"><b>is </b></font>it that you are trying <font color="#FF0000"><b>to do</b></font><font color="#000080">???
+</font>there are much easier methods <font color="#FF0000"><b>for </b></font>most things <font color="#FF0000"><b>in </b></font>this day <font color="#FF0000"><b>in </b></font>time<font color="#000080">...
+</font>it<font color="#800000">'s highly recommended to NOT mess around with FCBs manipulations if
+</font>one doesn<font color="#800000">'t really _have_ to...
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DIRS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0052.PAS">Original</a><b>]</b></p></body>
+</html>

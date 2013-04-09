@@ -1,0 +1,205 @@
+<html>
+<head><title> "device Driver Lists" by WILLIAM PLANKE</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to HARDWARE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0021.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+I've posted a working util that lists the Device Drivers that are resident in
+memory.  It uses the header record to point to the next driver in the chain
+and &quot;walks&quot; the memory chain until an offset end flag is reached.  Hope you
+enjoy it and that it isn't too sloppy.  At the end, I have a question that
+needs to be answered if you're interested....
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>DevList<font color="#000080">;
+
+</font><font color="#008000"><i>{ this program walks the device driver memory chain. Each device
+  driver points to the next until the ENDFLAG is reached.  I use
+  the popular undocumented DOS function $52 to jump to the DOS
+  &quot;List of Lists&quot; then $22 bytes beyond that, the first device in
+  the chain (NUL) can be found.
+
+  Thanks to Ralf Brown and his valuable MS DOS Interrupts List,
+  to Timo Salmi, and to the person(?) who wrote the cool
+  hex-to-string conversion functions that I use all the time.
+}
+
+{$M 8192,0,0}
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>pstrg <font color="#000080">= </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">9</font><font color="#000080">];                </font><font color="#008000"><i>{ pointer conversion format }
+
+  </i></font>Array8C <font color="#000080">= </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">; </font><font color="#008000"><i>{ for device and file names }
+
+  </i></font>DevRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>NextDev_ofs  <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{pointer to next device header, offset value}
+    </i></font>NextDev_seg  <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{pointer to next device header, segment value}
+    </i></font>Attributes   <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{Attributes: block or char, IOCTL, etc.}
+    </i></font>Strategy     <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{pointer to device strategy routine, offset}
+    </i></font>Interrupt    <font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{pointer to device interrupt routine, offset}
+    </i></font>NameDev      <font color="#000080">: </font>Array8C<font color="#000080">; </font><font color="#008000"><i>{Name if char, or units if block}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>DevPtr <font color="#000080">= ^</font>DevRec<font color="#000080">;
+
+  </font>DevFileRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>FileName <font color="#000080">: </font>Array8C<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>DevFilePtr <font color="#000080">= ^</font>DevFileRec<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>LOL_HEADDEV_NUL  <font color="#000080">= </font><font color="#800000">$22</font><font color="#000080">; </font><font color="#008000"><i>{ offset from &quot;List of Lists&quot;
+                            to NUL device header }
+  </i></font>FNAME            <font color="#000080">= </font><font color="#800000">$8</font><font color="#000080">;
+  </font>ENDFLAG          <font color="#000080">= </font><font color="#800000">$FFFF</font><font color="#000080">;
+  </font>STDDEVS <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">12</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Array8C <font color="#000080">=
+    (</font><font color="#800000">'NUL     '</font><font color="#000080">, </font><font color="#800000">'CON     '</font><font color="#000080">, </font><font color="#800000">'AUX     '</font><font color="#000080">, </font><font color="#800000">'PRN     '</font><font color="#000080">,
+     </font><font color="#800000">'CLOCK$  '</font><font color="#000080">, </font><font color="#800000">'COM1    '</font><font color="#000080">, </font><font color="#800000">'COM2    '</font><font color="#000080">, </font><font color="#800000">'COM3    '</font><font color="#000080">,
+     </font><font color="#800000">'COM4    '</font><font color="#000080">, </font><font color="#800000">'LPT1    '</font><font color="#000080">, </font><font color="#800000">'LPT2    '</font><font color="#000080">, </font><font color="#800000">'LPT3    '</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>r       <font color="#000080">: </font>registers<font color="#000080">;
+  </font>i<font color="#000080">,        </font><font color="#008000"><i>{ index }
+  </i></font>Adjust  <font color="#000080">: </font>byte<font color="#000080">;
+  </font>Header  <font color="#000080">: </font>DevPtr<font color="#000080">;
+  </font>DevFile <font color="#000080">: </font>DevFilePtr<font color="#000080">;
+  </font>Valid<font color="#000080">,
+  </font>Done    <font color="#000080">: </font>boolean<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>BinW<font color="#000080">(</font>Decimal <font color="#000080">: </font>word<font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const
+  </b></font>BINDIGIT <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char <font color="#000080">= </font><font color="#800000">'01'</font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>i     <font color="#000080">: </font>byte<font color="#000080">;
+  </font>Binar <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>fillchar <font color="#000080">(</font>binar<font color="#000080">, </font>sizeof<font color="#000080">(</font>Binar<font color="#000080">), </font><font color="#800000">' '</font><font color="#000080">);
+  </font>Binar <font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] := </font>chr<font color="#000080">(</font><font color="#800000">16</font><font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">15 </font><font color="#FF0000"><b>do
+    </b></font>Binar<font color="#000080">[</font><font color="#800000">16</font><font color="#000080">-</font>i<font color="#000080">] := </font>BINDIGIT<font color="#000080">[(</font>Decimal <font color="#FF0000"><b>shr </b></font>i<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">];
+  </font>BinW <font color="#000080">:= </font>Binar<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>HexN <font color="#000080">(</font>b <font color="#000080">: </font>byte<font color="#000080">) : </font>char<font color="#000080">;        </font><font color="#008000"><i>{ convert nibble to char }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>b <font color="#000080">:= </font>b <font color="#FF0000"><b>and </b></font><font color="#800000">15</font><font color="#000080">;                   </font><font color="#008000"><i>{ forces to only 4 bits }
+  </i></font><font color="#FF0000"><b>if </b></font>b <font color="#000080">&gt; </font><font color="#800000">9 </font><font color="#FF0000"><b>then
+     </b></font>inc<font color="#000080">(</font>b<font color="#000080">,</font><font color="#800000">7</font><font color="#000080">);                    </font><font color="#008000"><i>{ adjust for hex digits }</i></font><font color="#000080">;
+  </font>HexN <font color="#000080">:= </font>chr<font color="#000080">(</font>b<font color="#000080">+</font><font color="#800000">48</font><font color="#000080">);              </font><font color="#008000"><i>{ convert to character }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>HexB<font color="#000080">(</font>b <font color="#000080">: </font>byte<font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>HexB <font color="#000080">:= </font>HexN <font color="#000080">(</font>b <font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">) + </font>HexN <font color="#000080">(</font>b<font color="#000080">);  </font><font color="#008000"><i>{ assemble the nibbles }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>HexW<font color="#000080">(</font>w <font color="#000080">: </font>word<font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{$R-}
+  </i></font>hexw <font color="#000080">:= </font>HexB<font color="#000080">(</font>w <font color="#FF0000"><b>shr </b></font><font color="#800000">8</font><font color="#000080">) + </font>HexB<font color="#000080">(</font>w<font color="#000080">);  </font><font color="#008000"><i>{ assemble the bytes }
+{$R+}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>HexL<font color="#000080">(</font>l <font color="#000080">: </font>longint<font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>HexL <font color="#000080">:= </font>HexW<font color="#000080">(</font>l <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">) + </font>HexW<font color="#000080">(</font>l<font color="#000080">); </font><font color="#008000"><i>{ assemble the words }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>function </b></font>XP<font color="#000080">(</font>p <font color="#000080">: </font>pointer<font color="#000080">) : </font>pstrg<font color="#000080">;         </font><font color="#008000"><i>{ display pointer P }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>XP <font color="#000080">:= </font>HexW<font color="#000080">(</font>seg<font color="#000080">(</font>p<font color="#000080">^)) + </font><font color="#800000">':' </font><font color="#000080">+ </font>HexW<font color="#000080">(</font>ofs<font color="#000080">(</font>p<font color="#000080">^));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>output<font color="#000080">, </font><font color="#800000">''</font><font color="#000080">);
+  </font>rewrite<font color="#000080">(</font>output<font color="#000080">);     </font><font color="#008000"><i>{ allow command line redirection }
+  </i></font>writeln<font color="#000080">(</font><font color="#800000">'Device'</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">'Address'</font><font color="#000080">:</font><font color="#800000">12</font><font color="#000080">, </font><font color="#800000">'Strat'</font><font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">'Intrpt'</font><font color="#000080">:</font><font color="#800000">8</font><font color="#000080">,
+          </font><font color="#800000">'Attrib'</font><font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">'File Name'</font><font color="#000080">:</font><font color="#800000">23</font><font color="#000080">);
+  </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">69 </font><font color="#FF0000"><b>do
+    </b></font>write<font color="#000080">(</font><font color="#800000">'-'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+
+  </font><font color="#FF0000"><b>with </b></font>r <font color="#FF0000"><b>do
+  begin
+    </b></font>es <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>bx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>ah <font color="#000080">:= </font><font color="#800000">$52</font><font color="#000080">;
+    </font><font color="#008000"><i>{ this is an undocumented DOS function call:
+      Get pointer to DOS &quot;List of Lists&quot; }
+    </i></font>msdos <font color="#000080">(</font>r<font color="#000080">);
+    </font><font color="#008000"><i>{ es and bx now have values }
+    </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>es <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>bx <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+
+    </font>Header <font color="#000080">:= </font>ptr<font color="#000080">(</font>es<font color="#000080">, </font>bx <font color="#000080">+ </font>LOL_HEADDEV_NUL<font color="#000080">); </font><font color="#008000"><i>{ we get NUL dev from this }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{with}
+
+  </i></font>Done <font color="#000080">:= </font>FALSE<font color="#000080">; </font><font color="#008000"><i>{ dummy variable to keep the repeat loop going,
+                    otherwise would have to duplicate the output
+                    routines one more time for the final device. }
+  </i></font><font color="#FF0000"><b>repeat
+    with </b></font>Header<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>Adjust <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#008000"><i>{ adjust keeps display columns aligned, bit 15 set is a Character
+        device, if clear it is a Block device and 1st byte is # of block
+        devs supported}
+
+      </i></font><font color="#FF0000"><b>if </b></font>boolean <font color="#000080">((</font>Attributes <font color="#FF0000"><b>shr </b></font><font color="#800000">15</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">1</font><font color="#000080">) = </font>TRUE <font color="#FF0000"><b>then
+        </b></font>write <font color="#000080">(</font>NameDev<font color="#000080">)
+      </font><font color="#FF0000"><b>else
+      begin
+        </b></font>write <font color="#000080">(</font><font color="#800000">'BLKdev='</font><font color="#000080">, </font>byte <font color="#000080">(</font>NameDev<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]));
+        </font>Adjust <font color="#000080">:= </font>byte <font color="#000080">(</font>NameDev<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]) </font><font color="#FF0000"><b>div </b></font><font color="#800000">10</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>write<font color="#000080">(</font>XP<font color="#000080">(</font>Header<font color="#000080">) : </font><font color="#800000">12 </font><font color="#000080">- </font>Adjust<font color="#000080">);
+      </font>write<font color="#000080">(</font>HexW<font color="#000080">(</font>Strategy<font color="#000080">) : </font><font color="#800000">7</font><font color="#000080">);
+      </font>write<font color="#000080">(</font>HexW<font color="#000080">(</font>Interrupt<font color="#000080">) : </font><font color="#800000">7</font><font color="#000080">);
+      </font>write<font color="#000080">(</font>HexW<font color="#000080">(</font>Attributes<font color="#000080">) : </font><font color="#800000">7</font><font color="#000080">, </font><font color="#800000">'='</font><font color="#000080">);
+      </font>write<font color="#000080">(</font>BinW<font color="#000080">(</font>Attributes<font color="#000080">));
+
+      </font><font color="#008000"><i>{ this next section I can't find documented anywhere, but I observed it
+        and decided to include it anyway, with MSDOS v5.0, others are unknown.
+        The file name's extension isn't saved and doesn't matter, either. }
+
+      </i></font><font color="#FF0000"><b>if </b></font>ofs<font color="#000080">(</font>Header<font color="#000080">^) &lt; </font>FNAME <font color="#FF0000"><b>then
+      </b></font><font color="#008000"><i>{ &quot;borrow&quot; from the segment and give it to the offset }
+        </i></font>DevFile <font color="#000080">:= </font>ptr<font color="#000080">(</font>seg<font color="#000080">(</font>Header<font color="#000080">^) - </font><font color="#800000">$1</font><font color="#000080">, </font>ofs<font color="#000080">(</font>Header<font color="#000080">^) + </font><font color="#800000">$10 </font><font color="#000080">- </font>FNAME<font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>DevFile <font color="#000080">:= </font>ptr<font color="#000080">(</font>seg<font color="#000080">(</font>Header<font color="#000080">^), </font>ofs<font color="#000080">(</font>Header<font color="#000080">^) - </font>FNAME<font color="#000080">);
+
+      </font>Valid <font color="#000080">:= </font>TRUE<font color="#000080">;
+      </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">12 </font><font color="#FF0000"><b>do
+        if </b></font>DevFile<font color="#000080">^.</font>FileName <font color="#000080">= </font>STDDEVS<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>then
+          </b></font>Valid <font color="#000080">:= </font>FALSE<font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font>Valid <font color="#FF0000"><b>then
+        for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">8 </font><font color="#FF0000"><b>do
+          if not </b></font><font color="#000080">(</font>DevFile<font color="#000080">^.</font>Filename<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">' '</font><font color="#000080">..</font><font color="#800000">'z'</font><font color="#000080">]) </font><font color="#FF0000"><b>then
+            </b></font>Valid <font color="#000080">:= </font>FALSE<font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font><font color="#008000"><i>{still} </i></font>Valid <font color="#FF0000"><b>then
+        </b></font>write <font color="#000080">(</font><font color="#800000">'  '</font><font color="#000080">, </font>DevFile<font color="#000080">^.</font>FileName<font color="#000080">);
+
+      </font>writeln<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>NextDev_ofs <font color="#000080">= </font>ENDFLAG <font color="#FF0000"><b>then
+        </b></font>exit<font color="#000080">; </font><font color="#008000"><i>{ end of the device chain }
+
+      </i></font>Header <font color="#000080">:= </font>ptr<font color="#000080">(</font>NextDev_seg<font color="#000080">, </font>NextDev_ofs<font color="#000080">);
+
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{with}
+  </i></font><font color="#FF0000"><b>until </b></font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font><font color="#008000"><i>{
+The question: I have seen utils that do this actually give the size of
+the driver in memory.  MSD and PMap both do this.  Does anybody know
+how I can determine the size of the driver in memory?
+}</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to HARDWARE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0021.PAS">Original</a><b>]</b></p></body>
+</html>

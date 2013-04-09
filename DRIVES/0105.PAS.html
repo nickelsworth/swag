@@ -1,0 +1,60 @@
+<html>
+<head><title> "Disk transfers - DMA Controller" by ARNE DE BRUIJN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0105.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+ BB&gt; Question: How can I make sure that my data for DMA transfer
+ BB&gt; (yes: SB-stuff) isn't going beyond &quot;page-boundaries&quot;?
+ BB&gt; (And what the h@#$ is a page-boudarie (?) anyway)
+
+The DMA controller has only 16 address bits, and to use it in 20-bits PC's and
+24-bits AT's (address bits), they added a page register, to hold the other 4/8
+bits. Bit the DMA controller knows nothing about it, so it can't increment it.
+This is all about absolute addresses, i.e. seg*16+ofs in real mode.
+Example: you want to 'DMA' 32768 bytes from $1234:0. Absolute address is
+$1234*16+0=$12340. The lower 16 bits go to the dma ($2340), and the other bit
+s to the page register ($1). After the DMA the offset is $2340+$8000=$A340, so
+no problems here. But if you use $7890:0 the absolute address is $78900, and
+if you add $8000 to the lower 16 bits ($8900), it becomes $10900, so larger
+than 16 bits, and the transfer can't be completed (it halts after
+$8000-$0900=$7700 bytes). That's why you need to keep the page of the 'end'
+absolute address the same as from the start address.
+
+I've written some pascal code to do that, but it assumes the heap is not
+fragmented (i.e. it assumes if it allocates two blocks the second starts were
+the first ends) (not sure it works always too, haven't tested it much).
+
+===}
+
+</i></font><font color="#FF0000"><b>function </b></font>Alloc64kBound<font color="#000080">(</font>Size<font color="#000080">:</font>word<font color="#000080">):</font>pointer<font color="#000080">;
+</font><font color="#008000"><i>{ Allocate a &lt;Size&gt; bytes buffer so that you can do a DMA transfer from/to it
+}{ Assumes the heap is not fragmented }
+{ Arne de Bruijn, 1995, PD }
+{$ifopt Q+}{$define Temp}{$Q-}{$endif}
+{ overflow checking should be off for word(seg shl 4), to avoid }
+{ word(seg and $0fff shl 4). }
+</i></font><font color="#FF0000"><b>type
+ </b></font>TPointer<font color="#000080">=</font><font color="#FF0000"><b>record
+  </b></font>Ofs<font color="#000080">,</font>Seg<font color="#000080">:</font>word<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+ </b></font>P<font color="#000080">,</font>P2<font color="#000080">:</font>pointer<font color="#000080">;
+ </font>NewSize<font color="#000080">:</font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+ </b></font>Alloc64kBound<font color="#000080">:=</font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font>MaxAvail<font color="#000080">&lt;</font>Size <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+ </font>GetMem<font color="#000080">(</font>P<font color="#000080">,</font>Size<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>word<font color="#000080">(</font>TPointer<font color="#000080">(</font>P<font color="#000080">).</font>Seg <font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">)+</font>TPointer<font color="#000080">(</font>P<font color="#000080">).</font>Ofs<font color="#000080">&gt;</font>word<font color="#000080">(-</font>Size<font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+   </b></font>NewSize<font color="#000080">:=((</font>longint<font color="#000080">((</font>TPointer<font color="#000080">(</font>P<font color="#000080">).</font>Seg <font color="#FF0000"><b>and </b></font><font color="#800000">$F000</font><font color="#000080">)+</font><font color="#800000">$1000</font><font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">)-
+    (</font>longint<font color="#000080">(</font>longint<font color="#000080">(</font>TPointer<font color="#000080">(</font>P<font color="#000080">).</font>Seg<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">)+</font>TPointer<font color="#000080">(</font>P<font color="#000080">).</font>Ofs<font color="#000080">));
+   </font>FreeMem<font color="#000080">(</font>P<font color="#000080">,</font>Size<font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>MaxAvail<font color="#000080">&lt;</font>NewSize <font color="#FF0000"><b>then </b></font>exit<font color="#000080">;
+   </font>GetMem<font color="#000080">(</font>P2<font color="#000080">,</font>NewSize<font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>MaxAvail<font color="#000080">&lt;</font>Size <font color="#FF0000"><b>then </b></font>P<font color="#000080">:=</font><font color="#FF0000"><b>NIL else </b></font>GetMem<font color="#000080">(</font>P<font color="#000080">,</font>Size<font color="#000080">);
+   </font>FreeMem<font color="#000080">(</font>P2<font color="#000080">,</font>NewSize<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>Alloc64kBound<font color="#000080">:=</font>P<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ifdef Temp}{$undef Temp}{$Q+}{$endif}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0105.PAS">Original</a><b>]</b></p></body>
+</html>

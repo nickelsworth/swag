@@ -1,0 +1,343 @@
+<html>
+<head><title> "Execute PKZIP" by GAYLE DAVIS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0022.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>UNIT </b></font>PKZExec<font color="#000080">;
+
+</font><font color="#FF0000"><b>INTERFACE
+
+USES </b></font>DOS<font color="#000080">;
+
+</font><font color="#008000"><i>{ Purpose :  Execute PKZIP/PKUNZIP on archive files                         }
+{ Uses specialized EXEC procedure so main program can use ALL of the memory }
+{ Also shows how to take over INT29 to NOT display anything on the CRT      }
+
+</i></font><font color="#FF0000"><b>CONST
+    </b></font>PKZIP             <font color="#000080">: </font>PathStr <font color="#000080">= </font><font color="#800000">'PKZIP.EXE'</font><font color="#000080">;
+    </font>PKUNZIP           <font color="#000080">: </font>PathStr <font color="#000080">= </font><font color="#800000">'PKUNZIP.EXE'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>ZIPError          <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CleanUpDir <font color="#000080">(</font>WorkDir<font color="#000080">, </font>FileMask <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+                   </font><font color="#008000"><i>{Erases files based on a mask }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DisplayZIPError<font color="#000080">;
+                   </font><font color="#008000"><i>{ PKZip interface }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DefaultCleanup <font color="#000080">(</font>WorkDir <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+                   </font><font color="#008000"><i>{Erases files *.BAK, *.MAP, temp*.*}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>ShowEraseStats<font color="#000080">;
+                   </font><font color="#008000"><i>{shows count &amp; bytes recovered}
+
+</i></font><font color="#FF0000"><b>FUNCTION  </b></font>UnZIPFile <font color="#000080">(</font>ZIPOpts<font color="#000080">, </font>ZIPName<font color="#000080">, </font>DPath<font color="#000080">, </font>fspec <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>qt <font color="#000080">: </font>BOOLEAN<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+                   </font><font color="#008000"><i>{Uses PKUnZip to de-archive files }
+
+</i></font><font color="#FF0000"><b>FUNCTION  </b></font>ZIPFile <font color="#000080">(</font>ZIPOpts<font color="#000080">, </font>ZIPName<font color="#000080">, </font>fspec  <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>qt <font color="#000080">: </font>BOOLEAN<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+                   </font><font color="#008000"><i>{Uses PKZip to archive files }
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+VAR  </b></font>ZIPDefaultZIPOpts <font color="#000080">: </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">[</font><font color="#800000">16</font><font color="#000080">];
+</font><font color="#FF0000"><b>VAR  </b></font>ZIPFileName       <font color="#000080">: </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">[</font><font color="#800000">50</font><font color="#000080">];
+</font><font color="#FF0000"><b>VAR  </b></font>ZIPDPath          <font color="#000080">: </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">[</font><font color="#800000">50</font><font color="#000080">];
+
+</font><font color="#FF0000"><b>VAR  </b></font>EraseCount        <font color="#000080">: </font>WORD<font color="#000080">;        </font><font color="#008000"><i>{ files erased }
+     </i></font>EraseSizeK        <font color="#000080">: </font>LONGINT<font color="#000080">;     </font><font color="#008000"><i>{ kilobytes released by erasing files }
+     </i></font>ShowOnWrite       <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+     </font>I29H              <font color="#000080">: </font>POINTER<font color="#000080">;
+
+</font><font color="#008000"><i>{ EXECUTE STUFF - SHRINK HEAP AND EXECUTE LIKE EXECDOS }
+
+{$F+}
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Int29Handler <font color="#000080">(</font>AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP <font color="#000080">: </font>WORD<font color="#000080">); </font>INTERRUPT<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>Dummy <font color="#000080">: </font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  Asm
+    </b></font><font color="#FF00FF">Sti
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>ShowOnWrite <font color="#FF0000"><b>THEN </b></font>WRITE <font color="#000080">(</font>CHAR <font color="#000080">(</font>LO <font color="#000080">(</font>Ax<font color="#000080">) ) );
+  </font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">Cli
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ReallocateMemory <font color="#000080">(</font>P <font color="#000080">: </font>POINTER<font color="#000080">); </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">MOV  AX, PrefixSeg
+  MOV  ES, AX
+  MOV  BX, WORD PTR P + 2
+  CMP  WORD PTR P, 0
+  JE   @OK
+  INC  BX
+
+ @OK :
+  SUB  BX, AX
+  MOV  AH, 4Ah
+  INT  21h
+  JC   @X
+  LES  DI, P
+  MOV  WORD PTR HeapEnd, DI
+  MOV  WORD PTR HeapEnd + 2, ES
+ @X :
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ ZAP this DEFINE if NOT 386,486}
+{..$DEFINE CPU386}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>EXECUTE <font color="#000080">(</font>Name <font color="#000080">: </font>PathStr <font color="#000080">; </font>Tail <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">) : </font>WORD<font color="#000080">; </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+  </b></font><font color="#008000"><i>{$IFDEF CPU386}
+  </i></font><font color="#FF00FF">DB      66h
+  PUSH    WORD PTR HeapEnd
+  DB      66h
+  PUSH    WORD PTR Name
+  DB      66h
+  PUSH    WORD PTR Tail
+  DB      66h
+  PUSH    WORD PTR HeapPtr
+  </font><font color="#008000"><i>{$ELSE}
+  </i></font><font color="#FF00FF">PUSH    WORD PTR HeapEnd + 2
+  PUSH    WORD PTR HeapEnd
+  PUSH    WORD PTR Name + 2
+  PUSH    WORD PTR Name
+  PUSH    WORD PTR Tail + 2
+  PUSH    WORD PTR Tail
+  PUSH    WORD PTR HeapPtr + 2
+  PUSH    WORD PTR HeapPtr
+  </font><font color="#008000"><i>{$ENDIF}
+
+  </i></font><font color="#FF00FF">CALL ReallocateMemory
+  CALL SwapVectors
+  CALL DOS.EXEC
+  CALL SwapVectors
+  CALL ReallocateMemory
+  MOV  AX, DosError
+  OR   AX, AX
+  JNZ  @OUT
+  MOV  AH, 4Dh
+  INT  21h
+ @OUT :
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>ExecuteCommand<font color="#000080">(</font>p<font color="#000080">,</font>s <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>quiet <font color="#000080">: </font>BOOLEAN<font color="#000080">) : </font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+</b></font>ShowOnWrite <font color="#000080">:= </font><font color="#FF0000"><b>NOT </b></font>quiet<font color="#000080">;  </font><font color="#008000"><i>{ turn off INT 29 }
+</i></font>GETINTVEC <font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, </font>I29H<font color="#000080">);
+</font>SETINTVEC <font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, @</font>Int29Handler<font color="#000080">);         </font><font color="#008000"><i>{ Install interrupt handler }
+</i></font>Execute<font color="#000080">(</font>p<font color="#000080">,</font>s<font color="#000080">);
+</font>SETINTVEC <font color="#000080">(</font><font color="#800000">$29</font><font color="#000080">, </font>I29h<font color="#000080">);
+</font><font color="#FF0000"><b>IF </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>ExecuteCommand <font color="#000080">:= </font>DosExitCode   <font color="#FF0000"><b>ELSE </b></font>ExecuteCommand <font color="#000080">:= </font>DosError<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>AddBackSlash <font color="#000080">(</font>dName <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">) : </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>dName <font color="#000080">[</font>LENGTH <font color="#000080">(</font>dName<font color="#000080">) ] </font><font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">'\'</font><font color="#000080">, </font><font color="#800000">':'</font><font color="#000080">, </font><font color="#800000">#0</font><font color="#000080">] </font><font color="#FF0000"><b>THEN
+    </b></font>AddBackSlash <font color="#000080">:= </font>dName
+  <font color="#FF0000"><b>ELSE
+    </b></font>AddBackSlash <font color="#000080">:= </font>dName <font color="#000080">+ </font><font color="#800000">'\'</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>EraseFile <font color="#000080">( </font>S <font color="#000080">: </font>PathStr <font color="#000080">) : </font>BOOLEAN <font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>F <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+
+</b></font>EraseFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+
+</font>ASSIGN <font color="#000080">(</font>F<font color="#000080">, </font>S<font color="#000080">);
+</font>RESET <font color="#000080">(</font>F<font color="#000080">);
+
+</font><font color="#FF0000"><b>IF </b></font>IORESULT <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+
+  </font>CLOSE <font color="#000080">(</font>F<font color="#000080">);
+  </font>ERASE <font color="#000080">(</font>F<font color="#000080">);
+  </font>EraseFile <font color="#000080">:= (</font>IORESULT <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>FileExists <font color="#000080">( </font>S <font color="#000080">: </font>PathStr <font color="#000080">) : </font>BOOLEAN <font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR </b></font>F <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+
+</b></font>FileExists <font color="#000080">:= </font>FALSE<font color="#000080">;
+
+</font>ASSIGN <font color="#000080">(</font>F<font color="#000080">, </font>S<font color="#000080">);
+</font>RESET <font color="#000080">(</font>F<font color="#000080">);
+
+</font><font color="#FF0000"><b>IF </b></font>IORESULT <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+
+  </font>CLOSE <font color="#000080">(</font>F<font color="#000080">);
+  </font>FileExists <font color="#000080">:= (</font>IORESULT <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CleanUpFile <font color="#000080">(</font>WorkDir <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>SR <font color="#000080">: </font>searchRec<font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>l    <font color="#000080">: </font>LONGINT<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+    WITH </b></font>SR <font color="#FF0000"><b>DO
+        BEGIN
+        </b></font>l <font color="#000080">:= </font>size <font color="#FF0000"><b>DIV </b></font><font color="#800000">512</font><font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>attr <font color="#FF0000"><b>AND </b></font><font color="#800000">31</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+            BEGIN
+            IF </b></font>l <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>l <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+            </font>EraseSizeK <font color="#000080">:= </font>EraseSizeK <font color="#000080">+ </font>l<font color="#000080">;
+            </font>WRITELN <font color="#000080">(</font><font color="#800000">'         Removing: '</font><font color="#000080">, (</font>AddBackSlash <font color="#000080">(</font>WorkDir<font color="#000080">) + </font>name<font color="#000080">),
+                    </font><font color="#800000">'   '</font><font color="#000080">, </font>l <font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">'k'</font><font color="#000080">);
+            </font>EraseFile <font color="#000080">(</font>AddBackSlash <font color="#000080">(</font>WorkDir<font color="#000080">) + </font>name<font color="#000080">);
+            </font>INC <font color="#000080">(</font>EraseCount<font color="#000080">);
+            </font><font color="#FF0000"><b>END
+        ELSE </b></font>WRITELN <font color="#000080">(</font><font color="#800000">' ??  '</font><font color="#000080">, (</font>AddBackSlash <font color="#000080">(</font>WorkDir<font color="#000080">) + </font>name<font color="#000080">), </font><font color="#800000">'   '</font><font color="#000080">, </font>l <font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">'k'</font><font color="#000080">,
+                     </font><font color="#800000">'  attr: '</font><font color="#000080">, </font>attr<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CleanUpDir <font color="#000080">(</font>WorkDir<font color="#000080">, </font>FileMask <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>Frec <font color="#000080">: </font>SearchRec<font color="#000080">;
+    </font>s    <font color="#000080">: </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">[</font><font color="#800000">64</font><font color="#000080">];
+    </font><font color="#FF0000"><b>BEGIN
+    </b></font>s <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font>FINDFIRST <font color="#000080">(</font>AddBackSlash <font color="#000080">(</font>WorkDir<font color="#000080">) + </font>FileMask<font color="#000080">, </font>anyfile<font color="#000080">, </font>Frec<font color="#000080">);
+    </font><font color="#FF0000"><b>WHILE </b></font>doserror <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+        BEGIN
+        </b></font>CleanUpFile <font color="#000080">(</font>WorkDir<font color="#000080">, </font>Frec<font color="#000080">);
+        </font>FINDNEXT <font color="#000080">(</font>Frec<font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DefaultCleanup <font color="#000080">(</font>WorkDir <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+    </font><font color="#FF0000"><b>BEGIN
+    </b></font>CleanUpDir <font color="#000080">(</font>WorkDir<font color="#000080">, </font><font color="#800000">'*.BAK'</font><font color="#000080">);
+    </font>CleanUpDir <font color="#000080">(</font>WorkDir<font color="#000080">, </font><font color="#800000">'*.MAP'</font><font color="#000080">);
+    </font>CleanUpDir <font color="#000080">(</font>WorkDir<font color="#000080">, </font><font color="#800000">'TEMP*.*'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DisplayZIPError<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+    CASE </b></font>ziperror <font color="#FF0000"><b>OF
+        </b></font><font color="#800000">0       </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font><font color="#800000">'no error'</font><font color="#000080">);
+        </font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">3     </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Error in ZIP file '</font><font color="#000080">);
+        </font><font color="#800000">4</font><font color="#000080">..</font><font color="#800000">8    </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Insufficient Memory'</font><font color="#000080">);
+        </font><font color="#800000">11</font><font color="#000080">,</font><font color="#800000">12   </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' No MORE files '</font><font color="#000080">);
+        </font><font color="#800000">9</font><font color="#000080">,</font><font color="#800000">13    </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' File NOT found '</font><font color="#000080">);
+        </font><font color="#800000">14</font><font color="#000080">,</font><font color="#800000">50   </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Disk FULL !! '</font><font color="#000080">);
+        </font><font color="#800000">51      </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Unexpected EOF in ZIP file '</font><font color="#000080">);
+        </font><font color="#800000">15      </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Zip file is Read ONLY! '</font><font color="#000080">);
+        </font><font color="#800000">10</font><font color="#000080">,</font><font color="#800000">16   </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Bad or illegal parameters '</font><font color="#000080">);
+        </font><font color="#800000">17      </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Too many files '</font><font color="#000080">);
+        </font><font color="#800000">18      </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Could NOT open file '</font><font color="#000080">);
+        </font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">90   </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' Exec DOS error '</font><font color="#000080">);
+        </font><font color="#800000">98      </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' requested file not produced '</font><font color="#000080">);
+        </font><font color="#800000">99      </font><font color="#000080">: </font>WRITELN <font color="#000080">(</font>ziperror <font color="#000080">: </font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">' archive file not found'</font><font color="#000080">);
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>PKZIPInit<font color="#000080">;
+     </font><font color="#FF0000"><b>BEGIN
+     </b></font>PKZIP   <font color="#000080">:= </font>FSearch<font color="#000080">(</font><font color="#800000">'PKZIP.EXE'</font><font color="#000080">,</font>GetEnv<font color="#000080">(</font><font color="#800000">'PATH'</font><font color="#000080">));
+     </font>PKUNZIP <font color="#000080">:= </font>FSearch<font color="#000080">(</font><font color="#800000">'PKUNZIP.EXE'</font><font color="#000080">,</font>GetEnv<font color="#000080">(</font><font color="#800000">'PATH'</font><font color="#000080">));
+     </font>ZIPError          <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font>ZIPDefaultZIPOpts <font color="#000080">:= </font><font color="#800000">'-n'</font><font color="#000080">;
+     </font>ZIPFileName       <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+     </font>ZIPDPath          <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+     </font>EraseCount        <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font>EraseSizeK        <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>ShowEraseStats<font color="#000080">;
+    </font><font color="#008000"><i>{-Show statistics at the end of run}
+    </i></font><font color="#FF0000"><b>BEGIN
+    </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'Files Erased: '</font><font color="#000080">, </font>EraseCount<font color="#000080">,
+            </font><font color="#800000">'  bytes used: '</font><font color="#000080">, </font>EraseSizeK <font color="#FF0000"><b>DIV </b></font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">'k'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>FUNCTION  </b></font>UnZIPFile <font color="#000080">( </font>ZIPOpts<font color="#000080">, </font>ZIPName<font color="#000080">, </font>DPath<font color="#000080">, </font>fspec <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>qt <font color="#000080">: </font>BOOLEAN<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>s<font color="#000080">, </font>zname     <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+    </font>i<font color="#000080">, </font>j         <font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+    </b></font>ZIPError       <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>UnZIPFile <font color="#000080">:= </font>TRUE<font color="#000080">;
+    </font>s <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>ZIPOpts <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN  </b></font>s <font color="#000080">:= </font>s <font color="#000080">+ </font>ZIPOpts
+    <font color="#FF0000"><b>ELSE                   </b></font>s <font color="#000080">:= </font>s <font color="#000080">+ </font>ZIPDefaultZIPOpts<font color="#000080">;
+
+    </font><font color="#FF0000"><b>IF </b></font>ZIPName <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN  </b></font>zname <font color="#000080">:= </font>ZIPName
+    <font color="#FF0000"><b>ELSE                   </b></font>zname <font color="#000080">:= </font>ZIPFileName<font color="#000080">;
+    </font><font color="#FF0000"><b>IF NOT </b></font>FileExists <font color="#000080">(</font>zname<font color="#000080">) </font><font color="#FF0000"><b>THEN
+        BEGIN
+        </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'zname: ['</font><font color="#000080">, </font>zname<font color="#000080">, </font><font color="#800000">']'</font><font color="#000080">);
+        </font>UnZIPFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+        </font>ZIPError <font color="#000080">:= </font><font color="#800000">99</font><font color="#000080">;
+        </font>EXIT<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+    </font>s <font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>zname<font color="#000080">;
+
+    </font><font color="#FF0000"><b>IF </b></font>DPath <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN </b></font>s <font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>DPath
+    <font color="#FF0000"><b>ELSE                   </b></font>s <font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>ZIPDPath<font color="#000080">;
+    </font>s <font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>fspec<font color="#000080">;
+    </font>ZIPError <font color="#000080">:= </font>ExecuteCommand <font color="#000080">(</font>PKUNZIP<font color="#000080">,</font>s<font color="#000080">,</font>qt<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>ZIPError <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+         BEGIN
+         </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'PKUNZIP start failed '</font><font color="#000080">, </font>ZIPError<font color="#000080">, </font><font color="#800000">' ['</font><font color="#000080">, </font>s<font color="#000080">, </font><font color="#800000">']'</font><font color="#000080">);
+         </font>UnZIPFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+         </font><font color="#FF0000"><b>END
+    ELSE BEGIN
+         </b></font>i <font color="#000080">:= </font>POS <font color="#000080">(</font><font color="#800000">'*'</font><font color="#000080">, </font>fspec<font color="#000080">);
+         </font>j <font color="#000080">:= </font>POS <font color="#000080">(</font><font color="#800000">'?'</font><font color="#000080">, </font>fspec<font color="#000080">);
+         </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>i <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>j <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+             BEGIN
+             IF NOT </b></font>FileExists <font color="#000080">(</font>DPath <font color="#000080">+ </font>fspec<font color="#000080">) </font><font color="#FF0000"><b>THEN
+                  BEGIN
+                  </b></font>UnZIPFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+                  </font>ZIPError <font color="#000080">:= </font><font color="#800000">98</font><font color="#000080">;
+                  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+             </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION  </b></font>ZIPFile <font color="#000080">( </font>ZIPOpts<font color="#000080">, </font>ZIPName<font color="#000080">, </font>fspec  <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font>qt <font color="#000080">: </font>BOOLEAN<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>s<font color="#000080">, </font>zname     <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+    </font>i<font color="#000080">, </font>j         <font color="#000080">: </font>INTEGER<font color="#000080">;
+    </font><font color="#FF0000"><b>BEGIN
+    </b></font>ZIPError       <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>ZIPFile <font color="#000080">:= </font>TRUE<font color="#000080">;
+    </font>s  <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>ZIPOpts <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN  </b></font>s <font color="#000080">:= </font>s <font color="#000080">+ </font>ZIPOpts
+    <font color="#FF0000"><b>ELSE                   </b></font>s <font color="#000080">:= </font>s <font color="#000080">+ </font>ZIPDefaultZIPOpts<font color="#000080">;
+
+    </font><font color="#FF0000"><b>IF </b></font>ZIPName <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN  </b></font>zname <font color="#000080">:= </font>ZIPName
+    <font color="#FF0000"><b>ELSE                   </b></font>zname <font color="#000080">:= </font>ZIPFileName<font color="#000080">;
+    </font>s <font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>zname<font color="#000080">;
+    </font>s <font color="#000080">:= </font>s <font color="#000080">+ </font><font color="#800000">' ' </font><font color="#000080">+ </font>fspec<font color="#000080">;
+    </font>ZIPError <font color="#000080">:= </font>ExecuteCommand <font color="#000080">(</font>PKZIP<font color="#000080">,</font>s<font color="#000080">,</font>qt<font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>ZIPError <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+         BEGIN
+         </b></font>WRITELN <font color="#000080">(</font><font color="#800000">'PKZIP start failed '</font><font color="#000080">, </font>ZIPError<font color="#000080">, </font><font color="#800000">' ['</font><font color="#000080">, </font>s<font color="#000080">, </font><font color="#800000">']'</font><font color="#000080">);
+         </font>ZIPFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+         </font><font color="#FF0000"><b>END
+    ELSE BEGIN
+         IF NOT </b></font>FileExists <font color="#000080">(</font>ZIPname <font color="#000080">+ </font><font color="#800000">'.ZIP'</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+              BEGIN
+              </b></font>ZIPFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+              </font>ZIPError <font color="#000080">:= </font><font color="#800000">98</font><font color="#000080">;
+              </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+
+     </font><font color="#FF0000"><b>BEGIN
+     </b></font>PKZIPInit<font color="#000080">;
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to EXEC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0022.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,289 @@
+<html>
+<head><title> "DPMI Read/Write Sectors" by TURBO POWER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0075.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$S-,R-,V-,I-,B-,F+,O+,A-,X+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>DDisk<font color="#000080">;
+  </font><font color="#008000"><i>{-Read and write absolute sectors using DOS int $25 and $26
+    in protected mode under DOS or Windows. Does not support real mode.
+    Requires BP7 or TPW 1.5.
+
+    Based on the code in the OPDOS unit from Object Professional.
+
+    Thanks to Maynard Riley and Mark Boler for work done on this unit.
+
+    Notes:
+      The calling parameters correspond to those in OPDOS.
+      Drive = 0 corresponds to drive A.
+      Sectors are typically 512 bytes each. NumSects*SectorSize must be
+        less than 64K.
+      Buf may be any buffer in a protected mode program. DDISK
+        temporarily allocates a DOS real mode buffer, then copies
+        the result into or out of Buf.
+      If the function returns False, the DosError variable from the
+        DOS or WINDOS unit may have a non-zero value with more information
+        about the failure.
+
+      Use DPMIWriteDiskSectors with caution!
+
+    Version 1.0 (first public release) 7/19/94
+
+    For more information, contact TurboPower Software
+    CompuServe 76004,2611
+  }
+
+</i></font><font color="#FF0000"><b>interface
+
+function </b></font>DPMIReadDiskSectors<font color="#000080">(</font>Drive <font color="#000080">: </font>Word<font color="#000080">;
+                             </font>FirstSect <font color="#000080">: </font>LongInt<font color="#000080">; </font>NumSects <font color="#000080">: </font>Word<font color="#000080">;
+                             </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#008000"><i>{-Read sectors using int $25}
+
+</i></font><font color="#FF0000"><b>function </b></font>DPMIWriteDiskSectors<font color="#000080">(</font>Drive <font color="#000080">: </font>Word<font color="#000080">;
+                              </font>FirstSect <font color="#000080">: </font>LongInt<font color="#000080">; </font>NumSects <font color="#000080">: </font>Word<font color="#000080">;
+                              </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#008000"><i>{-Write sectors using int $26}
+
+  {====================================================================}
+
+</i></font><font color="#FF0000"><b>implementation
+
+uses
+</b></font><font color="#008000"><i>{$IFDEF DPMI}
+  </i></font>DOS<font color="#000080">,
+</font><font color="#008000"><i>{$ELSE}
+  </i></font>WinDOS<font color="#000080">,
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font>WinAPI<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>DpmiRealBuf <font color="#000080">=
+    </font><font color="#FF0000"><b>object
+
+    private
+      </b></font>Bytes   <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>BufBase <font color="#000080">: </font>LongInt<font color="#000080">;
+
+    </font><font color="#FF0000"><b>public
+      constructor </b></font>Init<font color="#000080">(</font>BufBytes <font color="#000080">: </font>LongInt<font color="#000080">);
+      </font><font color="#FF0000"><b>destructor </b></font>Done<font color="#000080">;
+      </font><font color="#FF0000"><b>function </b></font>Size <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font><font color="#FF0000"><b>function </b></font>Segment <font color="#000080">: </font>Word<font color="#000080">;
+      </font><font color="#FF0000"><b>function </b></font>Selector <font color="#000080">: </font>Word<font color="#000080">;
+      </font><font color="#FF0000"><b>function </b></font>RealPtr <font color="#000080">: </font>Pointer<font color="#000080">;
+      </font><font color="#FF0000"><b>function </b></font>ProtPtr <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>DPMIRegisters <font color="#000080">=
+    </font><font color="#FF0000"><b>record
+      </b></font>DI <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>SI <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>BP <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>Reserved <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>BX <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>DX <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>CX <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>AX <font color="#000080">: </font>LongInt<font color="#000080">;
+      </font>Flags <font color="#000080">: </font>Word<font color="#000080">;
+      </font>ES <font color="#000080">: </font>Word<font color="#000080">;
+      </font>DS <font color="#000080">: </font>Word<font color="#000080">;
+      </font>FS <font color="#000080">: </font>Word<font color="#000080">;
+      </font>GS <font color="#000080">: </font>Word<font color="#000080">;
+      </font>IP <font color="#000080">: </font>Word<font color="#000080">;
+      </font>CS <font color="#000080">: </font>Word<font color="#000080">;
+      </font>SP <font color="#000080">: </font>Word<font color="#000080">;
+      </font>SS <font color="#000080">: </font>Word<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>PacketPtr <font color="#000080">= ^</font>PacketRec<font color="#000080">;
+  </font>PacketRec <font color="#000080">=
+    </font><font color="#FF0000"><b>record
+      </b></font>StartLo <font color="#000080">: </font>Word<font color="#000080">;
+      </font>StartHi <font color="#000080">: </font>Word<font color="#000080">;
+      </font>Count <font color="#000080">: </font>Word<font color="#000080">;
+      </font>BufOfs <font color="#000080">: </font>Word<font color="#000080">;
+      </font>BufSeg <font color="#000080">: </font>Word<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>procedure </b></font>GetRealModeIntVector<font color="#000080">(</font>IntNo <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>Vector <font color="#000080">: </font>Pointer<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov     ax,0200h
+    mov     bl,IntNo
+    int     31h
+    les     di,Vector
+    mov     word ptr es:[di],dx
+    mov     word ptr es:[di+2],cx
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>CallFarRealModeProc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Regs <font color="#000080">: </font>DPMIRegisters<font color="#000080">) : </font>Word<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov     ax,0301h
+    xor     bx,bx
+    xor     cx,cx
+    les     di,Regs
+    int     31h
+    jc      @@9
+    xor     ax,ax
+@@9:
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DpmiRealBuf<font color="#000080">.</font>Segment <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Segment <font color="#000080">:= </font>BufBase <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DpmiRealBuf<font color="#000080">.</font>Selector <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Selector <font color="#000080">:= </font>BufBase <font color="#FF0000"><b>and </b></font><font color="#800000">$FFFF</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DpmiRealBuf<font color="#000080">.</font>RealPtr <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>RealPtr <font color="#000080">:= </font>Ptr<font color="#000080">(</font>BufBase <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DpmiRealBuf<font color="#000080">.</font>ProtPtr <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>ProtPtr <font color="#000080">:= </font>Ptr<font color="#000080">(</font>BufBase <font color="#FF0000"><b>and </b></font><font color="#800000">$FFFF</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DpmiRealBuf<font color="#000080">.</font>Size <font color="#000080">: </font>LongInt<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Size <font color="#000080">:= </font>Bytes<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>constructor </b></font>DpmiRealBuf<font color="#000080">.</font>Init<font color="#000080">(</font>BufBytes <font color="#000080">: </font>LongInt<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    </b></font>BufBase <font color="#000080">:= </font>GlobalDosAlloc<font color="#000080">(</font>BufBytes<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>BufBase <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>Fail<font color="#000080">;
+    </font>Bytes <font color="#000080">:= </font>BufBytes<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>destructor </b></font>DpmiRealBuf<font color="#000080">.</font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>GlobalDosFree<font color="#000080">(</font>Selector<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>DiskInfoRec <font color="#000080">=
+    </font><font color="#FF0000"><b>object
+      </b></font>DriveNumber <font color="#000080">: </font>Byte<font color="#000080">;
+      </font>ClustersAvailable <font color="#000080">: </font>Word<font color="#000080">;
+      </font>TotalClusters <font color="#000080">: </font>Word<font color="#000080">;
+      </font>BytesPerSector <font color="#000080">: </font>Word<font color="#000080">;
+      </font>SectorsPerCluster <font color="#000080">: </font>Word<font color="#000080">;
+      </font><font color="#FF0000"><b>constructor </b></font>Init<font color="#000080">(</font>d <font color="#000080">: </font>Byte<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>constructor </b></font>DiskInfoRec<font color="#000080">.</font>Init<font color="#000080">(</font>d <font color="#000080">: </font>Byte<font color="#000080">);
+  </font><font color="#FF0000"><b>var
+    </b></font>Ok <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>DriveNumber <font color="#000080">:= </font>d<font color="#000080">; </font><font color="#008000"><i>{ 0 = default ; 1 = 'A' }
+
+    </i></font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov     dl,d
+      mov     ah,$36
+      int     $21
+      cmp     ax,$FFFF
+      je      @8
+
+      les     di,Self
+      mov     es:[di].SectorsPerCluster,ax
+      mov     es:[di].ClustersAvailable,bx
+      mov     es:[di].BytesPerSector,cx
+      mov     es:[di].TotalClusters,dx
+      mov     al,True
+      jmp     @9
+
+@8:   mov     al,False
+@9:   mov     Ok,al
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>if not </b></font>Ok <font color="#FF0000"><b>then
+      </b></font>Fail<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DPMIReadWrite<font color="#000080">(</font>Drive <font color="#000080">: </font>Word<font color="#000080">;
+                         </font>FirstSect <font color="#000080">: </font>LongInt<font color="#000080">; </font>NumSects <font color="#000080">: </font>Word<font color="#000080">;
+                         </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">; </font>Vector <font color="#000080">: </font>Byte<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>var
+    </b></font>SaveInt <font color="#000080">: </font>Pointer<font color="#000080">;
+    </font>Status <font color="#000080">: </font>Word<font color="#000080">;
+    </font>BufBytes <font color="#000080">: </font>LongInt<font color="#000080">;
+    </font>DiskInfo <font color="#000080">: </font>DiskInfoRec<font color="#000080">;
+    </font>InterimBuf <font color="#000080">: </font>DpmiRealBuf<font color="#000080">;
+    </font>PacketBuf <font color="#000080">: </font>DpmiRealBuf<font color="#000080">;
+    </font>Regs <font color="#000080">: </font>DPMIRegisters<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>DosError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>DPMIReadWrite <font color="#000080">:= </font>False<font color="#000080">;
+
+    </font><font color="#FF0000"><b>if not </b></font>DiskInfo<font color="#000080">.</font>Init<font color="#000080">(</font>Drive<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>Exit<font color="#000080">;
+
+    </font>BufBytes <font color="#000080">:= </font>LongInt<font color="#000080">(</font>NumSects<font color="#000080">)*</font>DiskInfo<font color="#000080">.</font>BytesPerSector<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>BufBytes <font color="#000080">&gt; </font><font color="#800000">65535 </font><font color="#FF0000"><b>then
+      </b></font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>if not </b></font>InterimBuf<font color="#000080">.</font>Init<font color="#000080">(</font>BufBytes<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>Exit<font color="#000080">;
+
+    </font><font color="#FF0000"><b>if not </b></font>PacketBuf<font color="#000080">.</font>Init<font color="#000080">(</font>SizeOf<font color="#000080">(</font>PacketRec<font color="#000080">)) </font><font color="#FF0000"><b>then begin
+      </b></font>InterimBuf<font color="#000080">.</font>Done<font color="#000080">;
+      </font>Exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>if </b></font>Vector <font color="#000080">= </font><font color="#800000">$26 </font><font color="#FF0000"><b>then
+      </b></font>Move<font color="#000080">(</font>Buf<font color="#000080">, </font>InterimBuf<font color="#000080">.</font>ProtPtr<font color="#000080">^, </font>BufBytes<font color="#000080">);
+
+    </font>FillChar<font color="#000080">(</font>Regs<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Regs<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>with </b></font>PacketPtr<font color="#000080">(</font>PacketBuf<font color="#000080">.</font>ProtPtr<font color="#000080">)^ </font><font color="#FF0000"><b>do begin
+      </b></font>StartLo <font color="#000080">:= </font>FirstSect <font color="#FF0000"><b>and </b></font><font color="#800000">$FFFF</font><font color="#000080">;
+      </font>StartHi <font color="#000080">:= </font>FirstSect <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+      </font>Count <font color="#000080">:= </font>NumSects<font color="#000080">;
+      </font>BufOfs <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>BufSeg <font color="#000080">:= </font>InterimBuf<font color="#000080">.</font>Segment<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>GetRealModeIntVector<font color="#000080">(</font>Vector<font color="#000080">, </font>SaveInt<font color="#000080">); </font><font color="#008000"><i>{ returns real mode seg:ofs }
+    </i></font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do begin
+      </b></font>CX <font color="#000080">:= </font><font color="#800000">$FFFF</font><font color="#000080">;
+      </font>AX <font color="#000080">:= </font>Drive<font color="#000080">;
+      </font>BX <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>DS <font color="#000080">:= </font>PacketBuf<font color="#000080">.</font>Segment<font color="#000080">;
+      </font>CS <font color="#000080">:= </font>LongInt<font color="#000080">(</font>SaveInt<font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">;
+      </font>IP <font color="#000080">:= </font>LongInt<font color="#000080">(</font>SaveInt<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">$FFFF</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Status <font color="#000080">:= </font>CallFarRealModeProc<font color="#000080">(</font>Regs<font color="#000080">);
+
+    </font><font color="#FF0000"><b>if </b></font>Status <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      if </b></font>Odd<font color="#000080">(</font>Regs<font color="#000080">.</font>Flags<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>DosError <font color="#000080">:= </font>Regs<font color="#000080">.</font>AX
+      <font color="#FF0000"><b>else begin
+        if </b></font>Vector <font color="#000080">= </font><font color="#800000">$25 </font><font color="#FF0000"><b>then
+          </b></font>Move<font color="#000080">(</font>InterimBuf<font color="#000080">.</font>ProtPtr<font color="#000080">^, </font>Buf<font color="#000080">, </font>BufBytes<font color="#000080">);
+        </font>DPMIReadWrite <font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>PacketBuf<font color="#000080">.</font>Done<font color="#000080">;
+    </font>InterimBuf<font color="#000080">.</font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DPMIReadDiskSectors<font color="#000080">(</font>Drive <font color="#000080">: </font>Word<font color="#000080">;
+                               </font>FirstSect <font color="#000080">: </font>LongInt<font color="#000080">; </font>NumSects <font color="#000080">: </font>Word<font color="#000080">;
+                               </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>DPMIReadDiskSectors <font color="#000080">:= </font>DPMIReadWrite<font color="#000080">(</font>Drive<font color="#000080">, </font>FirstSect<font color="#000080">, </font>NumSects<font color="#000080">, </font>Buf<font color="#000080">, </font><font color="#800000">$25</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>function </b></font>DPMIWriteDiskSectors<font color="#000080">(</font>Drive <font color="#000080">: </font>Word<font color="#000080">;
+                                </font>FirstSect <font color="#000080">: </font>LongInt<font color="#000080">; </font>NumSects <font color="#000080">: </font>Word<font color="#000080">;
+                                </font><font color="#FF0000"><b>var </b></font>Buf<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>DPMIWriteDiskSectors <font color="#000080">:= </font>DPMIReadWrite<font color="#000080">(</font>Drive<font color="#000080">, </font>FirstSect<font color="#000080">, </font>NumSects<font color="#000080">, </font>Buf<font color="#000080">, </font><font color="#800000">$26</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0075.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,170 @@
+<html>
+<head><title> "Dpmi HiRes Timer" by KAI ROHRBACHER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TIMING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>UNIT </b></font>asytimer<font color="#000080">;
+</font><font color="#008000"><i>{Purpose  : High resolution timer which runs asynchronous to the     }
+{           rest of the program                                      }
+{Author   : Kai Rohrbacher, kai.rohrbacher@logo.ka.sub.org           }
+{Language : BorlandPascal 7.0 }
+{Date     : 26.06.1994        }
+{Remarks  : - Runs both in real- and protected mode.                 }
+{           - Only available on AT-style machines or better (uses    }
+{             real time clock services)                              }
+{           - Will &quot;fall through&quot; on PC's transparently: behaves as  }
+{             if time ran off immediately}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+VAR </b></font>TimeFlag<font color="#000080">:^</font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>ATClockAvailable<font color="#000080">:</font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SetCycleTime<font color="#000080">(</font>microseconds<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#FF0000"><b>FUNCTION </b></font>TimeOver<font color="#000080">:</font>BOOLEAN<font color="#000080">;
+  </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$C4</font><font color="#000080">/</font><font color="#800000">$1E</font><font color="#000080">/</font>TimeFlag<font color="#000080">/   </font><font color="#008000"><i>{LES BX,TimeFlag}
+         </i></font><font color="#800000">$26</font><font color="#000080">/</font><font color="#800000">$8A</font><font color="#000080">/</font><font color="#800000">$07</font><font color="#000080">/        </font><font color="#008000"><i>{MOV AL,ES:[BX] }
+         </i></font><font color="#800000">$B1</font><font color="#000080">/</font><font color="#800000">$07</font><font color="#000080">/            </font><font color="#008000"><i>{MOV CL,7 }
+         </i></font><font color="#800000">$D2</font><font color="#000080">/</font><font color="#800000">$E8</font><font color="#000080">);           </font><font color="#008000"><i>{SHR AL,CL}
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Trigger<font color="#000080">;
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+USES </b></font>CRT<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF DPMI}
+</i></font><font color="#FF0000"><b>TYPE </b></font>Treg<font color="#000080">=</font><font color="#FF0000"><b>RECORD  </b></font><font color="#008000"><i>{stuff for that dumb DPMI-server}
+           </i></font><font color="#FF0000"><b>CASE </b></font>BYTE <font color="#FF0000"><b>OF
+            </b></font><font color="#800000">0</font><font color="#000080">:(</font>LoLo<font color="#000080">,</font>LoHi<font color="#000080">,</font>HiLo<font color="#000080">,</font>HiHi<font color="#000080">:</font>BYTE<font color="#000080">);
+            </font><font color="#800000">1</font><font color="#000080">:(</font>Lo16<font color="#000080">,</font>Hi16<font color="#000080">:</font>WORD<font color="#000080">);
+          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font>Tregisters32<font color="#000080">=
+       </font><font color="#FF0000"><b>RECORD
+         </b></font>EDI<font color="#000080">,</font>ESI<font color="#000080">,</font>EBP<font color="#000080">,</font>junk32<font color="#000080">,</font>EBX<font color="#000080">,</font>EDX<font color="#000080">,</font>ECX<font color="#000080">,</font>EAX<font color="#000080">:</font>Treg<font color="#000080">;
+         </font>Flags32<font color="#000080">,</font>ES<font color="#000080">,</font>DS<font color="#000080">,</font>FS<font color="#000080">,</font>GS<font color="#000080">,</font>IP<font color="#000080">,</font>CS<font color="#000080">,</font>SP<font color="#000080">,</font>SS<font color="#000080">:</font>WORD
+       <font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>regs32<font color="#000080">:</font>Tregisters32<font color="#000080">;
+
+ </font><font color="#FF0000"><b>FUNCTION </b></font>EmulateInt<font color="#000080">(</font>IntNr<font color="#000080">:</font>BYTE<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>regs32<font color="#000080">:</font>Tregisters32<font color="#000080">):</font>BOOLEAN<font color="#000080">;
+ </font><font color="#FF0000"><b>ASSEMBLER</b></font><font color="#000080">; </font><font color="#008000"><i>{emulate real mode interrupt IntNr with registers regs32}
+ </i></font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">MOV AX,300h   </font><font color="#008000"><i>{emulate INT}
+   </i></font><font color="#FF00FF">XOR BH,BH     </font><font color="#008000"><i>{no A20 gate reset, please}
+   </i></font><font color="#FF00FF">MOV BL,IntNr  </font><font color="#008000"><i>{INT to emulate}
+   </i></font><font color="#FF00FF">XOR CX,CX     </font><font color="#008000"><i>{no parameter passing via PM stack}
+   </i></font><font color="#FF00FF">LES DI,regs32 </font><font color="#008000"><i>{pointer to register set}
+   </i></font><font color="#FF00FF">INT 31h       </font><font color="#008000"><i>{go for it}
+   </i></font><font color="#FF00FF">CMC           </font><font color="#008000"><i>{carry flag set if error, reflect this}
+   </i></font><font color="#FF00FF">MOV AX,0      </font><font color="#008000"><i>{as a BOOLEAN value: return TRUE if C=0}
+   </i></font><font color="#FF00FF">ADC AX,AX     </font><font color="#008000"><i>{and FALES otherwise}
+ </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>VAR </b></font>CycleTimeLo16<font color="#000080">,</font>CycleTimeHi16<font color="#000080">:</font>WORD<font color="#000080">;
+    </font>IsAT<font color="#000080">:</font>BYTE<font color="#000080">;
+
+</font><font color="#008000"><i>{$IFDEF DPMI}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>ATClockAvailable<font color="#000080">:</font>BOOLEAN<font color="#000080">; </font><font color="#008000"><i>{protected mode function}
+</i></font><font color="#FF0000"><b>BEGIN
+ </b></font>TimeFlag<font color="#000080">^:=</font><font color="#800000">0</font><font color="#000080">;             </font><font color="#008000"><i>{reset flag}
+ </i></font>FillChar<font color="#000080">(</font>regs32<font color="#000080">,</font>SizeOf<font color="#000080">(</font>regs32<font color="#000080">),</font><font color="#800000">0</font><font color="#000080">);
+ </font>regs32<font color="#000080">.</font>ECX<font color="#000080">.</font>Lo16<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+ </font>regs32<font color="#000080">.</font>EDX<font color="#000080">.</font>Lo16<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;       </font><font color="#008000"><i>{trigger flag after 1us}
+ </i></font>regs32<font color="#000080">.</font>ES      <font color="#000080">:=</font><font color="#800000">$40</font><font color="#000080">;     </font><font color="#008000"><i>{_segment_ address of Timeflag}
+ </i></font>regs32<font color="#000080">.</font>EBX<font color="#000080">.</font>Lo16<font color="#000080">:=</font>Ofs<font color="#000080">(</font>TimeFlag<font color="#000080">^); </font><font color="#008000"><i>{offset part = $F0}
+ </i></font>regs32<font color="#000080">.</font>EAX<font color="#000080">.</font>Lo16<font color="#000080">:=</font><font color="#800000">$8300</font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>IF NOT </b></font>EmulateInt<font color="#000080">(</font><font color="#800000">$15</font><font color="#000080">,</font>regs32<font color="#000080">)
+  </font><font color="#FF0000"><b>THEN </b></font>WRITELN<font color="#000080">(</font><font color="#800000">'Something went wrong in the INT-emulation!?'</font><font color="#000080">);
+
+ </font>Delay<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">); </font><font color="#008000"><i>{INT-emulation went ok, look for timer event:}
+           {wait 1000us, so event must have happened:}
+ {Flag now should have been set to $80:}
+ </i></font>ATClockAvailable<font color="#000080">:=</font>TimeFlag<font color="#000080">^=</font><font color="#800000">$80</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{$ELSE}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>ATClockAvailable<font color="#000080">:</font>BOOLEAN<font color="#000080">; </font><font color="#008000"><i>{real mode function}
+</i></font><font color="#FF0000"><b>BEGIN
+ </b></font>TimeFlag<font color="#000080">^:=</font><font color="#800000">0</font><font color="#000080">;             </font><font color="#008000"><i>{reset flag}
+ </i></font><font color="#FF0000"><b>IF </b></font>Test8086<font color="#000080">&lt;&gt;</font><font color="#800000">0  </font><font color="#008000"><i>{is it at least an AT?}
+  </i></font><font color="#FF0000"><b>THEN ASM </b></font><font color="#008000"><i>{yes, have a closer look:}
+         </i></font><font color="#FF00FF">STI
+         XOR CX,CX       </font><font color="#008000"><i>{trigger after 1us}
+         </i></font><font color="#FF00FF">MOV DX,1
+         LES BX,TimeFlag </font><font color="#008000"><i>{set Flag to $80 after this time}
+         </i></font><font color="#FF00FF">MOV AX,8300h    </font><font color="#008000"><i>{run asynchron to rest of program}
+         </i></font><font color="#FF00FF">INT 15h         </font><font color="#008000"><i>{go!}
+       </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+ </font>Delay<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);               </font><font color="#008000"><i>{wait a 1000us}
+ </i></font>ATClockAvailable<font color="#000080">:=</font>TimeFlag<font color="#000080">^=</font><font color="#800000">$80 </font><font color="#008000"><i>{Flag=$80, if it worked}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>SetCycleTime<font color="#000080">(</font>microseconds<font color="#000080">:</font>LONGINT<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>TimeFlag<font color="#000080">^:=</font><font color="#800000">$80</font><font color="#000080">;
+ </font>CycleTimeHi16<font color="#000080">:=</font>microseconds <font color="#FF0000"><b>SHR </b></font><font color="#800000">16</font><font color="#000080">;
+ </font>CycleTimeLo16<font color="#000080">:=</font>microseconds <font color="#FF0000"><b>AND </b></font><font color="#800000">$FFFF</font><font color="#000080">;
+ </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>microseconds<font color="#000080">&lt;&gt;</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font>ATClockAvailable
+  <font color="#FF0000"><b>THEN </b></font>IsAT<font color="#000080">:=</font><font color="#800000">0     </font><font color="#008000"><i>{ja, ZeitÅberwachung soll benutzt werden  }
+  </i></font><font color="#FF0000"><b>ELSE </b></font>IsAT<font color="#000080">:=</font><font color="#800000">$80   </font><font color="#008000"><i>{nein, keine mîglich oder nicht gewÅnscht }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Trigger<font color="#000080">;
+</font><font color="#008000"><i>{starts timer, which must have previously been set by SetCycleTime()}
+</i></font><font color="#FF0000"><b>BEGIN
+ IF </b></font>IsAT<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">; </font><font color="#008000"><i>{jmp out, if timer services unavailable}
+ </i></font>TimeFlag<font color="#000080">^:=</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#008000"><i>{$IFDEF DPMI}
+ </i></font>regs32<font color="#000080">.</font>ECX<font color="#000080">.</font>Lo16<font color="#000080">:=</font>CycleTimeHi16<font color="#000080">;
+ </font>regs32<font color="#000080">.</font>EDX<font color="#000080">.</font>Lo16<font color="#000080">:=</font>CycleTimeLo16<font color="#000080">;  </font><font color="#008000"><i>{trigger flag after t us}
+ </i></font>regs32<font color="#000080">.</font>ES      <font color="#000080">:=</font><font color="#800000">$40</font><font color="#000080">;            </font><font color="#008000"><i>{_segment_ address of Timeflag}
+ </i></font>regs32<font color="#000080">.</font>EBX<font color="#000080">.</font>Lo16<font color="#000080">:=</font>Ofs<font color="#000080">(</font>TimeFlag<font color="#000080">^); </font><font color="#008000"><i>{offset part = $F0}
+ </i></font>regs32<font color="#000080">.</font>EAX<font color="#000080">.</font>Lo16<font color="#000080">:=</font><font color="#800000">$8300</font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>IF NOT </b></font>EmulateInt<font color="#000080">(</font><font color="#800000">$15</font><font color="#000080">,</font>regs32<font color="#000080">)
+  </font><font color="#FF0000"><b>THEN </b></font>WRITELN<font color="#000080">(</font><font color="#800000">'Something went wrong in the INT-emulation!?'</font><font color="#000080">);
+</font><font color="#008000"><i>{$ELSE}
+</i></font><font color="#FF0000"><b>ASM
+  </b></font><font color="#FF00FF">MOV CX,CycleTimeHi16
+  MOV DX,CycleTimeLo16
+  LES BX,TimeFlag </font><font color="#008000"><i>{set Flag to $80 after this time}
+  </i></font><font color="#FF00FF">MOV AX,8300h    </font><font color="#008000"><i>{run asynchron to rest of program}
+  </i></font><font color="#FF00FF">INT 15h         </font><font color="#008000"><i>{go!}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ </b></font>TimeFlag<font color="#000080">:=</font>Ptr<font color="#000080">(</font>Seg0040<font color="#000080">,</font><font color="#800000">$F0</font><font color="#000080">); </font><font color="#008000"><i>{available byte in 1st MB}
+ </i></font>SetCycleTime<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">)
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font>____
+
+<font color="#FF0000"><b>PROGRAM </b></font>TestUnit_asytimer<font color="#000080">;
+</font><font color="#008000"><i>{Kai Rohrbacher, kai.rohrbacher@logo.ka.sub.org}
+</i></font><font color="#FF0000"><b>USES </b></font>asytimer<font color="#000080">;
+</font><font color="#FF0000"><b>CONST </b></font>wait<font color="#000080">:</font>LONGINT<font color="#000080">=</font><font color="#800000">5000000</font><font color="#000080">; </font><font color="#008000"><i>{trigger time in us -&gt; 5sec}
+
+ </i></font><font color="#FF0000"><b>PROCEDURE </b></font>SomeThing<font color="#000080">;
+ </font><font color="#FF0000"><b>CONST </b></font>s<font color="#000080">:</font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">=</font><font color="#800000">'\|/-'</font><font color="#000080">;
+       </font>help<font color="#000080">:</font>BYTE<font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>BEGIN </b></font>WRITE<font color="#000080">(</font>s<font color="#000080">[</font>help<font color="#000080">]+^</font>H<font color="#000080">); </font>help<font color="#000080">:=(</font>help<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#800000">3 </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+ IF </b></font>ATClockAvailable
+  <font color="#FF0000"><b>THEN </b></font>WRITELN<font color="#000080">(</font><font color="#800000">'INT15h-timer-routine available!'</font><font color="#000080">)
+  </font><font color="#FF0000"><b>ELSE </b></font>WRITELN<font color="#000080">(</font><font color="#800000">'INT15h-timer-routine doesn''t work!'</font><font color="#000080">);
+
+ </font>SetCycleTime<font color="#000080">(</font>wait<font color="#000080">);
+ </font>WRITELN<font color="#000080">(</font><font color="#800000">'Between the following 2 bells, there should be a delay of '</font><font color="#000080">,
+         </font>wait<font color="#000080">,</font><font color="#800000">' microseconds'</font><font color="#000080">);
+ </font>Trigger<font color="#000080">;    </font><font color="#008000"><i>{wait 5s = 5000ms}
+ </i></font>WRITE<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">);
+ </font><font color="#FF0000"><b>WHILE NOT </b></font>TimeOver <font color="#FF0000"><b>DO </b></font>SomeThing<font color="#000080">;
+ </font>WRITELN<font color="#000080">(</font><font color="#800000">#7'Done!'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TIMING SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0019.PAS">Original</a><b>]</b></p></body>
+</html>

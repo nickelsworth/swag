@@ -1,0 +1,213 @@
+<html>
+<head><title> "Heap Memory Integrity Checking" by DUNCAN MURDOCH</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0069.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: dmurdoch@mast.queensu.ca (Duncan Murdoch)
+&gt;
+&gt;Anyhow, what this program is doing (among other things) is reading data from
+&gt;an ASCII file when commanded to, one line at a time, and plotting it on the
+&gt;screen.  My problem is, when you return to the main menu, a bit of the RAM
+&gt;has been used.  If you call up a couple of plots in a row, eventually you
+&gt;run out of RAM and crash.  And I'm having a devil of a time trying to figure
+&gt;where the memory is going.
+
+This is one of the harder kinds of error to track down.  The way I do it is
+as follows:
+
+1.  Throughout program development, I use a debugging unit that warns me if
+anything is left on the heap when the program terminates. If there is, I
+immediately track it down and fix it.  The error is probably in the new
+part, and that helps to find it.
+
+2.  To prevent errors, I program in a very structured way:  every allocation
+has a matching de-allocation, preferable within a dozen or two lines of
+it so they're both on screen at once and I can see that they match.
+
+3.  If the preventive methods don't work, I have to track down the bugs. I
+have a routine that can print heap usage when I want.  I print all the heap
+that's used at the end of the program (should be none!), and try to
+recognize where the stuff came from.  If it's strings, it's easy, but if
+it's binary data, it's hard.  If necessary I trace through the program until
+I see one of those parts get allocated.
+
+I've attached my heap routine below, but it won't compile for you without a
+few utility routines from TurboPower's Object Professional library (and
+some others of mine).  Hopefully it'll still be useful for you and you can
+write the other parts yourself.
+
+Duncan Murdoch
+}
+</i></font><font color="#FF0000"><b>unit </b></font>heap<font color="#000080">;
+</font><font color="#008000"><i>{ This unit does integrity checks on the TP 6.0 heap }
+
+</i></font><font color="#FF0000"><b>interface
+
+uses </b></font>standard<font color="#000080">,</font>opinline<font color="#000080">,</font>opstring<font color="#000080">,</font>dump<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>heapokay<font color="#000080">:</font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>showfreelist<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">;</font>msg<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ Prints the free list }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>showheapused<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">;</font>msg<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ Prints the heap usage }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>PFreeRec <font color="#000080">= ^</font>TFreeRec<font color="#000080">;
+  </font>TFreeRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>next<font color="#000080">: </font>PFreeRec<font color="#000080">;
+    </font>size<font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>implementation
+
+function </b></font>Ordered<font color="#000080">(</font>p1<font color="#000080">,</font>p2<font color="#000080">:</font>pointer<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ Tests whether p1 &lt;= p2 }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>Ordered <font color="#000080">:= </font>PtrToLong<font color="#000080">(</font>p1<font color="#000080">) &lt;= </font>PtrToLong<font color="#000080">(</font>p2<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>Normed<font color="#000080">(</font>p<font color="#000080">:</font>pointer<font color="#000080">):</font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ Checks whether p is a normalized pointer }
+</i></font><font color="#FF0000"><b>begin
+  case </b></font>ofs<font color="#000080">(</font>p<font color="#000080">^) </font><font color="#FF0000"><b>of
+  </b></font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">$F </font><font color="#000080">: </font>Normed <font color="#000080">:= </font>true<font color="#000080">;
+  </font><font color="#FF0000"><b>else    </b></font>Normed <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>heapokay<font color="#000080">:</font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>error<font color="#000080">(</font>msg<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font>stderr<font color="#000080">,</font>msg<font color="#000080">);
+  </font>heapokay <font color="#000080">:= </font>false<font color="#000080">;
+  </font>halt<font color="#000080">(</font><font color="#800000">99</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>PFreeRec <font color="#000080">= ^</font>TFreeRec<font color="#000080">;
+  </font>TFreeRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>next<font color="#000080">: </font>PFreeRec<font color="#000080">;
+    </font>size<font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>FreeRec <font color="#000080">: </font>PFreeRec<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if not </b></font>Normed<font color="#000080">(</font>HeapOrg<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'HeapOrg bad!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if not </b></font>Normed<font color="#000080">(</font>FreeList<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'FreeList bad!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if not </b></font>Normed<font color="#000080">(</font>HeapPtr<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'HeapPtr bad!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if not </b></font>Normed<font color="#000080">(</font>HeapEnd<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'HeapEnd bad!'</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>if not </b></font>Ordered<font color="#000080">(</font>HeapOrg<font color="#000080">,</font>FreeList<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'HeapOrg &gt; FreeList'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if not </b></font>Ordered<font color="#000080">(</font>FreeList<font color="#000080">,</font>HeapPtr<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'FreeList &gt; HeapPtr'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if not </b></font>Ordered<font color="#000080">(</font>HeapPtr<font color="#000080">,</font>HeapEnd<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'HeapPtr &gt; HeapEnd'</font><font color="#000080">);
+
+  </font>FreeRec <font color="#000080">:= </font>FreeList<font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>PtrToLong<font color="#000080">(</font>FreeRec<font color="#000080">) &lt; </font>PtrToLong<font color="#000080">(</font>HeapPtr<font color="#000080">) </font><font color="#FF0000"><b>do   </b></font><font color="#008000"><i>{ Walk the free list }
+  </i></font><font color="#FF0000"><b>begin
+    if not </b></font>Normed<font color="#000080">(</font>FreeRec<font color="#000080">^.</font>next<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>error<font color="#000080">(</font><font color="#800000">'Bad next in free record '</font><font color="#000080">+</font>HexPtr<font color="#000080">(</font>FreeRec<font color="#000080">));
+    </font><font color="#FF0000"><b>if not </b></font>ordered<font color="#000080">(</font>FreeRec<font color="#000080">,</font>FreeRec<font color="#000080">^.</font>next<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>error<font color="#000080">(</font><font color="#800000">'self &gt; next in free record '</font><font color="#000080">+</font>HexPtr<font color="#000080">(</font>FreeRec<font color="#000080">));
+    </font><font color="#FF0000"><b>if not </b></font>ordered<font color="#000080">(</font>AddLongToPtr<font color="#000080">(</font>FreeRec<font color="#000080">,</font>PtrToLong<font color="#000080">(</font>FreeRec<font color="#000080">^.</font>size<font color="#000080">)),
+                   </font>FreeRec<font color="#000080">^.</font>next<font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>error<font color="#000080">(</font><font color="#800000">'Bad size in free record '</font><font color="#000080">+</font>HexPtr<font color="#000080">(</font>FreeRec<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>FreeRec <font color="#000080">= </font>FreeRec<font color="#000080">^.</font>Next <font color="#FF0000"><b>then
+      </b></font>error<font color="#000080">(</font><font color="#800000">'Self pointer in free record '</font><font color="#000080">+</font>HexPtr<font color="#000080">(</font>FreeRec<font color="#000080">));
+    </font>FreeRec <font color="#000080">:= </font>FreeRec<font color="#000080">^.</font>Next<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>FreeRec <font color="#000080">&lt;&gt; </font>HeapPtr <font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'Bad last free block'</font><font color="#000080">);
+
+  </font>heapokay <font color="#000080">:= </font>true<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>addtopointer<font color="#000080">(</font>p<font color="#000080">:</font>pointer<font color="#000080">;</font>incr<font color="#000080">:</font>longint<font color="#000080">):</font>pointer<font color="#000080">;
+</font><font color="#008000"><i>{  Adds increment to pointer, only normalizes if necessary }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>ofs<font color="#000080">(</font>p<font color="#000080">^) + </font>incr <font color="#000080">&gt; </font><font color="#800000">65535 </font><font color="#FF0000"><b>then
+    </b></font>addtopointer <font color="#000080">:= </font>AddLongToPtr<font color="#000080">(</font>p<font color="#000080">,</font>incr<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>addtopointer <font color="#000080">:= </font>AddWordToPtr<font color="#000080">(</font>p<font color="#000080">,</font>incr<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>showfreelist<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">;</font>msg<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ Prints the free list }
+</i></font><font color="#FF0000"><b>var
+  </b></font>FreePtr <font color="#000080">: </font>PFreerec<font color="#000080">;
+  </font>Free<font color="#000080">,</font>Total<font color="#000080">:</font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font>where<font color="#000080">,</font>msg<font color="#000080">);
+  </font>writeln<font color="#000080">(</font>where<font color="#000080">,</font><font color="#800000">'  Start      Stop    Size free'</font><font color="#000080">);
+
+  </font>FreePtr <font color="#000080">:= </font>PFreeRec<font color="#000080">(@</font>FreeList<font color="#000080">);
+  </font>Total <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>repeat
+    </b></font>Free<font color="#000080">:=</font>PtrToLong<font color="#000080">(</font>Freeptr<font color="#000080">^.</font>Size<font color="#000080">);
+    </font>inc<font color="#000080">(</font>Total<font color="#000080">,</font>Free<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>Free <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>writeln<font color="#000080">(</font>where<font color="#000080">, </font>HexPtr<font color="#000080">(</font>FreePtr<font color="#000080">), </font><font color="#800000">'  '</font><font color="#000080">, </font>HexPtr<font color="#000080">(</font>AddToPointer<font color="#000080">(</font>FreePtr<font color="#000080">,</font>Free<font color="#000080">)),
+                     </font><font color="#800000">'  '</font><font color="#000080">,</font>Free<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">);
+    </font>FreePtr <font color="#000080">:= </font>FreePtr<font color="#000080">^.</font>next<font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>FreePtr <font color="#000080">= </font>HeapPtr<font color="#000080">;
+  </font>Free <font color="#000080">:= </font>PtrDiff<font color="#000080">(</font>HeapEnd<font color="#000080">,</font>HeapPtr<font color="#000080">);
+  </font>inc<font color="#000080">(</font>Total<font color="#000080">,</font>Free<font color="#000080">);
+  </font>writeln<font color="#000080">(</font>where<font color="#000080">, </font>HexPtr<font color="#000080">(</font>HeapPtr<font color="#000080">), </font><font color="#800000">'  '</font><font color="#000080">, </font>HexPtr<font color="#000080">(</font>HeapEnd<font color="#000080">),
+                 </font><font color="#800000">'  '</font><font color="#000080">,</font>Free<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font>where<font color="#000080">, </font><font color="#800000">'Total'</font><font color="#000080">:</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">''</font><font color="#000080">:</font><font color="#800000">14</font><font color="#000080">, </font>Total<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>showheapused<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>where<font color="#000080">:</font>text<font color="#000080">;</font>msg<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#008000"><i>{ Prints what's been used on the heap }
+</i></font><font color="#FF0000"><b>var
+  </b></font>FreePtr <font color="#000080">: </font>PFreerec<font color="#000080">;
+  </font>UsedPtr <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>Used <font color="#000080">: </font>longint<font color="#000080">;
+  </font>Total<font color="#000080">: </font>longint<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font>where<font color="#000080">,</font>msg<font color="#000080">);
+  </font>writeln<font color="#000080">(</font>where<font color="#000080">,</font><font color="#800000">'  Start      Stop    Size used     Data'</font><font color="#000080">);
+
+  </font>FreePtr <font color="#000080">:= </font>FreeList<font color="#000080">;
+  </font>UsedPtr <font color="#000080">:= </font>HeapOrg<font color="#000080">;
+  </font>total <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>FreePtr <font color="#000080">&lt;&gt; </font>HeapPtr <font color="#FF0000"><b>do
+  begin
+    </b></font>Used <font color="#000080">:= </font>PtrDiff<font color="#000080">(</font>UsedPtr<font color="#000080">,</font>FreePtr<font color="#000080">);
+    </font>inc<font color="#000080">(</font>Total<font color="#000080">,</font>Used<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>used <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      </b></font>write<font color="#000080">(</font>where<font color="#000080">, </font>HexPtr<font color="#000080">(</font>UsedPtr<font color="#000080">), </font><font color="#800000">'  '</font><font color="#000080">, </font>HexPtr<font color="#000080">(</font>AddToPointer<font color="#000080">(</font>UsedPtr<font color="#000080">,</font>Used<font color="#000080">)),
+                     </font><font color="#800000">'  '</font><font color="#000080">,</font>Used<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">'   '</font><font color="#000080">);
+      </font>dumpbothshort<font color="#000080">(</font>where<font color="#000080">, </font>UsedPtr<font color="#000080">^, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">8</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font>UsedPtr <font color="#000080">:= </font>AddLongToPtr<font color="#000080">(</font>FreePtr<font color="#000080">,</font>PtrToLong<font color="#000080">(</font>FreePtr<font color="#000080">^.</font>size<font color="#000080">));
+    </font><font color="#FF0000"><b>if </b></font>FreePtr <font color="#000080">&lt;&gt; </font>HeapPtr <font color="#FF0000"><b>then
+      </b></font>FreePtr <font color="#000080">:= </font>FreePtr<font color="#000080">^.</font>next<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Used <font color="#000080">:= </font>PtrDiff<font color="#000080">(</font>HeapPtr<font color="#000080">,</font>UsedPtr<font color="#000080">);
+  </font>inc<font color="#000080">(</font>Total<font color="#000080">,</font>used<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>used <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>write<font color="#000080">(</font>where<font color="#000080">, </font>HexPtr<font color="#000080">(</font>UsedPtr<font color="#000080">), </font><font color="#800000">'  '</font><font color="#000080">, </font>HexPtr<font color="#000080">(</font>AddToPointer<font color="#000080">(</font>UsedPtr<font color="#000080">,</font>Used<font color="#000080">)),
+                     </font><font color="#800000">'  '</font><font color="#000080">,</font>Used<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">,</font><font color="#800000">'   '</font><font color="#000080">);
+    </font>dumpbothshort<font color="#000080">(</font>where<font color="#000080">, </font>UsedPtr<font color="#000080">^, </font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>writeln<font color="#000080">(</font>where<font color="#000080">, </font><font color="#800000">'Total'</font><font color="#000080">:</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">''</font><font color="#000080">:</font><font color="#800000">14</font><font color="#000080">, </font>Total<font color="#000080">:</font><font color="#800000">6</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0069.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,406 @@
+<html>
+<head><title> "Smooth Text Scroll" by DAVID DAHL</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SCROLL SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0012.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Does anybody know if it is possible to accomplish a smooth-text scroller
+&gt; (like in the old c64 dayz) in text mode? If so, please let me know and
+
+&gt; Well, it's impossible, you'll have to switch to a graphic mode.
+
+        No, it's possible in text mode... it's just a pain in the
+arse.  I know of two ways.  The first is to use an alternate
+character set (the EGA can have 2 on screen at once, the VGA can
+have 4).  You use one character set as normal text, and use the
+other as a pseudo-graphics window.  Put the text you need to
+scroll in the window and move (copy) it a pixel at a time.  The
+second way is to use the 8253 timer to time the scanline.  When
+the scanline gets to the portion of the screen you want, turn off
+v-retrace, set v-retrace on the next scan line, and set the
+horizontal pel pan to the value you need for your smooth pan.
+When the card gets to the line that the v-retrace would occur, it
+resets the pan but doesn't retrace because you turned it off.
+After this, reset the registers you changed back to their default
+values so the card builds the screen correctly.  This is done on
+EVERY screen build.  Needless to say, the pseudo-graphics window
+version is easier so that's the one I used to program the example
+that follows.
+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>SmoothTextScrollExample1<font color="#000080">;
+
+</font><font color="#008000"><i>{==============================================
+
+       Smooth Scroll In Text Mode Example
+           Programmed by David Dahl
+                   12/21/93
+   This program and source are PUBLIC DOMAIN
+
+ ----------------------------------------------
+
+   This example uses a second font to scroll
+   the text.  The font definition is changed
+   to make the text scroll.  This program
+   requires VGA.
+
+ ==============================================}
+
+</i></font><font color="#FF0000"><b>Uses  </b></font>CRT<font color="#000080">;
+
+</font><font color="#FF0000"><b>Type  </b></font>FontDefType <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">31</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var   </b></font>ScrollText <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+      </font>FontDef    <font color="#000080">: </font>FontDefType<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetCharWidthTo8<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+   </b></font><font color="#008000"><i>{ Change To 640 Horz Res }
+   </i></font><font color="#FF00FF">MOV DX, $3CC
+   IN  AL, DX
+   AND AL, Not(4 OR 8)
+   MOV DX, $3C2
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Turn Off Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 0
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Reset Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 3
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Switch To 8 Pixel Wide Fonts }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 1
+   OUT DX, AL
+   MOV DX, $3C5
+   IN  AL, DX
+   OR  AL, 1
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Turn Off Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 0
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Reset Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 3
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Center Screen }
+   </i></font><font color="#FF00FF">MOV DX, $3DA
+   IN  AL, DX
+   MOV DX, $3C0
+   MOV AL, $13 OR 32
+   OUT DX, AL
+   MOV AL, 0
+   OUT DX, AL
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>WriteScrollTextCharacters<font color="#000080">(</font>Row <font color="#000080">: </font>Byte<font color="#000080">);
+</font><font color="#FF0000"><b>Var </b></font>Counter <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font><font color="#008000"><i>{ Set Fonts 0 &amp; 1 }
+     </i></font><font color="#FF0000"><b>ASM
+        </b></font><font color="#FF00FF">MOV BL, 4
+        MOV AX, $1103
+        INT $10
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+     </font><font color="#008000"><i>{ Write Characters }
+     </i></font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">79 </font><font color="#FF0000"><b>do
+     Begin
+          </b></font><font color="#008000"><i>{ Set Characters }
+
+          </i></font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:(</font><font color="#800000">80</font><font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)*</font>Row<font color="#000080">+(</font>Counter<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)]   := </font>Counter<font color="#000080">;
+          </font><font color="#008000"><i>{ Set Attribute To Secondary Font }
+          </i></font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:(</font><font color="#800000">80</font><font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)*</font>Row<font color="#000080">+(</font>Counter<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">] :=
+             </font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:(</font><font color="#800000">80</font><font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)*</font>Row<font color="#000080">+(</font>Counter<font color="#000080">*</font><font color="#800000">2</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>OR </b></font><font color="#800000">8</font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>FlushKeyBoardBuffer<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>Key <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     While </b></font>KeyPressed <font color="#FF0000"><b>do
+           </b></font>Key <font color="#000080">:= </font>ReadKey<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetAccessToFontMemory<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+   </b></font><font color="#008000"><i>{ Turn Off Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 1
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Reset Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 3
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Change From Odd/Even Addressing to Linear }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 4
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 7
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Switch Write Access To Plane 2 }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 2
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 4
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Set Read Map Reg To Plane 2 }
+   </i></font><font color="#FF00FF">MOV DX, $3CE
+   MOV AL, 4
+   OUT DX, AL
+   MOV DX, $3CF
+   MOV AL, 2
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Set Graphics Mode Reg }
+   </i></font><font color="#FF00FF">MOV DX, $3CE
+   MOV AL, 5
+   OUT DX, AL
+   MOV DX, $3CF
+   MOV AL, 0
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Set Misc. Reg }
+   </i></font><font color="#FF00FF">MOV DX, $3CE
+   MOV AL, 6
+   OUT DX, AL
+   MOV DX, $3CF
+   MOV AL, 12
+   OUT DX, AL
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>SetAccessToTextMemory<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+   </b></font><font color="#008000"><i>{ Turn Off Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 1
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Reset Sequence Controller }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 0
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 3
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Change To Odd/Even Addressing }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 4
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 3
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Switch Write Access }
+   </i></font><font color="#FF00FF">MOV DX, $3C4
+   MOV AL, 2
+   OUT DX, AL
+   MOV DX, $3C5
+   MOV AL, 3  </font><font color="#008000"><i>{?}
+   </i></font><font color="#FF00FF">OUT DX, AL
+
+   </font><font color="#008000"><i>{ Set Read Map Reg }
+   </i></font><font color="#FF00FF">MOV DX, $3CE
+   MOV AL, 4
+   OUT DX, AL
+   MOV DX, $3CF
+   MOV AL, 0
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Set Graphics Mode Reg }
+   </i></font><font color="#FF00FF">MOV DX, $3CE
+   MOV AL, 5
+   OUT DX, AL
+   MOV DX, $3CF
+   MOV AL, $10
+   OUT DX, AL
+
+   </font><font color="#008000"><i>{ Set Misc. Reg }
+   </i></font><font color="#FF00FF">MOV DX, $3CE
+   MOV AL, 6
+   OUT DX, AL
+   MOV DX, $3CF
+   MOV AL, 14
+   OUT DX, AL
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>MakeFontDefTable<font color="#000080">;
+</font><font color="#FF0000"><b>Var  </b></font>CounterX<font color="#000080">,
+     </font>CounterY  <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>SetAccessToFontMemory<font color="#000080">;
+
+     </font><font color="#FF0000"><b>For </b></font>CounterY <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do
+         For </b></font>CounterX <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">31 </font><font color="#FF0000"><b>do
+             </b></font>FontDef<font color="#000080">[</font>CounterY<font color="#000080">, </font>CounterX<font color="#000080">] :=
+                 </font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:(</font>CounterY <font color="#000080">* </font><font color="#800000">32</font><font color="#000080">)+</font>CounterX<font color="#000080">];
+
+     </font>SetAccessToTextMemory<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ClearSecondFontMemory<font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>Counter <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+     </b></font>SetAccessToFontMemory<font color="#000080">;
+
+     </font><font color="#FF0000"><b>For </b></font>Counter <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">32 </font><font color="#000080">* </font><font color="#800000">256 </font><font color="#FF0000"><b>do
+         </b></font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">$4000 </font><font color="#000080">+ </font>Counter<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+
+     </font>SetAccessToTextMemory<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>ScrollMessage<font color="#000080">;
+</font><font color="#FF0000"><b>Const </b></font>CharCol  <font color="#000080">: </font>Integer <font color="#000080">= </font><font color="#800000">8</font><font color="#000080">;
+      </font>Counter  <font color="#000080">: </font>Byte <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+      </font>COUNTERY <font color="#000080">: </font>Byte <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+      </font>PWRTbl   <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#000080">= (</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">8</font><font color="#000080">,</font><font color="#800000">16</font><font color="#000080">,</font><font color="#800000">32</font><font color="#000080">,</font><font color="#800000">64</font><font color="#000080">,</font><font color="#800000">128</font><font color="#000080">);
+</font><font color="#FF0000"><b>Begin
+     </b></font>SetAccessToFontMemory<font color="#000080">;
+
+     </font><font color="#FF0000"><b>ASM
+        </b></font><font color="#008000"><i>{ Wait For Retrace }
+        </i></font><font color="#FF00FF">MOV DX, $3DA
+        @RT:
+         IN   AL, DX
+         TEST AL, 8
+        JZ @RT
+
+        </font><font color="#008000"><i>{ Scroll Text One Pixel To The Left }
+        </i></font><font color="#FF00FF">MOV AX, $B800 + ($4000 / 16)
+        MOV ES, AX
+        MOV CX, 32
+        @Row:
+         MOV DI, (79 * 32) - 1
+         ADD DI, CX
+         SHL byte ptr ES:[DI], 1
+         PUSHF
+         SUB DI, 32
+         POPF
+         PUSH CX
+         MOV CX, 79
+         @Chrs:
+          RCL byte ptr ES:[DI], 1
+          PUSHF
+          SUB DI, 32
+          POPF
+         Loop @Chrs
+         POP CX
+        Loop @Row
+     </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+     </font><font color="#FF0000"><b>If </b></font>CharCol <font color="#000080">&lt; </font><font color="#800000">0
+     </font><font color="#FF0000"><b>Then
+
+     Begin
+          </b></font>CharCol <font color="#000080">:= </font><font color="#800000">7</font><font color="#000080">;
+          </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+     </font><font color="#FF0000"><b>End
+     Else
+         </b></font>Dec<font color="#000080">(</font>CharCol<font color="#000080">);
+
+     </font><font color="#FF0000"><b>If </b></font>Counter <font color="#000080">&gt; </font>Length<font color="#000080">(</font>ScrollText<font color="#000080">)
+     </font><font color="#FF0000"><b>Then
+         </b></font>Counter <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+
+     </font><font color="#008000"><i>{ Write New Column Of Pixels }
+     </i></font><font color="#FF0000"><b>For </b></font>CounterY <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">31 </font><font color="#FF0000"><b>do
+     </b></font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">$4000 </font><font color="#000080">+ (</font><font color="#800000">79 </font><font color="#000080">* </font><font color="#800000">32</font><font color="#000080">) + </font>CounterY<font color="#000080">] :=
+         </font>MEM<font color="#000080">[</font><font color="#800000">$B800</font><font color="#000080">:</font><font color="#800000">$4000 </font><font color="#000080">+ (</font><font color="#800000">79 </font><font color="#000080">* </font><font color="#800000">32</font><font color="#000080">) + </font>CounterY<font color="#000080">] </font><font color="#FF0000"><b>OR
+          </b></font><font color="#000080">((</font>FontDef<font color="#000080">[</font>Ord<font color="#000080">(</font>ScrollText<font color="#000080">[</font>Counter<font color="#000080">]), </font>CounterY<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font>PwrTbl<font color="#000080">[</font>CharCol<font color="#000080">])
+            </font><font color="#FF0000"><b>SHR </b></font>CharCol<font color="#000080">);
+
+     </font>SetAccessToTextMemory<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>TurnCursorOff<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">MOV DX, $3D4
+   MOV AL, $0A
+   OUT DX, AL
+   MOV DX, $3D5
+   IN  AL, DX
+   OR  AL, 32
+   OUT DX, AL
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>TurnCursorOn<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>ASM
+   </b></font><font color="#FF00FF">MOV DX, $3D4
+   MOV AL, $0A
+   OUT DX, AL
+   MOV DX, $3D5
+   IN  AL, DX
+   AND AL, Not(32)
+   OUT DX, AL
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Begin
+     </b></font>TextMode <font color="#000080">(</font>C80<font color="#000080">);
+     </font>TurnCursorOff<font color="#000080">;
+     </font>SetCharWidthTo8<font color="#000080">;
+     </font>MakeFontDefTable<font color="#000080">;
+     </font>ClearSecondFontMemory<font color="#000080">;
+     </font>TextColor<font color="#000080">(</font>Red<font color="#000080">);
+     </font>ClrScr<font color="#000080">;
+
+     </font>ScrollText <font color="#000080">:= </font><font color="#800000">'This program is one example of how a smooth '</font><font color="#000080">+
+                   </font><font color="#800000">'scroll can be done in text mode.            '</font><font color="#000080">;
+
+     </font>WriteScrollTextCharacters<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);
+
+     </font>TextColor<font color="#000080">(</font>Blue<font color="#000080">);
+     </font>GoToXY <font color="#000080">(</font><font color="#800000">26</font><font color="#000080">,</font><font color="#800000">10</font><font color="#000080">);
+     </font>Write  <font color="#000080">(</font><font color="#800000">'Text Mode Smooth Scroll Example'</font><font color="#000080">);
+     </font>GoToXY <font color="#000080">(</font><font color="#800000">34</font><font color="#000080">,</font><font color="#800000">11</font><font color="#000080">);
+     </font>Write  <font color="#000080">(</font><font color="#800000">'By David Dahl'</font><font color="#000080">);
+
+     </font>FlushKeyBoardBuffer<font color="#000080">;
+
+     </font><font color="#FF0000"><b>Repeat
+           </b></font>ScrollMessage<font color="#000080">;
+     </font><font color="#FF0000"><b>Until </b></font>Keypressed<font color="#000080">;
+
+     </font>FlushKeyboardBuffer<font color="#000080">;
+
+     </font>TextMode <font color="#000080">(</font>C80<font color="#000080">);
+     </font>TurnCursorOn<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SCROLL SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0012.PAS">Original</a><b>]</b></p></body>
+</html>

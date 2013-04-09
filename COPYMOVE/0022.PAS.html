@@ -1,0 +1,135 @@
+<html>
+<head><title> "Fast File Copy" by MARK OUELLET</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COPYMOVE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0022.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt;   I need a QUICK way to Copy/Move files!  (This must be able to
+&gt;   work over Drives)
+&gt;   the :
+&gt;   Repeat
+&gt;     BlockRead(...);
+&gt;     BlockWrite(...);
+&gt;   UNTIL ();
+&gt;   Is To slow!  How does MS-DOS do it?
+
+Ok here is an example based on what I told you.
+
+THIS IS TESTED CODE. CURRENTLY SET TO COMPILE IN PROTECTED MODE UNDER
+BORLAND PASCAL 7.X.  ALLMOST NO ERROR CHECKING IS DONE. IF THE PROGRAM
+CAN'T AT LEAST ALLOCATE ONE BUFFER IT WILL CRASH AS NO CHECK IS MADE TO
+SEE IF WE HAVE BUFFERS OR NOT
+
+First a few numbers.
+    The following code managed to copy a &gt; 10 MEG file at a rate of 640K/second
+or about 300 clock ticks. That was acheived on a &gt;10 Meg file, in a DOS BOX
+under OS/2. Program reported 6.2 Meg of heap buffer used. That performance was
+also across drives that reside on the same hard-disk ie: different partitions
+of the same physical hard-disk which means head movement was unavoidable.
+
+    The target drive had 40Meg free. The same transfer from that drive to one
+that had only 13 Meg free was 275K /Second which is still pretty good.
+
+Here is the code:
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>FastCopy<font color="#000080">;
+</font><font color="#008000"><i>{$A+,B-,D-,E+,F+,G+,I-,L-,N+,P-,Q-,R-,S-,T-,V-,X-,Y-}
+{$M 16384,$10000}
+
+ </i></font><font color="#FF0000"><b>const
+  </b></font>MaxBufCnt <font color="#000080">= </font><font color="#800000">1000</font><font color="#000080">;
+ </font><font color="#FF0000"><b>type
+  </b></font>BufPtr <font color="#000080">= ^</font>BufRec<font color="#000080">;
+  </font>BufRec <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">8190</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+
+
+ </font><font color="#FF0000"><b>var
+  </b></font>InFile<font color="#000080">, </font>OutFile <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">; </font><font color="#008000"><i>{IF is In File, OF is OutFile}
+  </i></font>Buffer <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxBufCnt<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>BufPtr<font color="#000080">;
+  </font>BufLen <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxBufCnt<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;
+  </font>BufSiz <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>MaxBufCnt<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;
+  </font>BufCnt <font color="#000080">: </font>byte<font color="#000080">;
+  </font>Total <font color="#000080">: </font>longint<font color="#000080">;
+  </font>SizeofFile <font color="#000080">: </font>longint<font color="#000080">;
+  </font>IndexR<font color="#000080">,</font>IndexW <font color="#000080">: </font>byte<font color="#000080">;
+  </font>BytesWritten <font color="#000080">: </font>word<font color="#000080">;
+  </font>BR<font color="#000080">, </font>BW <font color="#000080">: </font>longint<font color="#000080">;
+  </font>Timer1<font color="#000080">,</font>Timer2 <font color="#000080">: </font>longint<font color="#000080">;
+  </font>Ticks <font color="#000080">: ^</font>Longint<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+ </b></font>Ticks <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg0040<font color="#000080">, </font><font color="#800000">$006c</font><font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font>paramcount <font color="#000080">&lt; </font><font color="#800000">2 </font><font color="#FF0000"><b>then begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'Usage:'</font><font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">), </font><font color="#800000">' &lt;Infile&gt; &lt;Outfile&gt;'</font><font color="#000080">);
+  </font>halt<font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>assign<font color="#000080">(</font>InFile<font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+ </font>assign<font color="#000080">(</font>OutFile<font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));
+ </font>writeln<font color="#000080">;
+ </font>writeln<font color="#000080">(</font><font color="#800000">'Copying '</font><font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">), </font><font color="#800000">' to '</font><font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));
+ </font>reset<font color="#000080">(</font>InFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+ </font>rewrite<font color="#000080">(</font>OutFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+ </font>BufCnt <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font>SizeOfFile <font color="#000080">:= </font>filesize<font color="#000080">(</font>InFile<font color="#000080">);
+ </font>Total <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>MaxAvail<font color="#000080">&gt;</font><font color="#800000">8192</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>BufCnt<font color="#000080">&lt;</font>MaxBufCnt<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Total<font color="#000080">&lt;</font>SizeOfFile<font color="#000080">) </font><font color="#FF0000"><b>do begin
+  </b></font>Inc<font color="#000080">(</font>BufCnt<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>MaxAvail<font color="#000080">&lt;</font><font color="#800000">32768 </font><font color="#FF0000"><b>then
+   </b></font>BufSiz<font color="#000080">[</font>BufCnt<font color="#000080">] := </font>MaxAvail
+  <font color="#FF0000"><b>else
+   </b></font>BufSiz<font color="#000080">[</font>BufCnt<font color="#000080">] := </font><font color="#800000">32768</font><font color="#000080">;
+  </font>getmem<font color="#000080">(</font>Buffer<font color="#000080">[</font>BufCnt<font color="#000080">], </font>BufSiz<font color="#000080">[</font>BufCnt<font color="#000080">]);
+  </font>BufLen<font color="#000080">[</font>BufCnt<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+  </font>Total <font color="#000080">:= </font>Total <font color="#000080">+ </font>BufSiz<font color="#000080">[</font>BufCnt<font color="#000080">];
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>writeln<font color="#000080">(</font>Total<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' Bytes of buffer used'</font><font color="#000080">);
+ </font>BW <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font>BR <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+ </font>Timer1 <font color="#000080">:= </font>Ticks<font color="#000080">^;
+ </font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>InFile<font color="#000080">) </font><font color="#FF0000"><b>do begin
+  </b></font>IndexR <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font><font color="#FF0000"><b>not </b></font>eof<font color="#000080">(</font>InFile<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>IndexR <font color="#000080">&lt; </font>BufCnt<font color="#000080">) </font><font color="#FF0000"><b>do begin
+   </b></font>Inc<font color="#000080">(</font>IndexR<font color="#000080">);
+   </font>blockread<font color="#000080">(</font>InFile<font color="#000080">, </font>Buffer<font color="#000080">[</font>IndexR<font color="#000080">]^, </font>BufSiz<font color="#000080">[</font>IndexR<font color="#000080">], </font>BufLen<font color="#000080">[</font>IndexR<font color="#000080">]);
+   </font>BR <font color="#000080">:= </font>BR <font color="#000080">+ </font>BufLen<font color="#000080">[</font>IndexR<font color="#000080">];
+   </font>write<font color="#000080">(</font><font color="#800000">#13</font><font color="#000080">, </font>BR<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' bytes read, '</font><font color="#000080">, </font>BW<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' bytes written.'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>IndexW <font color="#000080">:= </font>IndexR<font color="#000080">+</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>BufCnt <font color="#FF0000"><b>do
+   </b></font>BufLen<font color="#000080">[</font>IndexW<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>IndexW <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>IndexR <font color="#FF0000"><b>do begin
+   </b></font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">, </font>Buffer<font color="#000080">[</font>IndexW<font color="#000080">]^, </font>BufLen<font color="#000080">[</font>IndexW<font color="#000080">], </font>BytesWritten<font color="#000080">);
+   </font>BW <font color="#000080">:= </font>BW <font color="#000080">+ </font>BytesWritten<font color="#000080">;
+   </font>write<font color="#000080">(</font><font color="#800000">#13</font><font color="#000080">, </font>BR<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' bytes read, '</font><font color="#000080">, </font>BW<font color="#000080">:</font><font color="#800000">10</font><font color="#000080">, </font><font color="#800000">' bytes written.'</font><font color="#000080">);
+   </font><font color="#FF0000"><b>if </b></font>BytesWritten <font color="#000080">&lt;&gt; </font>BufLen<font color="#000080">[</font>IndexW<font color="#000080">] </font><font color="#FF0000"><b>then begin
+    </b></font>writeln<font color="#000080">;
+    </font>writeln<font color="#000080">(</font><font color="#800000">'Error writing to file... Disk might be full'</font><font color="#000080">);
+    </font>Halt<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font>Close<font color="#000080">(</font>InFile<font color="#000080">);
+ </font>Close<font color="#000080">(</font>OutFile<font color="#000080">);
+ </font>Timer2 <font color="#000080">:= </font>ticks<font color="#000080">^;
+ </font>writeln<font color="#000080">;
+ </font>writeln<font color="#000080">(</font><font color="#800000">'Copy took '</font><font color="#000080">, </font>Timer2<font color="#000080">-</font>Timer1<font color="#000080">, </font><font color="#800000">' timer ticks to complete'</font><font color="#000080">);
+ </font>writeln<font color="#000080">(</font><font color="#800000">'Throughput is '</font><font color="#000080">, </font>SizeOfFile <font color="#FF0000"><b>div </b></font><font color="#000080">(</font>Timer2<font color="#000080">-</font>Timer1<font color="#000080">), </font><font color="#800000">' bytes/tick'</font><font color="#000080">);
+ </font>writeln<font color="#000080">(</font><font color="#800000">'or if you prefer '</font><font color="#000080">, (</font>SizeOfFile <font color="#FF0000"><b>div </b></font><font color="#000080">(</font>Timer2<font color="#000080">-</font>Timer1<font color="#000080">)) * </font><font color="#800000">18.2</font><font color="#000080">:</font><font color="#800000">8</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">'
+</font>bytes<font color="#000080">/</font>second<font color="#800000">'); for IndexR := 1 to BufCnt do
+  </font>freemem<font color="#000080">(</font>Buffer<font color="#000080">[</font>IndexR<font color="#000080">], </font>BufSiz<font color="#000080">[</font>IndexR<font color="#000080">]);
+ </font>writeln<font color="#000080">;
+ </font>writeln<font color="#000080">(</font><font color="#800000">'Copy complete'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font><font color="#008000"><i>{
+    Compile to PROTECTED MODE or modify accordingly. No need to reduce the Max
+number of buffers. The program initializes it's buffers at the start to take
+all available HEAP. The more DPMI memory the happyer it gets!!!
+
+    Again the logic here is to load as much of the file as possible so that you
+don't keep moving the heads from the file you are copying to the copy you are
+writing.
+    Note that the last few buffers won't be perfect multiples of 1024 but that
+problem is overcompensated by the fact we are reading so many 32K buffers.
+
+Give it a try and let me know what you think.
+}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COPYMOVE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0022.PAS">Original</a><b>]</b></p></body>
+</html>

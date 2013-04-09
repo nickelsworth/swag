@@ -1,0 +1,420 @@
+<html>
+<head><title> "Another CDRom Interface" by C.J. RANKIN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0113.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{==========================================================================}
+{ CDDrive - an interface to the CD-ROM device driver.                      }
+{--------------------------------------------------------------------------}
+{ Copyright (c) 1996 C.J.Rankin   CJRankin@VossNet.Co.UK                   }
+{                                                                          }
+{ This unit provides an elementary interface for controlling a CD-ROM      }
+{ in TP6+. It has been left open-ended so that, if you wish, it can be     }
+{ extended to provide a more comprehensive range of CD-ROM functions.      }
+{                                                                          }
+{ Note that in its current form, it will *only* recognise the first CD-ROM }
+{ in the system- not a problem for most of us.                             }
+{                                                                          }
+{--------------------------------------------------------------------------}
+{                                                                          }
+{ Note: Windows 95 uses a protected mode CD-ROM driver and interface       }
+{       (MSCDEX v2.95). As a result, the standard way of requesting IOCTL  }
+{       functions of opening a file handle to the driver using Assign()    }
+{       and Reset() and then calling DOS services AX=$4402/$4403 DOES NOT  }
+{       WORK: DOS cannot open the CD-ROM driver in the DOS driver-list and }
+{       so opens a new file on the hard disc instead.                      }
+{                                                                          }
+{==========================================================================}
+{$A-,B-,D+,F-,G+,I-,L+,O+,R-,S-,V-,X+}
+</i></font><font color="#FF0000"><b>unit </b></font>CDDrive<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+const
+  </b></font>ex_CDROMUnknownUnit       <font color="#000080">=  </font><font color="#800000">1</font><font color="#000080">;
+  </font>ex_CDROMUnready           <font color="#000080">=  </font><font color="#800000">2</font><font color="#000080">;
+  </font>ex_CDROMUnknownCommand    <font color="#000080">=  </font><font color="#800000">3</font><font color="#000080">;
+  </font>ex_CDROMCRCError          <font color="#000080">=  </font><font color="#800000">4</font><font color="#000080">;
+  </font>ex_CDROMBadReqStrucLen    <font color="#000080">=  </font><font color="#800000">5</font><font color="#000080">;
+  </font>ex_CDROMBadSeek           <font color="#000080">=  </font><font color="#800000">6</font><font color="#000080">;
+  </font>ex_CDROMUnknownMedia      <font color="#000080">=  </font><font color="#800000">7</font><font color="#000080">;
+  </font>ex_CDROMUnknownSector     <font color="#000080">=  </font><font color="#800000">8</font><font color="#000080">;
+  </font>ex_CDROMReadError         <font color="#000080">= </font><font color="#800000">11</font><font color="#000080">;
+  </font>ex_CDROMGeneralFailure    <font color="#000080">= </font><font color="#800000">12</font><font color="#000080">;
+  </font>ex_CDROMMediaUnavailable  <font color="#000080">= </font><font color="#800000">14</font><font color="#000080">;
+  </font>ex_CDROMInvalidDiscChange <font color="#000080">= </font><font color="#800000">15</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>MaxCDROM <font color="#000080">= </font><font color="#800000">26</font><font color="#000080">;
+</font><font color="#FF0000"><b>type
+  </b></font>TCDROMIndex  <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">..</font>MaxCDROM<font color="#000080">;
+  </font>TCDROMLetter <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">..</font>MaxCDROM<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+  </font>TCDROMNumber <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">..</font>MaxCDROM<font color="#000080">;
+
+</font><font color="#008000"><i>{                                                             }
+{ These are the explicit CD-ROM services provided by the unit }
+{                                                             }
+</i></font><font color="#FF0000"><b>procedure </b></font>Eject<font color="#000080">;      </font><font color="#008000"><i>(* Eject CD-ROM                                      *)
+</i></font><font color="#FF0000"><b>procedure </b></font>Close<font color="#000080">;      </font><font color="#008000"><i>(* Close CD-ROM tray                                 *)
+</i></font><font color="#FF0000"><b>procedure </b></font>Lock<font color="#000080">;       </font><font color="#008000"><i>(* Lock CD-ROM drive                                 *)
+</i></font><font color="#FF0000"><b>procedure </b></font>Unlock<font color="#000080">;     </font><font color="#008000"><i>(* Unlock CD-ROM drive                               *)
+</i></font><font color="#FF0000"><b>procedure </b></font>Reset<font color="#000080">;      </font><font color="#008000"><i>(* Reinitialise CD-ROM: i.e. as if disc was changed. *)
+</i></font><font color="#FF0000"><b>function </b></font>GetNumberOfCDROMDrives<font color="#000080">: </font>TCDROMNumber<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>GetCDROMVersion<font color="#000080">: </font>word<font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                       }
+{ Templates for CD-ROM service requests. To implement another device    }
+{ or IOCTL request, create a descendant object with the requisite extra }
+{ fields and pass it to the appropriate requestor function.             }
+{                                                                       }
+</i></font><font color="#FF0000"><b>type
+  </b></font>PDeviceRequest <font color="#000080">= ^</font>TDeviceRequest<font color="#000080">;
+  </font>TDeviceRequest <font color="#000080">= </font><font color="#FF0000"><b>object
+                     </b></font>HeaderLength<font color="#000080">: </font>byte<font color="#000080">;
+                     </font>SubUnit<font color="#000080">:      </font>byte<font color="#000080">;
+                     </font>CommandCode<font color="#000080">:  </font>byte<font color="#000080">;
+                     </font>Status<font color="#000080">:       </font>word<font color="#000080">;
+                     </font>Reserved<font color="#000080">:     </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>PIOCTLRequest <font color="#000080">= ^</font>TIOCTLRequest<font color="#000080">;
+  </font>TIOCTLRequest <font color="#000080">= </font><font color="#FF0000"><b>object
+                    </b></font>SubFn<font color="#000080">: </font>byte<font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>TRequestFunc <font color="#000080">= </font><font color="#FF0000"><b>function</b></font><font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TDeviceRequest<font color="#000080">): </font>word<font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                          }
+{ This constitutes the interface to the driver, enabling further functions }
+{ to be added if desired. The return value is the driver's Status word:    }
+{ Status Word:   Bit 15: Error flag. If set then Bits 0-7 are error code   }
+{                Bit  8: Request done flag.                                }
+{                Bit  9: Device busy flag.                                 }
+{                                                                          }
+</i></font><font color="#FF0000"><b>function </b></font>DriverRequest_v210<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TDeviceRequest<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>DriverBasicRequest<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TDeviceRequest<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>IOCTLInput<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">; </font>ReqLen<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>IOCTLOutput<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">; </font>ReqLen<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                          }
+{ Errors are returned in this variable: the values are explained above ... }
+{                                                                          }
+</i></font><font color="#FF0000"><b>var </b></font>CDROMError<font color="#000080">: </font>byte<font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                          }
+{ DriverRequest_v210 enables CD-ROM driver requests for MSCDEX v2.10+. For }
+{ earlier versions of MSCDEX, DriverBasicRequest is used instead. The      }
+{ appropriate function is assigned to the following procedural variable.   }
+{                                                                          }
+</i></font><font color="#FF0000"><b>var </b></font>DriverRequest<font color="#000080">: </font>TRequestFunc<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+uses </b></font>DOS<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>TDrvName <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">8</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+
+  </font>PCDROMDriver <font color="#000080">= ^</font>TCDROMDriver<font color="#000080">;
+  </font>TCDROMDriver <font color="#000080">= </font><font color="#FF0000"><b>record
+                   </b></font>NextDriver<font color="#000080">:         </font>PCDROMDriver<font color="#000080">;
+                   </font>DeviceAttr<font color="#000080">:         </font>word<font color="#000080">;
+                   </font>StrategyEntryPoint<font color="#000080">: </font>word<font color="#000080">;
+                   </font>INTEntryPoint<font color="#000080">:      </font>word<font color="#000080">;
+                   </font>DeviceName<font color="#000080">:         </font>TDrvName<font color="#000080">;
+                   </font>Reserved<font color="#000080">:           </font>word<font color="#000080">;
+                   </font>DriveLetter<font color="#000080">:        </font>TCDROMNumber<font color="#000080">;
+                   </font>Units<font color="#000080">:              </font>byte
+                 <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>TCDROMDriveEntry <font color="#000080">= </font><font color="#FF0000"><b>record
+                       </b></font>SubUnit<font color="#000080">:     </font>byte<font color="#000080">;
+                       </font>CDROMDriver<font color="#000080">: </font>PCDROMDriver
+                     <font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>PDeviceIOCTLRequest <font color="#000080">= ^</font>TDeviceIOCTLRequest<font color="#000080">;
+  </font>TDeviceIOCTLRequest <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>TDeviceRequest<font color="#000080">)
+                          </font>Media<font color="#000080">:  </font>byte<font color="#000080">;
+                          </font>BufPtr<font color="#000080">: </font>pointer<font color="#000080">;
+                          </font>BufLen<font color="#000080">: </font>byte<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>TCDROMLock <font color="#000080">= (</font>CDROM_Unlocked<font color="#000080">, </font>CDROM_Locked<font color="#000080">);
+
+  </font>PCDROMLockRequest <font color="#000080">= ^</font>TCDROMLockRequest<font color="#000080">;
+  </font>TCDROMLockRequest <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>TIOCTLRequest<font color="#000080">)
+                        </font>LockStatus<font color="#000080">: </font>TCDROMLock<font color="#000080">;
+                      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>Regs<font color="#000080">:                </font>Registers<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>NumberOfCDROMDrives<font color="#000080">: </font>TCDROMNumber<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>CDROMDriveLetter<font color="#000080">:    </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>TCDROMIndex<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>TCDROMLetter<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>CDROMDriverStrategyEntryPoint<font color="#000080">: </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>CDROMDriverINTEntryPoint<font color="#000080">:      </font><font color="#FF0000"><b>procedure</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                         }
+{ This is the interface to the CD-ROM driver. The assumption here is that }
+{ we are only dealing with the first CD-ROM drive in the system- not a    }
+{ problem to us mere mortals who only HAVE one CD-ROM...                  }
+{                                                                         }
+</i></font><font color="#FF0000"><b>function </b></font>DriverRequest_v210<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TDeviceRequest<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>Regs <font color="#FF0000"><b>do
+    begin
+      </b></font>ax <font color="#000080">:= </font><font color="#800000">$1510</font><font color="#000080">;
+      </font>es <font color="#000080">:= </font>Seg<font color="#000080">(</font>Request<font color="#000080">);
+      </font>bx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>Request<font color="#000080">);
+      </font>cx <font color="#000080">:= </font>CDROMDriveLetter<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]; </font><font color="#008000"><i>(* Letter of CD-ROM drive: A=0,B=1,C=2... *)
+      </i></font>Intr<font color="#000080">(</font><font color="#800000">$2f</font><font color="#000080">,</font>Regs<font color="#000080">)
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>Request <font color="#FF0000"><b>do
+    begin
+      if </b></font>Status <font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font><font color="#800000">15</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>(* Check the error flag...*)
+        </i></font>CDROMError <font color="#000080">:= </font>lo<font color="#000080">(</font>Status<font color="#000080">)         </font><font color="#008000"><i>(* ... return the error   *)
+      </i></font><font color="#FF0000"><b>else
+        </b></font>CDROMError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                 </font><font color="#008000"><i>(* ... return `no error'  *)
+      </i></font>DriverRequest_v210 <font color="#000080">:= </font>Status
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                     }
+{ This method of calling CD-ROM driver functions should work for all  }
+{ versions of MSCDEX. Again, assume that there is only 1 CD-ROM ...   }
+{                                                                     }
+</i></font><font color="#FF0000"><b>function </b></font>DriverBasicRequest<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TDeviceRequest<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>Request <font color="#FF0000"><b>do
+    begin
+      </b></font>SubUnit <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>(* Only 1 CD-ROM, so it must be driver sub-unit 0 *)
+      </i></font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">LES BX, [BP+OFFSET Request]
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>CDROMDriverStrategyEntryPoint<font color="#000080">;
+      </font>CDROMDriverINTEntryPoint<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Status <font color="#FF0000"><b>and </b></font><font color="#000080">(</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font><font color="#800000">15</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>(* Check the error flag...*)
+        </i></font>CDROMError <font color="#000080">:= </font>lo<font color="#000080">(</font>Status<font color="#000080">)         </font><font color="#008000"><i>(* ... return the error   *)
+      </i></font><font color="#FF0000"><b>else
+        </b></font>CDROMError <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                 </font><font color="#008000"><i>(* ... return `no error'  *)
+      </i></font>DriverBasicRequest <font color="#000080">:= </font>Status
+    <font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                        }
+{ The CDROM driver can be asked to do LOTS of things; the IOCTL requests }
+{ are only a very small part. In theory you could descend other buffers  }
+{ from TDeviceRequest, fill in the HeaderLength, CommandCode and any new }
+{ fields and send them off to DriverRequest for execution...             }
+{                                                                        }
+</i></font><font color="#FF0000"><b>function </b></font>IOCTLOutput<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">; </font>ReqLen<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>DeviceRequestHeader<font color="#000080">: </font>TDeviceIOCTLRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin                               </b></font><font color="#008000"><i>(* Descendant of TDeviceRequest *)
+  </i></font><font color="#FF0000"><b>with </b></font>DeviceRequestHeader <font color="#FF0000"><b>do
+    begin
+      </b></font>HeaderLength <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DeviceRequestHeader<font color="#000080">);
+      </font>CommandCode <font color="#000080">:= </font><font color="#800000">$0C</font><font color="#000080">;
+      </font>BufPtr <font color="#000080">:= @</font>Request<font color="#000080">.</font>SubFn<font color="#000080">;  </font><font color="#008000"><i>(* These fields added to TDeviceRequest *)
+      </i></font>BufLen <font color="#000080">:= </font>ReqLen           <font color="#008000"><i>(* for IOCTL commands...                *)
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>IOCTLOutput <font color="#000080">:= </font>DriverRequest<font color="#000080">(</font>DeviceRequestHeader<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>IOCTLInput<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">; </font>ReqLen<font color="#000080">: </font>word<font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>DeviceRequestHeader<font color="#000080">: </font>TDeviceIOCTLRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin                               </b></font><font color="#008000"><i>(* Descendant of TDeviceRequest *)
+  </i></font><font color="#FF0000"><b>with </b></font>DeviceRequestHeader <font color="#FF0000"><b>do
+    begin
+      </b></font>HeaderLength <font color="#000080">:= </font>SizeOf<font color="#000080">(</font>DeviceRequestHeader<font color="#000080">);
+      </font>CommandCode <font color="#000080">:= </font><font color="#800000">$03</font><font color="#000080">;
+      </font>BufPtr <font color="#000080">:= @</font>Request<font color="#000080">.</font>SubFn<font color="#000080">;  </font><font color="#008000"><i>(* These fields added to TDeviceRequest *)
+      </i></font>BufLen <font color="#000080">:= </font>ReqLen           <font color="#008000"><i>(* for IOCTL commands...                *)
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>IOCTLInput <font color="#000080">:= </font>DriverRequest<font color="#000080">(</font>DeviceRequestHeader<font color="#000080">)
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                          }
+{ Yes, I COULD have just put NumberOfCDROMDrives in the interface section, }
+{ except that this number is important and I don't want users `fiddling'   }
+{ with it. :-)                                                             }
+{                                                                          }
+</i></font><font color="#FF0000"><b>function </b></font>GetNumberOfCDROMDrives<font color="#000080">: </font>TCDROMNumber<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetNumberOfCDROMDrives <font color="#000080">:= </font>NumberOfCDROMDrives
+<font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                     }
+{ The mechanism used to perform device driver requests depends on the }
+{ version of MSCDEX, so we need a method of finding this out.         }
+{                                                                     }
+</i></font><font color="#FF0000"><b>function </b></font>GetCDROMVersion<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>Regs <font color="#FF0000"><b>do
+    begin
+      </b></font>bx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>ax <font color="#000080">:= </font><font color="#800000">$150c</font><font color="#000080">;
+      </font>Intr<font color="#000080">(</font><font color="#800000">$2f</font><font color="#000080">,</font>Regs<font color="#000080">);
+      </font>GetCDROMVersion <font color="#000080">:= </font>bx  <font color="#008000"><i>(* Hi byte = Major version number *)
+    </i></font><font color="#FF0000"><b>end                      </b></font><font color="#008000"><i>(* Lo byte = Minor version number *)
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Eject<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>NumberOfCDROMDrives <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    with </b></font>Request <font color="#FF0000"><b>do
+      begin
+        </b></font>SubFn <font color="#000080">:= </font><font color="#800000">00</font><font color="#000080">;   </font><font color="#008000"><i>(* IOCTL command code for Eject... *)
+        </i></font>IOCTLOutput<font color="#000080">(</font>Request<font color="#000080">,</font>SizeOf<font color="#000080">(</font>Request<font color="#000080">))
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Reset<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>NumberOfCDROMDrives <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    with </b></font>Request <font color="#FF0000"><b>do
+      begin
+        </b></font>SubFn <font color="#000080">:= </font><font color="#800000">02</font><font color="#000080">;   </font><font color="#008000"><i>(* IOCTL command code to reset the CD-ROM drive *)
+        </i></font>IOCTLOutput<font color="#000080">(</font>Request<font color="#000080">,</font>SizeOf<font color="#000080">(</font>Request<font color="#000080">))
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Close<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Request<font color="#000080">: </font>TIOCTLRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>NumberOfCDROMDrives <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    with </b></font>Request <font color="#FF0000"><b>do
+      begin
+        </b></font>SubFn <font color="#000080">:= </font><font color="#800000">05</font><font color="#000080">;   </font><font color="#008000"><i>(* IOCTL command code to close the CD-ROM drive *)
+        </i></font>IOCTLOutput<font color="#000080">(</font>Request<font color="#000080">,</font>SizeOf<font color="#000080">(</font>Request<font color="#000080">))
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{
+{ This routine seems to require a CD in the drive. Otherwise it returns  }
+{ CDROMError = 2 (on my machine anyway...)                               }
+{                                                                        }
+</i></font><font color="#FF0000"><b>procedure </b></font>Lock<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Request<font color="#000080">: </font>TCDROMLockRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>NumberOfCDROMDrives <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    with </b></font>Request <font color="#FF0000"><b>do
+      begin
+        </b></font>SubFn <font color="#000080">:= </font><font color="#800000">01</font><font color="#000080">;   </font><font color="#008000"><i>(* ... locking the CDROM... *)
+        </i></font>LockStatus <font color="#000080">:= </font>CDROM_Locked<font color="#000080">;
+        </font>IOCTLOutput<font color="#000080">(</font>Request<font color="#000080">,</font>SizeOf<font color="#000080">(</font>Request<font color="#000080">))
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Unlock<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>Request<font color="#000080">: </font>TCDROMLockRequest<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>NumberOfCDROMDrives <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    with </b></font>Request <font color="#FF0000"><b>do
+      begin
+        </b></font>SubFn <font color="#000080">:= </font><font color="#800000">01</font><font color="#000080">;   </font><font color="#008000"><i>(* ... and unlocking ... *)
+        </i></font>LockStatus <font color="#000080">:= </font>CDROM_Unlocked<font color="#000080">;
+        </font>IOCTLOutput<font color="#000080">(</font>Request<font color="#000080">,</font>SizeOf<font color="#000080">(</font>Request<font color="#000080">))
+      </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                       }
+{ Store the Strategy and Interrupt Entry Points for the CD-ROM device   }
+{ driver... Again, assume that there is only 1 CD-ROM drive, and so     }
+{ SubUnit will always = 0                                               }
+{                                                                       }
+</i></font><font color="#FF0000"><b>procedure </b></font>SetUpEntryPoints<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>CDDriveList<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>TCDROMIndex<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>TCDROMDriveEntry<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>Regs <font color="#FF0000"><b>do
+    begin
+      </b></font>ax <font color="#000080">:= </font><font color="#800000">$1501</font><font color="#000080">;
+      </font>es <font color="#000080">:= </font>Seg<font color="#000080">(</font>CDDriveList<font color="#000080">);
+      </font>bx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>CDDriveList<font color="#000080">);
+      </font>Intr<font color="#000080">(</font><font color="#800000">$2f</font><font color="#000080">,</font>Regs<font color="#000080">)
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>with </b></font>CDDriveList<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+      </b></font><font color="#000080">@</font>CDROMDriverStrategyEntryPoint <font color="#000080">:=
+                  </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>CDROMDriver<font color="#000080">^),</font>CDROMDriver<font color="#000080">^.</font>StrategyEntryPoint<font color="#000080">);
+      @</font>CDROMDriverINTEntryPoint <font color="#000080">:=
+                  </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>CDROMDriver<font color="#000080">^),</font>CDROMDriver<font color="#000080">^.</font>INTEntryPoint<font color="#000080">)
+
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{                                                                          }
+{ Initialisation code: neither the number of CD-ROM drives nor their drive }
+{ letters will change during execution, so we shall identify the drives    }
+{ NOW and not do it again.                                                 }
+{                                                                          }
+</i></font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>{                                         }
+{ Get number of CD-ROMs in the system ... }
+{                                         }
+  </i></font><font color="#FF0000"><b>with </b></font>Regs <font color="#FF0000"><b>do
+    begin
+      </b></font>ax <font color="#000080">:= </font><font color="#800000">$1500</font><font color="#000080">;
+      </font>bx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>Intr<font color="#000080">(</font><font color="#800000">$2f</font><font color="#000080">,</font>Regs<font color="#000080">);
+      </font>NumberOfCDROMDrives <font color="#000080">:= </font>bl<font color="#000080">;
+</font><font color="#008000"><i>{                                                                         }
+{ Get the drive-letters for CD-ROMSs... There is an MSCDEX function to do }
+{ this for v2.00+, viz AX=$150D INT $2F. However we are assuming only one }
+{ CD-ROM and so the drive letter has already been determined.             }
+{                                                                         }
+      </i></font><font color="#FF0000"><b>if </b></font>NumberOfCDROMDrives <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        begin
+          </b></font>CDROMDriveLetter<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] := </font>cl<font color="#000080">;
+</font><font color="#008000"><i>{                                                                 }
+{ Determine the entry points for direct device-driver requests... }
+{                                                                 }
+          </i></font>SetUpEntryPoints<font color="#000080">;
+</font><font color="#008000"><i>{                                                                 }
+{ Determine which mechanism to use for CD-ROM driver requests ... }
+{                                                                 }
+          </i></font><font color="#FF0000"><b>if </b></font>GetCDROMVersion <font color="#000080">&lt; </font><font color="#800000">2</font><font color="#000080">*</font><font color="#800000">256 </font><font color="#000080">+ </font><font color="#800000">10 </font><font color="#FF0000"><b>then
+            </b></font>DriverRequest <font color="#000080">:= </font>DriverBasicRequest
+          <font color="#FF0000"><b>else
+            </b></font>DriverRequest <font color="#000080">:= </font>DriverRequest_v210
+        <font color="#FF0000"><b>end
+    end
+end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ----------------------   DEMO PROGRAM ----------------------- }
+
+{$A+,B-,D+,E-,F-,G+,I+,L+,N-,O-,R-,S-,V-,X+}
+{$M 16384,0,655360}
+</i></font><font color="#FF0000"><b>program </b></font>CDDemo<font color="#000080">;
+</font><font color="#FF0000"><b>uses </b></font>CDDrive<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>Version<font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>GetNumberOfCDROMDrives <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>writeln<font color="#000080">( </font><font color="#800000">'This machine has no CD-ROM drive.' </font><font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    begin
+      </b></font>Version <font color="#000080">:= </font>GetCDROMVersion<font color="#000080">;
+      </font>writeln<font color="#000080">( </font><font color="#800000">'MSCDEX v'</font><font color="#000080">, </font>hi<font color="#000080">(</font>Version<font color="#000080">), </font><font color="#800000">'.'</font><font color="#000080">, </font>lo<font color="#000080">(</font>Version<font color="#000080">) );
+      </font>Lock<font color="#000080">;
+      </font>writeln<font color="#000080">( </font><font color="#800000">'Lock: Error = '</font><font color="#000080">, </font>CDROMError <font color="#000080">);
+      </font>Unlock<font color="#000080">;
+      </font>writeln<font color="#000080">( </font><font color="#800000">'Unlock: Error = '</font><font color="#000080">, </font>CDROMError <font color="#000080">);
+      </font>Eject<font color="#000080">;
+      </font>writeln<font color="#000080">( </font><font color="#800000">'Eject: Error = '</font><font color="#000080">, </font>CDROMError <font color="#000080">);
+      </font>Close<font color="#000080">;
+      </font>writeln<font color="#000080">( </font><font color="#800000">'Close: Error = '</font><font color="#000080">, </font>CDROMError <font color="#000080">);
+      </font>Reset<font color="#000080">;
+      </font>writeln<font color="#000080">( </font><font color="#800000">'Reset: Error = '</font><font color="#000080">, </font>CDROMError <font color="#000080">)
+    </font><font color="#FF0000"><b>end
+end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0113.PAS">Original</a><b>]</b></p></body>
+</html>

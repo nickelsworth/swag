@@ -1,0 +1,188 @@
+<html>
+<head><title> "Copy/Move Files Anywhere" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COPYMOVE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0016.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A+,B-,D+,E+,F-,G+,I+,L+,N-,O-,P-,Q-,R-,S-,T-,V-,X+,Y+}
+{$M 16384,0,655360}
+
+</i></font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">,</font>Crt<font color="#000080">;
+
+   </font><font color="#FF0000"><b>TYPE
+
+   </b></font><font color="#008000"><i>{ Define action type MOVE or COPY }
+   </i></font>cTYPE <font color="#000080">= (</font>cMOVE<font color="#000080">,</font>cCOPY<font color="#000080">);
+
+   </font><font color="#008000"><i>{ Define the special structure of a DOS Disk Transfer Area (DTA) }
+   </i></font>DTARec      <font color="#000080">=  </font><font color="#FF0000"><b>RECORD
+                     </b></font>Filler   <font color="#000080">:  </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">21</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+                     </font>Attr     <font color="#000080">:  </font>BYTE<font color="#000080">;
+                     </font>Time     <font color="#000080">:  </font>WORD<font color="#000080">;
+                     </font>Date     <font color="#000080">:  </font>WORD<font color="#000080">;
+                     </font>Size     <font color="#000080">:  </font>LONGINT<font color="#000080">;
+                     </font>Name     <font color="#000080">:  </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">[</font><font color="#800000">12</font><font color="#000080">];
+                  </font><font color="#FF0000"><b>END </b></font><font color="#008000"><i>{DtaRec}</i></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+    </b></font>OK <font color="#000080">: </font>Integer<font color="#000080">;
+    </font>IP<font color="#000080">,</font>OP <font color="#000080">: </font>PathStr<font color="#000080">;  </font><font color="#008000"><i>{ input,output file names }
+
+   </i></font><font color="#FF0000"><b>FUNCTION </b></font>Copier <font color="#000080">(</font>cWhat <font color="#000080">: </font>cTYPE<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>orig<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>nName<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">) : </font>Integer<font color="#000080">;
+
+   </font><font color="#008000"><i>{ Copy or Move file through DOS if not on same disk. Retain original date,
+     time and size and delete the original on Move.  The beauty here is that
+     we can move files across different drives.  Also, we can rename file if
+     we choose.     If error, function returns error number }
+
+
+      </i></font><font color="#FF0000"><b>CONST </b></font>bufsize <font color="#000080">= </font><font color="#800000">$C000</font><font color="#000080">;            </font><font color="#008000"><i>{ About 48 KB - 49152 }
+
+      </i></font><font color="#FF0000"><b>TYPE
+       </b></font>fileBuffer <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>bufsize<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+
+      </font><font color="#FF0000"><b>VAR   </b></font>Regs<font color="#000080">: </font>registers<font color="#000080">;
+            </font>src<font color="#000080">,</font>dst<font color="#000080">: </font>INTEGER<font color="#000080">;
+            </font>bsize<font color="#000080">,</font>osize<font color="#000080">: </font>LONGINT<font color="#000080">;
+            </font>buffer <font color="#000080">: ^</font>fileBuffer<font color="#000080">;
+            </font>DTABlk <font color="#000080">: </font>DTARec<font color="#000080">;
+            </font>fError <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+
+      </font><font color="#FF0000"><b>FUNCTION </b></font>CheckError<font color="#000080">(</font>err <font color="#000080">: </font>Integer<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+      </font><font color="#FF0000"><b>BEGIN
+      </b></font>CheckError <font color="#000080">:= (</font>Err <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">);
+      </font>fError     <font color="#000080">:= (</font>Err <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">);
+      </font>Copier     <font color="#000080">:= </font>err<font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>PROCEDURE </b></font>delfile <font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>fName<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+
+         </font><font color="#FF0000"><b>VAR   </b></font>Regs<font color="#000080">: </font>registers<font color="#000080">;
+
+         </font><font color="#FF0000"><b>BEGIN
+            WITH </b></font>Regs <font color="#FF0000"><b>do BEGIN
+               </b></font>ah <font color="#000080">:= </font><font color="#800000">$43</font><font color="#000080">;             </font><font color="#008000"><i>{ Make file R/W for delete }
+               </i></font>al <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+               </font>cx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;               </font><font color="#008000"><i>{ Normal file }
+               </i></font>ds <font color="#000080">:= </font>Seg<font color="#000080">(</font>fName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);   </font><font color="#008000"><i>{ fName is the fully qualified }
+               </i></font>dx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>fName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);   </font><font color="#008000"><i>{ pathname of file, 0 terminated }
+               </i></font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+               </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT
+               <font color="#FF0000"><b>ELSE BEGIN
+                  </b></font>ah <font color="#000080">:= </font><font color="#800000">$41</font><font color="#000080">;            </font><font color="#008000"><i>{ Delete file through fName }
+                  { ds:dx stil valid from set-attributes }
+                  </i></font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+                  </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+                  </font><font color="#FF0000"><b>END
+               END
+         END</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>BEGIN
+
+         </b></font>Copier <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ Assume Success }
+         </i></font>FindFirst<font color="#000080">(</font>Orig<font color="#000080">,</font>Anyfile<font color="#000080">,</font>SearchRec<font color="#000080">(</font>DTABlk<font color="#000080">));
+         </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>DosError<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT<font color="#000080">;
+
+         </font><font color="#FF0000"><b>WITH </b></font>Regs <font color="#FF0000"><b>DO BEGIN
+            </b></font>ah <font color="#000080">:= </font><font color="#800000">$3D</font><font color="#000080">;                  </font><font color="#008000"><i>{ Open existing file }
+            </i></font>al <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                    </font><font color="#008000"><i>{ Read-only }
+            </i></font>ds <font color="#000080">:= </font>Seg<font color="#000080">(</font>orig<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);         </font><font color="#008000"><i>{ Original filename (from) }
+            </i></font>dx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>orig<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+            </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+            </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>Exit
+            <font color="#FF0000"><b>ELSE BEGIN
+               </b></font>src <font color="#000080">:= </font>ax<font color="#000080">;               </font><font color="#008000"><i>{ Handle of the file }
+
+               </i></font>ah <font color="#000080">:= </font><font color="#800000">$3C</font><font color="#000080">;               </font><font color="#008000"><i>{ Create a new file }
+               </i></font>cx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                 </font><font color="#008000"><i>{ Start as normal file }
+               </i></font>ds <font color="#000080">:= </font>Seg<font color="#000080">(</font>nName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);     </font><font color="#008000"><i>{ Pathname to move TO }
+               </i></font>dx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>nName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+               </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+               </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>Exit
+               <font color="#FF0000"><b>ELSE
+                  </b></font>dst <font color="#000080">:= </font>ax
+               <font color="#FF0000"><b>END
+            END</b></font><font color="#000080">;
+
+         </font>osize <font color="#000080">:= </font>DTABlk<font color="#000080">.</font>size<font color="#000080">;       </font><font color="#008000"><i>{ Size of file, from &quot;findfirst&quot; }
+         </i></font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>osize <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND NOT </b></font>ferror <font color="#FF0000"><b>DO BEGIN
+
+            IF </b></font>osize <font color="#000080">&gt; </font>bufsize <font color="#FF0000"><b>THEN
+               </b></font>bsize <font color="#000080">:= </font>bufsize        <font color="#008000"><i>{ Too big for buffer, use buffer size }
+            </i></font><font color="#FF0000"><b>ELSE
+               </b></font>bsize <font color="#000080">:= </font>osize<font color="#000080">;
+
+            </font><font color="#FF0000"><b>IF </b></font>BSize <font color="#000080">&gt; </font>MAXAVAIL <font color="#FF0000"><b>THEN </b></font>BSize <font color="#000080">:= </font>MAXAVAIL<font color="#000080">;
+
+            </font>GETMEM <font color="#000080">(</font>buffer<font color="#000080">, </font>BSize<font color="#000080">);    </font><font color="#008000"><i>{ Grap some HEAP memory }
+
+            </i></font><font color="#FF0000"><b>WITH </b></font>Regs <font color="#FF0000"><b>DO BEGIN
+               </b></font>ah <font color="#000080">:= </font><font color="#800000">$3F</font><font color="#000080">;               </font><font color="#008000"><i>{ Read block from file }
+               </i></font>bx <font color="#000080">:= </font>src<font color="#000080">;
+               </font>cx <font color="#000080">:= </font>bsize<font color="#000080">;
+               </font>ds <font color="#000080">:= </font>Seg<font color="#000080">(</font>buffer<font color="#000080">^);
+               </font>dx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>buffer<font color="#000080">^);
+               </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+               </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font><font color="#008000"><i>{}
+               </i></font><font color="#FF0000"><b>ELSE BEGIN
+                  </b></font>ah <font color="#000080">:= </font><font color="#800000">$40</font><font color="#000080">;            </font><font color="#008000"><i>{ Write block to file }
+                  </i></font>bx <font color="#000080">:= </font>dst<font color="#000080">;
+                  </font><font color="#008000"><i>{ cx and ds:dx still valid from Read }
+                  </i></font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+                  </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font><font color="#008000"><i>{}
+                  </i></font><font color="#FF0000"><b>ELSE IF </b></font>ax <font color="#000080">&lt; </font>bsize <font color="#FF0000"><b>THEN
+                     BEGIN
+                     </b></font>CheckError<font color="#000080">(</font><font color="#800000">98</font><font color="#000080">); </font><font color="#008000"><i>{ disk full }
+                     </i></font><font color="#FF0000"><b>END
+                  ELSE
+                     </b></font>osize <font color="#000080">:= </font>osize <font color="#000080">- </font>bsize
+                  <font color="#FF0000"><b>END</b></font><font color="#000080">;
+               </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+            </font>FREEMEM <font color="#000080">(</font>buffer<font color="#000080">, </font>BSize<font color="#000080">);   </font><font color="#008000"><i>{ Give back the memory }
+            </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+         </font><font color="#FF0000"><b>IF NOT </b></font>ferror <font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>cWHAT <font color="#000080">= </font>cMOVE<font color="#000080">) </font><font color="#FF0000"><b>THEN
+         WITH </b></font>Regs <font color="#FF0000"><b>DO
+            BEGIN
+            </b></font>ah <font color="#000080">:= </font><font color="#800000">$57</font><font color="#000080">;                  </font><font color="#008000"><i>{ Adjust date and time of file }
+            </i></font>al <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                    </font><font color="#008000"><i>{ Set date }
+            </i></font>bx <font color="#000080">:= </font>dst<font color="#000080">;
+            </font>cx <font color="#000080">:= </font>DTABlk<font color="#000080">.</font>time<font color="#000080">;          </font><font color="#008000"><i>{ Out of the &quot;find&quot; }
+            </i></font>dx <font color="#000080">:= </font>DTABlk<font color="#000080">.</font>date<font color="#000080">;
+            </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+            </font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">);
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+         </font><font color="#FF0000"><b>WITH </b></font>Regs <font color="#FF0000"><b>DO
+            BEGIN
+            </b></font>ah <font color="#000080">:= </font><font color="#800000">$3E</font><font color="#000080">;                  </font><font color="#008000"><i>{ Close all files, even with errors! }
+            </i></font>bx <font color="#000080">:= </font>src<font color="#000080">;
+            </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+            </font>ferror <font color="#000080">:= </font>ferror <font color="#FF0000"><b>OR </b></font><font color="#000080">((</font>flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">);
+            </font>ah <font color="#000080">:= </font><font color="#800000">$3E</font><font color="#000080">;
+            </font>bx <font color="#000080">:= </font>dst<font color="#000080">;
+            </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+            </font>ferror <font color="#000080">:= </font>ferror <font color="#FF0000"><b>OR </b></font><font color="#000080">((</font>flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0</font><font color="#000080">)
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+         </font><font color="#FF0000"><b>IF </b></font>ferror <font color="#FF0000"><b>THEN </b></font>EXIT            <font color="#008000"><i>{ we had an error somewhere }
+         </i></font><font color="#FF0000"><b>ELSE WITH </b></font>Regs <font color="#FF0000"><b>DO
+            BEGIN
+            </b></font>ah <font color="#000080">:= </font><font color="#800000">$43</font><font color="#000080">;                  </font><font color="#008000"><i>{ Set correct attributes to new file }
+            </i></font>al <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                    </font><font color="#008000"><i>{ Change attributes }
+            </i></font>cx <font color="#000080">:= </font>DTABlk<font color="#000080">.</font>attr<font color="#000080">;          </font><font color="#008000"><i>{ Attribute out of &quot;find&quot; }
+            </i></font>ds <font color="#000080">:= </font>Seg<font color="#000080">(</font>nName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+            </font>dx <font color="#000080">:= </font>Ofs<font color="#000080">(</font>nName<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+            </font>MsDos <font color="#000080">(</font>Regs<font color="#000080">);
+            </font><font color="#FF0000"><b>IF </b></font>CheckError<font color="#000080">(</font>Flags <font color="#FF0000"><b>AND </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>EXIT
+            <font color="#FF0000"><b>ELSE
+               If </b></font><font color="#000080">(</font>cWHAT <font color="#000080">= </font>cMOVE<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>DelFile <font color="#000080">(</font>orig<font color="#000080">) </font><font color="#008000"><i>{ Now delete the original }
+            </i></font><font color="#FF0000"><b>END                                       </b></font><font color="#008000"><i>{ if we are moving file }
+      </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+</b></font>clrscr<font color="#000080">;
+</font>IP <font color="#000080">:= </font><font color="#800000">'queen1.PAS'</font><font color="#000080">;
+</font>OP <font color="#000080">:= </font><font color="#800000">'d:\temp\queen1.pas'</font><font color="#000080">;
+</font>OK <font color="#000080">:= </font>Copier<font color="#000080">(</font>cCOPY<font color="#000080">,</font>IP<font color="#000080">,</font>OP<font color="#000080">);
+</font>WriteLn<font color="#000080">(</font>OK<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COPYMOVE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0016.PAS">Original</a><b>]</b></p></body>
+</html>

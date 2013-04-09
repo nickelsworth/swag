@@ -1,0 +1,709 @@
+<html>
+<head><title> "Stream Storage Unit" by MARCOS DELLA</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to STREAMS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0004.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>Unit </b></font>Storage<font color="#000080">;
+
+</font><font color="#008000"><i>{  STORAGE.PAS - 13 Jan 91
+
+   This unit was created to replace the original system storage that was
+   created for the DMG.  It is designed to be object oriented and will
+   also alow for external compression routines to be designed into the
+   system with a registration code for each.
+
+   The system will take a buffer pointer and run it through the compressor
+   until it reaches a NULL (0) character in the buffer.  This limits you
+   to storing only readable messages.  Once the compressor is finished,
+   the resulting bitstream is then written to the disk.  An index number
+   is returned for where this was written.
+
+   The system that reads the messages only needs an index and filename.
+   It will create a buffer for the message up to the memory restraints.
+
+   You MUST do a .done when you are through with the buffer or the space
+   will not be released to the heap.
+
+   NOTES:
+      The compression algorythm on this system is VERY rudimentary and is
+      designed for text only type of material.  It strips all spaces out of
+      your text and compresses the next character with 128.  This generally
+      saves around 20% storage of a typical text file.  The other change
+      is to do the same with the lower case 'e' character.  This is then
+      combined with a 64.  Between the two you get around %30 compression
+      on your text files... Pretty nifty...
+
+      Note that there is no modifications or remaps of any character ranging
+      from 000..159.  This is so that you can take a standard FIDO file and
+      read it without remapping the soft carriage returns and linefeeds
+      (8D and 8A).
+
+}
+
+{$F+,O+,S-,R-}
+
+</i></font><font color="#FF0000"><b>Interface
+
+Uses </b></font>Dos<font color="#000080">, </font>Objects<font color="#000080">;
+
+</font><font color="#FF0000"><b>CONST </b></font>stStoreError      <font color="#000080">= -</font><font color="#800000">120</font><font color="#000080">;
+      </font>stStoreReadErr    <font color="#000080">= </font><font color="#800000">197</font><font color="#000080">;
+      </font>stStoreWriteErr   <font color="#000080">= </font><font color="#800000">198</font><font color="#000080">;
+      </font>stStoreUnknownErr <font color="#000080">= </font><font color="#800000">199</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE  </b></font>PBuffer  <font color="#000080">= ^</font>BBuffer<font color="#000080">;
+      </font>BBuffer  <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65530</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>BYTE<font color="#000080">;
+      </font>PCharBuf <font color="#000080">= ^</font>CharBuf<font color="#000080">;
+      </font>CharBuf  <font color="#000080">= </font><font color="#FF0000"><b>ARRAY </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65530</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE  </b></font>PList    <font color="#000080">= ^</font>LList<font color="#000080">;
+      </font>LList    <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+                    </b></font>OldItem <font color="#000080">: </font>LONGINT<font color="#000080">;
+                    </font>NewItem <font color="#000080">: </font>LONGINT<font color="#000080">;
+                    </font>Next    <font color="#000080">: </font>PList<font color="#000080">;
+                 </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>TYPE  </b></font>PStorage <font color="#000080">= ^</font>TStorage<font color="#000080">;
+      </font>TStorage <font color="#000080">= </font><font color="#FF0000"><b>OBJECT</b></font><font color="#000080">(</font>TBufStream<font color="#000080">)
+                    </font>SFileName   <font color="#000080">: </font>FNameStr<font color="#000080">;
+                    </font>SCleanName  <font color="#000080">: </font>FNameStr<font color="#000080">;
+                    </font>SCleanIndex <font color="#000080">: </font>PList<font color="#000080">;
+                    </font>SMode       <font color="#000080">: </font>WORD<font color="#000080">;
+                    </font>SIndex      <font color="#000080">: </font>LONGINT<font color="#000080">;
+                    </font>SHoldBuf    <font color="#000080">: </font>POINTER<font color="#000080">;
+                    </font>SHoldBufLen <font color="#000080">: </font>WORD<font color="#000080">;
+                    </font><font color="#FF0000"><b>CONSTRUCTOR </b></font>Init<font color="#000080">(</font>AFileName <font color="#000080">: </font>FNameStr<font color="#000080">; </font>AMode<font color="#000080">, </font>Size <font color="#000080">: </font>WORD<font color="#000080">);
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>WriteMsg<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Buf<font color="#000080">);
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>ReadMsg<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Buf <font color="#000080">: </font>PCharBuf<font color="#000080">; </font>Index <font color="#000080">: </font>LONGINT<font color="#000080">);
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>DeleteMsg<font color="#000080">(</font>Index <font color="#000080">: </font>LONGINT<font color="#000080">);
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>CleanUpMsg<font color="#000080">;
+                    </font><font color="#FF0000"><b>FUNCTION </b></font>NewIndex<font color="#000080">(</font>Index <font color="#000080">: </font>LONGINT<font color="#000080">) : </font>LONGINT<font color="#000080">;
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>DeleteCleanUp<font color="#000080">;
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>Compress<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Buf<font color="#000080">); </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>PROCEDURE </b></font>DeCompress<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>Buf<font color="#000080">); </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>DESTRUCTOR </b></font>Done<font color="#000080">; </font><font color="#FF0000"><b>VIRTUAL</b></font><font color="#000080">;
+                 </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+CONST </b></font>MarkerWord   <font color="#000080">= </font><font color="#800000">$93D2</font><font color="#000080">;
+      </font>RegBasicComp <font color="#000080">: </font>BYTE <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR   </b></font>ExpandSize   <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>CompressSize <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>Marker       <font color="#000080">: </font>WORD<font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>CONSTRUCTOR </b></font>TStorage<font color="#000080">.</font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>TBufStream<font color="#000080">.</font>Init<font color="#000080">(</font>AFileName<font color="#000080">,</font>AMode<font color="#000080">,</font>Size<font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>Status <font color="#000080">:= </font>stStoreError
+   <font color="#FF0000"><b>ELSE
+      BEGIN
+         </b></font>SFileName   <font color="#000080">:= </font>FEXPAND<font color="#000080">(</font>AFileName<font color="#000080">);
+         </font>SCleanName  <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+         </font>SCleanIndex <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+         </font>SMode       <font color="#000080">:= </font>AMode<font color="#000080">;
+         </font>SIndex      <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+         </font>SHoldBuf    <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+         </font>SHoldBufLen <font color="#000080">:= </font><font color="#800000">0
+      </font><font color="#FF0000"><b>END
+END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>WriteMsg<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>WritePosn    <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>p            <font color="#000080">: </font>PBuffer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>p <font color="#000080">:= </font>PBuffer<font color="#000080">(@</font>Buf<font color="#000080">);
+   </font>SIndex <font color="#000080">:= </font>GetSize<font color="#000080">;
+   </font>TBufStream<font color="#000080">.</font>Seek<font color="#000080">(</font>SIndex<font color="#000080">);
+   </font>Marker <font color="#000080">:= </font>MarkerWord<font color="#000080">;
+   </font>TBufStream<font color="#000080">.</font>Write<font color="#000080">(</font>Marker<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>Marker<font color="#000080">));
+   </font>ExpandSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>ExpandSize<font color="#000080">] &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+      </b></font>INC<font color="#000080">(</font>ExpandSize<font color="#000080">);
+   </font>TBufStream<font color="#000080">.</font>Write<font color="#000080">(</font>ExpandSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>ExpandSize<font color="#000080">));
+   </font>Compress<font color="#000080">(</font>Buf<font color="#000080">);
+   </font>CompressSize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>CompressSize<font color="#000080">] &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+      </b></font>INC<font color="#000080">(</font>CompressSize<font color="#000080">);
+   </font>TBufStream<font color="#000080">.</font>Write<font color="#000080">(</font>CompressSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>CompressSize<font color="#000080">));
+   </font>WritePosn <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>WritePosn <font color="#000080">&lt; </font>CompressSize <font color="#FF0000"><b>DO
+      IF </b></font>CompressSize <font color="#000080">- </font>WritePosn <font color="#000080">&gt; </font>BufSize <font color="#FF0000"><b>THEN
+         BEGIN
+            </b></font>TBufStream<font color="#000080">.</font>Write<font color="#000080">(</font>p<font color="#000080">^[</font>WritePosn<font color="#000080">],</font>BufSize<font color="#000080">);
+            </font>INC<font color="#000080">(</font>WritePosn<font color="#000080">,</font>BufSize<font color="#000080">)
+         </font><font color="#FF0000"><b>END
+      ELSE
+         BEGIN
+            </b></font>TBufStream<font color="#000080">.</font>Write<font color="#000080">(</font>p<font color="#000080">^[</font>WritePosn<font color="#000080">],</font>CompressSize <font color="#000080">- </font>WritePosn<font color="#000080">);
+            </font>WritePosn <font color="#000080">:= </font>CompressSize
+         <font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>Flush<font color="#000080">;
+   </font><font color="#FF0000"><b>IF </b></font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>Status <font color="#000080">:= </font>stStoreError
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>ReadMsg<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>DeleteCheck <font color="#000080">: </font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   IF </b></font><font color="#000080">(</font>SHoldBuf <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>SHoldBufLen <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>FREEMEM<font color="#000080">(</font>SHoldBuf<font color="#000080">,</font>SHoldBufLen<font color="#000080">);
+         </font>SHoldBuf <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+         </font>SHoldBufLen <font color="#000080">:= </font><font color="#800000">0
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>Seek<font color="#000080">(</font>Index<font color="#000080">);
+   </font>Read<font color="#000080">(</font>Marker<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>Marker<font color="#000080">));
+   </font><font color="#FF0000"><b>IF </b></font>Marker <font color="#000080">= </font>MarkerWord <font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>Read<font color="#000080">(</font>ExpandSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>ExpandSize<font color="#000080">));
+         </font>Read<font color="#000080">(</font>CompressSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>CompressSize<font color="#000080">));
+      </font><font color="#FF0000"><b>END
+   ELSE
+      BEGIN
+         </b></font>Seek<font color="#000080">(</font>Index<font color="#000080">);
+         </font>ExpandSize <font color="#000080">:= </font>GetSize <font color="#000080">- </font>Index<font color="#000080">;
+         </font><font color="#FF0000"><b>IF </b></font>ExpandSize <font color="#000080">&gt;= </font>SIZEOF<font color="#000080">(</font>CharBuf<font color="#000080">) </font><font color="#FF0000"><b>THEN
+            </b></font>ExpandSize <font color="#000080">:= </font>SIZEOF<font color="#000080">(</font>CharBuf<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">;
+         </font>CompressSize <font color="#000080">:= </font>ExpandSize
+      <font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>Read<font color="#000080">(</font>DeleteCheck<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>DeleteCheck <font color="#000080">&lt; </font><font color="#800000">$FF</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Marker <font color="#000080">&lt;&gt; </font>MarkerWord<font color="#000080">) </font><font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>SHoldBufLen <font color="#000080">:= </font>ExpandSize <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+         </font>GETMEM<font color="#000080">(</font>SHoldBuf<font color="#000080">,</font>SHoldBufLen<font color="#000080">);
+         </font>FILLCHAR<font color="#000080">(</font>SHoldBuf<font color="#000080">^,</font>SHoldBufLen<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+         </font>BBuffer<font color="#000080">(</font>SHoldBuf<font color="#000080">^)[</font><font color="#800000">0</font><font color="#000080">] := </font>DeleteCheck<font color="#000080">;
+         </font>Read<font color="#000080">(</font>BBuffer<font color="#000080">(</font>SHoldBuf<font color="#000080">^)[</font><font color="#800000">1</font><font color="#000080">],</font>CompressSize <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">);
+         </font><font color="#FF0000"><b>IF </b></font>Marker <font color="#000080">= </font>MarkerWord <font color="#FF0000"><b>THEN
+            </b></font>DeCompress<font color="#000080">(</font>SHoldBuf<font color="#000080">^);
+      </font><font color="#FF0000"><b>END
+   ELSE
+      BEGIN
+         </b></font>SHoldBufLen <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+         </font>GETMEM<font color="#000080">(</font>SHoldBuf<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+         </font>BBuffer<font color="#000080">(</font>SHoldBuf<font color="#000080">^)[</font><font color="#800000">0</font><font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+         </font>Error<font color="#000080">(</font>stStoreError<font color="#000080">,</font>stStoreReadErr<font color="#000080">)     </font><font color="#008000"><i>{Disk Read Error}
+      </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>PCharBuf<font color="#000080">(</font>Buf<font color="#000080">) := @</font>SholdBuf<font color="#000080">^;
+   </font><font color="#FF0000"><b>IF </b></font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>Status <font color="#000080">:= </font>stStoreError
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>DeleteMsg<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>CompressType <font color="#000080">: </font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>Seek<font color="#000080">(</font>Index<font color="#000080">);
+   </font>Read<font color="#000080">(</font>Marker<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>Marker<font color="#000080">));
+   </font><font color="#FF0000"><b>IF </b></font>Marker <font color="#000080">= </font>MarkerWord <font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>Seek<font color="#000080">(</font>Index <font color="#000080">+ </font>SIZEOF<font color="#000080">(</font>Marker<font color="#000080">) + </font>SIZEOF<font color="#000080">(</font>ExpandSize<font color="#000080">) + </font>SIZEOF<font color="#000080">(</font>CompressSize<font color="#000080">));
+         </font>CompressType <font color="#000080">:= </font><font color="#800000">$FF</font><font color="#000080">;   </font><font color="#008000"><i>{Mark Compression Type as Deleted!}
+         </i></font>Write<font color="#000080">(</font>CompressType<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>CompressType<font color="#000080">))
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>IF </b></font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>Status <font color="#000080">:= </font>stStoreError
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>CleanUpMsg<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>Dir     <font color="#000080">: </font>DirStr<font color="#000080">;
+      </font>FName   <font color="#000080">: </font>NameStr<font color="#000080">;
+      </font>Ext     <font color="#000080">: </font>ExtStr<font color="#000080">;
+      </font>T       <font color="#000080">: </font>TBufStream<font color="#000080">;
+      </font>TmpPtr  <font color="#000080">: </font>POINTER<font color="#000080">;
+      </font>TFile   <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+      </font>OldItem <font color="#000080">: </font>LONGINT<font color="#000080">;
+      </font>NewItem <font color="#000080">: </font>LONGINT<font color="#000080">;
+      </font>LinkPtr <font color="#000080">: </font>PList<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>FSplit<font color="#000080">(</font>SFileName<font color="#000080">,</font>Dir<font color="#000080">,</font>FName<font color="#000080">,</font>Ext<font color="#000080">);
+   </font>SCleanName <font color="#000080">:= </font>Dir <font color="#000080">+ </font>FName <font color="#000080">+ </font><font color="#800000">'.$$$'</font><font color="#000080">;
+   </font>T<font color="#000080">.</font>Init<font color="#000080">(</font>SCleanName<font color="#000080">,</font>stCreate<font color="#000080">,</font><font color="#800000">1024</font><font color="#000080">);
+   </font>Seek<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+   </font>OldItem <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>OldItem <font color="#000080">&lt; </font>GetSize <font color="#000080">- </font><font color="#800000">1 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>Read<font color="#000080">(</font>Marker<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>Marker<font color="#000080">));
+      </font><font color="#FF0000"><b>IF </b></font>Marker <font color="#000080">&lt;&gt; </font>MarkerWord <font color="#FF0000"><b>THEN
+         </b></font>Error<font color="#000080">(</font>stStoreError<font color="#000080">,</font>stStoreUnknownErr<font color="#000080">);
+      </font>Read<font color="#000080">(</font>ExpandSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>ExpandSize<font color="#000080">));
+      </font>Read<font color="#000080">(</font>CompressSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>CompressSize<font color="#000080">));
+      </font>GETMEM<font color="#000080">(</font>TmpPtr<font color="#000080">,</font>CompressSize<font color="#000080">);
+      </font>Read<font color="#000080">(</font>TmpPtr<font color="#000080">^,</font>CompressSize<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>Status <font color="#000080">= </font>stOk<font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>BBuffer<font color="#000080">(</font>TmpPtr<font color="#000080">^)[</font><font color="#800000">0</font><font color="#000080">] &lt; </font><font color="#800000">$FF</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+         BEGIN
+            </b></font>NewItem <font color="#000080">:= </font>T<font color="#000080">.</font>GetPos<font color="#000080">;
+            </font>T<font color="#000080">.</font>Write<font color="#000080">(</font>Marker<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>Marker<font color="#000080">));
+            </font>T<font color="#000080">.</font>Write<font color="#000080">(</font>ExpandSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>ExpandSize<font color="#000080">));
+            </font>T<font color="#000080">.</font>Write<font color="#000080">(</font>CompressSize<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>CompressSize<font color="#000080">));
+            </font>T<font color="#000080">.</font>Write<font color="#000080">(</font>TmpPtr<font color="#000080">^,</font>CompressSize<font color="#000080">);
+            </font>GETMEM<font color="#000080">(</font>LinkPtr<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>LList<font color="#000080">));
+            </font>LinkPtr<font color="#000080">^.</font>OldItem <font color="#000080">:= </font>OldItem<font color="#000080">;
+            </font>LinkPtr<font color="#000080">^.</font>NewItem <font color="#000080">:= </font>NewItem<font color="#000080">;
+            </font>LinkPtr<font color="#000080">^.</font>Next <font color="#000080">:= </font>SCleanIndex<font color="#000080">;
+            </font>SCleanIndex <font color="#000080">:= </font>LinkPtr
+         <font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font>FREEMEM<font color="#000080">(</font>TmpPtr<font color="#000080">,</font>CompressSize<font color="#000080">);
+      </font>OldItem <font color="#000080">:= </font>GetPos
+   <font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>T<font color="#000080">.</font>Done<font color="#000080">;
+   </font><font color="#FF0000"><b>IF </b></font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>ASSIGN<font color="#000080">(</font>TFile<font color="#000080">,</font>SCleanName<font color="#000080">);
+         </font>ERASE<font color="#000080">(</font>TFile<font color="#000080">);
+         </font>SCleanName <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+         </font>Status <font color="#000080">:= </font>stStoreError
+      <font color="#FF0000"><b>END
+END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>TStorage<font color="#000080">.</font>NewIndex<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>PLink <font color="#000080">: </font>PList<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>PLink <font color="#000080">:= </font>SCleanIndex<font color="#000080">;
+   </font>NewIndex <font color="#000080">:= -</font><font color="#800000">1</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>PLink <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>PLink<font color="#000080">^.</font>OldItem <font color="#000080">&lt;&gt; </font>Index<font color="#000080">) </font><font color="#FF0000"><b>DO
+      </b></font>PLink <font color="#000080">:= </font>PLink<font color="#000080">^.</font>Next<font color="#000080">;
+   </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>PLink <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>PLink<font color="#000080">^.</font>OldItem <font color="#000080">= </font>Index<font color="#000080">) </font><font color="#FF0000"><b>THEN
+      </b></font>NewIndex <font color="#000080">:= </font>PLink<font color="#000080">^.</font>NewItem
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>DeleteCleanUp<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>TFile <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+      </font>PLink <font color="#000080">: </font>PList<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   IF </b></font>SCleanName <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font><font color="#008000"><i>{$I-} </i></font>ASSIGN<font color="#000080">(</font>TFile<font color="#000080">,</font>SCleanName<font color="#000080">);
+         </font>ERASE<font color="#000080">(</font>TFile<font color="#000080">); </font><font color="#008000"><i>{$I+}
+         </i></font>ErrorInfo <font color="#000080">:= </font>IOResult<font color="#000080">;
+         </font><font color="#FF0000"><b>IF </b></font>ErrorInfo <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+            </b></font>Status <font color="#000080">:= </font>stStoreError<font color="#000080">;
+         </font>SCleanName <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+         </font><font color="#FF0000"><b>WHILE </b></font>SCleanIndex <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL DO BEGIN
+            </b></font>PLink <font color="#000080">:= </font>SCleanIndex<font color="#000080">;
+            </font>SCleanIndex <font color="#000080">:= </font>PLink<font color="#000080">^.</font>Next<font color="#000080">;
+            </font>FREEMEM<font color="#000080">(</font>PLink<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>LList<font color="#000080">))
+         </font><font color="#FF0000"><b>END
+      END
+END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>Compress<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>p          <font color="#000080">: </font>PBuffer<font color="#000080">;
+      </font>ReadPosn   <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>WritePosn  <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>SpaceCount <font color="#000080">: </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>p <font color="#000080">:= </font>PBuffer<font color="#000080">(@</font>Buf<font color="#000080">);
+   </font>ReadPosn <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font>WritePosn <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">] &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>ReadPosn <font color="#000080">&lt; </font><font color="#800000">65530</font><font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>SpaceCount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font>SpaceCount<font color="#000080">] = </font><font color="#800000">32</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+         </b></font>INC<font color="#000080">(</font>SpaceCount<font color="#000080">);
+      </font><font color="#FF0000"><b>IF </b></font>SpaceCount <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>THEN
+         BEGIN
+            </b></font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">,</font>SpaceCount<font color="#000080">);
+            </font><font color="#FF0000"><b>WHILE </b></font>SpaceCount <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+               IF </b></font>SpaceCount <font color="#000080">&gt; </font><font color="#800000">255 </font><font color="#FF0000"><b>THEN
+                  BEGIN
+                     </b></font>p<font color="#000080">^[</font>WritePosn<font color="#000080">] := </font><font color="#800000">255</font><font color="#000080">;
+                     </font>p<font color="#000080">^[</font>WritePosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">255</font><font color="#000080">;
+                     </font>INC<font color="#000080">(</font>WritePosn<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+                     </font>DEC<font color="#000080">(</font>SpaceCount<font color="#000080">,</font><font color="#800000">255</font><font color="#000080">)
+                  </font><font color="#FF0000"><b>END
+               ELSE
+                  BEGIN
+                     </b></font>p<font color="#000080">^[</font>WritePosn<font color="#000080">] := </font><font color="#800000">255</font><font color="#000080">;
+                     </font>p<font color="#000080">^[</font>WritePosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] := </font>SpaceCount<font color="#000080">;
+                     </font>INC<font color="#000080">(</font>WritePosn<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+                     </font>SpaceCount <font color="#000080">:= </font><font color="#800000">0
+                  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font>SpaceCount <font color="#000080">:= </font><font color="#800000">2
+         </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font>SpaceCount <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>THEN
+         IF </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] &gt;= </font><font color="#800000">64</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] &lt;= </font><font color="#800000">127</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+            BEGIN
+               </b></font>p<font color="#000080">^[</font>WritePosn<font color="#000080">] := </font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] + </font><font color="#800000">128</font><font color="#000080">;
+               </font>INC<font color="#000080">(</font>WritePosn<font color="#000080">);
+               </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">)
+            </font><font color="#FF0000"><b>END
+         ELSE
+            </b></font>SpaceCount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>IF </b></font>SpaceCount <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN
+         BEGIN
+            IF </b></font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] = </font><font color="#800000">101 </font><font color="#FF0000"><b>THEN
+               BEGIN
+                  </b></font>p<font color="#000080">^[</font>WritePosn<font color="#000080">] := </font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">] + </font><font color="#800000">64</font><font color="#000080">;
+                  </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">)
+               </font><font color="#FF0000"><b>END
+            ELSE
+               BEGIN
+                  </b></font>p<font color="#000080">^[</font>WritePosn<font color="#000080">] := </font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">];
+                  </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">)
+               </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font>INC<font color="#000080">(</font>WritePosn<font color="#000080">)
+         </font><font color="#FF0000"><b>END
+   END</b></font><font color="#000080">;
+   </font>p<font color="#000080">^[</font>WritePosn<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+   </font>MOVE<font color="#000080">(</font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">],</font>p<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">],</font>WritePosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">);
+   </font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">] := </font>RegBasicComp
+<font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>TStorage<font color="#000080">.</font>DeCompress<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>p         <font color="#000080">: </font>PBuffer<font color="#000080">;
+      </font>ReadPosn  <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>Count     <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>Total     <font color="#000080">: </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>p <font color="#000080">:= </font>PBuffer<font color="#000080">(@</font>Buf<font color="#000080">);
+   </font>ReadPosn <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font>Total <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>Total <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>DO
+      </b></font>INC<font color="#000080">(</font>Total<font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">] = </font>RegBasicComp <font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>MOVE<font color="#000080">(</font>p<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">],</font>p<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">],</font>Total<font color="#000080">);
+         </font>p<font color="#000080">^[</font>Total<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;
+         </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">] &lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>ReadPosn <font color="#000080">&lt; </font>SholdBufLen<font color="#000080">) </font><font color="#FF0000"><b>DO BEGIN
+            CASE </b></font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">] </font><font color="#FF0000"><b>OF
+               </b></font><font color="#800000">255      </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+                             </b></font>Count <font color="#000080">:= </font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">];
+                             </font>MOVE<font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">2</font><font color="#000080">],</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font>Count<font color="#000080">],</font>SHoldBufLen <font color="#000080">- </font>ReadPosn <font color="#000080">- </font><font color="#800000">2</font><font color="#000080">);
+                             </font>FILLCHAR<font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">],</font>Count<font color="#000080">,</font><font color="#800000">32</font><font color="#000080">);
+                             </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">,</font>Count<font color="#000080">)
+                          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+               </font><font color="#800000">192</font><font color="#000080">..</font><font color="#800000">254 </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+                             </b></font>MOVE<font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">],</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">],</font>SHoldBufLen <font color="#000080">- </font>ReadPosn<font color="#000080">);
+                             </font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">] := </font><font color="#800000">32</font><font color="#000080">;
+                             </font>DEC<font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">],</font><font color="#800000">128</font><font color="#000080">);
+                             </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">)
+                          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+               </font><font color="#800000">160</font><font color="#000080">..</font><font color="#800000">191 </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+                             </b></font>MOVE<font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">],</font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">],</font>SHoldBufLen <font color="#000080">- </font>ReadPosn<font color="#000080">);
+                             </font>p<font color="#000080">^[</font>ReadPosn <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">] := </font><font color="#800000">101</font><font color="#000080">;
+                             </font>DEC<font color="#000080">(</font>p<font color="#000080">^[</font>ReadPosn<font color="#000080">],</font><font color="#800000">64</font><font color="#000080">);
+                             </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">)
+                          </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+               </font><font color="#800000">000</font><font color="#000080">..</font><font color="#800000">159 </font><font color="#000080">: </font>INC<font color="#000080">(</font>ReadPosn<font color="#000080">)
+            </font><font color="#FF0000"><b>END
+         END
+      END
+END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>DESTRUCTOR </b></font>TStorage<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>VAR   </b></font>TFile <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+      </font>PLink <font color="#000080">: </font>PList<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   IF </b></font><font color="#000080">(</font>SHoldBuf <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">(</font>SHoldBufLen <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>THEN
+      </b></font>FREEMEM<font color="#000080">(</font>SHoldBuf<font color="#000080">,</font>SHoldBufLen<font color="#000080">);
+   </font>TBufStream<font color="#000080">.</font>Done<font color="#000080">;
+   </font><font color="#FF0000"><b>IF </b></font>SCleanName <font color="#000080">&lt;&gt; </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN
+      BEGIN
+         </b></font>ASSIGN<font color="#000080">(</font>TFile<font color="#000080">,</font>SFileName<font color="#000080">);
+         </font>ERASE<font color="#000080">(</font>TFile<font color="#000080">);
+         </font>ASSIGN<font color="#000080">(</font>TFile<font color="#000080">,</font>SCleanName<font color="#000080">);
+         </font>RENAME<font color="#000080">(</font>TFile<font color="#000080">,</font>SFileName<font color="#000080">);
+         </font>SCleanName <font color="#000080">:= </font><font color="#800000">''
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>SCleanIndex <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL DO BEGIN
+      </b></font>PLink <font color="#000080">:= </font>SCleanIndex<font color="#000080">;
+      </font>SCleanIndex <font color="#000080">:= </font>PLink<font color="#000080">^.</font>Next<font color="#000080">;
+      </font>FREEMEM<font color="#000080">(</font>PLink<font color="#000080">,</font>SIZEOF<font color="#000080">(</font>LList<font color="#000080">))
+   </font><font color="#FF0000"><b>END
+
+END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{  --------------------------    TEST PROGRAM ------------------------ }
+
+</i></font><font color="#FF0000"><b>Program </b></font>StorageTest<font color="#000080">;
+
+</font><font color="#008000"><i>{ This program will demonstrate the ability to save and restore text info
+  in an indexed file that is also Network aware. This should be interesting
+
+  Note that the information both stored and retrived are limited to 65530
+  characters in length.  In the current version, this will require you to
+  have somewhere on your heap that much space. In the future this routine
+  will be made EMS aware so that it will grab the best option for heap
+  storage and manipulation out there...
+
+  The OBJECT TStorage is a Child of the BufStream Object.  This means that
+  it still retains all the lower level stuff from BufStream, DOSStream, and
+  TStream if you have some sort of use for that.
+
+  The routines provided are as follows:
+
+  TStorage.Init(FNameStr, Mode, BufSize)
+      This routine will initialize the file that you are going to be reading
+      from or writing to.  You can use the stCreate, stOpenWrite, stOpenRead,
+      or stOpen as your mode.  If you use the stCreate, the system will write
+      over your previous file.  If you use stOpenWrite, you can ONLY write
+      to the file, you cannot do reads and visa-versa with stOpenRead.  If
+      you use stOpen, then you can do both operations at the same time.
+
+      This is another item that in the future will be changed to do record
+      locking of the specified section you are writing to so that other
+      users on a network can read from the various other parts of the file.
+
+      The BufSize defines the internal buffer size that the system will use
+      to buffer your I/O reads.  Borland recommends around 1024 for standard
+      usage.  You might make it bigger or smaller depending on your needs.
+
+  TStorage.WriteMsg(Buf)
+      This takes a buffer that you define that is NULL terminated (there is
+      a #0 at the end of your text) and will write it out to the end of the
+      file after running the buffer thru the internal compression routine
+      (see TStorage.Compress). It will also set an internal variable
+      TStorage.SIndex that is your key to retrieving this body of text.
+
+  TStorage.ReadMsg(Buf : PCharBuf; Index)
+      This is how you retrieve your text.  You pass the index that you got
+      earlier from TStorage.SIndex to this routine and it will pass you a
+      buffer that is defined as an array of characters [0..whatever] with
+      the string being NULL terminated.  NOTE:  If the index that you pass
+      is not the beginning of a stored pattern, the ReadBuf routine will
+      assume that you are reading a STANDARD text file and will rewind
+      and read the ENTIRE file into the buffer.  This is how you can use
+      the same routine to read normal text files as well as those created
+      by this Object.  If the message was deleted by the DeleteMsg routine,
+      you will get an errorlevel of 100 (Disk Read Error) returned to you
+      from the function.
+
+  TStorage.DeleteMsg(Index)
+      This function does not actually delete the message out of the stream
+      as this would then mess up all subsequent index pointers.  Instead, it
+      changes the compression routine variable to $FF indicating that the
+      message is no longer valid.  To actually take the messages out of the
+      stream, you need to use the CleanUpMsg procedure.
+
+  TStorage.CleanUpMsg
+      This procedure will scan the message stream, and re-write it out to a
+      seperate file leaving out all the deleted messages.  It then creates
+      a linked list of the old indexes and their new values.  This is then
+      used by you, the user, to change all your old saved index values.
+      NOTE:  Make sure that you do the index change BEFORE calling the
+      TStorage.Done routine as this will remove your list from memory and
+      all your pointers will be subsiquently screwed up.  If there is a
+      problem and you need to restore the previous file, you can rename
+      .$$$ file back to your filename.  The .$$$ file is not deleted until
+      the TStorage.Done is called.
+
+  TStorage.NewIndex(Index) : LONGINT
+      When you call this routine with an old index number, it will return
+      to you the new index reference number. You'll get a -1 if the system
+      cannot fine an original index number.  To use this, you can scan
+      through your recorded indexes in your data file sequentially and call
+      this routine with each one you get.  Then replace the old value with
+      the new value.  If you get a -1 as your return, then the old message
+      was either originally deleted or lost to the system.  This will ALWAYS
+      return a -1 if you haven't made a VALID call to TStorage.CleanUpMsg.
+      It will also reset after a TStorage.Done has been executed.  Make sure
+      that you use this after the TStorage.CleanUpMsg routine if you want
+      to retain the changes made.
+
+  TStorage.DeleteCleanUp
+      If you decide that for some reason something went wrong somewhere and
+      everything is screwed up, you can prevent TStorage.Done from replacing
+      your original msg file by calling this routine.  It will remove the
+      .$$$ file from the disk and clear out all TStorage.NewIndex references.
+
+  TStorage.Compress(Buf)
+      This is a compression routine that is VERY rudimentary.  I whipped
+      this up in an hour or so just to demonstrate how it works.  You can
+      create a child object and replace the compress and decompress routines
+      with something more efficient if you'd like.  All you need to do is
+      create a new RegComp variable other than 1 and make sure that your
+      compression routine will downwardly call mine if the numbers don't
+      match.  This way you can read files that were created with any
+      compression routine that is in the line.
+
+  TStorage.DeCompress(Buf)
+      Same as the compression except that this goes backwards.  Again, this
+      is a basic one that I whipped together in a matter of minutes so don't
+      be too impressed by it
+
+  TStorage.Done
+      Here is where you clean up all the messes, close all the files, and
+      return all the used heap back.  Remember to call this when your done
+      using the routines
+
+  ERRORS Returned
+      When you check the TStorage.Status Integer, if you do not get an stOk
+      returned, then something went wrong.  To identify it from this Unit,
+      You can check TStorage.Status against stStoreError.  Errors also
+      included are stStoreReadErr, stStoreWriteErr, and stStoreUnknownErr.
+      These are stored in the TStorage.ErrorInfo location.
+
+  ---------------------------------------------------------------------------
+
+  These routines were originally designed as a message storage routine for a
+  new BBS system message base that we are putting together, however we have
+  used this storage format for a varity of purposes as you can store variable
+  length messages to one file and only have to keep track of an index.  It
+  also attempts to save on disk space which is ALWAYS at a premium around
+  here.
+
+  If you have any suggestions or improvments on this file or its usage, or
+  would just like to chat, you can reach me at the following:
+
+        Marcos R. Della
+        5084 Rincon Ave.
+        Santa Rosa, CA 95409
+
+        CIS: 71675,765
+
+  ---------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">, </font>Crt<font color="#000080">, </font>Storage<font color="#000080">, </font>Objects<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR   </b></font>T   <font color="#000080">: </font>TStorage<font color="#000080">;
+      </font>st1 <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;      </font><font color="#008000"><i>{Kind of a pseudo buffer}
+      </i></font>st2 <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;      </font><font color="#008000"><i>{Another pseudo buffer}
+      </i></font>st3 <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+      </font>p   <font color="#000080">: </font>PCharBuf<font color="#000080">;    </font><font color="#008000"><i>{Pointer to the return character buffer}
+
+      </i></font>idx1   <font color="#000080">: </font>LONGINT<font color="#000080">;
+      </font>idx2   <font color="#000080">: </font>LONGINT<font color="#000080">;
+      </font>idx3   <font color="#000080">: </font>LONGINT<font color="#000080">;
+      </font>loop   <font color="#000080">: </font>WORD<font color="#000080">;
+      </font>ch     <font color="#000080">: </font>CHAR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+   </b></font>CLRSCR<font color="#000080">;
+   </font>st1 <font color="#000080">:= </font><font color="#800000">'Now is the time for all good men to come to the aid of their '
+        </font><font color="#000080">+ </font><font color="#800000">'country before the last of the Mohecians take over the world as '
+        </font><font color="#000080">+ </font><font color="#800000">'we now know it.  This might be a very detrimental accident if '
+        </font><font color="#000080">+ </font><font color="#800000">'it is allowed to happen' </font><font color="#000080">+ </font><font color="#800000">#0</font><font color="#000080">;
+   </font>st2 <font color="#000080">:= </font><font color="#800000">'This is a message that will test the deletion function.' </font><font color="#000080">+ </font><font color="#800000">#0</font><font color="#000080">;
+   </font>st3 <font color="#000080">:= </font><font color="#800000">'This message will survive the compression and deletion!' </font><font color="#000080">+ </font><font color="#800000">#0</font><font color="#000080">;
+
+   </font>T<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#800000">'TESTFILE.DAT'</font><font color="#000080">,</font>stOpenWrite<font color="#000080">,</font><font color="#800000">512</font><font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>ErrorInfo <font color="#000080">= </font><font color="#800000">2 </font><font color="#FF0000"><b>THEN  </b></font><font color="#008000"><i>{File Does Not Exist}
+      </i></font><font color="#FF0000"><b>BEGIN
+         </b></font>T<font color="#000080">.</font>Done<font color="#000080">;
+         </font>T<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#800000">'TESTFILE.DAT'</font><font color="#000080">,</font>stCreate<font color="#000080">,</font><font color="#800000">512</font><font color="#000080">)
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Filename:   '</font><font color="#000080">,</font>T<font color="#000080">.</font>SFileName<font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Mode:       '</font><font color="#000080">,</font>T<font color="#000080">.</font>SMode<font color="#000080">);
+
+   </font>T<font color="#000080">.</font>WriteMsg<font color="#000080">(</font>st1<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);    </font><font color="#008000"><i>{Our actual buffer is from 1..till we hit the NULL}
+   </i></font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN    </b></font><font color="#008000"><i>{Do your real error checking here if you are}
+      </i></font>T<font color="#000080">.</font>Reset<font color="#000080">;                 </font><font color="#008000"><i>{really interested}
+   </i></font>idx1 <font color="#000080">:= </font>T<font color="#000080">.</font>SIndex<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'1st Index:  '</font><font color="#000080">,</font>idx1<font color="#000080">);
+
+   </font>T<font color="#000080">.</font>WriteMsg<font color="#000080">(</font>st2<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+   </font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>T<font color="#000080">.</font>Reset<font color="#000080">;
+   </font>idx2 <font color="#000080">:= </font>T<font color="#000080">.</font>SIndex<font color="#000080">;
+   </font>Writeln<font color="#000080">(</font><font color="#800000">'2nd Index:  '</font><font color="#000080">,</font>idx2<font color="#000080">);
+
+   </font>T<font color="#000080">.</font>WriteMsg<font color="#000080">(</font>st3<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">]);
+   </font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>T<font color="#000080">.</font>Reset<font color="#000080">;
+   </font>idx3 <font color="#000080">:= </font>T<font color="#000080">.</font>SIndex<font color="#000080">;
+   </font>Writeln<font color="#000080">(</font><font color="#800000">'3nd Index:  '</font><font color="#000080">,</font>idx3<font color="#000080">);
+
+   </font>WriteLn<font color="#000080">;
+   </font>T<font color="#000080">.</font>DeleteMsg<font color="#000080">(</font>idx2<font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'First Deletion Attempt (Write Only):   '</font><font color="#000080">,</font>T<font color="#000080">.</font>ErrorInfo<font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>T<font color="#000080">.</font>Reset<font color="#000080">;
+   </font>T<font color="#000080">.</font>Done<font color="#000080">;
+
+   </font>T<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#800000">'TESTFILE.DAT'</font><font color="#000080">,</font>stOpen<font color="#000080">,</font><font color="#800000">128</font><font color="#000080">);
+   </font>T<font color="#000080">.</font>DeleteMsg<font color="#000080">(</font>idx2<font color="#000080">);            </font><font color="#008000"><i>{Must be open for read/write!}
+   </i></font>WriteLn<font color="#000080">(</font><font color="#800000">'Second Deletion Attempt (Read/Write):  '</font><font color="#000080">,</font>T<font color="#000080">.</font>ErrorInfo<font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>T<font color="#000080">.</font>Reset<font color="#000080">;
+
+   </font>T<font color="#000080">.</font>ReadMsg<font color="#000080">(</font>p<font color="#000080">,</font>idx2<font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Attempt to re-read:                    '</font><font color="#000080">,</font>T<font color="#000080">.</font>ErrorInfo<font color="#000080">);
+   </font><font color="#FF0000"><b>IF </b></font>T<font color="#000080">.</font>Status <font color="#000080">&lt;&gt; </font>stOk <font color="#FF0000"><b>THEN
+      </b></font>T<font color="#000080">.</font>Reset<font color="#000080">;
+   </font>Write<font color="#000080">(</font><font color="#800000">'&quot;'</font><font color="#000080">);
+   </font>Loop <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>p<font color="#000080">^[</font>Loop<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>Write<font color="#000080">(</font>p<font color="#000080">^[</font>Loop<font color="#000080">]);
+      </font>INC<font color="#000080">(</font>Loop<font color="#000080">)
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'&quot;'</font><font color="#000080">);
+   </font>Write<font color="#000080">(</font><font color="#800000">'Cleaning up the deletion files.   Error returned: '</font><font color="#000080">);
+   </font>T<font color="#000080">.</font>CleanUpMsg<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font>T<font color="#000080">.</font>ErrorInfo<font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Re-Index of #1 (Old/New):   '</font><font color="#000080">,</font>idx1<font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">,</font>T<font color="#000080">.</font>NewIndex<font color="#000080">(</font>idx1<font color="#000080">));
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Re-Index of #2:             '</font><font color="#000080">,</font>idx2<font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">,</font>T<font color="#000080">.</font>NewIndex<font color="#000080">(</font>idx2<font color="#000080">));
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Re-Index of #3:             '</font><font color="#000080">,</font>idx3<font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">,</font>T<font color="#000080">.</font>NewIndex<font color="#000080">(</font>idx3<font color="#000080">));
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Removing Cleanup stuff and restoring old indexes'</font><font color="#000080">);
+   </font>T<font color="#000080">.</font>DeleteCleanUp<font color="#000080">;
+   </font>T<font color="#000080">.</font>Done<font color="#000080">;
+
+   </font>T<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#800000">'TESTFILE.DAT'</font><font color="#000080">,</font>stOpenRead<font color="#000080">,</font><font color="#800000">128</font><font color="#000080">);
+   </font>T<font color="#000080">.</font>ReadMsg<font color="#000080">(</font>p<font color="#000080">,</font>idx1<font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Test that is being read back from the file:'</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'---------------Index 1----------------------------'</font><font color="#000080">);
+   </font>Loop <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>p<font color="#000080">^[</font>Loop<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>Write<font color="#000080">(</font>p<font color="#000080">^[</font>Loop<font color="#000080">]);
+      </font>INC<font color="#000080">(</font>Loop<font color="#000080">)
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+
+   </font>T<font color="#000080">.</font>ReadMsg<font color="#000080">(</font>p<font color="#000080">,</font>idx3<font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'---------------Index 3----------------------------'</font><font color="#000080">);
+   </font>Loop <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>p<font color="#000080">^[</font>Loop<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>Write<font color="#000080">(</font>p<font color="#000080">^[</font>Loop<font color="#000080">]);
+      </font>INC<font color="#000080">(</font>Loop<font color="#000080">)
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>T<font color="#000080">.</font>Done<font color="#000080">;
+
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'-------------------------------------------'</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'If you want to see what the compressed text looks like'</font><font color="#000080">);
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'then use a listing utility to list the file '</font><font color="#000080">,</font>T<font color="#000080">.</font>SFilename<font color="#000080">);
+   </font>WriteLn<font color="#000080">;
+   </font>WriteLn<font color="#000080">(</font><font color="#800000">'Press a key to read a STANDARD text file'</font><font color="#000080">);
+   </font>ch <font color="#000080">:= </font>READKEY<font color="#000080">;
+   </font><font color="#FF0000"><b>IF </b></font>ch <font color="#000080">= </font><font color="#800000">#0 </font><font color="#FF0000"><b>THEN
+      </b></font>ch <font color="#000080">:= </font>READKEY<font color="#000080">;
+   </font>CLRSCR<font color="#000080">;
+
+   </font>T<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#800000">'TEST.PAS'</font><font color="#000080">,</font>stOpenRead<font color="#000080">,</font><font color="#800000">1024</font><font color="#000080">);
+   </font>T<font color="#000080">.</font>ReadMsg<font color="#000080">(</font>p<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+   </font>Loop <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+   </font><font color="#FF0000"><b>WHILE </b></font>p<font color="#000080">^[</font>Loop<font color="#000080">] &lt;&gt; </font><font color="#800000">#0 </font><font color="#FF0000"><b>DO BEGIN
+      </b></font>Write<font color="#000080">(</font>p<font color="#000080">^[</font>Loop<font color="#000080">]);
+      </font>INC<font color="#000080">(</font>Loop<font color="#000080">)
+   </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+   </font>WriteLn<font color="#000080">;
+   </font>T<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to STREAMS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0004.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,132 @@
+<html>
+<head><title> "Process WM_ENDSESSION" by HALLVARD VASSBOTN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0055.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+In a previous mailed with the subject &quot;[Delphi] Serios bug when closing
+windows???&quot; bimmer@ibm.net(Per Bakkendorff) writes:
+&gt;When you have a delphi application running, and you are shutting down windows,
+&gt;(don't close your app first), NONE of your destructors are called!!!!
+
+At first I thought the problem was programmer's code, but then I realized
+that it really is a bug or at least a very lazy &quot;feature&quot;.
+
+The problem seems to be that when you close down Windows, it will first
+send a WM_QueryEndSession message to all running top-level windows. This
+is handled and processed correctly by the TForm object in VCL.
+
+Then assuming that all applications indicated that it was ok to close down,
+Windows will send WM_EndSession messages to all windows. This message is
+not handled by VCL. The application is simply brought down with a bang.
+No windows are closed, no destructor called and no exit procedures called.
+
+The solution is to handle the WM_EndSession message yourself. There are
+several ways of handling messages in Delphi, but the only reliable way
+of handling the WM_ENDSESSION is to use the HookWindow method of
+Application.
+
+In the message handler, check to see if the message is a WM_ENDSESSION.
+If so, we should close down the application. We could have called the
+Close method of the main window, but the Windows API documentation states
+that the system might go down anytime after return from the WM_ENDSESSION,
+and a posted WM_QUIT message might never arrive to the application.
+
+The solution is to simply call Halt instead. This will call all registred
+exit procedures, including the ones in Controls and DB units. These will
+free the application and screen objects and take the BDE down correctly.
+
+A simple example follows:
+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>Tst2u<font color="#000080">;
+
+</font><font color="#FF0000"><b>interface
+
+uses
+  </b></font>SysUtils<font color="#000080">, </font>WinTypes<font color="#000080">, </font>WinProcs<font color="#000080">, </font>Messages<font color="#000080">, </font>Classes<font color="#000080">, </font>Graphics<font color="#000080">, </font>Controls<font color="#000080">,
+  </font>Forms<font color="#000080">, </font>Dialogs<font color="#000080">, </font>Grids<font color="#000080">, </font>DBGrids<font color="#000080">, </font>DB<font color="#000080">, </font>DBTables<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>TForm1 <font color="#000080">= </font><font color="#FF0000"><b>class</b></font><font color="#000080">(</font>TForm<font color="#000080">)
+    </font>DataSource1<font color="#000080">: </font>TDataSource<font color="#000080">;
+    </font>Table1<font color="#000080">: </font>TTable<font color="#000080">;
+    </font>DBGrid1<font color="#000080">: </font>TDBGrid<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>FormCreate<font color="#000080">(</font>Sender<font color="#000080">: </font>TObject<font color="#000080">);
+  </font><font color="#FF0000"><b>private
+    </b></font><font color="#008000"><i>{ Private declarations }
+    </i></font><font color="#FF0000"><b>function </b></font>HookProc<font color="#000080">(</font><font color="#FF0000"><b>var Message</b></font><font color="#000080">: </font>TMessage<font color="#000080">): </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>public
+    </b></font><font color="#008000"><i>{ Public declarations }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>Form1<font color="#000080">: </font>TForm1<font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+</b></font><font color="#008000"><i>{$R *.DFM}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>FlagFileName <font color="#000080">= </font><font color="#800000">'C:\Flag.Fil'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>CreateFlagFile<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>F<font color="#000080">: </font>System<font color="#000080">.</font>Text<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>System<font color="#000080">.</font>Assign<font color="#000080">(</font>F<font color="#000080">, </font>FlagFileName<font color="#000080">);
+  </font>System<font color="#000080">.</font>Rewrite<font color="#000080">(</font>F<font color="#000080">);
+  </font>Writeln<font color="#000080">(</font>F<font color="#000080">, </font><font color="#800000">'This is a dummy flag file'</font><font color="#000080">);
+  </font>System<font color="#000080">.</font>Close<font color="#000080">(</font>F<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>KillFlagFile<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>F<font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>System<font color="#000080">.</font>Assign<font color="#000080">(</font>F<font color="#000080">, </font>FlagFileName<font color="#000080">);
+  </font>System<font color="#000080">.</font>Erase<font color="#000080">(</font>F<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyExitProc<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>KillFlagFile<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>TForm1<font color="#000080">.</font>FormCreate<font color="#000080">(</font>Sender<font color="#000080">: </font>TObject<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>Application<font color="#000080">.</font>HookMainWindow<font color="#000080">(</font>HookProc<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>TForm1<font color="#000080">.</font>HookProc<font color="#000080">(</font><font color="#FF0000"><b>var Message</b></font><font color="#000080">: </font>TMessage<font color="#000080">): </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Result <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>if Message</b></font><font color="#000080">.</font>Msg <font color="#000080">= </font>WM_EndSession <font color="#FF0000"><b>then
+  begin
+    if </b></font>WordBool<font color="#000080">(</font><font color="#FF0000"><b>Message</b></font><font color="#000080">.</font>wParam<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font><font color="#008000"><i>{ Windows is closing down - clean up!! }
+
+      { This should execute all ExitProcs, close windows and call destructors... }
+       </i></font>Halt<font color="#000080">; </font><font color="#008000"><i>{ This works! }
+
+      { This should close things down properly,
+        but do we have enough time to handle any posted messages before Windows
+        is already down??  This will result in a PostQuitMessage that might
+        never arrive!}
+{      Close;} { This doesn't always work - avoid it }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>initialization
+  </b></font>CreateFlagFile<font color="#000080">;
+  </font>AddExitProc<font color="#000080">(</font>MyExitProc<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>This <font color="#FF0000"><b>unit </b></font>demonstrates that the exit procedures are called when closing
+the app normally <font color="#FF0000"><b>and </b></font>when closing down Windows <font color="#FF0000"><b>and </b></font>using HookMainWindow<font color="#000080">.
+</font>Without the HookMainWindow call<font color="#000080">, </font>the exit proc will <font color="#FF0000"><b>not </b></font>be called<font color="#000080">. </font>This
+<font color="#FF0000"><b>is </b></font>specially important <font color="#FF0000"><b>for </b></font>DB applications<font color="#000080">. </font>Without the Halt<font color="#000080">, </font>LCK files
+will <font color="#FF0000"><b>not </b></font>be deleted<font color="#000080">, </font>buffers might <font color="#FF0000"><b>not </b></font>be flushed<font color="#000080">, </font>changes posted <font color="#FF0000"><b>and
+</b></font>so <font color="#FF0000"><b>on</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0055.PAS">Original</a><b>]</b></p></body>
+</html>

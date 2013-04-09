@@ -1,0 +1,215 @@
+<html>
+<head><title> "Screen Saver TSR" by ANDREW KEY</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0016.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: ANDREW KEY
+Subj: Screen Save
+}
+
+</i></font><font color="#FF0000"><b>unit </b></font>Scrnsavr<font color="#000080">;
+</font><font color="#008000"><i>{$F+}
+(*************************************************************************)
+(*                        Screen Saver                                   *)
+(*                                                                       *)
+(*  Written by Jay A. Key -- Oct 1993                                    *)
+(*  Code may be modified and used freely.  Please mention my name        *)
+(*  somewhere in your docs or in the program itself.                     *)
+(*                                                                       *)
+(*  Self contained unit to install a text-mode screen saver in Turbo     *)
+(*  Pascal programs.  Simply include the following line in your code.    *)
+(*    uses ScrnSavr;                                                     *)
+(*                                                                       *)
+(*  It will initialize itself automatically, and will remove itself      *)
+(*  upon exit from your program, graceful exit or not.  Functions        *)
+(*  SetTimeOut and SetDelay are included if you wish to modify the       *)
+(*  default values.                                                      *)
+(*                                                                       *)
+(*  Warning: will not properly save and restore screens while running    *)
+(*  under the Turbo Pascal IDE.  Runs great from DOS.                    *)
+(*************************************************************************)
+
+</i></font><font color="#FF0000"><b>interface
+
+uses </b></font>Dos<font color="#000080">,</font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>NumRows<font color="#000080">: </font>byte<font color="#000080">;          </font><font color="#008000"><i>{Returns number of rows in current screen}
+</i></font><font color="#FF0000"><b>function </b></font>ColorAdaptor<font color="#000080">: </font>boolean<font color="#000080">;  </font><font color="#008000"><i>{TRUE if color video card installed}
+</i></font><font color="#FF0000"><b>procedure </b></font>SetTimeOut<font color="#000080">(</font>T<font color="#000080">: </font>integer<font color="#000080">); </font><font color="#008000"><i>{Delay(seconds) before activation}
+</i></font><font color="#FF0000"><b>procedure </b></font>SetDelay<font color="#000080">(</font>T<font color="#000080">: </font>integer<font color="#000080">);  </font><font color="#008000"><i>{Interval between iterations}
+
+(************************************)
+
+</i></font><font color="#FF0000"><b>implementation
+
+type
+  </b></font>VideoArray <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">2000</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;  </font><font color="#008000"><i>{buffer to save video screen}
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>Timer<font color="#000080">: </font>word<font color="#000080">;
+  </font>Waiting<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>OldInt15<font color="#000080">,                  </font><font color="#008000"><i>{Keyboard interrupt}
+  </i></font>OldInt1C<font color="#000080">,                  </font><font color="#008000"><i>{Timer interrupt}
+  </i></font>OldInt23<font color="#000080">,                  </font><font color="#008000"><i>{Cntl-C/Cntl-Break handler}
+  </i></font>ExitSave<font color="#000080">: </font>pointer<font color="#000080">;
+  </font>Position<font color="#000080">, </font>Cursor<font color="#000080">: </font>integer<font color="#000080">; </font><font color="#008000"><i>{save and restore cursor positions}
+  </i></font>VideoSave<font color="#000080">: </font>VideoArray<font color="#000080">;
+  </font>VideoMem<font color="#000080">: ^</font>VideoArray<font color="#000080">;
+  </font>TimeOut<font color="#000080">, </font>Delay<font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>JumpToPriorIsr<font color="#000080">(</font>p<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#008000"><i>{Originally written by Brook Monroe, &quot;An ISR Clock&quot;, pg. 64,
+ PC Techniques Aug/Sep 1992}
+  </i></font><font color="#FF0000"><b>inline</b></font><font color="#000080">(</font><font color="#800000">$5b</font><font color="#000080">/</font><font color="#800000">$58</font><font color="#000080">/</font><font color="#800000">$87</font><font color="#000080">/</font><font color="#800000">$5e</font><font color="#000080">/</font><font color="#800000">$0e</font><font color="#000080">/</font><font color="#800000">$87</font><font color="#000080">/</font><font color="#800000">$46</font><font color="#000080">/</font><font color="#800000">$10</font><font color="#000080">/</font><font color="#800000">$89</font><font color="#000080">/</font><font color="#800000">$ec</font><font color="#000080">/</font><font color="#800000">$5d</font><font color="#000080">/</font><font color="#800000">$07</font><font color="#000080">/</font><font color="#800000">$1f</font><font color="#000080">/
+         </font><font color="#800000">$5f</font><font color="#000080">/</font><font color="#800000">$5e</font><font color="#000080">/</font><font color="#800000">$5a</font><font color="#000080">/</font><font color="#800000">$59</font><font color="#000080">/</font><font color="#800000">$cb</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>function </b></font>ColorAdaptor<font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">int 11                   </font><font color="#008000"><i>{BIOS call - get equipment list}
+    </i></font><font color="#FF00FF">and al,$0010             </font><font color="#008000"><i>{mask off all but bit 4}
+    </i></font><font color="#FF00FF">xor al,$0010             </font><font color="#008000"><i>{flip bit 4 - return val is in al}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>NumRows<font color="#000080">: </font>byte<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;  </font><font color="#008000"><i>{returns number of displayable rows}
+  </i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ax,$40
+    mov es,ax
+    mov ax,$84
+    mov di,ax
+    mov al,[es:di]           </font><font color="#008000"><i>{byte at [$40:$84] is number of rows in display}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>HideCursor<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ah,$03
+    xor bh,bh
+    int $10               </font><font color="#008000"><i>{video interrupt}
+    </i></font><font color="#FF00FF">mov Position,dx       </font><font color="#008000"><i>{save cursor position}
+    </i></font><font color="#FF00FF">mov Cursor,cx         </font><font color="#008000"><i>{and type}
+    </i></font><font color="#FF00FF">mov ah,$01
+    mov ch,$20
+    int $10               </font><font color="#008000"><i>{video interrupt - hide cursor}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>RestoreCursor<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ah,$02
+    xor bh,bh
+    mov dx,Position       </font><font color="#008000"><i>{get old position}
+    </i></font><font color="#FF00FF">int $10               </font><font color="#008000"><i>{video interrupt - restore cursor position}
+    </i></font><font color="#FF00FF">mov cx,Cursor         </font><font color="#008000"><i>{get old cursor type}
+    </i></font><font color="#FF00FF">mov ah,$01
+    int $10               </font><font color="#008000"><i>{video interrupt - restore cursor type}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>RestoreScreen<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>VideoMem<font color="#000080">^ := </font>VideoSave<font color="#000080">;  </font><font color="#008000"><i>{Copy saved image back onto video memory}
+    </i></font>RestoreCursor<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SaveScreen<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>VideoSave <font color="#000080">:= </font>VideoMem<font color="#000080">^;  </font><font color="#008000"><i>{Copy video memory to array}
+    </i></font>HideCursor<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>DispMsg<font color="#000080">;  </font><font color="#008000"><i>{simple stub-out for displaying YOUR message(s),
+                     pictures, etc...use your imagination!!!}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ClrScr<font color="#000080">;
+    </font>GotoXY<font color="#000080">(</font>random<font color="#000080">(</font><font color="#800000">50</font><font color="#000080">),</font>random<font color="#000080">(</font><font color="#800000">23</font><font color="#000080">));
+    </font>writeln<font color="#000080">(</font><font color="#800000">'This would normally be something witty!'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>NewInt15<font color="#000080">(</font>Flags<font color="#000080">,</font>CS<font color="#000080">,</font>IP<font color="#000080">,</font>AX<font color="#000080">,</font>BX<font color="#000080">,</font>CX<font color="#000080">,</font>DX<font color="#000080">,
+                   </font>SI<font color="#000080">,</font>DI<font color="#000080">,</font>DS<font color="#000080">,</font>ES<font color="#000080">,</font>BP<font color="#000080">:</font>WORD<font color="#000080">); </font>interrupt<font color="#000080">; </font><font color="#008000"><i>{keyboard handler}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>Timer<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;                     </font><font color="#008000"><i>{Reset timer}
+    </i></font><font color="#FF0000"><b>if </b></font>Waiting <font color="#FF0000"><b>then               </b></font><font color="#008000"><i>{Screen saver activated?}
+      </i></font><font color="#FF0000"><b>begin
+        </b></font>RestoreScreen<font color="#000080">;            </font><font color="#008000"><i>{Restore saved screen image}
+        </i></font>Waiting<font color="#000080">:= </font>FALSE<font color="#000080">;          </font><font color="#008000"><i>{De-activate screen saver}
+        </i></font>Flags<font color="#000080">:=(</font>Flags <font color="#FF0000"><b>and </b></font><font color="#800000">$FFFE</font><font color="#000080">); </font><font color="#008000"><i>{Tell BIOS to ignore current keystroke}
+      </i></font><font color="#FF0000"><b>end
+    else
+      </b></font>JumpToPriorISR<font color="#000080">(</font>OldInt15<font color="#000080">);   </font><font color="#008000"><i>{call original int 15}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>NewInt1C<font color="#000080">; </font>interrupt<font color="#000080">;    </font><font color="#008000"><i>{timer interrupt}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>Inc<font color="#000080">(</font>Timer<font color="#000080">);                   </font><font color="#008000"><i>{Increment timer}
+    </i></font><font color="#FF0000"><b>if </b></font>Timer<font color="#000080">&gt;</font>TimeOut <font color="#FF0000"><b>then         </b></font><font color="#008000"><i>{No key hit for TimeOut seconds?}
+      </i></font><font color="#FF0000"><b>begin
+        </b></font>Waiting <font color="#000080">:= </font>TRUE<font color="#000080">;          </font><font color="#008000"><i>{Activate screen saver}
+        </i></font>SaveScreen<font color="#000080">;               </font><font color="#008000"><i>{Save image of video memory}
+        </i></font>DispMsg<font color="#000080">;                  </font><font color="#008000"><i>{Display your own message}
+        </i></font>Timer <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;               </font><font color="#008000"><i>{Reset timer}
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>waiting <font color="#FF0000"><b>then               </b></font><font color="#008000"><i>{Is saver already active?}
+      </i></font><font color="#FF0000"><b>begin
+        if </b></font>Timer<font color="#000080">&gt;</font>Delay <font color="#FF0000"><b>then       </b></font><font color="#008000"><i>{Time for next message?}
+          </i></font><font color="#FF0000"><b>begin
+            </b></font>Timer <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;           </font><font color="#008000"><i>{Reset timer}
+            </i></font>DispMsg<font color="#000080">;              </font><font color="#008000"><i>{Display next message}
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>JumpToPriorISR<font color="#000080">(</font>OldInt1C<font color="#000080">);     </font><font color="#008000"><i>{Chain to old timer interrupt}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>ResetIntVectors<font color="#000080">;        </font><font color="#008000"><i>{Restores Intrrupt vectors to orig. values}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>SetIntVec<font color="#000080">(</font><font color="#800000">$15</font><font color="#000080">,</font>OldInt15<font color="#000080">);
+    </font>SetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">,</font>OldInt1C<font color="#000080">);
+    </font>SetIntVec<font color="#000080">(</font><font color="#800000">$23</font><font color="#000080">,</font>OldInt23<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>NewInt23<font color="#000080">; </font>interrupt<font color="#000080">;    </font><font color="#008000"><i>{Called to handle cntl-c/brk}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ResetIntVectors<font color="#000080">;              </font><font color="#008000"><i>{Restore old interrupt vectors}
+    </i></font>JumpToPriorISR<font color="#000080">(</font>OldInt23<font color="#000080">);     </font><font color="#008000"><i>{Chain to original int 23h}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>MyExit<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;            </font><font color="#008000"><i>{exit code for unit}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>ResetIntVectors<font color="#000080">;              </font><font color="#008000"><i>{Restore old interrupt vectors}
+    </i></font>ExitProc<font color="#000080">:=</font>ExitSave<font color="#000080">;           </font><font color="#008000"><i>{Restore old exit code}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetVideoAddress<font color="#000080">;        </font><font color="#008000"><i>{Returns pointer to text video memory}
+  </i></font><font color="#FF0000"><b>begin
+    if </b></font>ColorAdaptor <font color="#FF0000"><b>then
+      </b></font>VideoMem <font color="#000080">:= </font>ptr<font color="#000080">(</font><font color="#800000">$B000</font><font color="#000080">,</font><font color="#800000">$0000</font><font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>VideoMem <font color="#000080">:= </font>ptr<font color="#000080">(</font><font color="#800000">$B800</font><font color="#000080">,</font><font color="#800000">$0000</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetTimeOut<font color="#000080">(</font>T<font color="#000080">: </font>integer<font color="#000080">); </font><font color="#008000"><i>{Set delay(seconds) before activation}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>TimeOut<font color="#000080">:=</font>Round<font color="#000080">(</font>T<font color="#000080">*</font><font color="#800000">18.2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetDelay<font color="#000080">(</font>T<font color="#000080">: </font>integer<font color="#000080">);  </font><font color="#008000"><i>{Set interval between iterations}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>Delay<font color="#000080">:=</font>Round<font color="#000080">(</font>T<font color="#000080">*</font><font color="#800000">18.2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{Initialize unit}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>SetVideoAddress<font color="#000080">;             </font><font color="#008000"><i>{Set up address for video memory}
+  </i></font>Waiting <font color="#000080">:= </font>FALSE<font color="#000080">;            </font><font color="#008000"><i>{Screen saver initially OFF}
+  </i></font>Timer <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                  </font><font color="#008000"><i>{Reset timer}
+  </i></font>ExitSave <font color="#000080">:= </font>ExitProc<font color="#000080">;        </font><font color="#008000"><i>{Save old exit routine}
+  </i></font>ExitProc <font color="#000080">:= @</font>MyExit<font color="#000080">;         </font><font color="#008000"><i>{Install own exit routine}
+{Install user defined int vectors}
+  </i></font>GetIntVec<font color="#000080">(</font><font color="#800000">$15</font><font color="#000080">,</font>OldInt15<font color="#000080">);     </font><font color="#008000"><i>{Keyboard handler}
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$15</font><font color="#000080">,@</font>NewInt15<font color="#000080">);
+  </font>GetIntVec<font color="#000080">(</font><font color="#800000">$1c</font><font color="#000080">,</font>OldInt1C<font color="#000080">);     </font><font color="#008000"><i>{Timer int}
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$1c</font><font color="#000080">,@</font>NewInt1C<font color="#000080">);
+  </font>GetIntVec<font color="#000080">(</font><font color="#800000">$23</font><font color="#000080">,</font>OldInt23<font color="#000080">);     </font><font color="#008000"><i>{Cntl-C/Brk handler}
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$23</font><font color="#000080">,@</font>NewInt23<font color="#000080">);
+  </font>SetTimeOut<font color="#000080">(</font><font color="#800000">120</font><font color="#000080">);
+  </font>SetDelay<font color="#000080">(</font><font color="#800000">15</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0016.PAS">Original</a><b>]</b></p></body>
+</html>

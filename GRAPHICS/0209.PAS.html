@@ -1,0 +1,764 @@
+<html>
+<head><title> "Partial JPEG File info" by CAMERON CLARK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0209.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$A+,B-,D+,E+,F-,G+,I+,L+,N-,O-,P-,Q+,R+,S+,T-,V-,X-}
+{:
+PREFACE:
+
+A basic jpeg/jfif file is compossed of subsections which I will call
+segments. Each segment has a header ID. Some headers have information
+blocks following the header, while some don not. Basically, the
+stucture can be thought of as follows:  (ID [info.], ... , ID [info.]).
+So, a segment can be compossed of only a header or a header with
+data following.
+
+Unlike most structures, the segments do not have a predefined order;
+therefor, it is maditory to read the ID header first then treat the
+following data occurding to its header. Remember, certain headers
+do not have any following data - I will label these in the code.
+
+The only predifined structure that a jpeg/jfif has is the following:
+The file starts with the SOI(start of information) header and is
+followed by the app0 segment. Followed by any number of other segments,
+followed by the EOI(end of information) segment.
+
+arrangment:  SOI (start of information)
+             app0
+             [ ... unknown ... ]
+             EOI (end of information)
+
+
+The usual arrangment that I have found in most jpeg/jfif files is as
+follows:
+             SOI    (start of information)
+             app0   (JFIF label w/ image description)
+             DQT    (Define quantization table)
+             sof0   (start of frame)
+             DHT    (Define huffman table)
+             DHT    (Define huffman table)
+             DHT    (Define huffman table)
+             DHT    (Define huffman table)
+             SOS    (Start of scan)
+       NOTE: dqt,sof0, &amp; dht don't always appear in this order.
+
+Description:
+    SOI:  just a &quot;dumb&quot; header - no information follows.
+
+    app0: for jfif files - JFIF id, version #, unit,
+          x &amp; y density, thumbnail info &amp; thumbnail (if any)
+          SEE app0_info TYPE
+
+    DQT:  defines 8x8 table used for quantization
+
+    sof0: image height &amp; width &amp; color components
+          jfif support (1) Y or (3) Y Cb Cr
+          a yuv_to_rbg function is in this unit.
+
+    DHT: Set's up all the huffman tables used to decompress
+         the image.
+
+    SOS: defines AC &amp; DC huffman tables to use for each color component
+
+Headers:
+Headers are 2 bytes, in hexidecimal &quot;FF&quot; followed by the ID byte.
+For ease of tranlastion, I have set up a list of constants to
+determine the header ID (eg. sof0,dht,sos,..., ect.)
+ALL headers with infomation following have a word that tells the
+length of the data following. The word is not in the intel lo-hi
+format, so I included a HI_LO function for translation.
+To read any segment you only need to the following:
+   Read the header, identify it.
+   Read the hi-lo word for length, translate HI_LO().
+   Read &quot;length&quot; bytes of data.
+   NOTE: Not all headers have a length or data block.
+
+
+THIS FILE----------------------------------------------
+
+This unit is design specifically for debuging and block testing. What
+this means is that no actual file needs to be used to test and debug
+each segment handling procedure. The driver file is responsible for
+header identification, file reading, and so on.
+
+To process an information block, read the header &amp; identify it.
+Read the length, subtract 2 from it and save it. Read &quot;length&quot; bytes
+into a block (array of bytes). Now, give the appropriete procedure
+the block, length, and a predefined type (Quan_tables, Huff_tables,
+app0_info, frame_0, scan_info).
+
+}
+
+</i></font><font color="#FF0000"><b>UNIT </b></font>jpegsegm<font color="#000080">; </font><font color="#008000"><i>{ see TEST program at the bottom ! }
+
+</i></font><font color="#FF0000"><b>INTERFACE
+  CONST </b></font>TEM  <font color="#000080">= </font><font color="#800000">$01</font><font color="#000080">;            </font><font color="#008000"><i>{unknown}
+      </i></font>SOF0 <font color="#000080">= </font><font color="#800000">$c0</font><font color="#000080">;            </font><font color="#008000"><i>{start of FRAME}
+      </i></font>SOF1 <font color="#000080">= </font><font color="#800000">$c1</font><font color="#000080">;            </font><font color="#008000"><i>{&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;&quot;}
+      </i></font>SOF2 <font color="#000080">= </font><font color="#800000">$c2</font><font color="#000080">;            </font><font color="#008000"><i>{following SOF usually unsupported}
+      </i></font>SOF3 <font color="#000080">= </font><font color="#800000">$c3</font><font color="#000080">;
+      </font>SOF5 <font color="#000080">= </font><font color="#800000">$c2</font><font color="#000080">;
+      </font>SOF6 <font color="#000080">= </font><font color="#800000">$c6</font><font color="#000080">;
+      </font>SOF7 <font color="#000080">= </font><font color="#800000">$c7</font><font color="#000080">;
+      </font>SOF9 <font color="#000080">= </font><font color="#800000">$c9</font><font color="#000080">;            </font><font color="#008000"><i>{sof9 : for arithmetic coding - taboo!}
+      </i></font>SOF10<font color="#000080">= </font><font color="#800000">$ca</font><font color="#000080">;
+      </font>SOF11<font color="#000080">= </font><font color="#800000">$cb</font><font color="#000080">;
+      </font>SOF13<font color="#000080">= </font><font color="#800000">$cd</font><font color="#000080">;
+      </font>SOF14<font color="#000080">= </font><font color="#800000">$ce</font><font color="#000080">;
+      </font>SOF15<font color="#000080">= </font><font color="#800000">$cf</font><font color="#000080">;
+      </font>DHT  <font color="#000080">= </font><font color="#800000">$c4</font><font color="#000080">;            </font><font color="#008000"><i>{Define huffman Table}
+      </i></font>JPG  <font color="#000080">= </font><font color="#800000">$c8</font><font color="#000080">;            </font><font color="#008000"><i>{undefined/ reserved =Error?}
+      </i></font>DAC  <font color="#000080">= </font><font color="#800000">$cc</font><font color="#000080">;            </font><font color="#008000"><i>{define arithmetic table UNSUPORTED }
+      </i></font>RST0 <font color="#000080">= </font><font color="#800000">$d0</font><font color="#000080">;            </font><font color="#008000"><i>{Used for resync [?] ignored}
+      </i></font>rst1 <font color="#000080">= </font><font color="#800000">$d1</font><font color="#000080">;
+      </font>rst2 <font color="#000080">= </font><font color="#800000">$d2</font><font color="#000080">;
+      </font>rst3 <font color="#000080">= </font><font color="#800000">$d3</font><font color="#000080">;
+      </font>rst4 <font color="#000080">= </font><font color="#800000">$d4</font><font color="#000080">;
+      </font>rst5 <font color="#000080">= </font><font color="#800000">$d5</font><font color="#000080">;
+      </font>rst6 <font color="#000080">= </font><font color="#800000">$d6</font><font color="#000080">;
+      </font>rst7 <font color="#000080">= </font><font color="#800000">$d7</font><font color="#000080">;
+      </font>SOI  <font color="#000080">= </font><font color="#800000">$d8</font><font color="#000080">;            </font><font color="#008000"><i>{start of image}
+      </i></font>EOI  <font color="#000080">= </font><font color="#800000">$d9</font><font color="#000080">;            </font><font color="#008000"><i>{end   of image}
+      </i></font>SOS  <font color="#000080">= </font><font color="#800000">$da</font><font color="#000080">;            </font><font color="#008000"><i>{start of scan }
+      </i></font>DQT  <font color="#000080">= </font><font color="#800000">$db</font><font color="#000080">;            </font><font color="#008000"><i>{Define Quantization Table}
+      </i></font>DNL  <font color="#000080">= </font><font color="#800000">$dc</font><font color="#000080">;            </font><font color="#008000"><i>{unknown -usually unsupported}
+      </i></font>DRI  <font color="#000080">= </font><font color="#800000">$dd</font><font color="#000080">;            </font><font color="#008000"><i>{Define Restart Interval}
+      </i></font>DHP  <font color="#000080">= </font><font color="#800000">$de</font><font color="#000080">;            </font><font color="#008000"><i>{ignore }
+      </i></font>EXP  <font color="#000080">= </font><font color="#800000">$df</font><font color="#000080">;
+      </font>APP0 <font color="#000080">= </font><font color="#800000">$e0</font><font color="#000080">;            </font><font color="#008000"><i>{JFIF app0 segment marker}
+      </i></font>APP15<font color="#000080">= </font><font color="#800000">$ef</font><font color="#000080">;            </font><font color="#008000"><i>{ignore}
+      </i></font>JPG0 <font color="#000080">= </font><font color="#800000">$f0</font><font color="#000080">;
+      </font>JPG13<font color="#000080">= </font><font color="#800000">$fd</font><font color="#000080">;
+      </font>COM  <font color="#000080">= </font><font color="#800000">$fe</font><font color="#000080">;            </font><font color="#008000"><i>{Comment}
+
+  {: Do App0 :}
+
+  </i></font><font color="#FF0000"><b>TYPE </b></font>app0_info <font color="#000080">= </font><font color="#FF0000"><b>record
+                   </b></font>revision   <font color="#000080">: </font><font color="#FF0000"><b>record
+                                  </b></font>major<font color="#000080">,         </font><font color="#008000"><i>{&gt;= 1}
+                                  </i></font>minor <font color="#000080">: </font>byte<font color="#000080">;
+                                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                   </font>XY_density <font color="#000080">: </font>byte<font color="#000080">;
+                   </font>X<font color="#000080">,</font>Y        <font color="#000080">: </font>word<font color="#000080">;
+                   </font>thumb_X<font color="#000080">,
+                   </font>thumb_y    <font color="#000080">: </font>byte<font color="#000080">;
+                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: Define Quantization Table :}
+
+  </i></font><font color="#FF0000"><b>TYPE </b></font>Q_byte      <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+       </font>Q_word      <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">;
+       </font>Q_type_type <font color="#000080">= (</font>bit_8<font color="#000080">,</font>bit_16<font color="#000080">);
+       </font>Quan_range <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">;
+       </font>Quan_tables <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>Quan_range<font color="#000080">] </font><font color="#FF0000"><b>of
+                     record
+                      </b></font>Valid  <font color="#000080">: </font>Boolean<font color="#000080">;
+                      </font>Q_TYPE <font color="#000080">: </font>Q_type_type<font color="#000080">;
+                      </font>Q      <font color="#000080">: </font><font color="#FF0000"><b>record
+                                 case </b></font>integer <font color="#FF0000"><b>of
+                                  </b></font><font color="#800000">1 </font><font color="#000080">: (</font>Q_byte <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">);
+                                  </font><font color="#800000">2 </font><font color="#000080">: (</font>Q_word <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>word<font color="#000080">);
+                                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+       </font>One_quan_table <font color="#000080">= </font><font color="#FF0000"><b>record
+                        case </b></font>integer <font color="#FF0000"><b>of
+                         </b></font><font color="#800000">1 </font><font color="#000080">: (</font>Q_int  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Integer<font color="#000080">);
+                         </font><font color="#800000">2 </font><font color="#000080">: (</font>Q_long <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Longint<font color="#000080">);
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: Define Huffman Table :}
+
+  </i></font><font color="#FF0000"><b>TYPE </b></font>huff_type   <font color="#000080">= (</font>AC<font color="#000080">, </font>DC<font color="#000080">);
+       </font>Huff_range  <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">;
+       </font>Huff_tables <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>huff_type<font color="#000080">] </font><font color="#FF0000"><b>of
+                     record
+                       </b></font>Table <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>Huff_range<font color="#000080">] </font><font color="#FF0000"><b>of
+                       record
+                         </b></font>valid     <font color="#000080">: </font>boolean<font color="#000080">;
+                         </font>H_type    <font color="#000080">: </font>huff_type<font color="#000080">;
+                         </font>Max_code  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+                         </font>H         <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">257</font><font color="#000080">] </font><font color="#FF0000"><b>of
+                                     record
+                                       </b></font>len  <font color="#000080">: </font>byte<font color="#000080">;
+                                       </font>code <font color="#000080">: </font>word<font color="#000080">;
+                                       </font>sym  <font color="#000080">: </font>byte<font color="#000080">;
+                                     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: Start of Frame :}
+
+  </i></font><font color="#FF0000"><b>type  </b></font>id_type   <font color="#000080">= (</font>no_id<font color="#000080">, </font>Y_<font color="#000080">, </font>CB_<font color="#000080">, </font>CR_<font color="#000080">, </font>I_<font color="#000080">, </font>Q_<font color="#000080">);
+        </font>comp_type <font color="#000080">= (</font>grey<font color="#000080">, </font>no_comp<font color="#000080">, </font>color<font color="#000080">);
+        </font>frame_0 <font color="#000080">= </font><font color="#FF0000"><b>record
+                   </b></font>precision    <font color="#000080">: </font>byte<font color="#000080">;
+                   </font>image_height <font color="#000080">: </font>word<font color="#000080">;
+                   </font>image_width  <font color="#000080">: </font>word<font color="#000080">;
+                   </font>comp_num     <font color="#000080">: </font>comp_type<font color="#000080">;
+                   </font>factor <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of
+                            record
+                              </b></font>id    <font color="#000080">: </font>id_type<font color="#000080">;
+                              </font>horz_factor   <font color="#000080">: </font>byte<font color="#000080">;
+                              </font>vert_factor   <font color="#000080">: </font>byte<font color="#000080">;
+                              </font>Q_num <font color="#000080">: </font>byte<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: Start of Scan :}
+
+  </i></font><font color="#FF0000"><b>type </b></font>comp_range <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">;
+       </font>scan_info <font color="#000080">= </font><font color="#FF0000"><b>record
+                     </b></font>comp_num <font color="#000080">: </font>comp_range<font color="#000080">;
+                     </font>Each <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font>comp_range<font color="#000080">] </font><font color="#FF0000"><b>of
+                            record
+                              </b></font>valid   <font color="#000080">: </font>boolean<font color="#000080">;
+                              </font>id      <font color="#000080">: </font>id_type<font color="#000080">;
+                              </font>huff_ac <font color="#000080">: </font>huff_range<font color="#000080">;
+                              </font>huff_dc <font color="#000080">: </font>huff_range<font color="#000080">;
+                            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_sof0<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                    </font><font color="#FF0000"><b>VAR </b></font>Frame <font color="#000080">: </font>frame_0<font color="#000080">);
+  </font><font color="#FF0000"><b>Function  </b></font>DO_app0<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                   </font><font color="#FF0000"><b>VAR </b></font>info <font color="#000080">: </font>app0_info <font color="#000080">) : </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_DQT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                 </font><font color="#FF0000"><b>VAR </b></font>All_DQT <font color="#000080">: </font>Quan_tables<font color="#000080">);
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_sos<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                   </font><font color="#FF0000"><b>Var </b></font>Scan <font color="#000080">: </font>Scan_info<font color="#000080">);
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_DHT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                 </font><font color="#FF0000"><b>VAR </b></font>all_dht <font color="#000080">: </font>huff_tables<font color="#000080">);
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_DRI<font color="#000080">; </font><font color="#008000"><i>{unknown}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>DeQuantize<font color="#000080">( </font><font color="#FF0000"><b>VAR </b></font>Q <font color="#000080">: </font>Quan_tables<font color="#000080">; </font>Num <font color="#000080">: </font>byte<font color="#000080">;
+                        </font><font color="#FF0000"><b>VAR </b></font>in_q <font color="#000080">: </font>one_quan_table<font color="#000080">);
+  </font><font color="#FF0000"><b>procedure </b></font>IDCT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>one <font color="#000080">: </font>one_quan_table<font color="#000080">);
+
+  </font><font color="#FF0000"><b>FUNCTION  </b></font>HI_LO<font color="#000080">(</font>inw <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">;
+
+</font><font color="#FF0000"><b>IMPLEMENTATION
+
+</b></font><font color="#008000"><i>{::::::::::::::::::::::::::::::::::}
+{: Change a HI-LO word to LO-HIGH :}
+{::::::::::::::::::::::::::::::::::}
+
+  </i></font><font color="#FF0000"><b>FUNCTION  </b></font>HI_LO<font color="#000080">(</font>inw <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>var </b></font>dwd <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>dwd <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>dwd <font color="#000080">:= </font>inw <font color="#FF0000"><b>SHR </b></font><font color="#800000">8</font><font color="#000080">;
+    </font>dwd <font color="#000080">:= </font>dwd <font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>inw <font color="#FF0000"><b>SHL </b></font><font color="#800000">8</font><font color="#000080">);
+    </font>Hi_lo <font color="#000080">:= </font>dwd<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#FF0000"><b>procedure </b></font>yuv_to_RGB<font color="#000080">( </font>Y<font color="#000080">,</font>CB<font color="#000080">,</font>Cr <font color="#000080">: </font>integer<font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>R<font color="#000080">,</font>G<font color="#000080">,</font>B <font color="#000080">: </font>byte<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    </b></font>r <font color="#000080">:= </font>trunc<font color="#000080">(</font>y <font color="#000080">+ </font><font color="#800000">1.402 </font><font color="#000080">*(</font>Cr<font color="#000080">-</font><font color="#800000">128</font><font color="#000080">));
+    </font>g <font color="#000080">:= </font>trunc<font color="#000080">(</font>y <font color="#000080">- </font><font color="#800000">0.34414 </font><font color="#000080">* (</font>cb<font color="#000080">-</font><font color="#800000">128</font><font color="#000080">) - </font><font color="#800000">0.71414</font><font color="#000080">*(</font>cr<font color="#000080">-</font><font color="#800000">128</font><font color="#000080">));
+    </font>b <font color="#000080">:= </font>trunc<font color="#000080">(</font>y <font color="#000080">+ </font><font color="#800000">1.772</font><font color="#000080">*(</font>Cb<font color="#000080">-</font><font color="#800000">128</font><font color="#000080">));
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{::::::::::::::}
+{: Dequantize :}
+{::::::::::::::}
+{: component wise multiplication of 2 8x8 matricies :}
+{: where b[x,y] = q[x,y] * a[x,y]                   :}
+{check}
+
+  </i></font><font color="#FF0000"><b>procedure </b></font>DeQuantize<font color="#000080">( </font><font color="#FF0000"><b>VAR </b></font>Q <font color="#000080">: </font>Quan_tables<font color="#000080">; </font>Num <font color="#000080">: </font>byte<font color="#000080">;
+                        </font><font color="#FF0000"><b>VAR </b></font>in_q <font color="#000080">: </font>one_quan_table<font color="#000080">);
+  </font><font color="#FF0000"><b>var </b></font>i<font color="#000080">,</font>j <font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    with </b></font>Q<font color="#000080">[</font>num<font color="#000080">] </font><font color="#FF0000"><b>do begin
+         case </b></font>q_type <font color="#FF0000"><b>of
+          </b></font>bit_8  <font color="#000080">: </font><font color="#FF0000"><b>begin
+                    for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do
+                        for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do
+                        </b></font>in_q<font color="#000080">.</font>q_int<font color="#000080">[</font>i<font color="#000080">,</font>j<font color="#000080">] := </font>in_q<font color="#000080">.</font>q_int<font color="#000080">[</font>i<font color="#000080">,</font>j<font color="#000080">] * </font>Q<font color="#000080">.</font>Q_byte<font color="#000080">[</font>i<font color="#000080">,</font>j<font color="#000080">];
+                   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>bit_16 <font color="#000080">: </font><font color="#FF0000"><b>begin
+                    for </b></font>I <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do
+                        for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do
+                        </b></font>in_q<font color="#000080">.</font>q_long<font color="#000080">[</font>i<font color="#000080">,</font>j<font color="#000080">] := </font>in_q<font color="#000080">.</font>q_long<font color="#000080">[</font>i<font color="#000080">,</font>j<font color="#000080">] * </font>Q<font color="#000080">.</font>Q_word<font color="#000080">[</font>i<font color="#000080">,</font>j<font color="#000080">];
+                   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{:::::::::::::::}
+{: Inverse DCT :}
+{:::::::::::::::}
+                  {u}   {v}
+  </i></font><font color="#FF0000"><b>const </b></font>C <font color="#000080">: </font><font color="#FF0000"><b>array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">7</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>real <font color="#000080">=
+  ((</font><font color="#800000">0.5</font><font color="#000080">, </font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">0.707106781188</font><font color="#000080">,
+    </font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">0.707106781188</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">),
+   (</font><font color="#800000">0.707106781188</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">, </font><font color="#800000">1.0</font><font color="#000080">));
+
+  </font><font color="#FF0000"><b>procedure </b></font>IDCT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>one <font color="#000080">: </font>one_quan_table<font color="#000080">);
+  </font><font color="#FF0000"><b>var </b></font>u<font color="#000080">,</font>v<font color="#000080">,
+      </font>x<font color="#000080">,</font>y  <font color="#000080">: </font>byte<font color="#000080">;
+      </font>suma<font color="#000080">,
+      </font>sumb <font color="#000080">: </font>real<font color="#000080">;
+      </font>temp_q <font color="#000080">: </font>one_quan_table<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    for </b></font>y <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do begin
+        for </b></font>x <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do begin
+  
+            </b></font>suma <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+            </font><font color="#FF0000"><b>for </b></font>u <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do begin
+                </b></font>sumb <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                </font><font color="#FF0000"><b>for </b></font>v <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do begin
+                    </b></font>sumb <font color="#000080">:= </font>sumb <font color="#000080">+ (</font>c<font color="#000080">[</font>u<font color="#000080">,</font>v<font color="#000080">] * </font>one<font color="#000080">.</font>q_int<font color="#000080">[</font>u<font color="#000080">,</font>v<font color="#000080">] *
+                                    </font>cos<font color="#000080">( ((</font><font color="#800000">2</font><font color="#000080">*</font>x<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) * </font>u <font color="#000080">* </font>pi<font color="#000080">) / </font><font color="#800000">16 </font><font color="#000080">) *
+                                    </font>cos<font color="#000080">( ((</font><font color="#800000">2</font><font color="#000080">*</font>y<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) * </font>v <font color="#000080">* </font>pi<font color="#000080">) / </font><font color="#800000">16 </font><font color="#000080">));
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font>suma <font color="#000080">:= </font>suma <font color="#000080">+ </font>sumb<font color="#000080">;
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font>suma <font color="#000080">:= </font>suma <font color="#000080">* </font><font color="#800000">0.25</font><font color="#000080">;
+            </font>temp_q<font color="#000080">.</font>q_int<font color="#000080">[</font>x<font color="#000080">,</font>y<font color="#000080">] := </font>trunc<font color="#000080">(</font>suma<font color="#000080">) + </font><font color="#800000">120</font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  
+    </font><font color="#FF0000"><b>for </b></font>y <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do begin
+        for </b></font>x <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">7 </font><font color="#FF0000"><b>do begin
+            </b></font>one<font color="#000080">.</font>q_int<font color="#000080">[</font>x<font color="#000080">,</font>y<font color="#000080">] :=  </font>temp_q<font color="#000080">.</font>q_int<font color="#000080">[</font>x<font color="#000080">,</font>y<font color="#000080">];
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{:::::::::::::::::::::::}
+{: JFIF Segment marker :}
+{:::::::::::::::::::::::}
+
+{: IF JFIF+#0 does not follow the header, then skip by LEN - 7.  :}
+{: Two bytes have ben passed to read LEN, and five to read JFIF0 :}
+
+  </i></font><font color="#FF0000"><b>Function </b></font>DO_app0<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                   </font><font color="#FF0000"><b>VAR </b></font>info <font color="#000080">: </font>app0_info <font color="#000080">) : </font>boolean<font color="#000080">;
+  </font><font color="#FF0000"><b>const </b></font>string_len <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font><font color="#FF0000"><b>VAR </b></font>Jfif_ID <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font><font color="#008000"><i>{JFIF + #0}
+      </i></font>Cur    <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>cur <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  
+    </font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>Jfif_ID<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>string_len<font color="#000080">); </font>Jfif_ID<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]:= </font>chr<font color="#000080">(</font>string_len<font color="#000080">);
+    </font>inc<font color="#000080">(</font>cur<font color="#000080">, </font>string_len<font color="#000080">);
+    </font>Len <font color="#000080">:= </font>Len <font color="#000080">- </font>string_len<font color="#000080">;
+  
+    </font><font color="#FF0000"><b>IF  </b></font><font color="#000080">(</font>Jfif_ID<font color="#000080">&lt;&gt;(</font><font color="#800000">'JFIF'</font><font color="#000080">+</font><font color="#800000">#0</font><font color="#000080">)) </font><font color="#FF0000"><b>then begin
+        </b></font><font color="#008000"><i>{Bskip(F, len);}
+        </i></font>do_app0 <font color="#000080">:= </font>false<font color="#000080">;
+    </font><font color="#FF0000"><b>end ELSE BEGIN
+  
+  
+        </b></font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>Info<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Info<font color="#000080">));
+        </font>inc<font color="#000080">(</font>cur<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Info<font color="#000080">));
+        </font>dec<font color="#000080">(</font>Len<font color="#000080">, </font>SizeOf<font color="#000080">(</font>Info<font color="#000080">));
+        </font><font color="#FF0000"><b>if  </b></font>info<font color="#000080">.</font>revision<font color="#000080">.</font>major <font color="#000080">&lt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+            </b></font><font color="#008000"><i>{writeln(DE,' Invalid Revision version.');}
+            </i></font>exit<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  
+  
+  
+        </font><font color="#FF0000"><b>IF  </b></font><font color="#000080">(</font>info<font color="#000080">.</font>thumb_x <font color="#000080">* </font>info<font color="#000080">.</font>thumb_Y <font color="#000080">* </font><font color="#800000">3 </font><font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+            </b></font><font color="#008000"><i>{Bskip(f, info.thumb_x * info.thumb_Y * 3);}
+            {the thumbnail N bytes; RGB 24bit W*H*3}
+            </i></font>len <font color="#000080">:= </font>len <font color="#000080">- (</font>info<font color="#000080">.</font>thumb_x <font color="#000080">* </font>info<font color="#000080">.</font>thumb_Y <font color="#000080">* </font><font color="#800000">3</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>if  </b></font>Len <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            </b></font>do_app0 <font color="#000080">:= </font>True
+        <font color="#FF0000"><b>else
+            </b></font>do_app0 <font color="#000080">:= </font>False<font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{:::::::::::::::::::::::::::::}
+{: Define Quantization Table :}
+{:::::::::::::::::::::::::::::}
+
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DO_DQT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                   </font><font color="#FF0000"><b>VAR </b></font>All_DQT <font color="#000080">: </font>Quan_tables<font color="#000080">);
+  </font><font color="#008000"><i>{might work in all cases}
+  </i></font><font color="#FF0000"><b>VAR </b></font>k<font color="#000080">,</font>l  <font color="#000080">: </font>byte<font color="#000080">;
+
+      </font>QT_info <font color="#000080">: </font>byte<font color="#000080">;
+      </font>QT_prec <font color="#000080">: </font>byte<font color="#000080">;
+      </font>QT_num  <font color="#000080">: </font>byte<font color="#000080">;
+  
+      </font>Cur     <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>Cur <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  
+    </font><font color="#FF0000"><b>repeat
+      </b></font><font color="#008000"><i>{::::::::::::::::}
+      {: Read QT Info :}
+      {::::::::::::::::}
+  
+      { Set all_dqt[ QT_num ]       }
+      {                      .Valid }
+      {                      .type  }
+  
+      </i></font>Qt_info <font color="#000080">:= </font>Block<font color="#000080">[</font>cur<font color="#000080">]; </font>Inc<font color="#000080">(</font>cur<font color="#000080">);  </font>Len <font color="#000080">:= </font>Len <font color="#000080">-</font><font color="#800000">1</font><font color="#000080">;
+      </font>QT_num  <font color="#000080">:= </font>Qt_info <font color="#FF0000"><b>and </b></font><font color="#800000">$0F</font><font color="#000080">;
+      </font>QT_prec <font color="#000080">:= (</font>Qt_info <font color="#FF0000"><b>and </b></font><font color="#800000">$f0</font><font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+  
+      </font><font color="#008000"><i>{:::::::::::::::::::}
+      {: Read in Q table :}
+      {:::::::::::::::::::}
+  
+      { Set all_dqt[ QT_num ]       }
+      {                      .Q[]   }
+  
+      </i></font><font color="#FF0000"><b>with </b></font>all_dqt<font color="#000080">[ </font>QT_num <font color="#000080">] </font><font color="#FF0000"><b>do begin
+           </b></font>valid <font color="#000080">:= </font>True<font color="#000080">;
+           </font><font color="#FF0000"><b>case </b></font>QT_prec <font color="#FF0000"><b>of
+            </b></font><font color="#800000">0 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                  </b></font>Q_type <font color="#000080">:= (</font>bit_8<font color="#000080">);
+                  </font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>Q<font color="#000080">.</font>Q_byte<font color="#000080">, </font>Sizeof<font color="#000080">(</font>Q_byte<font color="#000080">));
+                  </font>inc<font color="#000080">(</font>cur<font color="#000080">, </font>sizeof<font color="#000080">(</font>Q_byte<font color="#000080">));
+                  </font>Len <font color="#000080">:= </font>Len <font color="#000080">-  </font>SizeOf<font color="#000080">(</font>Q_byte<font color="#000080">);
+  
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#800000">1 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                  </b></font>Q_type <font color="#000080">:= (</font>bit_16<font color="#000080">);
+                  </font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>Q<font color="#000080">.</font>Q_word<font color="#000080">, </font>Sizeof<font color="#000080">(</font>Q_word<font color="#000080">));
+                  </font>inc<font color="#000080">(</font>cur<font color="#000080">, </font>sizeof<font color="#000080">(</font>Q_word<font color="#000080">));
+                  </font>Len <font color="#000080">:= </font>Len <font color="#000080">-  </font>SizeOf<font color="#000080">(</font>Q_word<font color="#000080">);
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>ELSE BEGIN
+                   </b></font><font color="#008000"><i>{writeln(DE,'Invalid QT_precison in DO_DQT');}
+                   </i></font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+                 </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+            </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>len <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  
+
+
+  </font><font color="#008000"><i>{:::::::::::::::::}
+  {: Start Of Scan :}
+  {:::::::::::::::::}
+
+  </i></font><font color="#FF0000"><b>PROCEDURE </b></font>do_sos<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                   </font><font color="#FF0000"><b>Var </b></font>Scan <font color="#000080">: </font>Scan_info<font color="#000080">);
+  </font><font color="#FF0000"><b>var </b></font>k<font color="#000080">,</font>dw <font color="#000080">: </font>word<font color="#000080">;   </font>Done<font color="#000080">: </font>boolean<font color="#000080">;
+      </font>db       <font color="#000080">: </font>byte<font color="#000080">;
+      </font>Cur      <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Cur <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>with </b></font>Scan <font color="#FF0000"><b>do begin
+         </b></font>Comp_num <font color="#000080">:= </font>Block<font color="#000080">[</font>cur<font color="#000080">]; </font>inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+         </font><font color="#FF0000"><b>for </b></font>K <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Comp_num <font color="#FF0000"><b>do begin
+             </b></font>Each<font color="#000080">[ </font>K <font color="#000080">].</font>valid <font color="#000080">:= </font>true<font color="#000080">;
+
+             </font>Each<font color="#000080">[ </font>K <font color="#000080">].</font>ID <font color="#000080">:= </font>id_type<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">]); </font>inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+
+             </font>DB <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+             </font>Each<font color="#000080">[ </font>K <font color="#000080">].</font>huff_ac <font color="#000080">:= </font>db <font color="#FF0000"><b>and </b></font><font color="#800000">$f</font><font color="#000080">;
+             </font>Each<font color="#000080">[ </font>K <font color="#000080">].</font>huff_dc <font color="#000080">:= (</font>db <font color="#FF0000"><b>and </b></font><font color="#800000">$f0</font><font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>{::::::::::::::::::::::::}
+{: Define Huffman Table :}
+{::::::::::::::::::::::::}
+
+  </i></font><font color="#FF0000"><b>CONST </b></font>Huff_mask <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>of
+                  </b></font>word <font color="#000080">=(  </font><font color="#800000">$01</font><font color="#000080">,  </font><font color="#800000">$03</font><font color="#000080">,  </font><font color="#800000">$07</font><font color="#000080">,  </font><font color="#800000">$0f</font><font color="#000080">,
+                           </font><font color="#800000">$1f</font><font color="#000080">,  </font><font color="#800000">$3f</font><font color="#000080">,  </font><font color="#800000">$7f</font><font color="#000080">,  </font><font color="#800000">$ff</font><font color="#000080">,
+                         </font><font color="#800000">$01ff</font><font color="#000080">,</font><font color="#800000">$03ff</font><font color="#000080">,</font><font color="#800000">$07ff</font><font color="#000080">,</font><font color="#800000">$0fff</font><font color="#000080">,
+                         </font><font color="#800000">$1fff</font><font color="#000080">,</font><font color="#800000">$3fff</font><font color="#000080">,</font><font color="#800000">$7fff</font><font color="#000080">,</font><font color="#800000">$ffff</font><font color="#000080">);
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_DHT<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                   </font><font color="#FF0000"><b>VAR </b></font>all_dht <font color="#000080">: </font>huff_tables<font color="#000080">);
+  
+  </font><font color="#FF0000"><b>VAR </b></font>DW <font color="#000080">: </font>Word<font color="#000080">;
+    </font>j<font color="#000080">,</font>k<font color="#000080">,</font>l<font color="#000080">,
+      </font>cur     <font color="#000080">: </font>byte<font color="#000080">;
+      </font>Sum     <font color="#000080">: </font>word<font color="#000080">;
+      </font>Size    <font color="#000080">: </font>byte<font color="#000080">;
+      </font>code    <font color="#000080">: </font>word<font color="#000080">;
+      </font>lenths  <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  
+      </font>HT_info <font color="#000080">: </font>byte<font color="#000080">;
+      </font>HT_num  <font color="#000080">: </font>byte<font color="#000080">;
+      </font>HT_type <font color="#000080">: </font>byte<font color="#000080">;
+      </font><font color="#008000"><i>{DW      : word;}
+  </i></font><font color="#FF0000"><b>BEGIN
+  
+    </b></font>Cur <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>Repeat
+      </b></font><font color="#008000"><i>{::::::::::::::::::}
+      {: Read Huff Info :}
+      {::::::::::::::::::}
+  
+      { SET ALL_DHT[HT_NUM]          }
+      {                   .Valid     }
+      {                   .H_type    }
+  
+      </i></font>ht_info <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>inc<font color="#000080">(</font>cur<font color="#000080">);
+      </font>Len <font color="#000080">:= </font>Len <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+      </font>HT_num  <font color="#000080">:= </font>HT_info <font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">;
+      </font>HT_type <font color="#000080">:= (</font>HT_info <font color="#FF0000"><b>and </b></font><font color="#800000">$F0</font><font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+  
+      </font><font color="#FF0000"><b>with </b></font>all_dht<font color="#000080">[ </font>huff_type<font color="#000080">(</font>HT_TYPE<font color="#000080">) ].</font>Table<font color="#000080">[ </font>HT_num <font color="#000080">] </font><font color="#FF0000"><b>do begin
+           </b></font>Valid  <font color="#000080">:= </font>True<font color="#000080">;
+           </font><font color="#FF0000"><b>case </b></font>HT_type <font color="#FF0000"><b>of
+            </b></font><font color="#800000">0 </font><font color="#000080">: </font>H_type <font color="#000080">:= </font>DC<font color="#000080">;
+            </font><font color="#800000">1 </font><font color="#000080">: </font>H_type <font color="#000080">:= </font>AC<font color="#000080">;
+           </font><font color="#FF0000"><b>else begin
+                  </b></font><font color="#008000"><i>{writeln(DE,'Invalid Huffman table type.');}
+                  </i></font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#008000"><i>{$IFDEF DEBUG } </i></font>writeln<font color="#000080">(</font>DE<font color="#000080">,</font><font color="#800000">'-- HT num  : '</font><font color="#000080">,</font>HT_num<font color="#000080">);
+                      </font>writeln<font color="#000080">(</font>DE<font color="#000080">,</font><font color="#800000">'-- HT type : '</font><font color="#000080">,</font>HT_type<font color="#000080">);
+      </font><font color="#008000"><i>{$ENDIF}
+  
+      {::::::::::::::::::}
+      {: Read in lenths :}
+      {::::::::::::::::::}
+  
+      </i></font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>Lenths<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">16</font><font color="#000080">); </font>inc<font color="#000080">(</font>cur<font color="#000080">,</font><font color="#800000">16</font><font color="#000080">);
+      </font>Len <font color="#000080">:= </font>Len <font color="#000080">- </font><font color="#800000">16</font><font color="#000080">;
+  
+      </font><font color="#008000"><i>{::::::::::::::::::::::}
+      {: Read in symbols    :}
+      {: partially borrowed :}
+      {::::::::::::::::::::::}
+  
+      { SET ALL_DHT[HT_NUM]          }
+      {                   .Valid     }
+      {                   .H[].Len   }
+      {                   .H[].Sym   }
+      {                   .Max_code  }
+  
+  
+  
+      </i></font><font color="#FF0000"><b>with </b></font>all_dht<font color="#000080">[ </font>huff_type<font color="#000080">(</font>HT_TYPE<font color="#000080">) ].</font>Table<font color="#000080">[ </font>HT_num <font color="#000080">] </font><font color="#FF0000"><b>do begin
+           </b></font>L   <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+           </font>sum <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+           </font><font color="#FF0000"><b>For </b></font>k <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">16 </font><font color="#FF0000"><b>do begin
+  
+               </b></font>Sum <font color="#000080">:= </font>Sum <font color="#000080">+ </font>lenths<font color="#000080">[</font>k<font color="#000080">];
+               </font><font color="#FF0000"><b>for </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>lenths<font color="#000080">[</font>k<font color="#000080">] </font><font color="#FF0000"><b>do begin      </b></font><font color="#008000"><i>{: if 0 then skipped   :}
+                   </i></font>H<font color="#000080">[</font>L<font color="#000080">] .</font>len <font color="#000080">:= </font>K<font color="#000080">;
+  
+                   </font>H<font color="#000080">[</font>L<font color="#000080">] .</font>sym <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">];</font>inc<font color="#000080">(</font>cur<font color="#000080">); </font><font color="#008000"><i>{: read in symbols     :}
+                                                     {: as we go            :}
+                   </i></font>Len <font color="#000080">:= </font>Len <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+                   </font>inc<font color="#000080">(</font>L<font color="#000080">);
+               </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+               </font>Max_code<font color="#000080">[</font>k<font color="#000080">] := </font>L<font color="#000080">;
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+           </font>H<font color="#000080">[</font>L<font color="#000080">] .</font>len <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                        </font><font color="#008000"><i>{: Last will have Zero :}
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  
+  
+      </font><font color="#008000"><i>{::::::::::::::::::::::::}
+      {: Create huffman Codes :}
+      {: partially borrowed   :}
+      {::::::::::::::::::::::::}
+
+      { Set all_dht[HT_NUM]. H[].CODE }
+
+
+      </i></font><font color="#FF0000"><b>with </b></font>all_dht<font color="#000080">[ </font>huff_type<font color="#000080">(</font>HT_TYPE<font color="#000080">) ].</font>Table<font color="#000080">[ </font>HT_num <font color="#000080">] </font><font color="#FF0000"><b>do begin
+           </b></font>L    <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+           </font>Size <font color="#000080">:= </font>H<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>len<font color="#000080">;
+           </font>code <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+           </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>H<font color="#000080">[</font>L<font color="#000080">].</font>len <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>do begin
+                 while </b></font><font color="#000080">(</font>H<font color="#000080">[</font>L<font color="#000080">].</font>len <font color="#000080">= </font>Size<font color="#000080">) </font><font color="#FF0000"><b>do begin
+                       </b></font>H<font color="#000080">[</font>L<font color="#000080">].</font>code <font color="#000080">:= </font>Huff_mask<font color="#000080">[ </font>H<font color="#000080">[</font>L<font color="#000080">].</font>Len<font color="#000080">] </font><font color="#FF0000"><b>and </b></font>Code<font color="#000080">;
+                       </font>inc<font color="#000080">(</font>L<font color="#000080">);
+                       </font>inc<font color="#000080">(</font>Code<font color="#000080">);
+                 </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                 </font>code <font color="#000080">:= </font>code <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;
+                 </font>inc<font color="#000080">(</font>Size<font color="#000080">);
+           </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  
+    </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>Len <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_DRI<font color="#000080">;
+  </font><font color="#FF0000"><b>VAR </b></font>Len<font color="#000080">, </font>dw2<font color="#000080">,</font>dw<font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+  END</b></font><font color="#000080">;
+
+
+
+
+
+  </font><font color="#FF0000"><b>PROCEDURE </b></font>DO_sof0<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>block <font color="#000080">: </font><font color="#FF0000"><b>array of </b></font>byte<font color="#000080">; </font>Len <font color="#000080">: </font>word<font color="#000080">;
+                    </font><font color="#FF0000"><b>VAR </b></font>Frame <font color="#000080">: </font>frame_0<font color="#000080">);
+  </font><font color="#FF0000"><b>VAR </b></font>K<font color="#000080">,</font>dw <font color="#000080">: </font>word<font color="#000080">;
+      </font>db    <font color="#000080">: </font>byte<font color="#000080">;
+
+      </font>Cur      <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>BEGIN
+    </b></font>cur <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+    </font><font color="#FF0000"><b>with </b></font>frame <font color="#FF0000"><b>do begin
+         </b></font>precision    <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+
+         </font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>image_height<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">); </font>inc<font color="#000080">(</font>cur<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>image_height <font color="#000080">:= </font>hi_lo<font color="#000080">(</font>image_height<font color="#000080">);
+
+         </font>move<font color="#000080">(</font>block<font color="#000080">[</font>cur<font color="#000080">], </font>image_width<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">); </font>inc<font color="#000080">(</font>cur<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+         </font>image_width <font color="#000080">:= </font>hi_lo<font color="#000080">(</font>image_width<font color="#000080">);
+
+         </font>dw <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+         </font><font color="#FF0000"><b>case </b></font>dw <font color="#FF0000"><b>of
+          </b></font><font color="#800000">1 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                </b></font>comp_num <font color="#000080">:= </font>grey<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#800000">3 </font><font color="#000080">: </font><font color="#FF0000"><b>begin
+                </b></font>comp_num <font color="#000080">:= </font>color<font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>else begin
+                </b></font>writeln<font color="#000080">(</font><font color="#800000">'SOF0: component not supported.'</font><font color="#000080">);
+                </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+         </font><font color="#FF0000"><b>for </b></font>K <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>DW <font color="#FF0000"><b>do begin
+             with </b></font>frame<font color="#000080">.</font>factor<font color="#000080">[</font>K<font color="#000080">] </font><font color="#FF0000"><b>do begin
+                  </b></font>db <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>Inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+                  </font><font color="#FF0000"><b>case </b></font>db <font color="#FF0000"><b>of
+                   </b></font><font color="#800000">1 </font><font color="#000080">: </font>ID <font color="#000080">:= </font>Y_<font color="#000080">;
+                   </font><font color="#800000">2 </font><font color="#000080">: </font>ID <font color="#000080">:= </font>CB_<font color="#000080">;
+                   </font><font color="#800000">3 </font><font color="#000080">: </font>ID <font color="#000080">:= </font>CR_<font color="#000080">;
+                   </font><font color="#800000">4 </font><font color="#000080">: </font>ID <font color="#000080">:= </font>I_<font color="#000080">;
+                   </font><font color="#800000">5 </font><font color="#000080">: </font>ID <font color="#000080">:= </font>Q_<font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+                  </font>db <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>Inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+                  </font>horz_factor <font color="#000080">:= </font>db <font color="#FF0000"><b>and </b></font><font color="#800000">$f</font><font color="#000080">;
+                  </font>vert_factor <font color="#000080">:= (</font>db <font color="#FF0000"><b>and </b></font><font color="#800000">$f0</font><font color="#000080">) </font><font color="#FF0000"><b>shr </b></font><font color="#800000">4</font><font color="#000080">;
+                  </font>q_num       <font color="#000080">:= </font>block<font color="#000080">[</font>cur<font color="#000080">]; </font>Inc<font color="#000080">(</font>cur<font color="#000080">); </font>dec<font color="#000080">(</font>len<font color="#000080">);
+             </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{with}
+         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{ ---------------------   TEST PROGRAM -------------------- }
+
+{$A+,B-,D+,E+,F-,G+,I-,L+,N-,O-,P-,Q+,R+,S+,T-,V-,X-}
+
+</i></font><font color="#FF0000"><b>program </b></font>tjpeg<font color="#000080">;
+</font><font color="#FF0000"><b>uses </b></font>jpegsegm<font color="#000080">;
+
+
+</font><font color="#FF0000"><b>var </b></font>f      <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+    </font>dw<font color="#000080">,
+    </font>length <font color="#000080">: </font>word<font color="#000080">;
+    </font>db     <font color="#000080">: </font>byte<font color="#000080">;
+    </font>darray <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2047</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+    </font>ai     <font color="#000080">: </font>app0_info<font color="#000080">;
+    </font>qts    <font color="#000080">: </font>quan_tables<font color="#000080">;
+    </font>hts    <font color="#000080">: </font>huff_tables<font color="#000080">;
+    </font>si     <font color="#000080">: </font>scan_info<font color="#000080">;
+    </font>f0     <font color="#000080">: </font>frame_0<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{:::::::::::::::::::::::::::::}
+  {: Required JPEG/JFIF format :}
+  {:::::::::::::::::::::::::::::}
+
+  {: open file :}
+  </i></font>assign<font color="#000080">(</font>F<font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)); </font>filemode <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>reset<font color="#000080">(</font>f<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font><font color="#000080">(</font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>writeln<font color="#000080">(</font><font color="#800000">'Syntax:  tjepg [filename]'</font><font color="#000080">);
+      </font>writeln<font color="#000080">(</font><font color="#800000">'Unable to open file: '</font><font color="#000080">, </font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+      </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: read soi header :}
+  </i></font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>db<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>db<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font><font color="#000080">(</font>db <font color="#000080">&lt;&gt; </font>SOI<font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>writeln<font color="#000080">(</font><font color="#800000">'File is missing required SOI header.'</font><font color="#000080">);
+      </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: read app0 block length :}
+  </i></font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>db<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>db<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if  </b></font><font color="#000080">(</font>db <font color="#000080">&lt;&gt; </font>app0<font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>writeln<font color="#000080">(</font><font color="#800000">'File is missing reqired app0 header.'</font><font color="#000080">);
+      </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{: read app0 block :}
+  </i></font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>length<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+  </font>length <font color="#000080">:= </font>hi_lo<font color="#000080">(</font>length<font color="#000080">) - </font><font color="#800000">2</font><font color="#000080">;
+
+  </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>darray<font color="#000080">, </font>length<font color="#000080">);
+  </font><font color="#FF0000"><b>if  not </b></font>do_app0<font color="#000080">( </font>darray<font color="#000080">, </font>length<font color="#000080">, </font>ai<font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font>writeln<font color="#000080">(</font><font color="#800000">'Missing JFIF marked app0 segment.'</font><font color="#000080">);
+      </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+  </font><font color="#008000"><i>{::::::::::::::::::::::::::::::}
+  {: process remaining segments :}
+  {::::::::::::::::::::::::::::::}
+  </i></font><font color="#FF0000"><b>repeat
+    </b></font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>db<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>dw<font color="#000080">); </font><font color="#008000"><i>{must be FF} </i></font><font color="#FF0000"><b>if </b></font>dw <font color="#000080">&lt;&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>halt<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+    </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>db<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>dw<font color="#000080">); </font><font color="#008000"><i>{header ID } </i></font><font color="#FF0000"><b>if </b></font>dw <font color="#000080">&lt;&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>halt<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">);
+
+    </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>length<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>dw<font color="#000080">);
+    </font>length <font color="#000080">:= </font>hi_lo<font color="#000080">(</font>length<font color="#000080">) - </font><font color="#800000">2</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if  </b></font>db <font color="#FF0000"><b>in </b></font><font color="#000080">[</font>dht<font color="#000080">,</font>dqt<font color="#000080">,</font>sof0<font color="#000080">,</font>sos<font color="#000080">] </font><font color="#FF0000"><b>then
+        </b></font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>darray<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">], </font>length<font color="#000080">, </font>dw<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>dw <font color="#000080">&lt;&gt; </font>length <font color="#FF0000"><b>then </b></font>halt<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">);
+    </font><font color="#FF0000"><b>case </b></font>db <font color="#FF0000"><b>of
+      </b></font>dht  <font color="#000080">: </font>do_dht <font color="#000080">(</font>darray<font color="#000080">, </font>length<font color="#000080">, </font>hts<font color="#000080">);
+      </font>dqt  <font color="#000080">: </font>do_dqt <font color="#000080">(</font>darray<font color="#000080">, </font>length<font color="#000080">, </font>qts<font color="#000080">);
+      </font>sof0 <font color="#000080">: </font>do_sof0<font color="#000080">(</font>darray<font color="#000080">, </font>length<font color="#000080">, </font>f0<font color="#000080">);
+      </font>sos  <font color="#000080">:
+      </font><font color="#FF0000"><b>begin
+        </b></font>do_sos <font color="#000080">(</font>darray<font color="#000080">, </font>length<font color="#000080">, </font>si<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'app0 information'</font><font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  version : '</font><font color="#000080">,</font>ai<font color="#000080">.</font>revision<font color="#000080">.</font>major<font color="#000080">,</font><font color="#800000">'.'</font><font color="#000080">,</font>ai<font color="#000080">.</font>revision<font color="#000080">.</font>minor<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  xy_density units(0-2): '</font><font color="#000080">,</font>ai<font color="#000080">.</font>xy_density<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  x density : '</font><font color="#000080">,</font>ai<font color="#000080">.</font>x<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  y density : '</font><font color="#000080">,</font>ai<font color="#000080">.</font>y<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  thumb x : '</font><font color="#000080">,</font>ai<font color="#000080">.</font>thumb_x<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  thumb y : '</font><font color="#000080">,</font>ai<font color="#000080">.</font>thumb_y<font color="#000080">);
+
+        </font>writeln<font color="#000080">(</font><font color="#800000">'sof0 information'</font><font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  precision : '</font><font color="#000080">,</font>f0<font color="#000080">.</font>precision<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  height : '</font><font color="#000080">,</font>f0<font color="#000080">.</font>image_height<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  width  : '</font><font color="#000080">,</font>f0<font color="#000080">.</font>image_width<font color="#000080">);
+        </font>writeln<font color="#000080">(</font><font color="#800000">'  number of components (1,3) :'</font><font color="#000080">,</font>byte<font color="#000080">(</font>f0<font color="#000080">.</font>comp_num<font color="#000080">));
+
+
+        </font>close<font color="#000080">(</font>f<font color="#000080">);
+        </font>halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font>false<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0209.PAS">Original</a><b>]</b></p></body>
+</html>

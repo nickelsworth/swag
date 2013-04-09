@@ -1,0 +1,115 @@
+<html>
+<head><title> "ISR's etc!" by GERHARD SKOLNIK</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to INTERRUP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0021.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>(*
+&gt;I've got two questions:
+&gt;1. If i write a program that uses SetIntVec and ends with keep(0), how
+&gt;can I determine how much heap and how much stack I have to use?
+&gt;
+
+I'm not sure about the stack, but the heap can be reduced to a minimum,
+like {$M 1024, 0, 0}. As I've never written a resident program in Pascal,
+I guess the stack size is a matter of experimenting, but how could I know...
+
+
+&gt;2. With this program:
+&gt;
+&gt;uses dos, crt;
+&gt;
+&gt;procedure print; interrupt;
+&gt;begin
+&gt; write(#7);
+&gt;end;
+&gt;
+&gt;begin
+&gt; SetIntVec($5,addr(print));
+&gt;end;
+&gt;
+&gt;I am also having troubles. At first, the program works, but after a few
+&gt;int 5's (which are replacd by a beep) a get (in dutch): internal stack
+&gt;overflow error - stopping all system activities
+&gt;
+&gt;So, at first the stack was big enough, later it wasn't. If the the stack
+&gt;'fills', how can I empty it (so it won't overflow)
+&gt;
+&gt;And, if I intercept an interrupt (PrtScr in this example) there will be
+&gt;not screendump. How can I just 'read' the interrupt, or how can I let the
+&gt;interrupt continue as it would have done without my SetIntVec. (hop you
+&gt;get what I mean :))
+&gt;
+
+You've got a classical re-entry problem there. The &quot;write(#7)&quot; statement
+takes quite some time to execute (especially as this Pascal line is
+compiled into hundreds of machine code lines - it's really better if you
+try assembler) if you hit &lt;PrtScreen&gt; too fast again the routine is still
+executing, interrupted, called another time etc... until there is no
+place on the stack to store any more return addresses. This will never
+work, not even with unlimited stack :-(
+
+Here's a workaround and an example how to chain to the original handler
+It's taken from a program of mine where I do a lot of interrupt bending,
+however it's not a resident one. In this program I called an external
+Dos program via exec, which insisted on destroying my screen mask by
+displaying some stupid, unnecessary messages. Therefore I had to hide
+the video output while it was executing, and as swapping the video
+pages didn't work I decided to shoot the fly with a cannon.
+
+I've commented out the Video-Interrupt chaining and inserted your
+PrtScr-Interrupt 5 instead. In the commented section you can see
+how the chaining is done.
+
+From: skolnik@kapsch.co.at (Gerhard Skolnik)
+*)
+
+</i></font><font color="#FF0000"><b>program </b></font>DontDoMuch<font color="#000080">;
+
+</font><font color="#008000"><i>{$M 1024, 0, 0}
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>Dos<font color="#000080">, </font>Crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+   </b></font>OldInt10       <font color="#000080">: </font>pointer<font color="#000080">;                       </font><font color="#008000"><i>{* old interrupt address *}
+   </i></font>Chain_Int10    <font color="#000080">: </font><font color="#FF0000"><b>procedure absolute </b></font>OldInt10<font color="#000080">;   </font><font color="#008000"><i>{* chain to old interrupt *}
+   </i></font>Reg            <font color="#000080">: </font>Registers<font color="#000080">;
+   </font>IntActive      <font color="#000080">: </font>boolean<font color="#000080">;      </font><font color="#008000"><i>{* is interrupt active? *}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>SkipVideo<font color="#000080">(</font>Flags<font color="#000080">, </font>CS<font color="#000080">, </font>IP<font color="#000080">, </font>AX<font color="#000080">, </font>BX<font color="#000080">, </font>CX<font color="#000080">, </font>DX<font color="#000080">, </font>SI<font color="#000080">, </font>DI<font color="#000080">, </font>DS<font color="#000080">, </font>ES<font color="#000080">, </font>BP<font color="#000080">: </font>word<font color="#000080">);
+  </font>interrupt<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+</b></font><font color="#008000"><i>(*    case Reg.AH of
+      $09,$0a,$0e,$13 : exit;              {* skip if output request *}
+    else
+      Chain_Int10;                         {* do anything else as expected *}
+    end;
+*)
+    </i></font><font color="#FF0000"><b>if not </b></font>IntActive <font color="#FF0000"><b>then
+      begin
+        </b></font>IntActive <font color="#000080">:= </font>true<font color="#000080">;
+        </font>write<font color="#000080">(</font><font color="#800000">#7</font><font color="#000080">);
+        </font>IntActive <font color="#000080">:= </font>false<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>HideOutPut<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>SetIntVec<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, @</font>SkipVideo<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>RestoreOutPut<font color="#000080">;
+
+  </font><font color="#FF0000"><b>begin
+    </b></font>SetIntVec<font color="#000080">(</font><font color="#800000">$10</font><font color="#000080">, </font>OldInt10<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>IntActive <font color="#000080">:= </font>false<font color="#000080">;
+  </font>GetIntVec<font color="#000080">(</font><font color="#800000">$05</font><font color="#000080">, </font>OldInt10<font color="#000080">);
+  </font>SetIntVec<font color="#000080">(</font><font color="#800000">$05</font><font color="#000080">, @</font>SkipVideo<font color="#000080">);
+  </font><font color="#008000"><i>{ further initialization stuff }
+  </i></font>keep<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);  </font><font color="#008000"><i>{ this I never used, but it should go here I guess }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to INTERRUP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0021.PAS">Original</a><b>]</b></p></body>
+</html>

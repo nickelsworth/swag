@@ -1,0 +1,259 @@
+<html>
+<head><title> "Small,Good ASYNC routines" by GARY GORDON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0028.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$B-} { Short circuit boolean ON }
+{$I-} { I/O checking OFF }
+{$R-} { Range checking OFF }
+{$S-} { Stack checking OFF }
+{$V-} { Var-str checking OFF}
+
+</i></font><font color="#FF0000"><b>UNIT </b></font>ASYNC2<font color="#000080">;
+  </font><font color="#008000"><i>{PD async unit debugged and modified for doorgame use by Joel Bergen}
+  {added com3 &amp; com4 support and xon/xoff handshaking                 }
+  {various bug fixes by Gary Gordon &amp; Joel Bergen Jan 1990}
+  {Last revised:  1/14/90}
+  {still needs check for existance of comm port in Async_Open routine}
+
+</i></font><font color="#FF0000"><b>INTERFACE
+
+USES </b></font>DOS<font color="#000080">, </font>CRT<font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Async_CheckCTS  <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Init<font color="#000080">;
+  </font><font color="#008000"><i>{ initialize variables, call first to initialize }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Close<font color="#000080">;
+  </font><font color="#008000"><i>{ reset the interrupt system when UART interrupts no longer needed }
+  { Turn off the COM port interrupts.                                }
+  { **MUST** BE CALLED BEFORE EXITING YOUR PROGRAM; otherwise you    }
+  { will see some really strange errors and have to re-boot.         }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_Open<font color="#000080">(</font>ComPort<font color="#000080">,</font>BaudRate <font color="#000080">: </font>WORD<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+  </font><font color="#008000"><i>{ open a communications port at 8/n/1 with supplied port &amp; baud   }
+  { Sets up interrupt vector, initialies the COM port for           }
+  { processing, sets pointers to the buffer.  Returns FALSE if COM  }
+  { port not installed.                                             }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_Buffer_Check <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+  </font><font color="#008000"><i>{ see if a character has been received        }
+  { If a character is available, returns TRUE   }
+  { Otherwise, returns FALSE                    }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_Read <font color="#000080">: </font>CHAR<font color="#000080">;
+  </font><font color="#008000"><i>{ read a character, assuming it is ready}
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Send<font color="#000080">(</font>C <font color="#000080">: </font>CHAR<font color="#000080">);
+  </font><font color="#008000"><i>{ transmit a character }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Hangup<font color="#000080">;
+  </font><font color="#008000"><i>{ drop carrier by dropping DTR}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_CarrierDetect <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+  </font><font color="#008000"><i>{ true if carrier detected }
+
+{----------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>IMPLEMENTATION
+
+CONST
+  </b></font>I8088_IMR <font color="#000080">= </font><font color="#800000">$21</font><font color="#000080">;   </font><font color="#008000"><i>{ port address of the Interrupt Mask Register }
+  </i></font>AsyncBasePort  <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>WORD <font color="#000080">= (</font><font color="#800000">$03F8</font><font color="#000080">,</font><font color="#800000">$02F8</font><font color="#000080">,</font><font color="#800000">$03E8</font><font color="#000080">,</font><font color="#800000">$02E8</font><font color="#000080">);
+  </font>AsyncIRQ       <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">4</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>WORD <font color="#000080">= (</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">4</font><font color="#000080">,</font><font color="#800000">3</font><font color="#000080">);
+  </font>Async_Buffer_Max <font color="#000080">= </font><font color="#800000">1024</font><font color="#000080">;          </font><font color="#008000"><i>{ size of input buffer }
+  </i></font>Ier <font color="#000080">= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Lcr <font color="#000080">= </font><font color="#800000">3</font><font color="#000080">;
+  </font>Mcr <font color="#000080">= </font><font color="#800000">4</font><font color="#000080">;
+  </font>Lsr <font color="#000080">= </font><font color="#800000">5</font><font color="#000080">;
+  </font>Msr <font color="#000080">= </font><font color="#800000">6</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>Async_OriginalVector <font color="#000080">: </font>POINTER<font color="#000080">;
+  </font>Async_OriginalLcr    <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>Async_OriginalImr    <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>Async_OriginalIer    <font color="#000080">: </font>INTEGER<font color="#000080">;
+
+  </font>Async_Buffer         <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>Async_Buffer_Max<font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>CHAR<font color="#000080">;
+
+  </font>Async_Open_Flag      <font color="#000080">: </font>BOOLEAN<font color="#000080">;   </font><font color="#008000"><i>{ true if Open but no Close }
+  </i></font>Async_Pause          <font color="#000080">: </font>BOOLEAN<font color="#000080">;   </font><font color="#008000"><i>{ true if paused (Xoff received) }
+  </i></font>Async_Port           <font color="#000080">: </font>INTEGER<font color="#000080">;   </font><font color="#008000"><i>{ current Open port number (1..4) }
+  </i></font>Async_Base           <font color="#000080">: </font>INTEGER<font color="#000080">;   </font><font color="#008000"><i>{ base for current open port }
+  </i></font>Async_Irq            <font color="#000080">: </font>INTEGER<font color="#000080">;   </font><font color="#008000"><i>{ irq for current open port }
+
+  </i></font>Async_Buffer_Overflow<font color="#000080">: </font>BOOLEAN<font color="#000080">;   </font><font color="#008000"><i>{ True if buffer overflow has happened }
+  </i></font>Async_Buffer_Used    <font color="#000080">: </font>WORD<font color="#000080">;      </font><font color="#008000"><i>{ number of characters in input buffer }
+
+  { Async_Buffer is empty if Head = Tail }
+  </i></font>Async_Buffer_Head    <font color="#000080">: </font>WORD<font color="#000080">;   </font><font color="#008000"><i>{ Locn in Async_Buffer to put next char }
+  </i></font>Async_Buffer_Tail    <font color="#000080">: </font>WORD<font color="#000080">;   </font><font color="#008000"><i>{ Locn in Async_Buffer to get next char }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>DisableInterrupts<font color="#000080">; </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FA </font><font color="#008000"><i>{cli} </i></font><font color="#000080">);     </font><font color="#008000"><i>{MACROS}
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>EnableInterrupts<font color="#000080">;  </font><font color="#FF0000"><b>INLINE</b></font><font color="#000080">(</font><font color="#800000">$FB </font><font color="#008000"><i>{sti} </i></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Isr<font color="#000080">;  </font>INTERRUPT<font color="#000080">;
+</font><font color="#008000"><i>{ Interrupt Service Routine
+  Invoked when the UART has received a byte of data from the
+  communication line }
+</i></font><font color="#FF0000"><b>CONST
+  </b></font>Xon  <font color="#000080">= </font><font color="#800000">#17</font><font color="#000080">;  </font><font color="#008000"><i>{^q resume}
+  </i></font>Xoff <font color="#000080">= </font><font color="#800000">#19</font><font color="#000080">;  </font><font color="#008000"><i>{^s pause}
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>c <font color="#000080">: </font>CHAR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>EnableInterrupts<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>Async_Buffer_Used <font color="#000080">&lt; </font>Async_Buffer_Max <font color="#FF0000"><b>THEN BEGIN
+    </b></font>c <font color="#000080">:= </font>CHR<font color="#000080">(</font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">]);
+    </font><font color="#FF0000"><b>CASE </b></font>c <font color="#FF0000"><b>OF
+      </b></font>Xoff <font color="#000080">: </font>Async_Pause<font color="#000080">:=</font>TRUE<font color="#000080">;
+      </font>Xon  <font color="#000080">: </font>Async_Pause<font color="#000080">:=</font>FALSE<font color="#000080">;
+      </font><font color="#FF0000"><b>ELSE BEGIN
+        </b></font>Async_Pause<font color="#000080">:=</font>FALSE<font color="#000080">;
+        </font>Async_Buffer<font color="#000080">[</font>Async_Buffer_Head<font color="#000080">] := </font>c<font color="#000080">;
+        </font><font color="#FF0000"><b>IF </b></font>Async_Buffer_Head <font color="#000080">&lt; </font>Async_Buffer_Max <font color="#FF0000"><b>THEN
+          </b></font>INC<font color="#000080">(</font>Async_Buffer_Head<font color="#000080">)
+        </font><font color="#FF0000"><b>ELSE
+          </b></font>Async_Buffer_Head <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>INC<font color="#000080">(</font>Async_Buffer_Used<font color="#000080">);
+      </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END ELSE </b></font>Async_Buffer_Overflow <font color="#000080">:= </font>TRUE<font color="#000080">;
+  </font>DisableInterrupts<font color="#000080">;
+  </font>PORT<font color="#000080">[</font><font color="#800000">$20</font><font color="#000080">] := </font><font color="#800000">$20</font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Isr }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Init<font color="#000080">;
+</font><font color="#008000"><i>{ initialize variables }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>Async_Open_Flag       <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font>Async_Buffer_Head     <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Async_Buffer_Tail     <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Async_Buffer_Overflow <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font>Async_Buffer_Used     <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Async_Pause           <font color="#000080">:= </font>FALSE<font color="#000080">;
+  </font>Async_CheckCTS        <font color="#000080">:= </font>TRUE<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Init }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Close<font color="#000080">;
+</font><font color="#008000"><i>{ reset the interrupt system when UART interrupts no longer needed }
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">, </font>m <font color="#000080">: </font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>Async_Open_Flag <font color="#FF0000"><b>THEN BEGIN
+    </b></font>DisableInterrupts<font color="#000080">;             </font><font color="#008000"><i>{ disable IRQ on 8259 }
+    </i></font>PORT<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Ier<font color="#000080">] := </font>Async_OriginalIer<font color="#000080">;
+    </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">]   := </font>Async_OriginalLcr<font color="#000080">;
+    </font>PORT<font color="#000080">[</font>I8088_IMR<font color="#000080">]        := </font>Async_OriginalImr<font color="#000080">;
+    </font>EnableInterrupts<font color="#000080">;
+    </font>SETINTVEC<font color="#000080">(</font>Async_Irq <font color="#000080">+ </font><font color="#800000">8</font><font color="#000080">,</font>Async_OriginalVector<font color="#000080">);
+    </font>Async_Open_Flag <font color="#000080">:= </font>FALSE     <font color="#008000"><i>{ flag port as closed }
+  </i></font><font color="#FF0000"><b>END
+END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Close }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_Open<font color="#000080">(</font>ComPort<font color="#000080">,</font>BaudRate <font color="#000080">: </font>WORD<font color="#000080">) : </font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>i<font color="#000080">, </font>m <font color="#000080">: </font>INTEGER<font color="#000080">;
+  </font>b    <font color="#000080">: </font>BYTE<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+    IF </b></font>Async_Open_Flag <font color="#FF0000"><b>THEN </b></font>Async_Close<font color="#000080">;
+    </font>Async_Port <font color="#000080">:= </font>ComPort<font color="#000080">;
+    </font>Async_Base <font color="#000080">:= </font>AsyncBasePort<font color="#000080">[</font>Async_Port<font color="#000080">];
+    </font>Async_Irq  <font color="#000080">:= </font>AsyncIRQ<font color="#000080">[</font>Async_Port<font color="#000080">];
+      </font><font color="#008000"><i>{ set comm parameters }
+    </i></font>Async_OriginalLcr <font color="#000080">:= </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">];
+
+    </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">] := </font><font color="#800000">$03</font><font color="#000080">;  </font><font color="#008000"><i>{set 8/n/1. This shouldn't be hardcoded}
+      { set ISR vector }
+    </i></font>GETINTVEC<font color="#000080">(</font>Async_Irq<font color="#000080">+</font><font color="#800000">8</font><font color="#000080">, </font>Async_OriginalVector<font color="#000080">);
+    </font>SETINTVEC<font color="#000080">(</font>Async_Irq<font color="#000080">+</font><font color="#800000">8</font><font color="#000080">, @</font>Async_Isr<font color="#000080">);
+      </font><font color="#008000"><i>{ read the RBR and reset any possible pending error conditions }
+      { first turn off the Divisor Access Latch Bit to allow access to RBR, etc. }
+    </i></font>DisableInterrupts<font color="#000080">;
+    </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">] := </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$7F</font><font color="#000080">;
+      </font><font color="#008000"><i>{ read the Line Status Register to reset any errors it indicates }
+    </i></font>i <font color="#000080">:= </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lsr<font color="#000080">];
+      </font><font color="#008000"><i>{ read the Receiver Buffer Register in case it contains a character }
+    </i></font>i <font color="#000080">:= </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">];
+      </font><font color="#008000"><i>{ enable the irq on the 8259 controller }
+    </i></font>i <font color="#000080">:= </font>PORT<font color="#000080">[</font>I8088_IMR<font color="#000080">];  </font><font color="#008000"><i>{ get the interrupt mask register }
+
+    </i></font>Async_OriginalImr <font color="#000080">:= </font>i<font color="#000080">;
+
+    </font>m <font color="#000080">:= (</font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font>Async_Irq<font color="#000080">) </font><font color="#FF0000"><b>XOR </b></font><font color="#800000">$00FF</font><font color="#000080">;
+    </font>PORT<font color="#000080">[</font>I8088_IMR<font color="#000080">] := </font>i <font color="#FF0000"><b>AND </b></font>m<font color="#000080">;
+      </font><font color="#008000"><i>{ enable the data ready interrupt on the 8250 }
+
+    </i></font>Async_OriginalIer <font color="#000080">:= </font>PORT<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Ier<font color="#000080">];
+
+    </font>Port<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Ier<font color="#000080">] := </font><font color="#800000">$01</font><font color="#000080">; </font><font color="#008000"><i>{ enable data ready interrupt }
+      { enable OUT2 on 8250 }
+    </i></font>i <font color="#000080">:= </font>PORT<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Mcr<font color="#000080">];
+    </font>PORT<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Mcr<font color="#000080">] := </font>i <font color="#FF0000"><b>OR </b></font><font color="#800000">$08</font><font color="#000080">;
+    </font>EnableInterrupts<font color="#000080">;
+      </font><font color="#008000"><i>{ Set baudrate}
+    </i></font>b <font color="#000080">:= </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">] </font><font color="#FF0000"><b>OR </b></font><font color="#800000">128</font><font color="#000080">;
+    </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">]:= </font>b<font color="#000080">;
+    </font>PORT<font color="#000080">[</font>Async_Base  <font color="#000080">]  := </font>LO<font color="#000080">(</font>TRUNC<font color="#000080">(</font><font color="#800000">115200.0</font><font color="#000080">/</font>BaudRate<font color="#000080">));
+    </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]  := </font>HI<font color="#000080">(</font>TRUNC<font color="#000080">(</font><font color="#800000">115200.0</font><font color="#000080">/</font>BaudRate<font color="#000080">));
+    </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Lcr<font color="#000080">]:= </font>b <font color="#FF0000"><b>AND </b></font><font color="#800000">127</font><font color="#000080">;
+      </font><font color="#008000"><i>{ set flags }
+    </i></font>Async_Open_Flag <font color="#000080">:= </font>TRUE<font color="#000080">;
+    </font>Async_Open <font color="#000080">:= </font>TRUE<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Open }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_Buffer_Check <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+</font><font color="#008000"><i>{ return true if character ready to receive }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>Async_Buffer_Check <font color="#000080">:= (</font>Async_Buffer_Used <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Buffer_Check }
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>Async_Read <font color="#000080">: </font>CHAR<font color="#000080">;
+</font><font color="#008000"><i>{ return char, use Async_Buffer_Check first! }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>Async_Read <font color="#000080">:= </font>Async_Buffer<font color="#000080">[</font>Async_Buffer_Tail<font color="#000080">];
+  </font>INC<font color="#000080">(</font>Async_Buffer_Tail<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>Async_Buffer_Tail <font color="#000080">&gt; </font>Async_Buffer_Max <font color="#FF0000"><b>THEN
+    </b></font>Async_Buffer_Tail <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>DEC<font color="#000080">(</font>Async_Buffer_Used<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Buffer_Check }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Send<font color="#000080">(</font>c <font color="#000080">: </font>CHAR<font color="#000080">);
+</font><font color="#008000"><i>{ transmit a character }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>PORT<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Mcr<font color="#000080">] := </font><font color="#800000">$0B</font><font color="#000080">;                 </font><font color="#008000"><i>{turn on OUT2, DTR, and RTS}
+  </i></font><font color="#FF0000"><b>IF </b></font>Async_CheckCTS <font color="#FF0000"><b>THEN
+    WHILE </b></font><font color="#000080">(</font>Port<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Msr<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$10</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>DO</b></font><font color="#000080">;  </font><font color="#008000"><i>{wait for CTS}
+  </i></font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>Port<font color="#000080">[</font>Async_Base <font color="#000080">+ </font>Lsr<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">$20</font><font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>DO</b></font><font color="#000080">; </font><font color="#008000"><i>{wait for Tx Holding Reg Empty}
+  </i></font><font color="#FF0000"><b>WHILE </b></font>Async_Pause <font color="#FF0000"><b>AND </b></font>Async_CarrierDetect <font color="#FF0000"><b>DO</b></font><font color="#000080">;  </font><font color="#008000"><i>{wait for Xon}
+  </i></font>DisableInterrupts<font color="#000080">;
+  </font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">] := </font>ORD<font color="#000080">(</font>c<font color="#000080">);                    </font><font color="#008000"><i>{send the character}
+  </i></font>EnableInterrupts<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">; </font><font color="#008000"><i>{ Async_Send }
+
+</i></font><font color="#FF0000"><b>PROCEDURE </b></font>Async_Hangup<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Mcr<font color="#000080">] := </font><font color="#800000">$00</font><font color="#000080">;  </font><font color="#008000"><i>{dtr off}
+  </i></font>DELAY<font color="#000080">(</font><font color="#800000">1000</font><font color="#000080">);                  </font><font color="#008000"><i>{wait 1 second}
+  </i></font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Mcr<font color="#000080">] := </font><font color="#800000">$03</font><font color="#000080">;  </font><font color="#008000"><i>{dtr on}
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>Async_CarrierDetect <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+</font><font color="#008000"><i>{true if carrier}
+</i></font><font color="#FF0000"><b>VAR
+  </b></font>b <font color="#000080">: </font>BOOLEAN<font color="#000080">;
+  </font>w <font color="#000080">: </font>WORD<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>w<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font>b<font color="#000080">:=</font>TRUE<font color="#000080">;
+  </font><font color="#FF0000"><b>WHILE </b></font><font color="#000080">(</font>w<font color="#000080">&lt;</font><font color="#800000">500</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font>b <font color="#FF0000"><b>DO BEGIN              </b></font><font color="#008000"><i>{make sure carrier stays down}
+    </i></font>INC<font color="#000080">(</font>w<font color="#000080">);                                 </font><font color="#008000"><i>{and is not just a fluke     }
+    </i></font>b<font color="#000080">:=(</font>PORT<font color="#000080">[</font>Async_Base<font color="#000080">+</font>Msr<font color="#000080">] </font><font color="#FF0000"><b>AND </b></font><font color="#800000">128</font><font color="#000080">) &lt;&gt; </font><font color="#800000">128</font><font color="#000080">; </font><font color="#008000"><i>{true = no carrier}</i></font><font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Async_CarrierDetect <font color="#000080">:= </font><font color="#FF0000"><b>NOT </b></font>b<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Async_Init<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">. </font><font color="#008000"><i>{ ASYNC UNIT }
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to COMM SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0028.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,690 @@
+<html>
+<head><title> "FLI File player" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0004.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$G+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>FliPlayer<font color="#000080">;
+
+</font><font color="#008000"><i>{  v1.1 made by Thaco   }
+{ (c) EPOS, August 1992 }
+
+
+</i></font><font color="#FF0000"><b>Const
+  </b></font>CLOCK_HZ              <font color="#000080">=</font><font color="#800000">4608</font><font color="#000080">;                   </font><font color="#008000"><i>{ Frequency of clock }
+  </i></font>MONItoR_HZ            <font color="#000080">=</font><font color="#800000">70</font><font color="#000080">;                     </font><font color="#008000"><i>{ Frequency of monitor }
+  </i></font>CLOCK_SCALE           <font color="#000080">=</font>CLOCK_HZ <font color="#FF0000"><b>div </b></font>MONItoR_HZ<font color="#000080">;
+
+  </font>BUFFERSIZE            <font color="#000080">=</font><font color="#800000">$FFFE</font><font color="#000080">;                  </font><font color="#008000"><i>{ Size of the framebuffer, must be an even number }
+  </i></font>CDATA                 <font color="#000080">=</font><font color="#800000">$040</font><font color="#000080">;                   </font><font color="#008000"><i>{ Port number of timer 0 }
+  </i></font>CMODE                 <font color="#000080">=</font><font color="#800000">$043</font><font color="#000080">;                   </font><font color="#008000"><i>{ Port number of timers control Word }
+  </i></font>CO80                  <font color="#000080">=</font><font color="#800000">$3</font><font color="#000080">;                     </font><font color="#008000"><i>{ Number For standard Text mode }
+  </i></font>KEYBOARD              <font color="#000080">=</font><font color="#800000">28</font><font color="#000080">;                     </font><font color="#008000"><i>{ Numbers returned by PorT[$64] indicating what hardware caused inT 09/the - }
+  </i></font>MOUSE                 <font color="#000080">=</font><font color="#800000">60</font><font color="#000080">;                     </font><font color="#008000"><i>{ - number on PorT[$60] }
+  </i></font>MCGA                  <font color="#000080">=</font><font color="#800000">$13</font><font color="#000080">;                    </font><font color="#008000"><i>{ Number For MCGA mode }
+  </i></font>MCGACheck<font color="#000080">:</font>Boolean     <font color="#000080">=</font>True<font color="#000080">;                   </font><font color="#008000"><i>{ Variable For MCGA checking }
+  </i></font>UseXMS<font color="#000080">:</font>Boolean        <font color="#000080">=</font>True<font color="#000080">;                   </font><font color="#008000"><i>{ Variable For XMS usage }
+  </i></font>XMSError<font color="#000080">:</font>Byte         <font color="#000080">=</font><font color="#800000">0</font><font color="#000080">;                      </font><font color="#008000"><i>{ Variable indicating the errornumber returned from the last XMS operation }
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>EMMStructure          <font color="#000080">=</font><font color="#FF0000"><b>Record
+                           </b></font>BytestoMoveLo<font color="#000080">,              </font><font color="#008000"><i>{ Low Word of Bytes to move. NB: Must be even! }
+                           </i></font>BytestoMoveHi<font color="#000080">,              </font><font color="#008000"><i>{ High Word of Bytes to move }
+                           </i></font>SourceHandle<font color="#000080">,               </font><font color="#008000"><i>{ Handle number of source (SH=0 =&gt; conventional memory) }
+                           </i></font>SourceoffsetLo<font color="#000080">,             </font><font color="#008000"><i>{ Low Word of source offset, or ofS if SH=0 }
+                           </i></font>SourceoffsetHi<font color="#000080">,             </font><font color="#008000"><i>{ High Word of source offset, or SEG if SH=0 }
+                           </i></font>DestinationHandle<font color="#000080">,          </font><font color="#008000"><i>{ Handle number of destination (DH=0 =&gt; conventional memory) }
+                           </i></font>DestinationoffsetLo<font color="#000080">,        </font><font color="#008000"><i>{ Low Word of destination offset, or ofS if DH=0 }
+                           </i></font>DestinationoffsetHi  <font color="#000080">:</font>Word<font color="#000080">; </font><font color="#008000"><i>{ High Word of destination offset, or SEG if DH=0 }
+                         </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>HeaderType            <font color="#000080">=</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">128</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;  </font><font color="#008000"><i>{ A bufferType used to read all kinds of headers }
+
+
+</i></font><font color="#FF0000"><b>Var
+  </b></font>Key<font color="#000080">,                                           </font><font color="#008000"><i>{ Variable used to check if a key has been pressed }
+  </i></font>OldKey                <font color="#000080">:</font>Byte<font color="#000080">;                   </font><font color="#008000"><i>{ Variable used to check if a key has been pressed }
+  </i></font>XMSRecord             <font color="#000080">:</font>EMMStructure<font color="#000080">;           </font><font color="#008000"><i>{ Variable For passing values to the XMS routine }
+  </i></font>InputFile             <font color="#000080">:</font><font color="#FF0000"><b>File</b></font><font color="#000080">;                   </font><font color="#008000"><i>{ Variable For the incomming .FLI File }
+  </i></font>Header                <font color="#000080">:</font>HeaderType<font color="#000080">;             </font><font color="#008000"><i>{ Buffer used to read all kinds of headers }
+  </i></font>Counter<font color="#000080">,                                       </font><font color="#008000"><i>{ General purpose counter }
+  </i></font>Speed                 <font color="#000080">:</font>Integer<font color="#000080">;                </font><font color="#008000"><i>{ Timedifference in video tics from one frame to the next }
+  </i></font>FileCounter<font color="#000080">,                                   </font><font color="#008000"><i>{ Variable telling the point to read from in the File stored in XMS }
+  </i></font>FileSize<font color="#000080">,                                      </font><font color="#008000"><i>{ Size of the .FLI-File }
+  </i></font>FrameSize<font color="#000080">,                                     </font><font color="#008000"><i>{ Variable indicating the datasize of current frame }
+  </i></font>NextTime<font color="#000080">,                                      </font><font color="#008000"><i>{ Variable saying when it is time to move on to the next frame }
+  </i></font>TimeCounter<font color="#000080">,                                   </font><font color="#008000"><i>{ Holding the current time in video tics }
+  </i></font>SecondPos             <font color="#000080">:</font>LongInt<font color="#000080">;                </font><font color="#008000"><i>{ Number of Bytes to skip from the start of the .FLI File when starting - }
+                                                 { - from the beginning again }
+  </i></font>Buffer<font color="#000080">,                                        </font><font color="#008000"><i>{ Pointer to the Framebuffer }
+  </i></font>XMSEntryPoint         <font color="#000080">:</font>Pointer<font color="#000080">;                </font><font color="#008000"><i>{ Entry point of the XMS routine in memory }
+  </i></font>SpeedString           <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">];              </font><font color="#008000"><i>{ String used to parse the -sNN command }
+  </i></font>FileName              <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">[</font><font color="#800000">13</font><font color="#000080">];             </font><font color="#008000"><i>{ String holding the name of the .FLI-File }
+  </i></font>BufferHandle<font color="#000080">,                                  </font><font color="#008000"><i>{ Handle number returned from the XMS routine }
+  </i></font>BytesRead<font color="#000080">,                                     </font><font color="#008000"><i>{ Variable telling the numbers of Bytes read from the .FLI File }
+  </i></font>FrameNumber<font color="#000080">,                                   </font><font color="#008000"><i>{ Number of the current frame }
+  </i></font>Frames<font color="#000080">,                                        </font><font color="#008000"><i>{ total number of frames }
+  </i></font>Chunks                <font color="#000080">:</font>Word<font color="#000080">;                   </font><font color="#008000"><i>{ total number of chunks in a frame }
+
+
+</i></font><font color="#FF0000"><b>Function </b></font>UpCaseString<font color="#000080">(</font>Streng<font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">):</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ takes a String and convert all letters to upperCase }
+</i></font><font color="#FF0000"><b>Var
+  </b></font>DummyString           <font color="#000080">:</font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font>Counter               <font color="#000080">:</font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>DummyString<font color="#000080">:=</font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>For </b></font>Counter<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Length<font color="#000080">(</font>Streng<font color="#000080">) </font><font color="#FF0000"><b>do
+    </b></font>DummyString<font color="#000080">:=</font>DummyString<font color="#000080">+</font>UpCase<font color="#000080">(</font>Streng<font color="#000080">[</font>Counter<font color="#000080">]);
+  </font>UpCaseString<font color="#000080">:=</font>DummyString<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>InitMode<font color="#000080">(</font>Mode<font color="#000080">:</font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Uses BIOS interrupts to set a videomode }
+</i></font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ax,Mode
+  int  10h
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>ModeSupport<font color="#000080">(</font>Mode<font color="#000080">:</font>Word<font color="#000080">):</font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ Uses BIOS interrupts to check if a videomode is supported }
+</i></font><font color="#FF0000"><b>Label </b></font>Exit<font color="#000080">, </font>Last_Modes<font color="#000080">, </font>No_Support<font color="#000080">, </font>Supported<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>DisplayInfo           <font color="#000080">:</font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">64</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;   </font><font color="#008000"><i>{ Array For storing Functionality/state inFormation }
+</i></font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">push es
+
+  mov  ah,1Bh                                    </font><font color="#008000"><i>{ the Functionality/state inFormation request at int 10h }
+  </i></font><font color="#FF00FF">mov  bx,0                                      </font><font color="#008000"><i>{ 0 = return Functionality/state inFormation }
+  </i></font><font color="#FF00FF">push ds                                        </font><font color="#008000"><i>{ push DS on the stack and pop it into ES so ES:DI could be used to - }
+  </i></font><font color="#FF00FF">pop  es                                        </font><font color="#008000"><i>{ - address DisplayInfo, as demanded of the interrupt Function }
+  </i></font><font color="#FF00FF">mov  di,offset DisplayInfo
+  int  10h
+
+  les  di,[dWord ptr es:di]                      </font><font color="#008000"><i>{ The first dWord in the buffer For state inFormation is the address - }
+                                                 { - of static funtionality table }
+  </i></font><font color="#FF00FF">mov  cx,Mode                                   </font><font color="#008000"><i>{ Can only check For the 0h-13h modes }
+  </i></font><font color="#FF00FF">cmp  cx,13h
+  ja   No_Support                                </font><font color="#008000"><i>{ Return 'no support' For modes &gt; 13h }
+
+  </i></font><font color="#FF00FF">mov  ax,1                                      </font><font color="#008000"><i>{ Shift the right Byte the right - }
+                                                 { - times and test For the right - }
+  </i></font><font color="#FF00FF">cmp  cx,10h                                    </font><font color="#008000"><i>{ - bit For knowing if the       - }
+  </i></font><font color="#FF00FF">jae  Last_Modes                                </font><font color="#008000"><i>{ - videomode is supported       - }
+                                                 { -                                }
+  </i></font><font color="#FF00FF">shl  ax,cl                                     </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">test ax,[Word ptr es:di+0]                     </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">jz   No_Support                                </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">jmp  Supported                                 </font><font color="#008000"><i>{ -                                }
+                                                 { -                                }
+</i></font><font color="#FF00FF">Last_Modes:                                      </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">sub  cx,10h                                    </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">shl  ax,cl                                     </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">test al,[Byte ptr es:di+2]                     </font><font color="#008000"><i>{ -                                }
+  </i></font><font color="#FF00FF">jz   No_Support                                </font><font color="#008000"><i>{ -                                }
+
+</i></font><font color="#FF00FF">Supported:
+  mov  al,1                                      </font><font color="#008000"><i>{ AL=1 makes the Function return True }
+  </i></font><font color="#FF00FF">jmp  Exit
+
+No_Support:
+  mov  al,0                                      </font><font color="#008000"><i>{ AL=0 makes the Function return True }
+
+</i></font><font color="#FF00FF">Exit:
+  pop  es
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>NoXMS<font color="#000080">:</font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ checks out if there is a XMS driver installed, and in Case it initialize the
+  XMSEntryPoint Variable }
+</i></font><font color="#FF0000"><b>Label </b></font>JumpOver<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">push es
+
+  mov  ax,4300h                                  </font><font color="#008000"><i>{ AX = 4300h =&gt; inSTALLATION CHECK }
+  </i></font><font color="#FF00FF">int  2Fh                                       </font><font color="#008000"><i>{ use int 2Fh Extended MEMorY SPECifICATION (XMS) }
+  </i></font><font color="#FF00FF">mov  bl,1                                      </font><font color="#008000"><i>{ use BL as a flag to indicate success }
+  </i></font><font color="#FF00FF">cmp  al,80h                                    </font><font color="#008000"><i>{ is a XMS driver installed? }
+  </i></font><font color="#FF00FF">jne  JumpOver
+  mov  ax,4310h                                  </font><font color="#008000"><i>{ AX = 4310h =&gt; GET DRIVER ADDRESS }
+  </i></font><font color="#FF00FF">int  2Fh
+  mov  [Word ptr XMSEntryPoint+0],BX             </font><font color="#008000"><i>{ initialize low Word of XMSEntryPoint }
+  </i></font><font color="#FF00FF">mov  [Word ptr XMSEntryPoint+2],ES             </font><font color="#008000"><i>{ initialize high Word of XMSEntryPoint }
+  </i></font><font color="#FF00FF">mov  bl,0                                      </font><font color="#008000"><i>{ indicate success }
+</i></font><font color="#FF00FF">JumpOver:
+  mov  al,bl                                     </font><font color="#008000"><i>{ make the Function return True (AH=1) or False (AH=0) }
+
+  </i></font><font color="#FF00FF">pop  es
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>XMSMaxAvail<font color="#000080">:</font>Word<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ returns size of largest contiguous block of XMS in kilo (1024) Bytes }
+</i></font><font color="#FF0000"><b>Label </b></font>JumpOver<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah,08h                                    </font><font color="#008000"><i>{ 'Query free Extended memory' Function }
+  </i></font><font color="#FF00FF">mov  XMSError,0                                </font><font color="#008000"><i>{ clear error Variable }
+  </i></font><font color="#FF00FF">call [dWord ptr XMSEntryPoint]
+  or   ax,ax                                     </font><font color="#008000"><i>{ check For error }
+  </i></font><font color="#FF00FF">jnz  JumpOver
+  mov  XMSError,bl                               </font><font color="#008000"><i>{ errornumber stored in BL }
+</i></font><font color="#FF00FF">JumpOver:                                        </font><font color="#008000"><i>{ AX=largest contiguous block of XMS }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>XMSGetMem<font color="#000080">(</font>SizeInKB<font color="#000080">:</font>Word<font color="#000080">):</font>Word<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ allocates specified numbers of kilo (1024) Bytes of XMS and return a handle
+  to this XMS block }
+</i></font><font color="#FF0000"><b>Label </b></font>JumpOver<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah,09h                                    </font><font color="#008000"><i>{ 'Allocate Extended memory block' Function }
+  </i></font><font color="#FF00FF">mov  dx,SizeInKB                               </font><font color="#008000"><i>{ number of KB requested }
+  </i></font><font color="#FF00FF">mov  XMSError,0                                </font><font color="#008000"><i>{ clear error Variable }
+  </i></font><font color="#FF00FF">call [dWord ptr XMSEntryPoint]
+  or   ax,ax                                     </font><font color="#008000"><i>{ check For error }
+  </i></font><font color="#FF00FF">jnz  JumpOver
+  mov  XMSError,bl                               </font><font color="#008000"><i>{ errornumber stored in BL }
+</i></font><font color="#FF00FF">JumpOver:
+  mov  ax,dx                                     </font><font color="#008000"><i>{ return handle number to XMS block }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>XMSFreeMem<font color="#000080">(</font>Handle<font color="#000080">:</font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Label </b></font>JumpOver<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah,0Ah                                    </font><font color="#008000"><i>{ 'Free Extended memory block' Function }
+  </i></font><font color="#FF00FF">mov  dx,Handle                                 </font><font color="#008000"><i>{ XMS's handle number to free }
+  </i></font><font color="#FF00FF">mov  XMSError,0                                </font><font color="#008000"><i>{ clear error Variable }
+  </i></font><font color="#FF00FF">call [dWord ptr XMSEntryPoint]
+  or   ax,ax                                     </font><font color="#008000"><i>{ check For error }
+  </i></font><font color="#FF00FF">jnz  JumpOver
+  mov  XMSError,bl                               </font><font color="#008000"><i>{ errornumber stored in BL }
+</i></font><font color="#FF00FF">JumpOver:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>XMSMove<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>EMMParamBlock<font color="#000080">:</font>EMMStructure<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Label </b></font>JumpOver<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">push ds
+  push es
+  push ds
+  pop  es
+  mov  ah,0Bh                                    </font><font color="#008000"><i>{ 'Move Extended memory block' Function }
+  </i></font><font color="#FF00FF">mov  XMSError,0                                </font><font color="#008000"><i>{ clear error Variable }
+  </i></font><font color="#FF00FF">lds  si,EMMParamBlock                          </font><font color="#008000"><i>{ DS:SI -&gt; data to pass to the XMS routine }
+  </i></font><font color="#FF00FF">call [dWord ptr es:XMSEntryPoint]
+  or   ax,ax                                     </font><font color="#008000"><i>{ check For error }
+  </i></font><font color="#FF00FF">jnz  JumpOver
+  mov  XMSError,bl                               </font><font color="#008000"><i>{ errornumber stored in BL }
+</i></font><font color="#FF00FF">JumpOver:
+  pop  es
+  pop  ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>ExitDuetoXMSError<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>InitMode<font color="#000080">(</font>CO80<font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! XMS routine has reported error '</font><font color="#000080">,</font>XMSError<font color="#000080">);
+  </font>XMSFreeMem<font color="#000080">(</font>BufferHandle<font color="#000080">);
+  </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>GetBlock<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>Buffer<font color="#000080">; </font>Size<font color="#000080">:</font>Word<font color="#000080">);
+</font><font color="#008000"><i>{ reads a specified numbers of data from a diskFile or XMS into a buffer }
+</i></font><font color="#FF0000"><b>Var
+  </b></font>XMSRecord             <font color="#000080">:</font>EMMStructure<font color="#000080">;
+  </font>NumberofBytes         <font color="#000080">:</font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>UseXMS <font color="#FF0000"><b>then
+  begin
+    </b></font>NumberofBytes<font color="#000080">:=</font>Size<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>Size <font color="#FF0000"><b>MOD </b></font><font color="#800000">2</font><font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>then
+      </b></font>Inc<font color="#000080">(</font>NumberofBytes<font color="#000080">);  </font><font color="#008000"><i>{ one must allways ask For a EQUAL number of Bytes }
+    </i></font><font color="#FF0000"><b>With </b></font>XMSRecord <font color="#FF0000"><b>do
+    begin
+      </b></font>BytestoMoveLo      <font color="#000080">:=</font>NumberofBytes<font color="#000080">;
+      </font>BytestoMoveHi      <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font>SourceHandle       <font color="#000080">:=</font>BufferHandle<font color="#000080">;
+      </font>SourceoffsetLo     <font color="#000080">:=</font>FileCounter <font color="#FF0000"><b>MOD </b></font><font color="#800000">65536</font><font color="#000080">;
+      </font>SourceoffsetHi     <font color="#000080">:=</font>FileCounter <font color="#FF0000"><b>div </b></font><font color="#800000">65536</font><font color="#000080">;
+      </font>DestinationHandle  <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font>DestinationoffsetLo<font color="#000080">:=</font>ofs<font color="#000080">(</font>Buffer<font color="#000080">);
+      </font>DestinationoffsetHi<font color="#000080">:=</font>Seg<font color="#000080">(</font>Buffer<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>XMSMove<font color="#000080">(</font>XMSRecord<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>XMSError<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>ExitDuetoXMSError<font color="#000080">;
+    </font>Inc<font color="#000080">(</font>FileCounter<font color="#000080">,</font>Size<font color="#000080">);
+  </font><font color="#FF0000"><b>end
+  else
+    </b></font>BlockRead<font color="#000080">(</font>InputFile<font color="#000080">,</font>Buffer<font color="#000080">,</font>Size<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>InitClock<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">; </font><font color="#008000"><i>{Taken from the FLILIB source}
+</i></font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  al,00110100b                                 </font><font color="#008000"><i>{ put it into liNear count instead of divide by 2 }
+  </i></font><font color="#FF00FF">out  CMODE,al
+  xor  al,al
+  out  CDATA,al
+  out  CDATA,al
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Function </b></font>GetClock<font color="#000080">:</font>LongInt<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">; </font><font color="#008000"><i>{Taken from the FLILIB source}
+{ this routine returns a clock With occassional spikes where time
+  will look like its running backwards 1/18th of a second.  The resolution
+  of the clock is 1/(18*256) = 1/4608 second.  66 ticks of this clock
+  are supposed to be equal to a monitor 1/70 second tick.}
+</i></font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ah,0                                         </font><font color="#008000"><i>{ get tick count from Dos and use For hi 3 Bytes }
+  </i></font><font color="#FF00FF">int  01ah                                         </font><font color="#008000"><i>{ lo order count in DX, hi order in CX }
+  </i></font><font color="#FF00FF">mov  ah,dl
+  mov  dl,dh
+  mov  dh,cl
+
+  mov  al,0                                         </font><font color="#008000"><i>{ read lo Byte straight from timer chip }
+  </i></font><font color="#FF00FF">out  CMODE,al                                         </font><font color="#008000"><i>{ latch count }
+  </i></font><font color="#FF00FF">mov  al,1
+  out  CMODE,al                                         </font><font color="#008000"><i>{ set up to read count }
+  </i></font><font color="#FF00FF">in   al,CDATA                                         </font><font color="#008000"><i>{ read in lo Byte (and discard) }
+  </i></font><font color="#FF00FF">in   al,CDATA                                         </font><font color="#008000"><i>{ hi Byte into al }
+  </i></font><font color="#FF00FF">neg  al                                         </font><font color="#008000"><i>{ make it so counting up instead of down }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>Procedure </b></font>TreatFrame<font color="#000080">(</font>Buffer<font color="#000080">:</font>Pointer<font color="#000080">;</font>Chunks<font color="#000080">:</font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ this is the 'workhorse' routine that takes a frame and put it on the screen }
+{ chunk by chunk }
+</i></font><font color="#FF0000"><b>Label
+  </b></font>Color_Loop<font color="#000080">, </font>Copy_Bytes<font color="#000080">, </font>Copy_Bytes2<font color="#000080">, </font>Exit<font color="#000080">, </font>Fli_Black<font color="#000080">, </font>Fli_Brun<font color="#000080">, </font>Fli_Color<font color="#000080">,
+  </font>Fli_Copy<font color="#000080">, </font>Fli_Lc<font color="#000080">, </font>Fli_Loop<font color="#000080">, </font>Jump_Over<font color="#000080">, </font>Line_Loop<font color="#000080">, </font>Line_Loop2<font color="#000080">, </font>Next_Line<font color="#000080">,
+  </font>Next_Line2<font color="#000080">, </font>Pack_Loop<font color="#000080">, </font>Pack_Loop2<font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">cli                                            </font><font color="#008000"><i>{ disable interrupts }
+  </i></font><font color="#FF00FF">push ds
+  push es                                        
+  lds  si,Buffer                                 </font><font color="#008000"><i>{ let DS:SI point at the frame to be drawn }
+
+</i></font><font color="#FF00FF">Fli_Loop:                                        </font><font color="#008000"><i>{ main loop that goes through all the chunks in a frame }
+  </i></font><font color="#FF00FF">cmp  Chunks,0                                  </font><font color="#008000"><i>{ are there any more chunks to draw? }
+  </i></font><font color="#FF00FF">je   Exit
+  dec  Chunks                                    </font><font color="#008000"><i>{ decrement Chunks For the chunk to process now }
+
+  </i></font><font color="#FF00FF">mov  ax,[Word ptr ds:si+4]                     </font><font color="#008000"><i>{ let AX have the ChunkType }
+  </i></font><font color="#FF00FF">add  si,6                                      </font><font color="#008000"><i>{ skip the ChunkHeader }
+
+  </i></font><font color="#FF00FF">cmp  ax,0Bh                                    </font><font color="#008000"><i>{ is it a FLI_COLor chunk? }
+  </i></font><font color="#FF00FF">je   Fli_Color
+  cmp  ax,0Ch                                    </font><font color="#008000"><i>{ is it a FLI_LC chunk? }
+  </i></font><font color="#FF00FF">je   Fli_Lc
+  cmp  ax,0Dh                                    </font><font color="#008000"><i>{ is it a FLI_BLACK chunk? }
+  </i></font><font color="#FF00FF">je   Fli_Black
+  cmp  ax,0Fh                                    </font><font color="#008000"><i>{ is it a FLI_BRUN chunk? }
+  </i></font><font color="#FF00FF">je   Fli_Brun
+  cmp  ax,10h                                    </font><font color="#008000"><i>{ is it a FLI_COPY chunk? }
+  </i></font><font color="#FF00FF">je   Fli_Copy
+  jmp  Fli_Loop                                  </font><font color="#008000"><i>{ This command should not be necessary since the Program should make one - }
+                                                 { - of the other jumps }
+
+</i></font><font color="#FF00FF">Fli_Color:
+  mov  bx,[Word ptr ds:si]                       </font><font color="#008000"><i>{ number of packets in this chunk (allways 1?) }
+  </i></font><font color="#FF00FF">add  si,2                                      </font><font color="#008000"><i>{ skip the NumberofPackets }
+  </i></font><font color="#FF00FF">mov  al,0                                      </font><font color="#008000"><i>{ start at color 0 }
+  </i></font><font color="#FF00FF">xor  cx,cx                                     </font><font color="#008000"><i>{ reset CX }
+
+</i></font><font color="#FF00FF">Color_Loop:
+  or   bx,bx                                     </font><font color="#008000"><i>{ set flags }
+  </i></font><font color="#FF00FF">jz   Fli_Loop                                  </font><font color="#008000"><i>{ Exit if no more packages }
+  </i></font><font color="#FF00FF">dec  bx                                        </font><font color="#008000"><i>{ decrement NumberofPackages For the package to process now }
+
+  </i></font><font color="#FF00FF">mov  cl,[Byte ptr ds:si+0]                     </font><font color="#008000"><i>{ first Byte in packet tells how many colors to skip }
+  </i></font><font color="#FF00FF">add  al,cl                                     </font><font color="#008000"><i>{ add the skiped colors to the start to get the new start }
+  </i></font><font color="#FF00FF">mov  dx,$3C8                                   </font><font color="#008000"><i>{ PEL Address Write Mode Register }
+  </i></font><font color="#FF00FF">out  dx,al                                     </font><font color="#008000"><i>{ tell the VGA card what color we start changing }
+
+  </i></font><font color="#FF00FF">inc  dx                                        </font><font color="#008000"><i>{ at the port abow the PEL_A_W_M_R is the PEL Data Register }
+  </i></font><font color="#FF00FF">mov  cl,[Byte ptr ds:si+1]                     </font><font color="#008000"><i>{ next Byte in packet tells how many colors to change }
+  </i></font><font color="#FF00FF">or   cl,cl                                     </font><font color="#008000"><i>{ set the flags }
+  </i></font><font color="#FF00FF">jnz  Jump_Over                                 </font><font color="#008000"><i>{ if NumberstoChange=0 then NumberstoChange=256 }
+  </i></font><font color="#FF00FF">inc  ch                                        </font><font color="#008000"><i>{ CH=1 and CL=0 =&gt; CX=256 }
+</i></font><font color="#FF00FF">Jump_Over:
+  add  al,cl                                     </font><font color="#008000"><i>{ update the color to start at }
+  </i></font><font color="#FF00FF">mov  di,cx                                     </font><font color="#008000"><i>{ since each color is made of 3 Bytes (Red, Green &amp; Blue) we have to - }
+  </i></font><font color="#FF00FF">shl  cx,1                                      </font><font color="#008000"><i>{ - multiply CX (the data counter) With 3 }
+  </i></font><font color="#FF00FF">add  cx,di                                     </font><font color="#008000"><i>{ - CX = old_CX shl 1 + old_CX   (the fastest way to multiply With 3) }
+  </i></font><font color="#FF00FF">add  si,2                                      </font><font color="#008000"><i>{ skip the NumberstoSkip and NumberstoChange Bytes }
+  </i></font><font color="#FF00FF">rep  outsb                                     </font><font color="#008000"><i>{ put the color data to the VGA card FAST! }
+
+  </i></font><font color="#FF00FF">jmp  Color_Loop                                </font><font color="#008000"><i>{ finish With this packet - jump back }
+
+
+</i></font><font color="#FF00FF">Fli_Lc:
+  mov  ax,0A000h
+  mov  es,ax                                     </font><font color="#008000"><i>{ let ES point at the screen segment }
+  </i></font><font color="#FF00FF">mov  di,[Word ptr ds:si+0]                     </font><font color="#008000"><i>{ put LinestoSkip into DI - }
+  </i></font><font color="#FF00FF">mov  ax,di                                     </font><font color="#008000"><i>{ - to get the offset address to this line we have to multiply With 320 - }
+  </i></font><font color="#FF00FF">shl  ax,8                                      </font><font color="#008000"><i>{ - DI = old_DI shl 8 + old_DI shl 6 - }
+  </i></font><font color="#FF00FF">shl  di,6                                      </font><font color="#008000"><i>{ - it is the same as DI = old_DI*256 + old_DI*64 = old_DI*320 - }
+  </i></font><font color="#FF00FF">add  di,ax                                     </font><font color="#008000"><i>{ - but this way is faster than a plain mul }
+  </i></font><font color="#FF00FF">mov  bx,[Word ptr ds:si+2]                     </font><font color="#008000"><i>{ put LinestoChange into BX }
+  </i></font><font color="#FF00FF">add  si,4                                      </font><font color="#008000"><i>{ skip the LinestoSkip and LinestoChange Words }
+  </i></font><font color="#FF00FF">xor  cx,cx                                     </font><font color="#008000"><i>{ reset cx }
+
+</i></font><font color="#FF00FF">Line_Loop:
+  or   bx,bx                                     </font><font color="#008000"><i>{ set flags }
+  </i></font><font color="#FF00FF">jz  Fli_Loop                                   </font><font color="#008000"><i>{ Exit if no more lines to change }
+  </i></font><font color="#FF00FF">dec  bx
+
+  mov  dl,[Byte ptr ds:si]                       </font><font color="#008000"><i>{ put PacketsInLine into DL }
+  </i></font><font color="#FF00FF">inc  si                                        </font><font color="#008000"><i>{ skip the PacketsInLine Byte }
+  </i></font><font color="#FF00FF">push di                                        </font><font color="#008000"><i>{ save the offset address of this line }
+
+</i></font><font color="#FF00FF">Pack_Loop:
+  or   dl,dl                                     </font><font color="#008000"><i>{ set flags }
+  </i></font><font color="#FF00FF">jz   Next_Line                                 </font><font color="#008000"><i>{ Exit if no more packets in this line }
+  </i></font><font color="#FF00FF">dec  dl
+  mov  cl,[Byte ptr ds:si+0]                     </font><font color="#008000"><i>{ put BytestoSkip into CL }
+  </i></font><font color="#FF00FF">add  di,cx                                     </font><font color="#008000"><i>{ update the offset address }
+  </i></font><font color="#FF00FF">mov  cl,[Byte ptr ds:si+1]                     </font><font color="#008000"><i>{ put BytesofDatatoCome into CL }
+  </i></font><font color="#FF00FF">or   cl,cl                                     </font><font color="#008000"><i>{ set flags }
+  </i></font><font color="#FF00FF">jns  Copy_Bytes                                </font><font color="#008000"><i>{ no SIGN means that CL number of data is to come - }
+                                                 { - else the next data should be put -CL number of times }
+  </i></font><font color="#FF00FF">mov  al,[Byte ptr ds:si+2]                     </font><font color="#008000"><i>{ put the Byte to be Repeated into AL }
+  </i></font><font color="#FF00FF">add  si,3                                      </font><font color="#008000"><i>{ skip the packet }
+  </i></font><font color="#FF00FF">neg  cl                                        </font><font color="#008000"><i>{ Repeat -CL times }
+  </i></font><font color="#FF00FF">rep  stosb
+  jmp  Pack_Loop                                 </font><font color="#008000"><i>{ finish With this packet }
+
+</i></font><font color="#FF00FF">Copy_Bytes:                                      
+  add  si,2                                      </font><font color="#008000"><i>{ skip the two count Bytes at the start of the packet }
+  </i></font><font color="#FF00FF">rep  movsb
+  jmp  Pack_Loop                                 </font><font color="#008000"><i>{ finish With this packet }
+
+</i></font><font color="#FF00FF">Next_Line:
+  pop  di                                        </font><font color="#008000"><i>{ restore the old offset address of the current line }
+  </i></font><font color="#FF00FF">add  di,320                                    </font><font color="#008000"><i>{ offset address to the next line }
+  </i></font><font color="#FF00FF">jmp  Line_Loop
+
+
+Fli_Black:
+  mov  ax,0A000h
+  mov  es,ax                                     </font><font color="#008000"><i>{ let ES:DI point to the start of the screen }
+  </i></font><font color="#FF00FF">xor  di,di
+  mov  cx,32000                                  </font><font color="#008000"><i>{ number of Words in a screen }
+  </i></font><font color="#FF00FF">xor  ax,ax                                     </font><font color="#008000"><i>{ color 0 is to be put on the screen }
+  </i></font><font color="#FF00FF">rep  stosw
+  jmp  Fli_Loop                                  </font><font color="#008000"><i>{ jump back to main loop }
+
+
+</i></font><font color="#FF00FF">Fli_Brun:
+  mov  ax,0A000h
+  mov  es,ax                                     </font><font color="#008000"><i>{ let ES:DI point at the start of the screen }
+  </i></font><font color="#FF00FF">xor  di,di
+  mov  bx,200                                    </font><font color="#008000"><i>{ numbers of lines in a screen }
+  </i></font><font color="#FF00FF">xor  cx,cx
+
+Line_Loop2:
+  mov  dl,[Byte ptr ds:si]                       </font><font color="#008000"><i>{ put PacketsInLine into DL }
+  </i></font><font color="#FF00FF">inc  si                                        </font><font color="#008000"><i>{ skip the PacketsInLine Byte }
+  </i></font><font color="#FF00FF">push di                                        </font><font color="#008000"><i>{ save the offset address of this line }
+
+</i></font><font color="#FF00FF">Pack_Loop2:
+  or   dl,dl                                     </font><font color="#008000"><i>{ set flags }
+  </i></font><font color="#FF00FF">jz   Next_Line2                                </font><font color="#008000"><i>{ Exit if no more packets in this line }
+  </i></font><font color="#FF00FF">dec  dl
+  mov  cl,[Byte ptr ds:si]                       </font><font color="#008000"><i>{ put BytesofDatatoCome into CL }
+  </i></font><font color="#FF00FF">or   cl,cl                                     </font><font color="#008000"><i>{ set flags }
+  </i></font><font color="#FF00FF">js   Copy_Bytes2                               </font><font color="#008000"><i>{ SIGN meens that CL number of data is to come - }
+                                                 { - else the next data should be put -CL number of times }
+  </i></font><font color="#FF00FF">mov  al,[Byte ptr ds:si+1]                     </font><font color="#008000"><i>{ put the Byte to be Repeated into AL }
+  </i></font><font color="#FF00FF">add  si,2                                      </font><font color="#008000"><i>{ skip the packet }
+  </i></font><font color="#FF00FF">rep  stosb
+  jmp  Pack_Loop2                                </font><font color="#008000"><i>{ finish With this packet }
+
+</i></font><font color="#FF00FF">Copy_Bytes2:
+  inc  si                                        </font><font color="#008000"><i>{ skip the count Byte at the start of the packet }
+  </i></font><font color="#FF00FF">neg  cl                                        </font><font color="#008000"><i>{ Repeat -CL times }
+  </i></font><font color="#FF00FF">rep  movsb
+  jmp  Pack_Loop2                                </font><font color="#008000"><i>{ finish With this packet }
+
+</i></font><font color="#FF00FF">Next_Line2:
+  pop  di                                        </font><font color="#008000"><i>{ restore the old offset address of the current line }
+  </i></font><font color="#FF00FF">add  di,320                                    </font><font color="#008000"><i>{ offset address to the next line }
+  </i></font><font color="#FF00FF">dec  bx                                        </font><font color="#008000"><i>{ any more lines to draw? }
+  </i></font><font color="#FF00FF">jnz  Line_Loop2
+  jmp  Fli_Loop                                  </font><font color="#008000"><i>{ jump back to main loop }
+
+
+</i></font><font color="#FF00FF">Fli_Copy:
+  mov  ax,0A000h
+  mov  es,ax                                     </font><font color="#008000"><i>{ let ES:DI point to the start of the screen }
+  </i></font><font color="#FF00FF">xor  di,di
+  mov  cx,32000                                  </font><font color="#008000"><i>{ number of Words in a screen }
+  </i></font><font color="#FF00FF">rep  movsw
+  jmp  Fli_Loop                                  </font><font color="#008000"><i>{ jump back to main loop }
+
+
+</i></font><font color="#FF00FF">Exit:
+  sti                                            </font><font color="#008000"><i>{ enable interrupts }
+  </i></font><font color="#FF00FF">pop  es
+  pop  ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+
+</font><font color="#FF0000"><b>begin
+  </b></font>WriteLn<font color="#000080">;
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'.FLI-Player v1.1 by Thaco'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">(</font><font color="#800000">'  (c) EPOS, August 1992'</font><font color="#000080">);
+  </font>WriteLn<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>ParamCount<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then                           </b></font><font color="#008000"><i>{ if no input parameters then Write the 'usage Text' }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'USAGE: FLIPLAY &lt;options&gt; &lt;Filename&gt;'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                   '</font><font color="#000080">+</font><font color="#800000">#24</font><font color="#000080">+</font><font color="#800000">'         '</font><font color="#000080">+</font><font color="#800000">#24</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                   &sup3;         &Agrave;&Auml;&Auml;  Filename of .FLI File'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                   &Agrave;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;&Auml;  -d   = Do not use XMS'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                  -i   = InFormation about the Program'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                  -n   = No checking of MCGA mode support'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                  -sNN = Set playspeed to NN video ticks (0-99)'</font><font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'                                         ( NN=70 &divide frame Delay of 1 second )'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>For </b></font>Counter<font color="#000080">:=</font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ParamCount <font color="#FF0000"><b>do                </b></font><font color="#008000"><i>{ search through the input parameters For a -Info option }
+    </i></font><font color="#FF0000"><b>if </b></font>Pos<font color="#000080">(</font><font color="#800000">'-I'</font><font color="#000080">,</font>UpCaseString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)))&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Program inFormation:'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'This Program plays animations (sequences of pictures) made by Programs like'</font><font color="#000080">,</font><font color="#800000">#10#13</font><font color="#000080">,
+              </font><font color="#800000">'Autodesk Animator (so called .FLI-Files). The Program decodes the .FLI File,'</font><font color="#000080">,</font><font color="#800000">#10#13</font><font color="#000080">,
+              </font><font color="#800000">'frame by frame, and Uses the systemclock For mesuring the time-Delay between'</font><font color="#000080">,</font><font color="#800000">#10#13</font><font color="#000080">,
+              </font><font color="#800000">'each frame.'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'Basis For the Program was the FliLib package made by Jim Kent, but since the'</font><font color="#000080">,</font><font color="#800000">#10#13</font><font color="#000080">,
+              </font><font color="#800000">'original source was written in C, and I am not a good C-Writer, I decided'</font><font color="#000080">,</font><font color="#800000">#10#13</font><font color="#000080">,
+              </font><font color="#800000">'to Write my own .FLI-player in Turbo Pascal v6.0.'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'This Program was made by Eirik Milch Pedersen (thaco@solan.Unit.no).'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'Copyright Eirik Pedersens Own SoftwareCompany (EPOS), August 1992'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">;
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'Autodesk Animator is (c) Autodesk Inc'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'FliLib is (c) Dancing Flame'</font><font color="#000080">);
+      </font>WriteLn<font color="#000080">(</font><font color="#800000">'Turbo Pascal is (c) Borland International Inc'</font><font color="#000080">);
+      </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Speed<font color="#000080">:=-</font><font color="#800000">1</font><font color="#000080">;
+  </font>Counter<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Copy<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">)=</font><font color="#800000">'-'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>ParamCount<font color="#000080">&gt;=</font>Counter<font color="#000080">) </font><font color="#FF0000"><b>do </b></font><font color="#008000"><i>{ search through the input parameters to assemble them }
+  </i></font><font color="#FF0000"><b>begin
+   if </b></font>Pos<font color="#000080">(</font><font color="#800000">'-D'</font><font color="#000080">,</font>UpCaseString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)))&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ do not use XMS For storing the File into memory }
+     </i></font>UseXMS<font color="#000080">:=</font>False
+   <font color="#FF0000"><b>else
+     if </b></font>Pos<font color="#000080">(</font><font color="#800000">'-N'</font><font color="#000080">,</font>UpCaseString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)))&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ do not check For a vga card present }
+       </i></font>MCGACheck<font color="#000080">:=</font>False
+     <font color="#FF0000"><b>else
+       if </b></font>Pos<font color="#000080">(</font><font color="#800000">'-S'</font><font color="#000080">,</font>UpCaseString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">)))&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ speed override has been specified }
+       </i></font><font color="#FF0000"><b>begin
+         </b></font>SpeedString<font color="#000080">:=</font>Copy<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">),</font><font color="#800000">3</font><font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);  </font><font color="#008000"><i>{ cut out the NN parameter }
+         </i></font><font color="#FF0000"><b>if not</b></font><font color="#000080">(</font>SpeedString<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">]) </font><font color="#FF0000"><b>or    </b></font><font color="#008000"><i>{ check if the NN parameter is legal }
+            </i></font><font color="#000080">(</font><font color="#FF0000"><b>not</b></font><font color="#000080">(</font>SpeedString<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">]) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Length<font color="#000080">(</font>SpeedString<font color="#000080">)=</font><font color="#800000">2</font><font color="#000080">)) </font><font color="#FF0000"><b>then
+         begin
+           </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! Can not parse speed '''</font><font color="#000080">,</font>SpeedString<font color="#000080">,</font><font color="#800000">'''.'</font><font color="#000080">);
+           </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+         </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+         </font>Speed<font color="#000080">:=</font>Byte<font color="#000080">(</font>SpeedString<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])-</font><font color="#800000">48</font><font color="#000080">;  </font><font color="#008000"><i>{ take the first number, in ASCII, and convert it to a standard number }
+         </i></font><font color="#FF0000"><b>if </b></font>Length<font color="#000080">(</font>SpeedString<font color="#000080">)=</font><font color="#800000">2 </font><font color="#FF0000"><b>then    </b></font><font color="#008000"><i>{ if there is two numbers then multiply the first With 10 and add the next }
+           </i></font>Speed<font color="#000080">:=</font>Speed<font color="#000080">*</font><font color="#800000">10</font><font color="#000080">+</font>Byte<font color="#000080">(</font>SpeedString<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">])-</font><font color="#800000">48</font><font color="#000080">;
+         </font>Speed<font color="#000080">:=</font>Speed<font color="#000080">*</font>CLOCK_SCALE<font color="#000080">;        </font><font color="#008000"><i>{ convert the speed to number of clock tics }
+       </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font>Inc<font color="#000080">(</font>Counter<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>ParamCount<font color="#000080">&lt;</font>Counter <font color="#FF0000"><b>then
+  begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! No Filename specified.'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>FileName<font color="#000080">:=</font>UpCaseString<font color="#000080">(</font>ParamStr<font color="#000080">(</font>Counter<font color="#000080">));
+  </font><font color="#FF0000"><b>if </b></font>Pos<font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">,</font>FileName<font color="#000080">)=</font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ find out if there exist a . in the Filename }
+    </i></font>FileName<font color="#000080">:=</font>FileName<font color="#000080">+</font><font color="#800000">'.FLI'</font><font color="#000080">; </font><font color="#008000"><i>{ if not then add the .FLI extension on the Filename }
+
+  </i></font><font color="#FF0000"><b>if </b></font>MaxAvail<font color="#000080">&lt;</font>BUFFERSIZE <font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ check if there is enough memory to the frame buffer }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! Can not allocate enough memory to a frame buffer.'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>GetMem<font color="#000080">(</font>Buffer<font color="#000080">,</font>BUFFERSIZE<font color="#000080">);
+  </font>Assign<font color="#000080">(</font>InputFile<font color="#000080">,</font>FileName<font color="#000080">);
+  </font>Reset<font color="#000080">(</font>InputFile<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Ioresult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ has an error occured during opening the File? }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! Can not open File '''</font><font color="#000080">,</font>FileName<font color="#000080">,</font><font color="#800000">'''.'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if not</b></font><font color="#000080">(</font>MCGACheck<font color="#000080">) </font><font color="#FF0000"><b>or </b></font>ModeSupport<font color="#000080">(</font>MCGA<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>InitMode<font color="#000080">(</font>MCGA<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+  begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! Video mode 013h - 320x200x256 colors - is not supported.'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>BlockRead<font color="#000080">(</font>InputFile<font color="#000080">,</font>Header<font color="#000080">,</font><font color="#800000">128</font><font color="#000080">);  </font><font color="#008000"><i>{ read the .FLI main header }
+
+  </i></font><font color="#FF0000"><b>if not</b></font><font color="#000080">((</font>Header<font color="#000080">[</font><font color="#800000">4</font><font color="#000080">]=</font><font color="#800000">$11</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">5</font><font color="#000080">]=</font><font color="#800000">$AF</font><font color="#000080">)) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ check if the File has got the magic number }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>InitMode<font color="#000080">(</font>CO80<font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! File '''</font><font color="#000080">,</font>FileName<font color="#000080">,</font><font color="#800000">''' is of a wrong File Type.'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>NoXMS <font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ if no XMS driver present then do not use XMS }
+    </i></font>UseXMS<font color="#000080">:=</font>False<font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>UseXMS <font color="#FF0000"><b>then
+  begin
+    </b></font>FileSize<font color="#000080">:=</font>Header<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]+</font><font color="#800000">256</font><font color="#000080">*(</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*(</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">])));
+    </font><font color="#FF0000"><b>if </b></font>XMSMaxAvail<font color="#000080">&lt;=(</font>FileSize<font color="#000080">+</font><font color="#800000">1023</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">10 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ is there enough XMS (rounded up to Nearest KB) availible? }
+    </i></font><font color="#FF0000"><b>begin
+      </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'ERRor! not enough XMS For the File'</font><font color="#000080">);
+      </font>Halt<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end
+    else
+    begin
+      </b></font>Seek<font color="#000080">(</font>InputFile<font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);  </font><font color="#008000"><i>{ skip back to start of .FLI-File to put it all into XMS }
+      </i></font>BufferHandle<font color="#000080">:=</font>XMSGetMem<font color="#000080">((</font>FileSize<font color="#000080">+</font><font color="#800000">1023</font><font color="#000080">) </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">10</font><font color="#000080">);  </font><font color="#008000"><i>{ allocate XMS For the whole .FLI File }
+      </i></font>FileCounter<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>Repeat
+        </b></font>BlockRead<font color="#000080">(</font>InputFile<font color="#000080">,</font>Buffer<font color="#000080">^,</font>BUFFERSIZE<font color="#000080">,</font>BytesRead<font color="#000080">);  </font><font color="#008000"><i>{ read a part from the .FLI File }
+        </i></font><font color="#FF0000"><b>if </b></font>BytesRead <font color="#FF0000"><b>MOD </b></font><font color="#800000">2</font><font color="#000080">=</font><font color="#800000">1 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ since BUFFERSIZE shoud be an even number, the only time this triggers is the last part }
+          </i></font>Inc<font color="#000080">(</font>BytesRead<font color="#000080">);          </font><font color="#008000"><i>{ must be done because the XMS routine demands an even number of Bytes to be moved }
+        </i></font><font color="#FF0000"><b>if </b></font>BytesRead<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        begin
+          With </b></font>XMSRecord <font color="#FF0000"><b>do  </b></font><font color="#008000"><i>{ put data into the XMSRecord }
+          </i></font><font color="#FF0000"><b>begin
+            </b></font>BytestoMoveLo      <font color="#000080">:=</font>BytesRead<font color="#000080">;
+            </font>BytestoMoveHi      <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+            </font>SourceHandle       <font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+            </font>SourceoffsetLo     <font color="#000080">:=</font>ofs<font color="#000080">(</font>Buffer<font color="#000080">^);
+            </font>SourceoffsetHi     <font color="#000080">:=</font>Seg<font color="#000080">(</font>Buffer<font color="#000080">^);
+            </font>DestinationHandle  <font color="#000080">:=</font>BufferHandle<font color="#000080">;
+            </font>DestinationoffsetLo<font color="#000080">:=</font>FileCounter <font color="#FF0000"><b>MOD </b></font><font color="#800000">65536</font><font color="#000080">;
+            </font>DestinationoffsetHi<font color="#000080">:=</font>FileCounter <font color="#FF0000"><b>div </b></font><font color="#800000">65536</font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>XMSMove<font color="#000080">(</font>XMSRecord<font color="#000080">);   </font><font color="#008000"><i>{ move Bytes to XMS }
+          </i></font><font color="#FF0000"><b>if </b></font>XMSError<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ have any XMS errors occured? }
+            </i></font>ExitDuetoXMSError<font color="#000080">;
+          </font>Inc<font color="#000080">(</font>FileCounter<font color="#000080">,</font>BytesRead<font color="#000080">);  </font><font color="#008000"><i>{ update the offset into XMS where to put the next Bytes }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>Until </b></font>BytesRead<font color="#000080">&lt;&gt;</font>BUFFERSIZE<font color="#000080">;  </font><font color="#008000"><i>{ Repeat Until Bytes read &lt;&gt; Bytes tried to read =&gt; end of File }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>FileCounter<font color="#000080">:=</font><font color="#800000">128</font><font color="#000080">;  </font><font color="#008000"><i>{ we continue (after reading the .FLI File into XMS) right after the .FLI main header }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>Frames<font color="#000080">:=</font>Header<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">]+</font>Header<font color="#000080">[</font><font color="#800000">7</font><font color="#000080">]*</font><font color="#800000">256</font><font color="#000080">;  </font><font color="#008000"><i>{ get the number of frames from the .FLI-header }
+  </i></font><font color="#FF0000"><b>if </b></font>Speed<font color="#000080">=-</font><font color="#800000">1 </font><font color="#FF0000"><b>then                  </b></font><font color="#008000"><i>{ if speed is not set by a speed override then get it from the .FLI-header }
+    </i></font>Speed<font color="#000080">:=(</font>Header<font color="#000080">[</font><font color="#800000">16</font><font color="#000080">]+</font>Integer<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">17</font><font color="#000080">])*</font><font color="#800000">256</font><font color="#000080">)*</font>CLOCK_SCALE<font color="#000080">;
+  </font>InitClock<font color="#000080">;  </font><font color="#008000"><i>{ initialize the System Clock }
+  </i></font>OldKey<font color="#000080">:=</font>PorT<font color="#000080">[</font><font color="#800000">$60</font><font color="#000080">];  </font><font color="#008000"><i>{ get the current value from the keyboard }
+  </i></font>Key<font color="#000080">:=</font>OldKey<font color="#000080">;        </font><font color="#008000"><i>{ and set the 'current key' Variable to the same value }
+
+  </i></font>GetBlock<font color="#000080">(</font>Header<font color="#000080">,</font><font color="#800000">16</font><font color="#000080">);  </font><font color="#008000"><i>{ read the first frame-header }
+  </i></font>FrameSize<font color="#000080">:=</font>Header<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]+</font><font color="#800000">256</font><font color="#000080">*(</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*(</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">])))-</font><font color="#800000">16</font><font color="#000080">;  </font><font color="#008000"><i>{ calculate framesize }
+  </i></font>SecondPos<font color="#000080">:=</font><font color="#800000">128</font><font color="#000080">+</font><font color="#800000">16</font><font color="#000080">+</font>FrameSize<font color="#000080">;  </font><font color="#008000"><i>{ calculate what position to skip to when the .FLI is finished and is going to start again - }
+                                { the position = .FLI-header + first_frame-header + first_framesize }
+  </i></font>Chunks<font color="#000080">:=</font>Header<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">]+</font>Header<font color="#000080">[</font><font color="#800000">7</font><font color="#000080">]*</font><font color="#800000">256</font><font color="#000080">;  </font><font color="#008000"><i>{ calculate number of chunks in frame }
+  </i></font>GetBlock<font color="#000080">(</font>Buffer<font color="#000080">^,</font>FrameSize<font color="#000080">);  </font><font color="#008000"><i>{ read the frame into the framebuffer }
+  </i></font>TreatFrame<font color="#000080">(</font>Buffer<font color="#000080">,</font>Chunks<font color="#000080">);  </font><font color="#008000"><i>{ treat the first frame }
+
+  </i></font>TimeCounter<font color="#000080">:=</font>GetClock<font color="#000080">;  </font><font color="#008000"><i>{ get the current time }
+
+  {
+    The first frame must be handeled separatly from the rest. This is because the rest of the frames are updates/changes of the
+    first frame.
+    At the end of the .FLI-File there is one extra frame who handles the changes from the last frame to the first frame.
+  }
+
+  </i></font><font color="#FF0000"><b>Repeat
+    </b></font>FrameNumber<font color="#000080">:=</font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ we start at the first frame (after the initial frame) }
+    </i></font><font color="#FF0000"><b>Repeat
+      </b></font>GetBlock<font color="#000080">(</font>Header<font color="#000080">,</font><font color="#800000">16</font><font color="#000080">);  </font><font color="#008000"><i>{ read frame-header }
+      </i></font>FrameSize<font color="#000080">:=</font>Header<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">]+</font><font color="#800000">256</font><font color="#000080">*(</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*(</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">])+</font><font color="#800000">256</font><font color="#000080">*</font>LongInt<font color="#000080">(</font>Header<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">])))-</font><font color="#800000">16</font><font color="#000080">;  </font><font color="#008000"><i>{ size of frame }
+      </i></font><font color="#FF0000"><b>if </b></font>FrameSize<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ sometimes there are no changes from one frame to the next (used For extra Delays). In such - }
+                            { - Cases the size of the frame is 0 and we don't have to process them }
+      </i></font><font color="#FF0000"><b>begin
+        </b></font>Chunks<font color="#000080">:=</font>Header<font color="#000080">[</font><font color="#800000">6</font><font color="#000080">]+</font>Header<font color="#000080">[</font><font color="#800000">7</font><font color="#000080">]*</font><font color="#800000">256</font><font color="#000080">;  </font><font color="#008000"><i>{ calculate number of chunks in the frame }
+        </i></font>GetBlock<font color="#000080">(</font>Buffer<font color="#000080">^,</font>FrameSize<font color="#000080">);  </font><font color="#008000"><i>{ read the frame into the framebuffer }
+        </i></font>TreatFrame<font color="#000080">(</font>Buffer<font color="#000080">,</font>Chunks<font color="#000080">);  </font><font color="#008000"><i>{ treat the frame }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>NextTime<font color="#000080">:=</font>TimeCounter<font color="#000080">+</font>Speed<font color="#000080">;   </font><font color="#008000"><i>{ calculate the Delay to the next frame }
+      </i></font><font color="#FF0000"><b>While </b></font>TimeCounter<font color="#000080">&lt;</font>NextTime <font color="#FF0000"><b>do  </b></font><font color="#008000"><i>{ wait For this long }
+        </i></font>TimeCounter<font color="#000080">:=</font>GetClock<font color="#000080">;
+
+      </font><font color="#FF0000"><b>if </b></font>PorT<font color="#000080">[</font><font color="#800000">$64</font><font color="#000080">]=</font>KEYBOARD <font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ check if the value at the keyboard port is caused by a key pressed }
+        </i></font>Key<font color="#000080">:=</font>PorT<font color="#000080">[</font><font color="#800000">$60</font><font color="#000080">];            </font><font color="#008000"><i>{ get the current value from the keyboard }
+      </i></font>Inc<font color="#000080">(</font>FrameNumber<font color="#000080">);  </font><font color="#008000"><i>{ one frame finished, over to the next one }
+    </i></font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>FrameNumber<font color="#000080">&gt;</font>Frames<font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>Key<font color="#000080">&lt;&gt;</font>OldKey<font color="#000080">);  </font><font color="#008000"><i>{ Repeated Until we come to the last frame or a key is pressed }
+
+    </i></font><font color="#FF0000"><b>if </b></font>UseXMS <font color="#FF0000"><b>then
+      </b></font>FileCounter<font color="#000080">:=</font>SecondPos
+    <font color="#FF0000"><b>else
+      </b></font>Seek<font color="#000080">(</font>InputFile<font color="#000080">,</font>SecondPos<font color="#000080">);  </font><font color="#008000"><i>{ set current position in the File to the second frame }
+
+  </i></font><font color="#FF0000"><b>Until </b></font>Key<font color="#000080">&lt;&gt;</font>OldKey<font color="#000080">;  </font><font color="#008000"><i>{ Exit the loop if a key has been pressed }
+
+  </i></font>InitMode<font color="#000080">(</font>CO80<font color="#000080">);  </font><font color="#008000"><i>{ get back to Text mode }
+
+  </i></font>Close<font color="#000080">(</font>InputFile<font color="#000080">);            </font><font color="#008000"><i>{ be a kind boy and close the File beFore we end the Program }
+  </i></font>FreeMem<font color="#000080">(</font>Buffer<font color="#000080">,</font>BUFFERSIZE<font color="#000080">);  </font><font color="#008000"><i>{ and free the framebuffer }
+
+  </i></font><font color="#FF0000"><b>if </b></font>UseXMS <font color="#FF0000"><b>then
+    </b></font>XMSFreeMem<font color="#000080">(</font>BufferHandle<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MISC SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0004.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,121 @@
+<html>
+<head><title> "MYCHECK.PAS" by SWAG SUPPORT TEAM</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ISR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0006.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{$ifDEF VER70}
+{$A+,B-,D+,E-,F-,G+,I-,L+,N-,O-,P-,Q-,R-,S+,T-,V-,X+}
+{$else}
+{$A+,B-,D-,E-,F-,G+,I-,L-,N-,O-,R-,S+,V-,X-}
+{$endif}
+{$DEFinE COLor}
+</i></font><font color="#FF0000"><b>Unit </b></font>MyCheck<font color="#000080">;
+</font><font color="#008000"><i>{
+  Version: 2.0 (8 jan 1993).
+
+             TeeCee     Bob Swart  Saved:
+  Code size: 514 Bytes  472 Bytes  42 Bytes
+  Data size:  32 Bytes   32 Bytes   0 Bytes
+
+  Here is the $1C ISR that I will add (unless you wish to do that).
+
+  Some changes were made, which resulted in less code and data size, a
+  little more speed, and display of the progress Variable on screen is
+  made 'ticking' each second by changing the colour from white on blue
+  to gray on blue and back With each update.
+  Also, the Variable Test8086 is set to 0 when the ISR in entered, and
+  reset to the value Save8086 (initialized at startup) on Exit. Hereby
+  we elimiate potential BTP7 problems With using LongInts in ISRs, and
+  not saving Extended Registers properly.
+}
+</i></font><font color="#FF0000"><b>Interface
+
+Var </b></font>progress<font color="#000080">: </font>LongInt <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$0040</font><font color="#000080">:</font><font color="#800000">$00F0</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+</b></font><font color="#008000"><i>{ Everything is private to this Unit }
+</i></font><font color="#FF0000"><b>Uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>Const
+  </b></font>Line      <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;    </font><font color="#008000"><i>{ Change as required For position of display on screen }
+  </i></font>Column    <font color="#000080">= </font><font color="#800000">72</font><font color="#000080">;                                 </font><font color="#008000"><i>{ top left corner is 0,0 }
+  </i></font>ScreenPos <font color="#000080">= (</font>line <font color="#000080">* </font><font color="#800000">80 </font><font color="#000080">* </font><font color="#800000">2</font><font color="#000080">) + (</font>column <font color="#000080">* </font><font color="#800000">2</font><font color="#000080">);
+  </font>Colour<font color="#000080">: </font>Byte <font color="#000080">= </font><font color="#800000">$1F</font><font color="#000080">;                                 </font><font color="#008000"><i>{ White/Gray on Blue }
+
+</i></font><font color="#FF0000"><b>Type
+  </b></font>TimeStr <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+  </font>TimePtr <font color="#000080">= ^</font>TimeStr<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font><font color="#008000"><i>{$ifDEF COLor}
+  </i></font>Time<font color="#000080">: </font>TimeStr <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$B800</font><font color="#000080">:</font>ScreenPos<font color="#000080">;  </font><font color="#008000"><i>{ Assume colour display adaptor }
+  {$else}
+  </i></font>Time<font color="#000080">: </font>TimeStr <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$B000</font><font color="#000080">:</font>ScreenPos<font color="#000080">; </font><font color="#008000"><i>{ otherwise mono display adaptor }
+  {$endif}
+  </i></font>OldInt1C<font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>ExitSave<font color="#000080">: </font>Pointer<font color="#000080">;
+  </font>Save8086<font color="#000080">: </font>Byte<font color="#000080">;
+
+
+</font><font color="#008000"><i>{$F+}
+</i></font><font color="#FF0000"><b>Procedure </b></font>Int1CISR<font color="#000080">; </font>Interrupt<font color="#000080">;
+</font><font color="#008000"><i>{ This will be called every clock tick by hardware interrupt $08 }
+</i></font><font color="#FF0000"><b>Const </b></font>DisplayTickCount <font color="#000080">= </font><font color="#800000">20</font><font color="#000080">;
+      </font>TickCount<font color="#000080">: </font>LongInt <font color="#000080">= </font>DisplayTickCount<font color="#000080">;
+      </font>HexChars<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">$0</font><font color="#000080">..</font><font color="#800000">$F</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char <font color="#000080">= </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+</font><font color="#FF0000"><b>Var </b></font>HexA<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte <font color="#FF0000"><b>Absolute </b></font>progress<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{$ifDEF VER70}
+  </i></font>Test8086 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#008000"><i>{$endif}
+  </i></font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">cli
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>inc<font color="#000080">(</font>TickCount<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>TickCount <font color="#000080">&gt; </font>DisplayTickCount <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ ticks to update the display }
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>TickCount <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;        </font><font color="#008000"><i>{ equality check and assignment faster than mod }
+            { The following statements actually display the on-screen time }
+    </i></font>Colour <font color="#000080">:= </font>Colour <font color="#FF0000"><b>xor </b></font><font color="#800000">$08</font><font color="#000080">;        </font><font color="#008000"><i>{ Swap between white and gray on blue }
+    </i></font>FillChar<font color="#000080">(</font>Time<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">],</font>Sizeof<font color="#000080">(</font>Time<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">,</font>Colour<font color="#000080">);
+    </font>Time<font color="#000080">[</font><font color="#800000">00</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">02</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">3</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">04</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">06</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">08</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">10</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">12</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">];
+    </font>Time<font color="#000080">[</font><font color="#800000">14</font><font color="#000080">] := </font>HexChars<font color="#000080">[</font>HexA<font color="#000080">[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>and </b></font><font color="#800000">$F</font><font color="#000080">]
+  </font><font color="#FF0000"><b>end </b></font><font color="#008000"><i>{ if TickCount &gt; DisplayTickCount }</i></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Asm
+    </b></font><font color="#FF00FF">sti
+    pushf                                  </font><font color="#008000"><i>{ push flags to set up For IRET }
+    </i></font><font color="#FF00FF">call  OldInt1C                              </font><font color="#008000"><i>{ Call old ISR entry point }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#008000"><i>{$ifDEF VER70}
+  </i></font>Test8086 <font color="#000080">:= </font>Save8086
+  <font color="#008000"><i>{$endif}
+</i></font><font color="#FF0000"><b>end </b></font><font color="#008000"><i>{Int1CISR}</i></font><font color="#000080">;
+</font><font color="#008000"><i>{$F-}
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>ClockExitProc<font color="#000080">; </font><font color="#FF0000"><b>Far</b></font><font color="#000080">;
+</font><font color="#008000"><i>{ This Procedure is VERY important as you have hooked the timer interrupt  }
+{ and thereFore if this is omitted when the Unit is terminated your        }
+{ system will crash in an unpredictable and possibly damaging way.         }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>ExitProc <font color="#000080">:= </font>ExitSave<font color="#000080">;
+  </font>SetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">,</font>OldInt1C<font color="#000080">);               </font><font color="#008000"><i>{ This &quot;unhooks&quot; the timer vector }
+</i></font><font color="#FF0000"><b>end </b></font><font color="#008000"><i>{ClockExitProc}</i></font><font color="#000080">;
+
+
+</font><font color="#FF0000"><b>begin
+  </b></font>progress <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#008000"><i>{$ifDEF VER70}
+  </i></font>Save8086 <font color="#000080">:= </font>Test8086<font color="#000080">;
+  </font><font color="#008000"><i>{$endif}
+  </i></font>ExitSave <font color="#000080">:= </font>ExitProc<font color="#000080">;                          </font><font color="#008000"><i>{ Save old Exit Procedure }
+  </i></font>ExitProc <font color="#000080">:= @</font>ClockExitProc<font color="#000080">;                 </font><font color="#008000"><i>{ Setup a new Exit Procedure }
+  </i></font>GetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">,</font>OldInt1C<font color="#000080">);              </font><font color="#008000"><i>{ Get old timer vector and save it }
+  </i></font>SetIntVec<font color="#000080">(</font><font color="#800000">$1C</font><font color="#000080">,@</font>Int1CISR<font color="#000080">);   </font><font color="#008000"><i>{ Hook the timer vector to the new Procedure }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ISR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0006.PAS">Original</a><b>]</b></p></body>
+</html>

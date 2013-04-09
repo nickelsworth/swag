@@ -1,0 +1,482 @@
+<html>
+<head><title> "DOS More Clone" by RUSSELL SCHULZ</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0051.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: russell@alpha3.ersys.edmonton.ab.ca (Russell Schulz)
+
+&gt;Can Someone tell me how the DOS program MORE works?
+
+dos does the redirection part.  more just reads from stdin -- readln(s);
+
+&gt;I would really like to write a MORE replacement
+
+there are already a bunch of good ones.  ask archie for `less'.
+
+also, with this old code of mine, you can type `l80 filespec.*' or
+`dir |l80' as well.  it keeps everything in the lower 640k.
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>l80<font color="#000080">;  </font><font color="#008000"><i>{less-like program, 80-char limitation}
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>dos<font color="#000080">,</font>crt<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>maxlines<font color="#000080">=</font><font color="#800000">24</font><font color="#000080">;
+  </font>botlinelen<font color="#000080">=</font><font color="#800000">70</font><font color="#000080">;
+  </font>blankstring<font color="#000080">=</font><font color="#800000">'                                                     '</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>ptr<font color="#000080">=^</font>node<font color="#000080">;
+  </font>node<font color="#000080">=</font><font color="#FF0000"><b>record
+         </b></font>line<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">79</font><font color="#000080">];
+         </font>next<font color="#000080">: </font>ptr<font color="#000080">;
+       </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>infile<font color="#000080">: </font>text<font color="#000080">;
+  </font>ch<font color="#000080">: </font>char<font color="#000080">;
+  </font>filename<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>line<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>toplineno<font color="#000080">: </font>longint<font color="#000080">;
+  </font>prevtoplineno<font color="#000080">: </font>longint<font color="#000080">;
+  </font>done<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>head<font color="#000080">, </font>tail<font color="#000080">, </font>prev<font color="#000080">, </font>curr<font color="#000080">: </font>ptr<font color="#000080">;
+  </font>topline<font color="#000080">, </font>botline<font color="#000080">: </font>ptr<font color="#000080">;
+  </font>numlines<font color="#000080">: </font>longint<font color="#000080">;
+  </font>rep<font color="#000080">: </font>longint<font color="#000080">;
+  </font>userep<font color="#000080">: </font>longint<font color="#000080">;
+  </font>searchstr<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>dosearch<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>atend<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>refresh<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>scrollno<font color="#000080">: </font>integer<font color="#000080">;
+  </font>doscroll<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>newtoplineno<font color="#000080">: </font>longint<font color="#000080">;
+  </font>msg<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>filespec<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>temp<font color="#000080">: </font>integer<font color="#000080">;
+  </font>savepos<font color="#000080">: </font>pointer<font color="#000080">;
+  </font>i<font color="#000080">: </font>integer<font color="#000080">;
+  </font>fileinfo<font color="#000080">: </font>searchrec<font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>wipeline<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>write<font color="#000080">(^</font>M<font color="#000080">,</font>blankstring<font color="#000080">,^</font>M<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>expand<font color="#000080">(</font>str<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>work<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">79</font><font color="#000080">];
+  </font>i<font color="#000080">,</font>j<font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>pos<font color="#000080">(^</font>I<font color="#000080">,</font>str<font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>pos<font color="#000080">(^</font>J<font color="#000080">,</font>str<font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>pos<font color="#000080">(</font><font color="#800000">'_'</font><font color="#000080">,</font>str<font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>expand <font color="#000080">:= </font>str
+  <font color="#FF0000"><b>else
+    begin
+      </b></font>work <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font>i<font color="#000080">&lt;=</font>length<font color="#000080">(</font>str<font color="#000080">) </font><font color="#FF0000"><b>do
+        begin
+          if </b></font>str<font color="#000080">[</font>i<font color="#000080">]=^</font>I <font color="#FF0000"><b>then
+            for </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">8</font><font color="#000080">-(</font>length<font color="#000080">(</font>work<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">7</font><font color="#000080">) </font><font color="#FF0000"><b>do
+              </b></font>work <font color="#000080">:= </font>work<font color="#000080">+</font><font color="#800000">' '
+          </font><font color="#FF0000"><b>else
+            if </b></font><font color="#000080">(</font>length<font color="#000080">(</font>str<font color="#000080">)&gt;</font>i<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>str<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'_'</font><font color="#000080">,^</font>H<font color="#000080">,</font><font color="#800000">#127</font><font color="#000080">]) </font><font color="#FF0000"><b>and
+              </b></font><font color="#000080">(</font>str<font color="#000080">[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'_'</font><font color="#000080">,^</font>H<font color="#000080">,</font><font color="#800000">#127</font><font color="#000080">]) </font><font color="#FF0000"><b>and not
+              </b></font><font color="#000080">((</font>str<font color="#000080">[</font>i<font color="#000080">]=</font><font color="#800000">'_'</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>str<font color="#000080">[</font>i<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]=</font><font color="#800000">'_'</font><font color="#000080">)) </font><font color="#FF0000"><b>then
+              </b></font>inc<font color="#000080">(</font>i<font color="#000080">)
+            </font><font color="#FF0000"><b>else
+              if </b></font>str<font color="#000080">[</font>i<font color="#000080">]&lt;&gt;^</font>J <font color="#FF0000"><b>then
+                </b></font>work <font color="#000080">:= </font>work<font color="#000080">+</font>str<font color="#000080">[</font>i<font color="#000080">];
+         </font>inc<font color="#000080">(</font>i<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>expand <font color="#000080">:= </font>work<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>pline<font color="#000080">(</font>p<font color="#000080">: </font>ptr<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>p<font color="#000080">=</font><font color="#FF0000"><b>nil then
+    </b></font>pline <font color="#000080">:= </font><font color="#800000">'~'
+  </font><font color="#FF0000"><b>else
+    </b></font>pline <font color="#000080">:= </font>p<font color="#000080">^.</font>line<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>add<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>head<font color="#000080">,</font>tail<font color="#000080">: </font>ptr<font color="#000080">; </font>line<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>n<font color="#000080">: </font>ptr<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>new<font color="#000080">(</font>n<font color="#000080">);
+  </font>n<font color="#000080">^.</font>line <font color="#000080">:= </font>expand<font color="#000080">(</font>line<font color="#000080">);
+  </font>n<font color="#000080">^.</font>next <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>head<font color="#000080">=</font><font color="#FF0000"><b>nil then
+    </b></font>head <font color="#000080">:= </font>n<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>tail<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>nil then
+    </b></font>tail<font color="#000080">^.</font>next <font color="#000080">:= </font>n<font color="#000080">;
+  </font>tail <font color="#000080">:= </font>n<font color="#000080">;
+  </font>inc<font color="#000080">(</font>numlines<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>lookup<font color="#000080">(</font>aline<font color="#000080">: </font>integer<font color="#000080">): </font>ptr<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>curr<font color="#000080">: </font>ptr<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>aline<font color="#000080">&gt;=</font>numlines <font color="#FF0000"><b>then
+    </b></font>lookup <font color="#000080">:= </font>tail
+  <font color="#FF0000"><b>else if </b></font>aline<font color="#000080">&lt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then
+    </b></font>lookup <font color="#000080">:= </font>head
+  <font color="#FF0000"><b>else
+    begin
+      </b></font>curr <font color="#000080">:= </font>head<font color="#000080">;
+      </font><font color="#FF0000"><b>while </b></font>aline<font color="#000080">&gt;</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+        begin
+          </b></font>dec<font color="#000080">(</font>aline<font color="#000080">);
+          </font>curr <font color="#000080">:= </font>curr<font color="#000080">^.</font>next<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>lookup <font color="#000080">:= </font>curr<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>gets<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>line<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>tmp<font color="#000080">: </font>integer<font color="#000080">;
+  </font>ch<font color="#000080">: </font>char<font color="#000080">;
+  </font>valid<font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>valid <font color="#000080">:= </font>true<font color="#000080">;
+  </font>line <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>write<font color="#000080">(^</font>M<font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">);
+  </font><font color="#FF0000"><b>repeat
+    </b></font>ch <font color="#000080">:= </font>readkey<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ch<font color="#000080">=^</font>I <font color="#FF0000"><b>then </b></font>ch <font color="#000080">:= </font><font color="#800000">' '</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>ch<font color="#000080">&lt;&gt;^</font>M <font color="#FF0000"><b>then
+      if </b></font><font color="#000080">(</font>ch<font color="#000080">=^</font>H<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>line<font color="#000080">=</font><font color="#800000">''</font><font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>valid <font color="#000080">:= </font>false
+      <font color="#FF0000"><b>else if </b></font>ch<font color="#000080">=^</font>H <font color="#FF0000"><b>then
+        begin
+          if </b></font>length<font color="#000080">(</font>line<font color="#000080">)=</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>line <font color="#000080">:= </font><font color="#800000">''
+          </font><font color="#FF0000"><b>else </b></font>line <font color="#000080">:= </font>copy<font color="#000080">(</font>line<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>length<font color="#000080">(</font>line<font color="#000080">)-</font><font color="#800000">1</font><font color="#000080">);
+          </font>write<font color="#000080">(</font>ch<font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font>ch<font color="#000080">);
+        </font><font color="#FF0000"><b>end
+      else if </b></font>length<font color="#000080">(</font>line<font color="#000080">)&lt;</font>botlinelen <font color="#FF0000"><b>then
+        begin
+          </b></font>line <font color="#000080">:= </font>line<font color="#000080">+</font>ch<font color="#000080">;
+          </font>write<font color="#000080">(</font>ch<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>ch<font color="#000080">=^</font>M<font color="#000080">) </font><font color="#FF0000"><b>or not </b></font>valid<font color="#000080">;
+  </font>wipeline<font color="#000080">;
+  </font>gets <font color="#000080">:= </font>valid<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>isin<font color="#000080">(</font>shortstr<font color="#000080">,</font>longstr<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>isin <font color="#000080">:= </font>pos<font color="#000080">(</font>shortstr<font color="#000080">,</font>longstr<font color="#000080">)&lt;&gt;</font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>searchf<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>curr<font color="#000080">: </font>ptr<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>toplineno<font color="#000080">: </font>longint<font color="#000080">): </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>tmp<font color="#000080">: </font>ptr<font color="#000080">;
+  </font>lin<font color="#000080">: </font>longint<font color="#000080">;
+  </font>found<font color="#000080">: </font>boolean<font color="#000080">;
+  </font>awrap<font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>found <font color="#000080">:= </font>false<font color="#000080">;
+  </font>awrap <font color="#000080">:= </font>false<font color="#000080">;
+  </font>prevtoplineno <font color="#000080">:= </font>toplineno<font color="#000080">;
+  </font>prev <font color="#000080">:= </font>curr<font color="#000080">;
+  </font>write<font color="#000080">(</font><font color="#800000">'/'</font><font color="#000080">);
+  </font>lin <font color="#000080">:= </font>toplineno<font color="#000080">;
+  </font>tmp <font color="#000080">:= </font>curr<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>tmp<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>nil then
+    repeat
+      if </b></font>tmp<font color="#000080">^.</font>next<font color="#000080">=</font><font color="#FF0000"><b>nil then
+        begin
+          </b></font>awrap <font color="#000080">:= </font>true<font color="#000080">;
+          </font>tmp <font color="#000080">:= </font>head<font color="#000080">;
+          </font>lin <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>tmp <font color="#000080">:= </font>tmp<font color="#000080">^.</font>next<font color="#000080">;
+          </font>inc<font color="#000080">(</font>lin<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>isin<font color="#000080">(</font>searchstr<font color="#000080">,</font>tmp<font color="#000080">^.</font>line<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>found <font color="#000080">:= </font>true<font color="#000080">;
+    </font><font color="#FF0000"><b>until </b></font>found <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>tmp<font color="#000080">=</font>curr<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>found <font color="#FF0000"><b>then
+    begin
+      </b></font>curr <font color="#000080">:= </font>tmp<font color="#000080">;
+      </font>toplineno <font color="#000080">:= </font>lin<font color="#000080">;
+      </font>scrollno <font color="#000080">:= </font>toplineno<font color="#000080">-</font>prevtoplineno<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>scrollno<font color="#000080">&gt;=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>scrollno<font color="#000080">&lt;</font>maxlines<font color="#000080">)
+       </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>prevtoplineno<font color="#000080">+</font>scrollno<font color="#000080">&lt;=</font>numlines<font color="#000080">-</font>maxlines<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+        begin
+          </b></font>curr <font color="#000080">:= </font>prev<font color="#000080">;
+          </font>toplineno <font color="#000080">:= </font>prevtoplineno<font color="#000080">;
+          </font>doscroll <font color="#000080">:= </font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>awrap <font color="#FF0000"><b>then
+    </b></font>msg <font color="#000080">:= </font><font color="#800000">'(wrap)'</font><font color="#000080">;
+  </font>searchf <font color="#000080">:= </font>found<font color="#000080">;
+  </font>wipeline<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>prtscreen<font color="#000080">(</font>p<font color="#000080">: </font>ptr<font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>lineat<font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>atend <font color="#000080">:= </font>false<font color="#000080">;
+  </font>lineat <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>lineat<font color="#000080">&lt;=</font>maxlines <font color="#FF0000"><b>do
+    begin
+      </b></font>inc<font color="#000080">(</font>lineat<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>p<font color="#000080">=</font><font color="#FF0000"><b>nil then
+        begin
+          </b></font>writeln<font color="#000080">(</font><font color="#800000">'~'</font><font color="#000080">);
+          </font>atend <font color="#000080">:= </font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>writeln<font color="#000080">(</font>pline<font color="#000080">(</font>p<font color="#000080">));
+          </font><font color="#FF0000"><b>if </b></font>lineat<font color="#000080">&lt;=</font>maxlines <font color="#FF0000"><b>then
+            </b></font>p <font color="#000080">:= </font>p<font color="#000080">^.</font>next<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>p<font color="#000080">=</font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>p<font color="#000080">^.</font>next<font color="#000080">=</font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then </b></font>atend <font color="#000080">:= </font>true<font color="#000080">;
+  </font>botline <font color="#000080">:= </font>p<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>scroll<font color="#000080">(</font>scrollno<font color="#000080">: </font>integer<font color="#000080">);
+
+</font><font color="#FF0000"><b>var
+  </b></font>lineat<font color="#000080">: </font>integer<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>atend <font color="#000080">:= </font>false<font color="#000080">;
+  </font>lineat <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>lineat<font color="#000080">&lt;=</font>scrollno <font color="#FF0000"><b>do
+    begin
+      </b></font>inc<font color="#000080">(</font>lineat<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>botline<font color="#000080">=</font><font color="#FF0000"><b>nil then
+        begin
+          </b></font>writeln<font color="#000080">(</font><font color="#800000">'~'</font><font color="#000080">);
+          </font>atend <font color="#000080">:= </font>true<font color="#000080">;
+        </font><font color="#FF0000"><b>end
+      else
+        begin
+          </b></font>botline <font color="#000080">:= </font>botline<font color="#000080">^.</font>next<font color="#000080">;
+          </font>writeln<font color="#000080">(</font>pline<font color="#000080">(</font>botline<font color="#000080">));
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>topline<font color="#000080">&lt;&gt;</font><font color="#FF0000"><b>nil then
+        begin
+          </b></font>topline <font color="#000080">:= </font>topline<font color="#000080">^.</font>next<font color="#000080">;
+          </font>inc<font color="#000080">(</font>toplineno<font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>botline<font color="#000080">=</font><font color="#FF0000"><b>nil then </b></font>atend <font color="#000080">:= </font>true<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>inrange<font color="#000080">(</font>n<font color="#000080">: </font>longint<font color="#000080">): </font>longint<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>n<font color="#000080">&lt;</font><font color="#800000">1 </font><font color="#FF0000"><b>then </b></font>inrange <font color="#000080">:= </font><font color="#800000">1
+  </font><font color="#FF0000"><b>else if </b></font>n<font color="#000080">&gt;</font>numlines <font color="#FF0000"><b>then </b></font>inrange <font color="#000080">:= </font>numlines
+  <font color="#FF0000"><b>else </b></font>inrange <font color="#000080">:= </font>n<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>showfile<font color="#000080">(</font>filename<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>infile<font color="#000080">,</font>filename<font color="#000080">);
+  </font><font color="#008000"><i>{$I-}
+  </i></font>reset<font color="#000080">(</font>infile<font color="#000080">);
+  </font><font color="#008000"><i>{$I+}
+  </i></font><font color="#FF0000"><b>if </b></font>IOResult<font color="#000080">&lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      </b></font>writeln<font color="#000080">(</font><font color="#800000">'error opening '''</font><font color="#000080">,</font>filename<font color="#000080">,</font><font color="#800000">''''</font><font color="#000080">);
+      </font>halt<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>head <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>tail <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>numlines <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>searchstr <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>msg <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while not </b></font>eof<font color="#000080">(</font>infile<font color="#000080">) </font><font color="#FF0000"><b>do
+    begin
+      </b></font>readln<font color="#000080">(</font>infile<font color="#000080">,</font>line<font color="#000080">);
+      </font>add<font color="#000080">(</font>head<font color="#000080">,</font>tail<font color="#000080">,</font>line<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>close<font color="#000080">(</font>infile<font color="#000080">);
+  </font>toplineno <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>done <font color="#000080">:= </font>false<font color="#000080">;
+  </font>topline <font color="#000080">:= </font>head<font color="#000080">;
+  </font>prev <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>refresh <font color="#000080">:= </font>true<font color="#000080">;
+  </font>doscroll <font color="#000080">:= </font>false<font color="#000080">;
+  </font><font color="#FF0000"><b>while not </b></font>done <font color="#FF0000"><b>do
+    begin
+      if </b></font>doscroll <font color="#FF0000"><b>then
+        </b></font>scroll<font color="#000080">(</font>scrollno<font color="#000080">)
+      </font><font color="#FF0000"><b>else if </b></font>refresh <font color="#FF0000"><b>then
+        </b></font>prtscreen<font color="#000080">(</font>topline<font color="#000080">);
+      </font>refresh <font color="#000080">:= </font>true<font color="#000080">;
+      </font>doscroll <font color="#000080">:= </font>false<font color="#000080">;
+      </font>write<font color="#000080">(^</font>M<font color="#000080">,</font><font color="#800000">'          '</font><font color="#000080">,</font>msg<font color="#000080">);
+      </font>msg <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>atend <font color="#FF0000"><b>then
+        </b></font>write<font color="#000080">(^</font>M<font color="#000080">,</font><font color="#800000">'--END--'</font><font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>write<font color="#000080">(^</font>M<font color="#000080">,</font><font color="#800000">'--L80--'</font><font color="#000080">);
+      </font>rep <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>prevtoplineno <font color="#000080">:= </font>toplineno<font color="#000080">;
+      </font><font color="#FF0000"><b>repeat
+        repeat
+          </b></font>ch <font color="#000080">:= </font>readkey<font color="#000080">;
+        </font><font color="#FF0000"><b>until </b></font>ch <font color="#FF0000"><b>in </b></font><font color="#000080">[^</font>M<font color="#000080">,</font><font color="#800000">'j'</font><font color="#000080">,</font><font color="#800000">'q'</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">,</font><font color="#800000">'G'</font><font color="#000080">,</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">,^</font>G<font color="#000080">,</font><font color="#800000">'b'</font><font color="#000080">,</font><font color="#800000">'u'</font><font color="#000080">,</font><font color="#800000">'/'</font><font color="#000080">,</font><font color="#800000">'n'</font><font color="#000080">];
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ch <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">]) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>rep<font color="#000080">&lt;</font>maxlongint <font color="#FF0000"><b>div </b></font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>then
+          </b></font>rep <font color="#000080">:= </font>rep<font color="#000080">*</font><font color="#800000">10</font><font color="#000080">+</font>ord<font color="#000080">(</font>ch<font color="#000080">)-</font>ord<font color="#000080">(</font><font color="#800000">'0'</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else if </b></font>ch<font color="#000080">=^</font>G <font color="#FF0000"><b>then
+          begin
+            </b></font>wipeline<font color="#000080">;
+            </font>write<font color="#000080">(</font><font color="#800000">''''</font><font color="#000080">,</font>filename<font color="#000080">,</font><font color="#800000">''': '</font><font color="#000080">);
+            </font>newtoplineno <font color="#000080">:= </font>inrange<font color="#000080">(</font>toplineno<font color="#000080">+</font>maxlines<font color="#000080">);
+            </font>write<font color="#000080">(</font><font color="#800000">'line '</font><font color="#000080">,</font>newtoplineno<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">' of '</font><font color="#000080">,</font>numlines<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">' '</font><font color="#000080">);
+            </font><font color="#FF0000"><b>if </b></font>numlines<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+              </b></font>write<font color="#000080">(</font><font color="#800000">'--100%--'</font><font color="#000080">)
+            </font><font color="#FF0000"><b>else
+              </b></font>write<font color="#000080">(</font><font color="#800000">'--'</font><font color="#000080">,</font><font color="#800000">100</font><font color="#000080">*</font>newtoplineno <font color="#FF0000"><b>div </b></font>numlines<font color="#000080">:</font><font color="#800000">0</font><font color="#000080">,</font><font color="#800000">'%'</font><font color="#000080">,</font><font color="#800000">'--'</font><font color="#000080">);
+          </font><font color="#FF0000"><b>end
+        else
+          begin
+            </b></font>wipeline<font color="#000080">;
+            </font><font color="#FF0000"><b>if </b></font>rep<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+              </b></font>userep <font color="#000080">:= </font><font color="#800000">1
+            </font><font color="#FF0000"><b>else
+              </b></font>userep <font color="#000080">:= </font>rep<font color="#000080">;
+            </font><font color="#FF0000"><b>case </b></font>ch <font color="#FF0000"><b>of
+              </b></font><font color="#800000">'q'</font><font color="#000080">: </font>done <font color="#000080">:= </font>true<font color="#000080">;
+              </font><font color="#800000">' '</font><font color="#000080">:
+                </font><font color="#FF0000"><b>begin
+                  </b></font>newtoplineno <font color="#000080">:= </font>inrange<font color="#000080">(</font>toplineno<font color="#000080">+</font>maxlines<font color="#000080">*</font>userep<font color="#000080">);
+                  </font><font color="#FF0000"><b>if </b></font>newtoplineno<font color="#000080">=</font>toplineno <font color="#FF0000"><b>then
+                    </b></font>refresh <font color="#000080">:= </font>false
+                  <font color="#FF0000"><b>else
+                    begin
+                      </b></font>topline <font color="#000080">:= </font>lookup<font color="#000080">(</font>newtoplineno<font color="#000080">);
+                      </font>toplineno <font color="#000080">:= </font>newtoplineno<font color="#000080">;
+                    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              ^</font>M<font color="#000080">,</font><font color="#800000">'j'</font><font color="#000080">:
+                </font><font color="#FF0000"><b>begin
+                  </b></font>newtoplineno <font color="#000080">:= </font>inrange<font color="#000080">(</font>toplineno<font color="#000080">+</font>userep<font color="#000080">);
+                  </font><font color="#FF0000"><b>if </b></font>newtoplineno<font color="#000080">=</font>toplineno <font color="#FF0000"><b>then
+                    </b></font>refresh <font color="#000080">:= </font>false
+                  <font color="#FF0000"><b>else
+                    if </b></font>userep<font color="#000080">&lt;</font>maxlines <font color="#FF0000"><b>then
+                      begin
+                        </b></font>doscroll <font color="#000080">:= </font>true<font color="#000080">;
+                        </font>scrollno <font color="#000080">:= </font>userep<font color="#000080">;
+                      </font><font color="#FF0000"><b>end
+                    else
+                      begin
+                        </b></font>topline <font color="#000080">:= </font>lookup<font color="#000080">(</font>newtoplineno<font color="#000080">);
+                        </font>toplineno <font color="#000080">:= </font>newtoplineno<font color="#000080">;
+                      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#800000">'G'</font><font color="#000080">, </font><font color="#800000">'b'</font><font color="#000080">, </font><font color="#800000">'u'</font><font color="#000080">:
+                </font><font color="#FF0000"><b>begin
+                  if </b></font>ch<font color="#000080">=</font><font color="#800000">'G' </font><font color="#FF0000"><b>then
+                    begin
+                      </b></font>newtoplineno <font color="#000080">:= </font>rep<font color="#000080">;
+                      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>newtoplineno<font color="#000080">&gt;</font>numlines<font color="#000080">-</font>maxlines<font color="#000080">)
+                       </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>newtoplineno<font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+                        </b></font>newtoplineno <font color="#000080">:= </font>numlines<font color="#000080">-</font>maxlines<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">;
+                    </font><font color="#FF0000"><b>end
+                  else
+                    </b></font>newtoplineno <font color="#000080">:= </font>inrange<font color="#000080">(</font>toplineno<font color="#000080">-</font>maxlines<font color="#000080">*</font>userep<font color="#000080">);
+                  </font>topline <font color="#000080">:= </font>lookup<font color="#000080">(</font>newtoplineno<font color="#000080">);
+                  </font>toplineno <font color="#000080">:= </font>newtoplineno<font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#800000">'/'</font><font color="#000080">, </font><font color="#800000">'n'</font><font color="#000080">:
+                </font><font color="#FF0000"><b>begin
+                </b></font>line <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+                </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>ch<font color="#000080">=</font><font color="#800000">'n'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font>gets<font color="#000080">(</font>line<font color="#000080">) </font><font color="#FF0000"><b>then
+                  begin
+                    </b></font>dosearch <font color="#000080">:= </font>true<font color="#000080">;
+                    </font><font color="#FF0000"><b>if </b></font>line<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then
+                      if </b></font>searchstr<font color="#000080">=</font><font color="#800000">'' </font><font color="#FF0000"><b>then
+                        begin
+                          </b></font>msg <font color="#000080">:= </font><font color="#800000">'no previous string'</font><font color="#000080">;
+                          </font>dosearch <font color="#000080">:= </font>false<font color="#000080">;
+                          </font>refresh <font color="#000080">:= </font>false<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                    </font><font color="#FF0000"><b>if </b></font>line<font color="#000080">&lt;&gt;</font><font color="#800000">'' </font><font color="#FF0000"><b>then
+                      </b></font>searchstr <font color="#000080">:= </font>line<font color="#000080">;
+                    </font><font color="#FF0000"><b>if </b></font>dosearch <font color="#FF0000"><b>then
+                      if not </b></font>searchf<font color="#000080">(</font>topline<font color="#000080">,</font>toplineno<font color="#000080">) </font><font color="#FF0000"><b>then
+                        begin
+                          </b></font>msg <font color="#000080">:= </font><font color="#800000">'not found'</font><font color="#000080">;
+                          </font>refresh <font color="#000080">:= </font>false<font color="#000080">;
+                        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+                </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+              </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>until </b></font>ch <font color="#FF0000"><b>in </b></font><font color="#000080">[^</font>M<font color="#000080">, </font><font color="#800000">'j'</font><font color="#000080">, </font><font color="#800000">'q'</font><font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">, </font><font color="#800000">'G'</font><font color="#000080">, </font><font color="#800000">'b'</font><font color="#000080">, </font><font color="#800000">'/'</font><font color="#000080">, </font><font color="#800000">'n'</font><font color="#000080">, </font><font color="#800000">'u'</font><font color="#000080">];
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>paramcount<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    if </b></font>paramstr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)=</font><font color="#800000">'-?' </font><font color="#FF0000"><b>then
+      begin
+        </b></font>writeln<font color="#000080">(</font><font color="#800000">'usage: l80 {filename}'</font><font color="#000080">);
+        </font>halt<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>mark<font color="#000080">(</font>savepos<font color="#000080">);
+
+  </font><font color="#FF0000"><b>if </b></font>paramcount<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>showfile<font color="#000080">(</font><font color="#800000">''</font><font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    begin
+      for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>paramcount <font color="#FF0000"><b>do
+        begin
+          </b></font>filespec <font color="#000080">:= </font>paramstr<font color="#000080">(</font>i<font color="#000080">);
+          </font>findfirst<font color="#000080">(</font>filespec<font color="#000080">,</font>archive<font color="#000080">,</font>fileinfo<font color="#000080">);
+          </font>temp<font color="#000080">:=</font>length<font color="#000080">(</font>filespec<font color="#000080">);
+          </font><font color="#FF0000"><b>repeat
+            </b></font>dec<font color="#000080">(</font>temp<font color="#000080">);
+          </font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>filespec<font color="#000080">[</font>temp<font color="#000080">]=</font><font color="#800000">'\'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>filespec<font color="#000080">[</font>temp<font color="#000080">]=</font><font color="#800000">':'</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>temp<font color="#000080">=</font><font color="#800000">1</font><font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>pos<font color="#000080">(</font><font color="#800000">'\'</font><font color="#000080">,</font>filespec<font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>pos<font color="#000080">(</font><font color="#800000">':'</font><font color="#000080">,</font>filespec<font color="#000080">)=</font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+            </b></font>filespec<font color="#000080">:=</font><font color="#800000">''
+          </font><font color="#FF0000"><b>else
+            </b></font>filespec<font color="#000080">:=</font>copy<font color="#000080">(</font>filespec<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font>temp<font color="#000080">);
+          </font><font color="#FF0000"><b>while </b></font>doserror<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>do
+            begin
+              </b></font>release<font color="#000080">(</font>savepos<font color="#000080">);
+              </font>showfile<font color="#000080">(</font>concat<font color="#000080">(</font>filespec<font color="#000080">,</font>fileinfo<font color="#000080">.</font>name<font color="#000080">));
+              </font>findnext<font color="#000080">(</font>fileinfo<font color="#000080">);
+            </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0051.PAS">Original</a><b>]</b></p></body>
+</html>

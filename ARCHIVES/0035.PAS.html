@@ -1,0 +1,175 @@
+<html>
+<head><title> "Files Recompression" by DAVID DANIEL ANDERSON</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0035.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>(*                          SWAG submission
+|                             RECOMP v0.1
+|               As posted on: GDSOFT BBS (219) 875-8133
+|
+|                         ~~~~~~~~~~~~~~~~~~~
+|   Author:     David Daniel Anderson
+|   Program:    Recompress nested ZIP archives
+|   Date:       October 18, 1995
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Here is the basis for a program to recompress archives which may
+or may not contain nested archives.  It will recompress all nested
+archives that it recognizes, up to at least six levels deep.
+
+Although this program is fully functional, it has severe limitations
+which preclude me from releasing it as a ready-to-use program.
+
+As written, this should only be for personal use, and to serve as an
+example of how to construct a release-worthy recompression program.
+
+Limitations of this program foundation:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+It doesn't recognize anything besides ZIP files.
+It is hardcoded to use v2 of PKZIP/ PKUNZIP.
+It doesn't preserve directory structures in the ZIP files.
+It doesn't preserve the file attributes of the archived files.
+It doesn't preserve the extension of the main ZIP, it will always
+   be renamed to *.ZIP.
+It doesn't preserve the authenticity verification, comments, or date
+   of the original archive.
+It has almost no error detection.  If an extraction fails, you are
+   out of luck.
+It lacks an Exit or ExitOnError procedure.
+It doesn't verify that &quot;COMSPEC&quot; is set, and valid.
+In short, while the logic seems solid, it is not robust enough to
+   handle varied or unexpected conditions.
+*)
+
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>Recompress_Nested_ZIP_files<font color="#000080">;
+</font><font color="#008000"><i>{$M 8192,0,0} {$I-}
+</i></font><font color="#FF0000"><b>USES </b></font>DOS<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>RecursionLevel<font color="#000080">: </font>BYTE<font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>CheckIO<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>IOResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>Halt <font color="#000080">(</font><font color="#800000">7</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>getFileName <font color="#000080">(</font>fn <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">): </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font><font color="#000080">(</font>Pos <font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>fn<font color="#000080">) &gt; </font><font color="#800000">0</font><font color="#000080">)
+    </font><font color="#FF0000"><b>THEN </b></font>getFileName <font color="#000080">:= </font>Copy <font color="#000080">(</font>fn<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, (</font>Pos <font color="#000080">(</font><font color="#800000">'.'</font><font color="#000080">, </font>fn<font color="#000080">) - </font><font color="#800000">1</font><font color="#000080">))
+    </font><font color="#FF0000"><b>ELSE </b></font>getFileName <font color="#000080">:= </font>fn<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>IsDir <font color="#000080">(</font><font color="#FF0000"><b>CONST </b></font>FileName<font color="#000080">: </font>PATHSTR<font color="#000080">): </font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>Attr  <font color="#000080">: </font>WORD<font color="#000080">;
+  </font>cFile <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Assign <font color="#000080">(</font>cFile<font color="#000080">, </font>FileName<font color="#000080">);
+  </font>GetFAttr <font color="#000080">(</font>cFile<font color="#000080">, </font>Attr<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">((</font>Attr <font color="#FF0000"><b>AND </b></font>Directory<font color="#000080">) = </font>Directory<font color="#000080">)
+    </font><font color="#FF0000"><b>THEN </b></font>IsDir <font color="#000080">:= </font>TRUE
+    <font color="#FF0000"><b>ELSE </b></font>IsDir <font color="#000080">:= </font>FALSE<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>GetFilePath <font color="#000080">(</font><font color="#FF0000"><b>CONST </b></font>PSTR<font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">; </font><font color="#FF0000"><b>VAR </b></font>sDir<font color="#000080">: </font>DIRSTR<font color="#000080">): </font>PATHSTR<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>jPath     <font color="#000080">: </font>PATHSTR<font color="#000080">;  </font><font color="#008000"><i>{ file path,       }
+  </i></font>jDir      <font color="#000080">: </font>DIRSTR<font color="#000080">;   </font><font color="#008000"><i>{      directory,  }
+  </i></font>jName     <font color="#000080">: </font>NAMESTR<font color="#000080">;  </font><font color="#008000"><i>{      name,       }
+  </i></font>jExt      <font color="#000080">: </font>EXTSTR<font color="#000080">;   </font><font color="#008000"><i>{      extension.  }
+</i></font><font color="#FF0000"><b>BEGIN
+  </b></font>jPath <font color="#000080">:= </font>PSTR<font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font>jPath <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>THEN </b></font>jPath <font color="#000080">:= </font><font color="#800000">'*.*'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font><font color="#FF0000"><b>NOT </b></font><font color="#000080">(</font>jPath <font color="#000080">[</font>Length <font color="#000080">(</font>jPath<font color="#000080">)] </font><font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">':'</font><font color="#000080">, </font><font color="#800000">'\'</font><font color="#000080">])) </font><font color="#FF0000"><b>AND </b></font>IsDir <font color="#000080">(</font>jPath<font color="#000080">) </font><font color="#FF0000"><b>THEN
+    </b></font>jPath <font color="#000080">:= </font>jPath <font color="#000080">+ </font><font color="#800000">'\'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>jPath <font color="#000080">[</font>Length <font color="#000080">(</font>jPath<font color="#000080">)] </font><font color="#FF0000"><b>IN </b></font><font color="#000080">[</font><font color="#800000">':'</font><font color="#000080">, </font><font color="#800000">'\'</font><font color="#000080">]) </font><font color="#FF0000"><b>THEN
+    </b></font>jPath <font color="#000080">:= </font>jPath <font color="#000080">+ </font><font color="#800000">'*.*'</font><font color="#000080">;
+
+  </font>FSplit <font color="#000080">(</font>FExpand <font color="#000080">(</font>jPath<font color="#000080">), </font>jDir<font color="#000080">, </font>jName<font color="#000080">, </font>jExt<font color="#000080">);
+  </font>jPath <font color="#000080">:= </font>jDir <font color="#000080">+ </font>jName<font color="#000080">+ </font>jExt<font color="#000080">;
+
+  </font>sDir <font color="#000080">:= </font>jDir<font color="#000080">;
+  </font>GetFilePath <font color="#000080">:= </font>jPath<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>IsFile <font color="#000080">(</font><font color="#FF0000"><b>CONST </b></font>FileName<font color="#000080">: </font>PATHSTR<font color="#000080">): </font>BOOLEAN<font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+  </b></font>Attr  <font color="#000080">: </font>WORD<font color="#000080">;
+  </font>cFile <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Assign <font color="#000080">(</font>cFile<font color="#000080">, </font>FileName<font color="#000080">);
+  </font>GetFAttr <font color="#000080">(</font>cFile<font color="#000080">, </font>Attr<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>AND </b></font><font color="#000080">((</font>Attr <font color="#FF0000"><b>AND </b></font>Directory<font color="#000080">) &lt;&gt; </font>Directory<font color="#000080">)
+    </font><font color="#FF0000"><b>THEN </b></font>IsFile <font color="#000080">:= </font>TRUE
+    <font color="#FF0000"><b>ELSE </b></font>IsFile <font color="#000080">:= </font>FALSE<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>EraseFile <font color="#000080">(</font><font color="#FF0000"><b>CONST </b></font>FileName <font color="#000080">: </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>cFile <font color="#000080">: </font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  IF </b></font>IsFile <font color="#000080">(</font>FileName<font color="#000080">) </font><font color="#FF0000"><b>THEN BEGIN
+    </b></font>Assign <font color="#000080">(</font>cFile<font color="#000080">, </font>FileName<font color="#000080">);
+    </font>SetFAttr <font color="#000080">(</font>cFile<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+    </font>Erase <font color="#000080">(</font>cFile<font color="#000080">); </font>CheckIO<font color="#000080">;
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>RezipThem <font color="#000080">(</font>dirname<font color="#000080">: </font>PATHSTR<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>fn<font color="#000080">: </font>NAMESTR<font color="#000080">;
+  </font>fileinfo<font color="#000080">: </font>SEARCHREC<font color="#000080">;
+  </font>Compression <font color="#000080">: </font><font color="#FF0000"><b>STRING </b></font><font color="#000080">[</font><font color="#800000">4</font><font color="#000080">];
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>FindFirst <font color="#000080">(</font>dirname<font color="#000080">, </font>Directory<font color="#000080">, </font>fileinfo<font color="#000080">);
+  </font><font color="#FF0000"><b>WHILE </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+  BEGIN
+    </b></font>fn <font color="#000080">:= </font>getFileName <font color="#000080">(</font>fileinfo<font color="#000080">. </font>Name<font color="#000080">);
+    </font>WriteLn <font color="#000080">(</font><font color="#800000">'Level: '</font><font color="#000080">, </font>RecursionLevel<font color="#000080">, </font><font color="#800000">'; compressing: '</font><font color="#000080">, </font>fn<font color="#000080">);
+    </font>erasefile <font color="#000080">(</font>fn <font color="#000080">+ </font><font color="#800000">'.zip'</font><font color="#000080">);
+    </font><font color="#FF0000"><b>IF </b></font>RecursionLevel <font color="#000080">&gt; </font><font color="#800000">1
+      </font><font color="#FF0000"><b>THEN </b></font>compression <font color="#000080">:= </font><font color="#800000">'-e0 '   </font><font color="#008000"><i>{ STORING the nested ZIP files }
+      </i></font><font color="#FF0000"><b>ELSE </b></font>compression <font color="#000080">:= </font><font color="#800000">'-ex '</font><font color="#000080">;  </font><font color="#008000"><i>{ results in smaller ZIP overall }
+    </i></font>SwapVectors<font color="#000080">;
+    </font>Exec <font color="#000080">(</font>GetEnv <font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">),</font><font color="#800000">' /c pkzip -# '</font><font color="#000080">+</font>compression<font color="#000080">+</font>fn<font color="#000080">+</font><font color="#800000">'.zip -m '</font><font color="#000080">+
+          </font>fileinfo<font color="#000080">.</font>Name<font color="#000080">+</font><font color="#800000">'\*.*'</font><font color="#000080">);
+    </font>SwapVectors<font color="#000080">;
+    </font><font color="#FF0000"><b>IF </b></font>IsDir <font color="#000080">(</font>fileinfo<font color="#000080">. </font>Name<font color="#000080">) </font><font color="#FF0000"><b>THEN </b></font>RmDir <font color="#000080">(</font>fileinfo<font color="#000080">. </font>Name<font color="#000080">);
+    </font>FindNext <font color="#000080">(</font>fileinfo<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>Dec <font color="#000080">(</font>RecursionLevel<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>UnzipThem <font color="#000080">(</font>zipname<font color="#000080">: </font>PATHSTR<font color="#000080">);
+</font><font color="#FF0000"><b>VAR
+  </b></font>StartDir<font color="#000080">: </font>PATHSTR<font color="#000080">;
+  </font>fn<font color="#000080">: </font>NAMESTR<font color="#000080">;
+  </font>fileinfo<font color="#000080">: </font>SEARCHREC<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>Inc <font color="#000080">(</font>RecursionLevel<font color="#000080">);
+  </font><font color="#FF0000"><b>IF </b></font>RecursionLevel <font color="#000080">= </font><font color="#800000">1 </font><font color="#FF0000"><b>THEN
+    </b></font>WriteLn <font color="#000080">(</font><font color="#800000">'~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'</font><font color="#000080">);
+  </font>GetDir <font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font>StartDir<font color="#000080">);
+  </font>FindFirst <font color="#000080">(</font>zipname<font color="#000080">, </font>Archive<font color="#000080">, </font>fileinfo<font color="#000080">);
+  </font><font color="#FF0000"><b>WHILE </b></font>DosError <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>DO
+  BEGIN
+    </b></font>fn <font color="#000080">:= </font>getFileName <font color="#000080">(</font>fileinfo<font color="#000080">. </font>Name<font color="#000080">);
+    </font>WriteLn <font color="#000080">(</font><font color="#800000">'Level: '</font><font color="#000080">, </font>RecursionLevel<font color="#000080">, </font><font color="#800000">'; extracting:  '</font><font color="#000080">, </font>fn<font color="#000080">);
+    </font>MkDir <font color="#000080">(</font>fn <font color="#000080">+ </font><font color="#800000">'.dir'</font><font color="#000080">);
+    </font>ChDir <font color="#000080">(</font>fn <font color="#000080">+ </font><font color="#800000">'.dir'</font><font color="#000080">);
+    </font>SwapVectors<font color="#000080">;
+    </font>Exec <font color="#000080">(</font>GetEnv <font color="#000080">(</font><font color="#800000">'COMSPEC'</font><font color="#000080">), </font><font color="#800000">' /c pkunzip -# ..\' </font><font color="#000080">+ </font>fileinfo<font color="#000080">. </font>Name<font color="#000080">);
+    </font>SwapVectors<font color="#000080">;
+    </font>UnzipThem <font color="#000080">(</font><font color="#800000">'*.zip'</font><font color="#000080">);
+    </font>ChDir <font color="#000080">(</font>StartDir<font color="#000080">);
+    </font>FindNext <font color="#000080">(</font>fileinfo<font color="#000080">);
+  </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+  </font>RezipThem <font color="#000080">(</font><font color="#800000">'*.dir'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>VAR
+  </b></font>fPath<font color="#000080">: </font>PATHSTR<font color="#000080">; </font>fDir<font color="#000080">: </font>DIRSTR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+  </b></font>RecursionLevel <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>fPath <font color="#000080">:= </font>GetFilePath <font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">), </font>fDir<font color="#000080">);
+  </font>UnzipThem <font color="#000080">(</font>fPath<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0035.PAS">Original</a><b>]</b></p></body>
+</html>

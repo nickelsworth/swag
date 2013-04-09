@@ -1,0 +1,171 @@
+<html>
+<head><title> "EMS Heaps" by DJ MURDOCH</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0073.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Actually, there is 2 ways I know.. One way, is to extend
+&gt; the HEAP to UMBs. Another way is to extend it to EMS/XMS...
+
+&gt; You can't extend a TP heap like that. Maybe with DOS calls to memory
+&gt; allocation you can do that with DOS heap memory. TP actually takes 1
+&gt; large DOS heap block and does its own allocation and heap tracking within
+&gt; that for its own heap management. TP can't do what you want it to do,
+&gt; this time.
+
+It can use UMBs or the EMS page frame; that's no problem at all.  Just allocate
+them to your program using DOS services, then fiddle with the heap manager
+variables so that it thinks it's got a fragmented heap.  Here's some code I
+wrote a long time ago to use the EMS page frame this way; you'll need to
+provide some EMS control routines yourself if you don't have the Object
+Professional library.  It was written for TP 6, but should work fine in TP/BP 7
+real mode, because the heap manager is the same.
+}
+</i></font><font color="#FF0000"><b>unit </b></font>EMSHeap<font color="#000080">;
+
+</font><font color="#008000"><i>{ This unit adds up to 64K of EMS memory to the Turbo Pascal heap.  Compatible
+  with TP 6.0. }
+
+{ Version 0.0.
+  Copyright (1992) D.J. Murdoch.  This unit may be freely used
+  provided credit is given to the author. }
+
+</i></font><font color="#FF0000"><b>interface
+
+const
+  </b></font>init_alloc <font color="#000080">: </font>boolean <font color="#000080">= </font>true<font color="#000080">;   </font><font color="#008000"><i>{ Whether to allocate during initialization }
+  </i></font>pages      <font color="#000080">: </font>word    <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;      </font><font color="#008000"><i>{ The number of pages currently allocated   }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>UseEMSHeap<font color="#000080">;
+</font><font color="#008000"><i>{ Attempt to allocate EMS memory and attach it to the heap.  Pages will be
+  set to the number of allocated pages if it succeeds. }
+
+</i></font><font color="#FF0000"><b>function </b></font>ReleaseEMSHeap<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ Attempt to release the EMS pages, and restore the heap to normal.  Will
+  fail and return false if any variables are allocated in the EMS portion of
+  the heap. }
+
+</i></font><font color="#FF0000"><b>implementation
+
+uses
+  </b></font>opinline<font color="#000080">, </font>opems<font color="#000080">;     </font><font color="#008000"><i>{ These routines from Object Professional provide
+                         the EMS management routines, and the pointer
+                         manipulation }
+
+</i></font><font color="#FF0000"><b>var
+  </b></font>handle <font color="#000080">: </font>word<font color="#000080">;       </font><font color="#008000"><i>{ The handle of the allocated pages }
+  </i></font>SaveExitProc<font color="#000080">,
+  </font>SaveHeapEnd <font color="#000080">: </font>Pointer<font color="#000080">; </font><font color="#008000"><i>{ Saved values of the System variables }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>PFreeRec <font color="#000080">= ^</font>TFreeRec<font color="#000080">;
+  </font>TFreeRec <font color="#000080">= </font><font color="#FF0000"><b>record
+    </b></font>Next <font color="#000080">: </font>PFreeRec<font color="#000080">;
+    </font>Size <font color="#000080">: </font>Pointer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>UseEMSHeap<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>page <font color="#000080">: </font>word<font color="#000080">;
+  </font>FreeRec <font color="#000080">: </font>PFreeRec<font color="#000080">;  </font><font color="#008000"><i>{ PFreeRec is described in the Programmer's Guide }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>pages <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then    </b></font><font color="#008000"><i>{ Already got EMS, so exit }
+    </i></font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>EMSInstalled <font color="#FF0000"><b>then
+  begin
+    </b></font>pages <font color="#000080">:= </font>EMSPagesAvail<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>pages <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>pages <font color="#000080">&lt;&gt; </font>EMSErrorCode<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      if </b></font>pages <font color="#000080">&gt; </font><font color="#800000">4 </font><font color="#FF0000"><b>then
+        </b></font>pages <font color="#000080">:= </font><font color="#800000">4</font><font color="#000080">;
+      </font>handle <font color="#000080">:= </font>AllocateEMSPages<font color="#000080">(</font>pages<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>handle <font color="#000080">&lt;&gt; </font>EMSErrorCode <font color="#FF0000"><b>then
+      begin
+        for </b></font>page<font color="#000080">:=</font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pages<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+          if not </b></font>MapEMSPage<font color="#000080">(</font>handle<font color="#000080">,</font>page<font color="#000080">,</font>page<font color="#000080">) </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ Shouldn't fail? }</i></font><font color="#000080">;
+
+        </font><font color="#008000"><i>{ Now we've got the pages allocated, let's set up the heap manager. }
+
+        { First, set up a free list record at the old HeapPtr }
+        </i></font>FreeRec <font color="#000080">:= </font>HeapPtr<font color="#000080">;
+        </font><font color="#FF0000"><b>with </b></font>FreeRec<font color="#000080">^ </font><font color="#FF0000"><b>do
+        begin
+          </b></font>Next <font color="#000080">:= </font>EMSPageFramePtr<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>ofs<font color="#000080">(</font>HeapEnd<font color="#000080">^) &gt;= </font>ofs<font color="#000080">(</font>HeapPtr<font color="#000080">^) </font><font color="#FF0000"><b>then
+            </b></font>Size <font color="#000080">:= </font>Ptr<font color="#000080">(</font>seg<font color="#000080">(</font>HeapEnd<font color="#000080">^) - </font>Seg<font color="#000080">(</font>HeapPtr<font color="#000080">^),
+                        </font>ofs<font color="#000080">(</font>HeapEnd<font color="#000080">^) - </font>Ofs<font color="#000080">(</font>HeapPtr<font color="#000080">^))
+          </font><font color="#FF0000"><b>else
+            </b></font>Size <font color="#000080">:= </font>Ptr<font color="#000080">(</font>seg<font color="#000080">(</font>HeapEnd<font color="#000080">^) - </font>Seg<font color="#000080">(</font>HeapPtr<font color="#000080">^) - </font><font color="#800000">1</font><font color="#000080">,
+                        </font>ofs<font color="#000080">(</font>HeapEnd<font color="#000080">^) - </font>Ofs<font color="#000080">(</font>HeapPtr<font color="#000080">^) + </font><font color="#800000">16</font><font color="#000080">);
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#008000"><i>{ Now adjust HeapPtr and HeapEnd }
+        </i></font>HeapPtr <font color="#000080">:= </font>Normalized<font color="#000080">(</font>EMSPageFramePtr<font color="#000080">);
+        </font>SaveHeapEnd <font color="#000080">:= </font>HeapEnd<font color="#000080">;
+        </font>HeapEnd <font color="#000080">:= </font>Ptr<font color="#000080">(</font>seg<font color="#000080">(</font>HeapPtr<font color="#000080">^) + </font>pages<font color="#000080">*</font><font color="#800000">$400</font><font color="#000080">,</font>ofs<font color="#000080">(</font>HeapPtr<font color="#000080">^));
+
+        </font><font color="#008000"><i>{ Success! - so exit. }
+        </i></font>exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#008000"><i>{ If we're here, we failed somehow. }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>pages <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;    </font><font color="#008000"><i>{ Signal failure }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ReleaseEMSHeap<font color="#000080">:</font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ Shrinks back to original allocation, if nothing is allocated in the EMS
+  part. }
+</i></font><font color="#FF0000"><b>var
+  </b></font>FreeRec <font color="#000080">: </font>PFreeRec<font color="#000080">;
+  </font>FreeEnd  <font color="#000080">: </font>Pointer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>pages <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    if </b></font>PtrToLong<font color="#000080">(</font>HeapPtr<font color="#000080">) &gt; </font>PtrToLong<font color="#000080">(</font>EMSPageFramePtr<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>ReleaseEMSHeap <font color="#000080">:= </font>false<font color="#000080">;
+      </font>exit<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>FreeRec <font color="#000080">:= </font>FreeList<font color="#000080">;
+    </font><font color="#FF0000"><b>while </b></font>FreeRec<font color="#000080">^.</font>Next <font color="#000080">&lt;&gt; </font>HeapPtr <font color="#FF0000"><b>do
+      </b></font>FreeRec <font color="#000080">:= </font>FreeRec<font color="#000080">^.</font>Next<font color="#000080">;
+
+    </font><font color="#008000"><i>{ Now FreeRec points to the last free block in regular memory }
+    </i></font><font color="#FF0000"><b>with </b></font>FreeRec<font color="#000080">^ </font><font color="#FF0000"><b>do
+    begin
+      </b></font>FreeEnd <font color="#000080">:= </font>Ptr<font color="#000080">(</font>Seg<font color="#000080">(</font>FreeRec<font color="#000080">^) + </font>Seg<font color="#000080">(</font>Size<font color="#000080">^),
+                        </font>Ofs<font color="#000080">(</font>FreeRec<font color="#000080">^) + </font>Ofs<font color="#000080">(</font>Size<font color="#000080">^));  </font><font color="#008000"><i>{ The end of the last
+                                                        free block }
+      </i></font><font color="#FF0000"><b>if </b></font>PtrToLong<font color="#000080">(</font>FreeEnd<font color="#000080">) &lt; </font>PtrToLong<font color="#000080">(</font>SaveHeapEnd<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>HeapPtr <font color="#000080">:= </font>SaveHeapEnd        <font color="#008000"><i>{  Memory allocated to the end of
+                                         normal ram }
+      </i></font><font color="#FF0000"><b>else if </b></font>PtrToLong<font color="#000080">(</font>FreeEnd<font color="#000080">) = </font>PtrToLong<font color="#000080">(</font>SaveHeapEnd<font color="#000080">) </font><font color="#FF0000"><b>then
+        </b></font>HeapPtr <font color="#000080">:= </font>FreeRec        <font color="#008000"><i>{  A free block at the top of memory }
+      </i></font><font color="#FF0000"><b>else
+      begin
+        </b></font><font color="#008000"><i>{ This has got to be an error condition, so bail out.  }
+        </i></font>ReleaseEMSHeap <font color="#000080">:= </font>false<font color="#000080">;
+        </font>exit<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>HeapEnd <font color="#000080">:= </font>SaveHeapEnd<font color="#000080">;
+      </font><font color="#FF0000"><b>if not </b></font>DeallocateEMSHandle<font color="#000080">(</font>handle<font color="#000080">) </font><font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ Error we can't handle }</i></font><font color="#000080">;
+      </font>pages <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ReleaseEMSHeap <font color="#000080">:= </font>true<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>EMSExitProc<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;    </font><font color="#008000"><i>{ On exit, release our EMS pages }
+</i></font><font color="#FF0000"><b>begin
+  </b></font>ExitProc <font color="#000080">:= </font>SaveExitProc<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>pages <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    if not </b></font>DeallocateEMSHandle<font color="#000080">(</font>handle<font color="#000080">) </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ Error, but nothing
+                                               we can do about it }</i></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>SaveExitProc <font color="#000080">:= </font>ExitProc<font color="#000080">;
+  </font>ExitProc <font color="#000080">:= @</font>EMSExitProc<font color="#000080">;
+  </font>UseEMSHeap<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to MEMORY SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0073.PAS">Original</a><b>]</b></p></body>
+</html>

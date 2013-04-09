@@ -1,0 +1,373 @@
+<html>
+<head><title> "Linked lists in Expanded Memory" by GARRY J. VASS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to POINTERS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+       PROTOTYPE PROCEDURES FOR CREATING AND ACCESSING SORTED
+                 LINKED LISTS IN EXPANDED MEMORY
+
+                  GARRY J. VASS [72307,3311]
+
+The procedures and functions given below present a prototype
+method for creating and accesing linked lists in expanded memory.
+Although pointer variables are used in a way that appears to
+conform to the TPascal pointer syntax, there are several major
+differences:
+
+            -  there are none of the standard NEW, GETMEM,
+               MARK, RELEASE, DISPOSE, FREEMEM, and MAXAVAIL
+               calls made.  These are bound to the program's
+               physical location in memory, and have no
+               effect in expanded memory.  Attempting to
+               use these here, or to implement standard
+               linked procedures by altering the HeapPtr
+               standard variable is dangerous and highly
+               discouraged.
+            -  pointer variables are set and queried by
+               a simulation of TPascal's internal procedures
+               that is specially customized to the EMS
+               page frame segment.
+            -  the MEMAVAIL function is useless here.  These
+               procedures will support a list of up to 64K.
+
+The general pseudo-code for creating a linked list in expanded
+memory is:
+
+      1.  Get a handle and allocate memory from the EMM.
+      2.  Get the page frame segment for the handle to
+          mark the physical beginning of the list in
+          expanded memory.
+      3.  Initialize the root pointer to the page frame
+          segment.
+      4.  For each new record (or list member):
+
+          a.  Calculate a new physical location for the
+              record using a simulated normalization
+              procedure.
+          b.  Set the appropriate values to the
+              pointers using a simulated pointer
+              assignment procedure.
+          c.  Assure that the last logical record
+              contains a pointer value of NIL.
+
+Accessing the list is basically the same as the standard algorithms.
+
+The procedures here assume that each list record (or member) is composed
+of three elements:
+
+        -  a pointer to the next logical record.  If the member is the
+           last logical record, this pointer is NIL.
+        -  an index, or logical sort key.  This value determines the
+           logical position of the record in the list.  These routines
+           and the demo use an integer type for index.  The index,
+           however, can be of any type where ordinal comparisons
+           can be made, including pointers.
+        -  an area for the actual data in each record.  These routines
+           and the demo use a string of length 255, but this area can
+           be of any type, including pointers to other lists.
+
+Please note that these routines are exploratory and prototype.  In no way
+are they intended to be definitive, accurate, efficient, or exemplary.
+
+Areas for further analysis are:
+
+      1.  A reliable analog to the MEMAVAIL function.
+      2.  Creating linked lists that cross handle boundaries.
+      3.  Creating linked lists that begin in heapspace and
+          extend to expanded memory.
+      4.  A reliable method for assigning the standard
+          variable, HeapPtr, to the base page.
+
+Please let me know of your progress in these areas, or improvements
+to the routines below via the BORLAND SIG [72307,3311] or my PASCAL/
+PROLOG SIG at the POLICE STATION BBS (201-963-3115).
+
+}
+</i></font><font color="#FF0000"><b>PROGRAM </b></font>LINKED_LISTS<font color="#000080">;
+</font><font color="#FF0000"><b>Uses </b></font>dos<font color="#000080">,</font>crt<font color="#000080">;
+</font><font color="#FF0000"><b>CONST
+     </b></font>ALLOCATE_MEMORY <font color="#000080">=   </font><font color="#800000">$43</font><font color="#000080">;
+     </font>EMS_SERVICES    <font color="#000080">=   </font><font color="#800000">$67</font><font color="#000080">;
+     </font>FOREVER<font color="#000080">:</font>BOOLEAN <font color="#000080">= </font>FALSE<font color="#000080">;
+     </font>GET_PAGE_FRAME  <font color="#000080">=   </font><font color="#800000">$41</font><font color="#000080">;
+     </font>LOGICAL_PAGES   <font color="#000080">=     </font><font color="#800000">5</font><font color="#000080">;
+     </font>MAP_MEMORY      <font color="#000080">=   </font><font color="#800000">$44</font><font color="#000080">;
+     </font>RELEASE_HANDLE  <font color="#000080">=   </font><font color="#800000">$45</font><font color="#000080">;
+</font><font color="#FF0000"><b>TYPE
+    </b></font>ANYSTRING <font color="#000080">= </font><font color="#FF0000"><b>STRING</b></font><font color="#000080">[</font><font color="#800000">255</font><font color="#000080">];
+    </font>LISTPTR   <font color="#000080">= ^</font>LISTREC<font color="#000080">;
+    </font>LISTREC   <font color="#000080">= </font><font color="#FF0000"><b>RECORD
+                      </b></font>NEXT_POINTER <font color="#000080">: </font>LISTPTR<font color="#000080">;
+                      </font>INDEX_PART   <font color="#000080">: </font>INTEGER<font color="#000080">;
+                      </font>DATA_PART    <font color="#000080">: </font>ANYSTRING<font color="#000080">;
+                </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>VAR
+   </b></font>ANYINTEGER <font color="#000080">: </font>INTEGER<font color="#000080">;
+   </font>ANYSTR     <font color="#000080">: </font>ANYSTRING<font color="#000080">;
+   </font>HANDLE     <font color="#000080">: </font>INTEGER<font color="#000080">;    </font><font color="#008000"><i>{ HANDLE ASSIGNED BY EMM }
+   </i></font>LIST       <font color="#000080">: </font>LISTREC<font color="#000080">;
+   </font>NEWOFFSET  <font color="#000080">: </font>INTEGER<font color="#000080">;    </font><font color="#008000"><i>{ PHYSICAL OFFSET OF RECORD }
+   </i></font>NEWSEGMENT <font color="#000080">: </font>INTEGER<font color="#000080">;    </font><font color="#008000"><i>{ PHYSICAL SEGMENT OF RECORD }
+   </i></font>REGS1      <font color="#000080">: </font>Registers<font color="#000080">;
+   </font>ROOT       <font color="#000080">: </font>LISTPTR<font color="#000080">;    </font><font color="#008000"><i>{ POINTER TO LIST ROOT }
+   </i></font>SEGMENT    <font color="#000080">: </font>INTEGER<font color="#000080">;    </font><font color="#008000"><i>{ PAGE FRAME SEGMENT }
+
+{--------------------- GENERAL SUPPORT ROUTINES  ----------------------}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>HEXBYTE<font color="#000080">(</font>N<font color="#000080">:</font>INTEGER<font color="#000080">):</font>ANYSTRING<font color="#000080">;
+</font><font color="#FF0000"><b>CONST </b></font>H<font color="#000080">:</font>ANYSTRING<font color="#000080">=</font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>HEXBYTE<font color="#000080">:=</font>H<font color="#000080">[((</font>LO<font color="#000080">(</font>N<font color="#000080">)</font><font color="#FF0000"><b>DIV </b></font><font color="#800000">16</font><font color="#000080">)</font><font color="#FF0000"><b>MOD </b></font><font color="#800000">16</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">]+</font>H<font color="#000080">[(</font>LO<font color="#000080">(</font>N<font color="#000080">) </font><font color="#FF0000"><b>MOD </b></font><font color="#800000">16</font><font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">];
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>HEXWORD<font color="#000080">(</font>N<font color="#000080">:</font>INTEGER<font color="#000080">):</font>ANYSTRING<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>HEXWORD<font color="#000080">:= </font>HEXBYTE<font color="#000080">(</font>HI<font color="#000080">(</font>N<font color="#000080">))+</font>HEXBYTE<font color="#000080">(</font>LO<font color="#000080">(</font>N<font color="#000080">));
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>CARDINAL<font color="#000080">(</font>I<font color="#000080">:</font>INTEGER<font color="#000080">):</font>REAL<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>CARDINAL<font color="#000080">:=</font><font color="#800000">256.0</font><font color="#000080">*</font>HI<font color="#000080">(</font>I<font color="#000080">)+</font>LO<font color="#000080">(</font>I<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE  </b></font>PAUSE<font color="#000080">;
+</font><font color="#FF0000"><b>VAR </b></font>CH<font color="#000080">:</font>CHAR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>WRITELN<font color="#000080">;</font>WRITELN<font color="#000080">(</font><font color="#800000">'-- PAUSING FOR KEYBOARD INPUT...'</font><font color="#000080">);
+     </font>READ<font color="#000080">(</font>CH<font color="#000080">);
+     </font>WRITELN<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>DIE<font color="#000080">(</font>M<font color="#000080">:</font>ANYSTRING<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>WRITELN<font color="#000080">(</font><font color="#800000">'ERROR IN: '</font><font color="#000080">,</font>M<font color="#000080">);
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'HALTING HERE, SUGGEST REBOOT'</font><font color="#000080">);
+     </font>HALT<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>FUNCTION </b></font>EXIST<font color="#000080">(</font>FILENAME<font color="#000080">:</font>ANYSTRING<font color="#000080">):</font>BOOLEAN<font color="#000080">;</font><font color="#FF0000"><b>VAR </b></font>FILVAR<font color="#000080">:</font><font color="#FF0000"><b>FILE</b></font><font color="#000080">;</font><font color="#FF0000"><b>BEGIN </b></font>ASSIGN<font color="#000080">(</font>FILVAR<font color="#000080">,</font>FILENAME<font color="#000080">);</font><font color="#008000"><i>{$I-}
+</i></font>RESET<font color="#000080">(</font>FILVAR<font color="#000080">);</font><font color="#008000"><i>{$I+}</i></font>EXIST <font color="#000080">:= (</font>IORESULT <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{--------------------- END OF GENERAL SUPPORT ROUTINES  ----------------}
+
+{----------------------  EMS SUPPORT ROUTINES  -------------------------}
+
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>EMS_INSTALLED<font color="#000080">:</font>BOOLEAN<font color="#000080">;         </font><font color="#008000"><i>{ RETURNS TRUE IF EMS IS INSTALLED }
+</i></font><font color="#FF0000"><b>BEGIN                                   </b></font><font color="#008000"><i>{ ASSURED DEVICE NAME OF EMMXXXX0  }
+     </i></font>EMS_INSTALLED <font color="#000080">:= </font>EXIST<font color="#000080">(</font><font color="#800000">'EMMXXXX0'</font><font color="#000080">);</font><font color="#008000"><i>{ BY LOTUS/INTEL/MS STANDARDS      }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>NEWHANDLE<font color="#000080">(</font>NUMBER_OF_LOGICAL_PAGES_NEEDED<font color="#000080">:</font>INTEGER<font color="#000080">):</font>INTEGER<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">:= </font>ALLOCATE_MEMORY<font color="#000080">;
+     </font>REGS1<font color="#000080">.</font>BX <font color="#000080">:= </font>NUMBER_OF_LOGICAL_PAGES_NEEDED<font color="#000080">;
+     </font>INTR<font color="#000080">(</font>EMS_SERVICES<font color="#000080">, </font>REGS1<font color="#000080">);
+     </font><font color="#FF0000"><b>IF </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>DIE<font color="#000080">(</font><font color="#800000">'ALLOCATE MEMORY'</font><font color="#000080">);
+     </font>NEWHANDLE <font color="#000080">:= </font>REGS1<font color="#000080">.</font>DX<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>KILL_HANDLE<font color="#000080">(</font>HANDLE_TO_KILL<font color="#000080">:</font>INTEGER<font color="#000080">);  </font><font color="#008000"><i>{ RELEASES EMS HANDLE.    }
+</i></font><font color="#FF0000"><b>BEGIN                                           </b></font><font color="#008000"><i>{ THIS MUST BE DONE IF    }
+     </i></font><font color="#FF0000"><b>REPEAT                                     </b></font><font color="#008000"><i>{ OTHER APPLICATIONS ARE  }
+          </i></font>WRITELN<font color="#000080">(</font><font color="#800000">'RELEASING EMS HANDLE'</font><font color="#000080">);      </font><font color="#008000"><i>{ TO USE THE EM ARES.  DUE}
+          </i></font>REGS1<font color="#000080">.</font>AH <font color="#000080">:= </font>RELEASE_HANDLE<font color="#000080">;            </font><font color="#008000"><i>{ TO CONCURRENT PROCESSES,}
+          </i></font>REGS1<font color="#000080">.</font>DX <font color="#000080">:= </font>HANDLE_TO_KILL<font color="#000080">;            </font><font color="#008000"><i>{ SEVERAL TRIES MAY BE    }
+          </i></font>INTR<font color="#000080">(</font>EMS_SERVICES<font color="#000080">, </font>REGS1<font color="#000080">);             </font><font color="#008000"><i>{ NECESSARY.              }
+     </i></font><font color="#FF0000"><b>UNTIL </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'HANDLE RELEASED'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>PAGE_FRAME_SEGMENT<font color="#000080">:</font>INTEGER<font color="#000080">;         </font><font color="#008000"><i>{ RETURNS PFS }
+</i></font><font color="#FF0000"><b>BEGIN
+     </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">:= </font>GET_PAGE_FRAME<font color="#000080">;
+     </font>INTR<font color="#000080">(</font>EMS_SERVICES<font color="#000080">, </font>REGS1<font color="#000080">);
+     </font><font color="#FF0000"><b>IF </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>DIE<font color="#000080">(</font><font color="#800000">'GETTING PFS'</font><font color="#000080">);
+     </font>PAGE_FRAME_SEGMENT <font color="#000080">:= </font>REGS1<font color="#000080">.</font>BX<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>MAP_MEM<font color="#000080">(</font>HANDLE_TO_MAP<font color="#000080">:</font>INTEGER<font color="#000080">);  </font><font color="#008000"><i>{MAPS HANDLE TO PHYSICAL}
+</i></font><font color="#FF0000"><b>CONST </b></font>PHYSICAL_PAGE <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;                 </font><font color="#008000"><i>{PAGES.}
+</i></font><font color="#FF0000"><b>BEGIN
+     </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">:= </font>MAP_MEMORY<font color="#000080">;
+     </font>REGS1<font color="#000080">.</font>AL <font color="#000080">:= </font>PHYSICAL_PAGE<font color="#000080">;
+     </font>REGS1<font color="#000080">.</font>BX <font color="#000080">:= </font>PHYSICAL_PAGE<font color="#000080">;
+     </font>REGS1<font color="#000080">.</font>DX <font color="#000080">:= </font>HANDLE_TO_MAP<font color="#000080">;
+     </font>INTR<font color="#000080">(</font>EMS_SERVICES<font color="#000080">, </font>REGS1<font color="#000080">);
+     </font><font color="#FF0000"><b>IF </b></font>REGS1<font color="#000080">.</font>AH <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>THEN </b></font>DIE<font color="#000080">(</font><font color="#800000">'MAPPING MEMORY'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>GET_EMS_MEMORY<font color="#000080">(</font>NUMBER_OF_16K_LOGICAL_PAGES<font color="#000080">:</font>INTEGER<font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>TH<font color="#000080">:</font>INTEGER<font color="#000080">;                     </font><font color="#008000"><i>{ REQUESTS EM FROM EMM IN 16K INCREMENTS }
+</i></font><font color="#FF0000"><b>BEGIN
+     </b></font>HANDLE <font color="#000080">:=  </font>NEWHANDLE<font color="#000080">(</font>NUMBER_OF_16K_LOGICAL_PAGES<font color="#000080">);
+     </font>SEGMENT <font color="#000080">:= </font>PAGE_FRAME_SEGMENT<font color="#000080">;
+     </font>MAP_MEM<font color="#000080">(</font>HANDLE<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+</font><font color="#008000"><i>{----------------- END OF EMS SUPPORT ROUTINES  -----------------------}
+
+{----------------- CUSTOMIZED LINKED LIST SUPPORT ---------------------}
+</i></font><font color="#FF0000"><b>FUNCTION </b></font>ABSOLUTE_ADDRESS<font color="#000080">(</font>S<font color="#000080">, </font>O<font color="#000080">:</font>INTEGER<font color="#000080">):</font>REAL<font color="#000080">;   </font><font color="#008000"><i>{ RETURNS THE REAL }
+</i></font><font color="#FF0000"><b>BEGIN                                           </b></font><font color="#008000"><i>{ ABSOLUTE ADDRESS }
+     </i></font>ABSOLUTE_ADDRESS <font color="#000080">:=  (</font>CARDINAL<font color="#000080">(</font>S<font color="#000080">) * </font><font color="#800000">$10</font><font color="#000080">)   </font><font color="#008000"><i>{ FOR SEGMENT &quot;S&quot;  }
+                         </i></font><font color="#000080">+ </font>CARDINAL<font color="#000080">(</font>O<font color="#000080">);         </font><font color="#008000"><i>{ AND OFFSET &quot;O&quot;.  }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>NORMALIZE<font color="#000080">(</font><font color="#FF0000"><b>VAR </b></font>S<font color="#000080">, </font>O<font color="#000080">:</font>INTEGER<font color="#000080">); </font><font color="#008000"><i>{ SIMULATION OF TURBO'S INTERNAL }
+</i></font><font color="#FF0000"><b>VAR                                    </b></font><font color="#008000"><i>{ NORMALIZATION ROUTINES FOR     }
+   </i></font>NEW_SEGMENT<font color="#000080">: </font>INTEGER<font color="#000080">;               </font><font color="#008000"><i>{ POINTER VARIABLES.             }
+   </i></font>NEW_OFFSET <font color="#000080">: </font>INTEGER<font color="#000080">;               </font><font color="#008000"><i>{ NORMALIZES SEGMENT &quot;S&quot; AND     }
+</i></font><font color="#FF0000"><b>BEGIN                                  </b></font><font color="#008000"><i>{ OFFSET &quot;O&quot; INTO LEGITAMATE     }
+     </i></font>NEW_SEGMENT <font color="#000080">:= </font>S<font color="#000080">;                 </font><font color="#008000"><i>{ POINTER VALUES.                }
+     </i></font>NEW_OFFSET  <font color="#000080">:= </font>O<font color="#000080">;
+     </font><font color="#FF0000"><b>REPEAT
+           CASE </b></font>NEW_OFFSET <font color="#FF0000"><b>OF
+              </b></font><font color="#800000">$00</font><font color="#000080">..</font><font color="#800000">$0E   </font><font color="#000080">: </font>NEW_OFFSET <font color="#000080">:= </font>SUCC<font color="#000080">(</font>NEW_OFFSET<font color="#000080">);
+              </font><font color="#800000">$0F</font><font color="#000080">..</font><font color="#800000">$FF   </font><font color="#000080">: </font><font color="#FF0000"><b>BEGIN
+                               </b></font>NEW_OFFSET <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+                               </font>NEW_SEGMENT <font color="#000080">:= </font>SUCC<font color="#000080">(</font>NEW_SEGMENT<font color="#000080">);
+                           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+           </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>UNTIL  </b></font><font color="#000080">(</font>ABSOLUTE_ADDRESS<font color="#000080">(</font>NEW_SEGMENT<font color="#000080">, </font>NEW_OFFSET<font color="#000080">) &gt;
+             </font>ABSOLUTE_ADDRESS<font color="#000080">(</font>S<font color="#000080">, </font>O<font color="#000080">) + </font>SIZEOF<font color="#000080">(</font>LIST<font color="#000080">));
+     </font>S <font color="#000080">:= </font>NEW_SEGMENT<font color="#000080">;
+     </font>O <font color="#000080">:= </font>NEW_OFFSET<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>VALUEOF<font color="#000080">(</font>P<font color="#000080">:</font>LISTPTR<font color="#000080">):</font>ANYSTRING<font color="#000080">;  </font><font color="#008000"><i>{ RETURNS A STRING IN   }
+                                        { SEGMENT:OFFSET FORMAT }
+                                        { WHICH CONTAINS VALUE  }
+</i></font><font color="#FF0000"><b>BEGIN                                   </b></font><font color="#008000"><i>{ OF A POINTER VARIABLE }
+     </i></font>VALUEOF <font color="#000080">:= </font>HEXBYTE<font color="#000080">(</font>MEM<font color="#000080">[</font>SEG<font color="#000080">(</font>P<font color="#000080">):</font>OFS<font color="#000080">(</font>P<font color="#000080">) + </font><font color="#800000">3</font><font color="#000080">]) +
+                </font>HEXBYTE<font color="#000080">(</font>MEM<font color="#000080">[</font>SEG<font color="#000080">(</font>P<font color="#000080">):</font>OFS<font color="#000080">(</font>P<font color="#000080">) + </font><font color="#800000">2</font><font color="#000080">]) +</font><font color="#800000">':'</font><font color="#000080">+
+                </font>HEXBYTE<font color="#000080">(</font>MEM<font color="#000080">[</font>SEG<font color="#000080">(</font>P<font color="#000080">):</font>OFS<font color="#000080">(</font>P<font color="#000080">) + </font><font color="#800000">1</font><font color="#000080">]) +
+                </font>HEXBYTE<font color="#000080">(</font>MEM<font color="#000080">[</font>SEG<font color="#000080">(</font>P<font color="#000080">):</font>OFS<font color="#000080">(</font>P<font color="#000080">) + </font><font color="#800000">0</font><font color="#000080">]);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>SNAP<font color="#000080">(</font>P<font color="#000080">:</font>LISTPTR<font color="#000080">);                   </font><font color="#008000"><i>{ FOR THE RECORD BEING         }
+</i></font><font color="#FF0000"><b>BEGIN                                        </b></font><font color="#008000"><i>{ POINTED TO BY &quot;P&quot;, THIS      }
+     </i></font>WRITELN<font color="#000080">(</font>VALUEOF<font color="#000080">(</font>P<font color="#000080">):</font><font color="#800000">10</font><font color="#000080">,                  </font><font color="#008000"><i>{ PRINTS THE SEGMENT/OFFSET    }
+             </i></font>VALUEOF<font color="#000080">(</font>P<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">):</font><font color="#800000">20</font><font color="#000080">,    </font><font color="#008000"><i>{ LOCATION, THE SEGMENT/       }
+             </i></font>P<font color="#000080">^.</font>INDEX_PART<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,                </font><font color="#008000"><i>{ OFFSET OF THE RECORD PONTER, }
+             </i></font><font color="#800000">'     '</font><font color="#000080">,</font>P<font color="#000080">^.</font>DATA_PART<font color="#000080">);          </font><font color="#008000"><i>{ RECORD INDEX, AND DATA.      }
+</i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>PROCESS_LIST<font color="#000080">;               </font><font color="#008000"><i>{ GET AND PRINT MEMBERS OF A LIST }
+</i></font><font color="#FF0000"><b>VAR </b></font>M1<font color="#000080">:</font>LISTPTR<font color="#000080">;                       </font><font color="#008000"><i>{ SORTED IN INDEX ORDER.          }
+</i></font><font color="#FF0000"><b>BEGIN
+     </b></font>PAUSE<font color="#000080">;
+     </font>M1 <font color="#000080">:= </font>ROOT<font color="#000080">;
+     </font>WRITELN<font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'---------------- LINKED LIST ---------------------------------'</font><font color="#000080">);
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'MEMBER LOCATION           MEMBER CONTENTS'</font><font color="#000080">);
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'IN MEMORY             POINTER    INDEX  DATA   '</font><font color="#000080">);
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'---------------       -----------------------------------------'</font><font color="#000080">);
+     </font>WRITELN<font color="#000080">;
+     </font><font color="#FF0000"><b>REPEAT
+           </b></font>SNAP<font color="#000080">(</font>M1<font color="#000080">);
+           </font>M1 <font color="#000080">:= </font>M1<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">;
+     </font><font color="#FF0000"><b>UNTIL </b></font>M1 <font color="#000080">= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'------------ END OF LIST----------'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>LOAD_MEMBER_HIGH <font color="#000080">(</font>IND<font color="#000080">:</font>INTEGER<font color="#000080">; </font>DAT<font color="#000080">:</font>ANYSTRING<font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>M1<font color="#000080">:</font>LISTPTR<font color="#000080">;
+     </font>P<font color="#000080">:</font>LISTPTR<font color="#000080">;                  </font><font color="#008000"><i>{ INSERTS A RECORD AT THE HIGH }
+</i></font><font color="#FF0000"><b>BEGIN                            </b></font><font color="#008000"><i>{ END OF THE LIST.             }
+     </i></font>M1 <font color="#000080">:= </font>ROOT<font color="#000080">;
+     </font><font color="#FF0000"><b>REPEAT
+           IF </b></font>M1<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL THEN </b></font>M1 <font color="#000080">:= </font>M1<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">;
+     </font><font color="#FF0000"><b>UNTIL </b></font>M1<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+     </font>NORMALIZE<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);
+     </font>M1<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">:= </font>PTR<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);
+     </font>P <font color="#000080">:= </font>M1<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">;
+     </font>P<font color="#000080">^.</font>INDEX_PART <font color="#000080">:= </font>IND<font color="#000080">;
+     </font>P<font color="#000080">^.</font>DATA_PART <font color="#000080">:= </font>DAT<font color="#000080">;
+     </font>P<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>LOAD_MEMBER_MIDDLE <font color="#000080">(</font>IND<font color="#000080">:</font>INTEGER<font color="#000080">; </font>DAT<font color="#000080">:</font>ANYSTRING<font color="#000080">);
+</font><font color="#FF0000"><b>VAR </b></font>M1<font color="#000080">:</font>LISTPTR<font color="#000080">;
+    </font>M2<font color="#000080">:</font>LISTPTR<font color="#000080">;
+    </font>P <font color="#000080">:</font>LISTPTR<font color="#000080">;
+    </font>T <font color="#000080">:</font>LISTPTR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN                         </b></font><font color="#008000"><i>{ INSERTS A MEMBER INTO THE MIDDLE }
+     </i></font>M1 <font color="#000080">:= </font>ROOT<font color="#000080">;              </font><font color="#008000"><i>{ OF A LIST.                       }
+     </i></font><font color="#FF0000"><b>REPEAT
+           </b></font>M2 <font color="#000080">:= </font>M1<font color="#000080">;
+           </font><font color="#FF0000"><b>IF </b></font>M1<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>NIL THEN </b></font>M1 <font color="#000080">:= </font>M1<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">;
+     </font><font color="#FF0000"><b>UNTIL </b></font><font color="#000080">(</font>M1<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>M1<font color="#000080">^.</font>INDEX_PART <font color="#000080">&gt;= </font>IND<font color="#000080">);
+     </font><font color="#FF0000"><b>IF </b></font><font color="#000080">(</font>M1<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">) </font><font color="#FF0000"><b>AND
+        </b></font><font color="#000080">(</font>M1<font color="#000080">^.</font>INDEX_PART <font color="#000080">&lt;   </font>IND<font color="#000080">) </font><font color="#FF0000"><b>THEN
+        BEGIN
+             </b></font>LOAD_MEMBER_HIGH <font color="#000080">(</font>IND<font color="#000080">, </font>DAT<font color="#000080">);
+             </font>EXIT<font color="#000080">;
+        </font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+     </font>T <font color="#000080">:= </font>M2<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">;
+     </font>NORMALIZE<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);
+     </font>M2<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">:= </font>PTR<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);
+     </font>P <font color="#000080">:= </font>M2<font color="#000080">^.</font>NEXT_POINTER<font color="#000080">;
+     </font>P<font color="#000080">^.</font>INDEX_PART <font color="#000080">:= </font>IND<font color="#000080">;
+     </font>P<font color="#000080">^.</font>DATA_PART <font color="#000080">:= </font>DAT<font color="#000080">;
+     </font>P<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">:= </font>T<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>LOAD_MEMBER <font color="#000080">(</font>IND<font color="#000080">:</font>INTEGER<font color="#000080">; </font>DAT<font color="#000080">:</font>ANYSTRING<font color="#000080">);
+</font><font color="#FF0000"><b>VAR  </b></font>M1<font color="#000080">:</font>LISTPTR<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>WRITELN<font color="#000080">(</font><font color="#800000">'ADDING:  '</font><font color="#000080">,</font>DAT<font color="#000080">,</font><font color="#800000">' WITH AGE OF '</font><font color="#000080">,</font>IND<font color="#000080">);
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'TURBO`S HEAP POINTER:  '</font><font color="#000080">,</font>VALUEOF<font color="#000080">(</font>HEAPPTR<font color="#000080">),
+             </font><font color="#800000">', MEMAVAIL = '</font><font color="#000080">,</font>MEMAVAIL <font color="#000080">* </font><font color="#800000">16.0</font><font color="#000080">:</font><font color="#800000">8</font><font color="#000080">:</font><font color="#800000">0</font><font color="#000080">);
+     </font>WRITELN<font color="#000080">;
+     </font>PAUSE<font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'... SEARCHING FOR ADD POINT ...'</font><font color="#000080">);
+     </font><font color="#FF0000"><b>IF </b></font>ROOT<font color="#000080">^.</font>INDEX_PART <font color="#000080">&lt;= </font>IND <font color="#FF0000"><b>THEN             </b></font><font color="#008000"><i>{ ENTRY POINT ROUTINE FOR }
+        </i></font><font color="#FF0000"><b>BEGIN                                    </b></font><font color="#008000"><i>{ ADDING NEW LIST MEMBERS }
+             </i></font>LOAD_MEMBER_MIDDLE<font color="#000080">(</font>IND<font color="#000080">, </font>DAT<font color="#000080">);       </font><font color="#008000"><i>{ ACTS ONLY IF NEW MEMBER }
+             </i></font>EXIT<font color="#000080">;                               </font><font color="#008000"><i>{ SHOULD REPLACE CURRENT  }
+        </i></font><font color="#FF0000"><b>END</b></font><font color="#000080">;                                     </font><font color="#008000"><i>{ ROOT.                   }
+     </i></font>M1 <font color="#000080">:= </font>ROOT<font color="#000080">;
+     </font>NORMALIZE<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);
+     </font>ROOT <font color="#000080">:= </font>PTR<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);
+     </font>ROOT<font color="#000080">^.</font>INDEX_PART   <font color="#000080">:= </font>IND<font color="#000080">;
+     </font>ROOT<font color="#000080">^.</font>DATA_PART    <font color="#000080">:= </font>DAT<font color="#000080">;
+     </font>ROOT<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">:= </font>M1<font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>INITIALIZE_ROOT_ENTRY<font color="#000080">(</font>IND<font color="#000080">:</font>INTEGER<font color="#000080">; </font>DAT<font color="#000080">:</font>ANYSTRING<font color="#000080">);
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>ROOT <font color="#000080">:= </font>PTR<font color="#000080">(</font>NEWSEGMENT<font color="#000080">, </font>NEWOFFSET<font color="#000080">);       </font><font color="#008000"><i>{ INITIALIZES A LIST AND }
+     </i></font>ROOT<font color="#000080">^.</font>INDEX_PART   <font color="#000080">:= </font>IND<font color="#000080">;                </font><font color="#008000"><i>{ ADDS FIRST MEMBER AS   }
+     </i></font>ROOT<font color="#000080">^.</font>DATA_PART    <font color="#000080">:= </font>DAT<font color="#000080">;                </font><font color="#008000"><i>{ &quot;ROOT&quot;.                }
+     </i></font>ROOT<font color="#000080">^.</font>NEXT_POINTER <font color="#000080">:= </font><font color="#FF0000"><b>NIL</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+     </b></font>TEXTCOLOR<font color="#000080">(</font><font color="#800000">15</font><font color="#000080">);
+     </font><font color="#FF0000"><b>IF NOT </b></font>EMS_INSTALLED <font color="#FF0000"><b>THEN </b></font>DIE<font color="#000080">(</font><font color="#800000">'LOCATING EMS DRIVER'</font><font color="#000080">);
+     </font>CLRSCR<font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'DEMO OF LINKED LIST IN EXPANDED MEMORY...'</font><font color="#000080">);
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'SETTING UP EMS PARAMETERS...'</font><font color="#000080">);
+     </font>GET_EMS_MEMORY<font color="#000080">(</font>LOGICAL_PAGES<font color="#000080">);
+     </font>WRITELN<font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'ASSIGNED HANDLE:  '</font><font color="#000080">,</font>HANDLE<font color="#000080">);
+     </font>NEWSEGMENT <font color="#000080">:= </font>SEGMENT<font color="#000080">;
+     </font>NEWOFFSET  <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'EMS PARAMETERS SET.  BASE PAGE IS:  '</font><font color="#000080">,</font>HEXWORD<font color="#000080">(</font>SEGMENT<font color="#000080">));
+     </font>WRITELN<font color="#000080">;
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'TURBO`S HEAP POINTER IS '</font><font color="#000080">,</font>VALUEOF<font color="#000080">(</font>HEAPPTR<font color="#000080">));
+     </font>WRITELN<font color="#000080">(</font><font color="#800000">'READY TO ADD RECORDS...'</font><font color="#000080">);
+     </font>PAUSE<font color="#000080">;
+
+</font><font color="#008000"><i>{ Demo:  Create a linked list of names and ages with age as the index/sort
+  key.  Use random numbers for the ages so as to get a different sequence
+  each time the demo is run.}
+
+     </i></font>INITIALIZE_ROOT_ENTRY<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">, </font><font color="#800000">'Anne Baxter (original root)'</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Rosie Mallory  '</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Sue Perkins    '</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Betty Williams '</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Marge Holly    '</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Lisa Taylor    '</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Carmen Abigail '</font><font color="#000080">);
+     </font>LOAD_MEMBER<font color="#000080">(</font>RANDOM<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">) + </font><font color="#800000">20</font><font color="#000080">,  </font><font color="#800000">'Rhonda Perlman '</font><font color="#000080">);
+     </font>PROCESS_LIST<font color="#000080">;
+     </font>KILL_HANDLE<font color="#000080">(</font>HANDLE<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to POINTERS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p></body>
+</html>

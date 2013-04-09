@@ -1,0 +1,681 @@
+<html>
+<head><title> "7K Text Editor (GHOSTED)" by SEAN PALMER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTEDIT SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0011.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+SEAN PALMER
+
+&gt; Can anyone (please, it's important) , post here an example of a source
+&gt; code that will show a Text File , and let me scroll it (Up , Down ) ?
+&gt; Also I need an example of a simple editor.
+
+Try this For an example. Turbo Pascal 6.0+ source.
+Compiles to a 7K Text editor. Neat?
+}
+
+{$A-,B-,D-,E-,F-,G-,I-,L-,N-,O-,R-,S-,V-,X+}
+{$M $C00,0,0}
+
+</i></font><font color="#FF0000"><b>Program </b></font>ghostEd<font color="#000080">; </font><font color="#008000"><i>{Ghost Editor v0.4 (C) 1993 Sean L. Palmer}
+
+</i></font><font color="#FF0000"><b>Const
+  </b></font>version  <font color="#000080">= </font><font color="#800000">'0.4'</font><font color="#000080">;
+  </font>maxF     <font color="#000080">= </font><font color="#800000">$3FFF</font><font color="#000080">;     </font><font color="#008000"><i>{only handles small Files!}
+  </i></font>txtColor <font color="#000080">= </font><font color="#800000">$B</font><font color="#000080">;
+  </font>vSeg     <font color="#000080">: </font>Word <font color="#000080">= </font><font color="#800000">$B800</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>nLines   <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>halfPage <font color="#000080">: </font>Byte<font color="#000080">;
+  </font>txt      <font color="#000080">: </font><font color="#FF0000"><b>Array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>maxF<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+  </font>crs<font color="#000080">,
+  </font>endF<font color="#000080">,
+  </font>pgBase<font color="#000080">,
+  </font>lnBase   <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>x<font color="#000080">, </font>y     <font color="#000080">: </font>Word<font color="#000080">;
+  </font>update   <font color="#000080">: </font>Boolean<font color="#000080">;
+  </font>theFile  <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+  </font>ticks    <font color="#000080">: </font>Word <font color="#FF0000"><b>Absolute </b></font><font color="#800000">$40 </font><font color="#000080">: </font><font color="#800000">$6C</font><font color="#000080">;   </font><font color="#008000"><i>{ticks happen 18.2 times/second}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>syncTick<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>i <font color="#000080">:= </font>ticks<font color="#000080">;
+  </font><font color="#FF0000"><b>Repeat Until </b></font>i <font color="#000080">&lt;&gt; </font>ticks<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>readKey <font color="#000080">: </font>Char<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov ah, $07
+  int $21
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>keyPressed <font color="#000080">: </font>Boolean<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov ah, $B
+  int $21
+  and al, $FE
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>moveScrUp<font color="#000080">(</font>s<font color="#000080">, </font>d<font color="#000080">, </font>n <font color="#000080">: </font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  cx, n
+  push ds
+  mov  ax, vSeg
+  mov  es, ax
+  mov  ds, ax
+        mov  si, s
+  shl  si, 1
+  mov  di, d
+  shl  di, 1
+  cld
+  repz movsw </font><font color="#008000"><i>{attr too!}
+  </i></font><font color="#FF00FF">pop  ds
+ @X:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>moveScrDn<font color="#000080">(</font>s<font color="#000080">, </font>d<font color="#000080">, </font>n <font color="#000080">: </font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  cx, n
+  push ds
+  mov  ax, vSeg
+  mov  es, ax
+  mov  ds, ax
+  mov  si, s
+  add  si, cx
+  shl  si, 1
+  mov  di, d
+  add  di, cx
+  shl  di, 1
+  std
+  repz movsw </font><font color="#008000"><i>{attr too!}
+  </i></font><font color="#FF00FF">pop  ds
+ @X:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>moveScr<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>s<font color="#000080">; </font>d<font color="#000080">, </font>n <font color="#000080">: </font>Word<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  cx, n
+  jcxz @X
+  push ds
+  mov  ax, vSeg
+  mov  es, ax
+  mov  di, d
+  shl  di, 1
+  lds  si, s
+  cld
+ @L:
+  movsb
+  inc  di
+  loop @L
+  pop  ds
+ @X:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>fillScr<font color="#000080">(</font>d<font color="#000080">, </font>n <font color="#000080">: </font>Word<font color="#000080">; </font>c <font color="#000080">: </font>Char<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  cx, n
+  jcxz @X
+  mov  ax, vSeg
+  mov  es, ax
+  mov  di, d
+  shl  di, 1
+  mov  al, c
+  cld
+ @L:
+  stosb
+  inc  di
+  loop @L
+ @X:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>fillAttr<font color="#000080">(</font>d<font color="#000080">, </font>n <font color="#000080">: </font>Word<font color="#000080">; </font>c <font color="#000080">: </font>Byte<font color="#000080">); </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  cx, n
+  jcxz @X
+  mov  ax, vSeg
+  mov  es, ax
+  mov  di, d
+  shl  di, 1
+  mov  al, c
+  cld
+ @L:
+  inc  di
+  stosb
+  loop @L
+ @X:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>cls<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>fillAttr<font color="#000080">(</font><font color="#800000">80</font><font color="#000080">, </font>pred<font color="#000080">(</font>nLines<font color="#000080">) * </font><font color="#800000">80</font><font color="#000080">, </font>txtColor<font color="#000080">);
+  </font>fillScr<font color="#000080">(</font><font color="#800000">80</font><font color="#000080">, </font>pred<font color="#000080">(</font>nLines<font color="#000080">) * </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>scrollUp<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>moveScrUp<font color="#000080">(</font><font color="#800000">320</font><font color="#000080">, </font><font color="#800000">160</font><font color="#000080">, </font>pred<font color="#000080">(</font>nLines<font color="#000080">) * </font><font color="#800000">160</font><font color="#000080">);
+  </font>fillScr<font color="#000080">(</font>pred<font color="#000080">(</font>nLines<font color="#000080">) * </font><font color="#800000">160</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>scrollDn<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>moveScrDn<font color="#000080">(</font><font color="#800000">160</font><font color="#000080">, </font><font color="#800000">320</font><font color="#000080">, </font>pred<font color="#000080">(</font>nLines<font color="#000080">) * </font><font color="#800000">320</font><font color="#000080">);
+  </font>fillScr<font color="#000080">(</font><font color="#800000">160</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{put cursor after preceding CR or at 0}
+</i></font><font color="#FF0000"><b>Function </b></font>scanCrUp<font color="#000080">(</font>i <font color="#000080">: </font>Integer<font color="#000080">) : </font>Integer<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov   di, i
+  mov   cx, di
+  add   di, offset txt
+  mov   ax, ds
+  mov   es, ax
+  std;
+  mov   al, $D
+  dec   di
+  repnz scasb
+  jnz   @S
+  inc   di
+ @S:
+  inc   di
+  sub   di, offset txt
+  mov   ax, di
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{put cursor on next CR or endF}
+</i></font><font color="#FF0000"><b>Function </b></font>scanCrDn<font color="#000080">(</font>i<font color="#000080">:</font>Integer<font color="#000080">):</font>Integer<font color="#000080">;</font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov   di, i
+  mov   cx, endF
+  sub   cx, di
+  inc   cx
+  add   di, offset txt
+  mov   ax, ds
+  mov   es, ax
+  cld
+  mov   al, $D
+  repnz scasb
+  dec   di
+  sub   di, offset txt
+  mov   ax, di
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>findxy<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>lnBase <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>crs<font color="#000080">);
+  </font>x      <font color="#000080">:= </font>crs <font color="#000080">- </font>lnBase<font color="#000080">;
+  </font>y      <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>pgBase <font color="#000080">:= </font>lnBase<font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>pgBase <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>y <font color="#000080">&lt; </font>halfPage<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>pgBase <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>pred<font color="#000080">(</font>pgBase<font color="#000080">));
+    </font>inc<font color="#000080">(</font>y<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>display<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i<font color="#000080">, </font>j<font color="#000080">, </font>k<font color="#000080">, </font>oldY <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>findXY<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>update <font color="#FF0000"><b>then
+  begin
+    </b></font>update <font color="#000080">:= </font>False<font color="#000080">;
+    </font>j <font color="#000080">:= </font>pgBase<font color="#000080">;
+    </font>i <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>j <font color="#000080">&lt;= </font>endf<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>i <font color="#000080">&lt; </font>pred<font color="#000080">(</font>nLines<font color="#000080">)) </font><font color="#FF0000"><b>do
+    begin
+      </b></font>k <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>j<font color="#000080">);
+      </font>moveScr<font color="#000080">(</font>txt<font color="#000080">[</font>j<font color="#000080">], </font>i <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">, </font>k <font color="#000080">- </font>j<font color="#000080">);
+      </font>fillScr<font color="#000080">(</font>i <font color="#000080">* </font><font color="#800000">80 </font><font color="#000080">+ </font>k <font color="#000080">- </font>j<font color="#000080">, </font><font color="#800000">80 </font><font color="#000080">- </font>k <font color="#000080">+ </font>j<font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+      </font>fillAttr<font color="#000080">(</font>i <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font>txtColor<font color="#000080">);
+      </font>j <font color="#000080">:= </font>succ<font color="#000080">(</font>k<font color="#000080">);
+      </font>inc<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&lt; </font>pred<font color="#000080">(</font>nLines<font color="#000080">) </font><font color="#FF0000"><b>then
+    begin
+      </b></font>fillScr<font color="#000080">(</font>i <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">80 </font><font color="#000080">* </font>pred<font color="#000080">(</font>nLines <font color="#000080">- </font>i<font color="#000080">), </font><font color="#800000">'X'</font><font color="#000080">);
+      </font>fillAttr<font color="#000080">(</font>i <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">80 </font><font color="#000080">* </font>pred<font color="#000080">(</font>nLines <font color="#000080">- </font>i<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end
+  else
+  begin
+    </b></font>i <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>lnBase<font color="#000080">) - </font>lnBase<font color="#000080">;
+    </font>moveScr<font color="#000080">(</font>txt<font color="#000080">[</font>lnBase<font color="#000080">], </font>y <font color="#000080">* </font><font color="#800000">80</font><font color="#000080">, </font>i<font color="#000080">);
+    </font>fillScr<font color="#000080">(</font>y <font color="#000080">* </font><font color="#800000">80 </font><font color="#000080">+ </font>i<font color="#000080">, </font><font color="#800000">80 </font><font color="#000080">- </font>i<font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>title<font color="#000080">;
+</font><font color="#FF0000"><b>Const
+  </b></font>menuStr <font color="#000080">: </font><font color="#FF0000"><b>String </b></font><font color="#000080">= </font><font color="#800000">'Ghost Editor v' </font><font color="#000080">+ </font>version <font color="#000080">+ </font><font color="#800000">'-(C) Sean Palmer 1993'</font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>fillAttr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">$70</font><font color="#000080">);
+  </font>fillScr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+  </font>MoveScr<font color="#000080">(</font>MenuStr<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">1</font><font color="#000080">, </font>length<font color="#000080">(</font>MenuStr<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>error<font color="#000080">(</font>s <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>fillattr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">$CE</font><font color="#000080">);
+  </font>fillScr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">' '</font><font color="#000080">);
+  </font>moveScr<font color="#000080">(</font>s<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font><font color="#800000">1</font><font color="#000080">, </font>length<font color="#000080">(</font>s<font color="#000080">));
+  </font>Write<font color="#000080">(^</font>G<font color="#000080">);
+  </font>ReadKey<font color="#000080">;
+  </font>title<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>tooBigErr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>error<font color="#000080">(</font><font color="#800000">'File too big'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>insChar<font color="#000080">(</font>c <font color="#000080">: </font>Char<font color="#000080">); </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>delChar<font color="#000080">; </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Procedure </b></font>backChar<font color="#000080">; </font><font color="#FF0000"><b>forward</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>trimLine<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i<font color="#000080">, </font>t<font color="#000080">, </font>b <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>i   <font color="#000080">:= </font>crs<font color="#000080">;
+  </font>b   <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>crs<font color="#000080">);
+  </font>t   <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>crs<font color="#000080">);
+  </font>crs <font color="#000080">:= </font>b<font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>txt<font color="#000080">[</font>crs<font color="#000080">] = </font><font color="#800000">' ' </font><font color="#FF0000"><b>do
+  begin
+    </b></font>delChar<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&gt; </font>crs <font color="#FF0000"><b>then
+      </b></font>dec<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>crs <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>dec<font color="#000080">(</font>crs<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>crs <font color="#000080">:= </font>i<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>checkWrap<font color="#000080">(</font>c <font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>i<font color="#000080">, </font>t<font color="#000080">, </font>b <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>b <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>c<font color="#000080">);
+  </font>t <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>c<font color="#000080">);
+  </font>i <font color="#000080">:= </font>b<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">- </font>t <font color="#000080">&gt;= </font><font color="#800000">79 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>i <font color="#000080">:= </font>t <font color="#000080">+ </font><font color="#800000">79</font><font color="#000080">;
+    </font><font color="#FF0000"><b>Repeat
+      </b></font>dec<font color="#000080">(</font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>txt<font color="#000080">[</font>i<font color="#000080">] = </font><font color="#800000">' '</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>i <font color="#000080">= </font>t<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">= </font>t <font color="#FF0000"><b>then
+      </b></font>backChar   <font color="#008000"><i>{just disallow lines that long With no spaces}
+    </i></font><font color="#FF0000"><b>else
+    begin
+      </b></font>txt<font color="#000080">[</font>i<font color="#000080">] := ^</font>M<font color="#000080">;  </font><font color="#008000"><i>{change sp into cr, to wrap}
+      </i></font>update <font color="#000080">:= </font>True<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>b <font color="#000080">&lt; </font>endF<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>txt<font color="#000080">[</font>b<font color="#000080">] = ^</font>M<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>txt<font color="#000080">[</font>succ<font color="#000080">(</font>b<font color="#000080">)] &lt;&gt; ^</font>M<font color="#000080">) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>txt<font color="#000080">[</font>b<font color="#000080">] := </font><font color="#800000">' '</font><font color="#000080">; </font><font color="#008000"><i>{change cr into sp, to append wrapped part to next
+line}         </i></font>checkWrap<font color="#000080">(</font>b<font color="#000080">);  </font><font color="#008000"><i>{recursively check next line since it got stuff
+added}       </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>changeLines<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>trimLine<font color="#000080">;
+  </font>update <font color="#000080">:= </font>True<font color="#000080">;  </font><font color="#008000"><i>{signal to display to redraw}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>insChar<font color="#000080">(</font>c <font color="#000080">: </font>Char<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  if </b></font>endf <font color="#000080">= </font>maxF <font color="#FF0000"><b>then
+  begin
+    </b></font>tooBigErr<font color="#000080">;
+    </font>exit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>move<font color="#000080">(</font>txt<font color="#000080">[</font>crs<font color="#000080">], </font>txt<font color="#000080">[</font>succ<font color="#000080">(</font>crs<font color="#000080">)], </font>endf <font color="#000080">- </font>crs<font color="#000080">);
+  </font>txt<font color="#000080">[</font>crs<font color="#000080">] := </font>c<font color="#000080">;
+  </font>inc<font color="#000080">(</font>crs<font color="#000080">);
+  </font>inc<font color="#000080">(</font>endf<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>c <font color="#000080">= ^</font>M <font color="#FF0000"><b>then
+    </b></font>changeLines<font color="#000080">;
+  </font>checkWrap<font color="#000080">(</font>crs<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>delChar<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>crs <font color="#000080">= </font>endf <font color="#FF0000"><b>then
+    </b></font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>txt<font color="#000080">[</font>crs<font color="#000080">] = ^</font>M <font color="#FF0000"><b>then
+    </b></font>changeLines<font color="#000080">;
+  </font>move<font color="#000080">(</font>txt<font color="#000080">[</font>succ<font color="#000080">(</font>crs<font color="#000080">)], </font>txt<font color="#000080">[</font>crs<font color="#000080">], </font>endf <font color="#000080">- </font>crs<font color="#000080">);
+  </font>dec<font color="#000080">(</font>endf<font color="#000080">);
+  </font>checkWrap<font color="#000080">(</font>crs<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>addLF<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  For </b></font>crs <font color="#000080">:= </font>endF <font color="#FF0000"><b>downto </b></font><font color="#800000">1 </font><font color="#FF0000"><b>do
+  if </b></font>txt<font color="#000080">[</font>pred<font color="#000080">(</font>crs<font color="#000080">)] = ^</font>M <font color="#FF0000"><b>then
+  begin
+    </b></font>insChar<font color="#000080">(^</font>J<font color="#000080">);
+    </font>dec<font color="#000080">(</font>crs<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>stripLF<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  For </b></font>crs <font color="#000080">:= </font>endF <font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do
+  if </b></font>txt<font color="#000080">[</font>crs<font color="#000080">] = ^</font>J <font color="#FF0000"><b>then
+    </b></font>delChar<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>WriteErr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>error<font color="#000080">(</font><font color="#800000">'Write Error'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>saveFile<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>addLF<font color="#000080">;
+  </font>reWrite<font color="#000080">(</font>theFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>WriteErr
+  <font color="#FF0000"><b>else
+  begin
+    </b></font>blockWrite<font color="#000080">(</font>theFile<font color="#000080">, </font>txt<font color="#000080">, </font>endf<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>WriteErr<font color="#000080">;
+    </font>close<font color="#000080">(</font>theFile<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>newFile<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>crs    <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>endF   <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>update <font color="#000080">:= </font>True<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>readErr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>error<font color="#000080">(</font><font color="#800000">'Read Error'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>loadFile<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i<font color="#000080">, </font>n <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>reset<font color="#000080">(</font>theFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>newFile
+  <font color="#FF0000"><b>else
+  begin
+    </b></font>n <font color="#000080">:= </font>Filesize<font color="#000080">(</font>theFile<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>n <font color="#000080">&gt; </font>maxF <font color="#FF0000"><b>then
+    begin
+      </b></font>tooBigErr<font color="#000080">;
+      </font>n <font color="#000080">:= </font>maxF<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>blockread<font color="#000080">(</font>theFile<font color="#000080">, </font>txt<font color="#000080">, </font>n<font color="#000080">, </font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&lt; </font>n <font color="#FF0000"><b>then
+      </b></font>readErr<font color="#000080">;
+    </font>close<font color="#000080">(</font>theFile<font color="#000080">);
+    </font>crs    <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>endf   <font color="#000080">:= </font>i<font color="#000080">;
+    </font>update <font color="#000080">:= </font>True<font color="#000080">;
+    </font>stripLF<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>signOff<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>f    <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+  </font>i<font color="#000080">, </font>n <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>assign<font color="#000080">(</font>f<font color="#000080">, </font><font color="#800000">'signoff.txt'</font><font color="#000080">);
+  </font>reset<font color="#000080">(</font>f<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>ioresult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'No SIGNOFF.TXT defined'</font><font color="#000080">)  </font><font color="#008000"><i>{no macro defined}
+  </i></font><font color="#FF0000"><b>else
+  begin
+    </b></font>n <font color="#000080">:= </font>Filesize<font color="#000080">(</font>f<font color="#000080">);
+    </font>blockread<font color="#000080">(</font>f<font color="#000080">, </font>txt<font color="#000080">[</font>endF<font color="#000080">], </font>n<font color="#000080">, </font>i<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&lt; </font>n <font color="#FF0000"><b>then
+      </b></font>readErr<font color="#000080">;
+    </font>close<font color="#000080">(</font>f<font color="#000080">);
+    </font>inc<font color="#000080">(</font>endf<font color="#000080">, </font>i<font color="#000080">);
+    </font>update <font color="#000080">:= </font>True<font color="#000080">;
+    </font>i <font color="#000080">:= </font>crs<font color="#000080">;
+    </font>stripLF<font color="#000080">;
+    </font>crs <font color="#000080">:= </font>i<font color="#000080">; </font><font color="#008000"><i>{stripLF messes With crs}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goLf<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>crs <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>dec<font color="#000080">(</font>crs<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>txt<font color="#000080">[</font>crs<font color="#000080">] = ^</font>M <font color="#FF0000"><b>then
+    </b></font>changeLines<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goRt<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>txt<font color="#000080">[</font>crs<font color="#000080">] = ^</font>M <font color="#FF0000"><b>then
+    </b></font>changeLines<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>crs <font color="#000080">&lt; </font>endf <font color="#FF0000"><b>then
+    </b></font>inc<font color="#000080">(</font>crs<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goCtrlLf<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>c <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  Repeat
+    </b></font>goLf<font color="#000080">;
+    </font>c <font color="#000080">:= </font>txt<font color="#000080">[</font>crs<font color="#000080">];
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>c <font color="#000080">&lt;= </font><font color="#800000">' '</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>crs <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goCtrlRt<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>c <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  Repeat
+    </b></font>goRt<font color="#000080">;
+    </font>c <font color="#000080">:= </font>txt<font color="#000080">[</font>crs<font color="#000080">];
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>c <font color="#000080">&lt;= </font><font color="#800000">' '</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>crs <font color="#000080">&gt;= </font>endF<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goUp<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>lnBase <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>changeLines<font color="#000080">;
+    </font>lnBase <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>pred<font color="#000080">(</font>lnBase<font color="#000080">));
+    </font>crs <font color="#000080">:= </font>lnBase<font color="#000080">;
+    </font>i <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>crs<font color="#000080">) - </font>crs<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&gt;= </font>x <font color="#FF0000"><b>then
+      </b></font>inc<font color="#000080">(</font>crs<font color="#000080">, </font>x<font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>inc<font color="#000080">(</font>crs<font color="#000080">,</font>i<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goDn<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>changeLines<font color="#000080">;
+  </font>crs <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>crs<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>crs <font color="#000080">&gt;= </font>endF <font color="#FF0000"><b>then
+    </b></font>Exit<font color="#000080">;
+  </font>inc<font color="#000080">(</font>crs<font color="#000080">);
+  </font>lnBase <font color="#000080">:= </font>crs<font color="#000080">;
+  </font>i <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>crs<font color="#000080">) - </font>crs<font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&gt;= </font>x <font color="#FF0000"><b>then
+    </b></font>inc<font color="#000080">(</font>crs<font color="#000080">, </font>x<font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>inc<font color="#000080">(</font>crs<font color="#000080">, </font>i<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goPgUp<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  For </b></font>i <font color="#000080">:= </font>halfPage <font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do
+    </b></font>goUp<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goPgDn<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  For </b></font>i <font color="#000080">:= </font>halfPage <font color="#FF0000"><b>downto </b></font><font color="#800000">0 </font><font color="#FF0000"><b>do
+    </b></font>goDn<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goHome<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>crs <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>crs<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>goend<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>crs <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>crs<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>backChar<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font><font color="#000080">(</font>crs <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+  begin
+    </b></font>goLf<font color="#000080">;
+    </font>delChar<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>deleteLine<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>i <font color="#000080">: </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>i <font color="#000080">:= </font>scanCrDn<font color="#000080">(</font>crs<font color="#000080">);
+  </font>crs <font color="#000080">:= </font>scanCrUp<font color="#000080">(</font>crs<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>i <font color="#000080">&lt; </font>endF <font color="#FF0000"><b>then
+  begin
+    </b></font>move<font color="#000080">(</font>txt<font color="#000080">[</font>succ<font color="#000080">(</font>i<font color="#000080">)], </font>txt<font color="#000080">[</font>crs<font color="#000080">], </font>endf <font color="#000080">- </font>i<font color="#000080">);
+    </font>dec<font color="#000080">(</font>endF<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>dec<font color="#000080">(</font>endf<font color="#000080">, </font>i <font color="#000080">- </font>crs<font color="#000080">);
+  </font>changeLines<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>flipCursor<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>j<font color="#000080">, </font>k<font color="#000080">, </font>l <font color="#000080">: </font>Word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>j <font color="#000080">:= </font>succ<font color="#000080">((</font>y <font color="#000080">* </font><font color="#800000">80 </font><font color="#000080">+ </font>x<font color="#000080">) </font><font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>l <font color="#000080">:= </font>mem<font color="#000080">[</font>vSeg <font color="#000080">: </font>j<font color="#000080">];   </font><font color="#008000"><i>{save attr under cursor}
+  </i></font>mem<font color="#000080">[</font>vSeg <font color="#000080">: </font>j<font color="#000080">] := </font><font color="#800000">$7B</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if not </b></font>KeyPressed <font color="#FF0000"><b>then
+    </b></font>syncTick<font color="#000080">;
+  </font>mem<font color="#000080">[</font>vSeg <font color="#000080">: </font>j<font color="#000080">] := </font>l<font color="#000080">;
+  </font><font color="#FF0000"><b>if not </b></font>KeyPressed <font color="#FF0000"><b>then
+    </b></font>syncTick<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>edit<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>c <font color="#000080">: </font>Char<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  Repeat
+    </b></font>display<font color="#000080">;
+    </font><font color="#FF0000"><b>Repeat
+      </b></font>flipcursor<font color="#000080">;
+    </font><font color="#FF0000"><b>Until </b></font>KeyPressed<font color="#000080">;
+
+    </font>c <font color="#000080">:= </font>ReadKey<font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>c <font color="#000080">= </font><font color="#800000">#0 </font><font color="#FF0000"><b>then
+      Case </b></font>ReadKey <font color="#FF0000"><b>of
+        </b></font><font color="#800000">#59  </font><font color="#000080">: </font>signOff<font color="#000080">;
+        </font><font color="#800000">#75  </font><font color="#000080">: </font>goLf<font color="#000080">;
+        </font><font color="#800000">#77  </font><font color="#000080">: </font>goRt<font color="#000080">;
+        </font><font color="#800000">#115 </font><font color="#000080">: </font>goCtrlLf<font color="#000080">;
+        </font><font color="#800000">#116 </font><font color="#000080">: </font>goCtrlRt<font color="#000080">;
+        </font><font color="#800000">#72  </font><font color="#000080">: </font>goUp<font color="#000080">;
+        </font><font color="#800000">#80  </font><font color="#000080">: </font>goDn<font color="#000080">;
+        </font><font color="#800000">#83  </font><font color="#000080">: </font>delChar<font color="#000080">;
+        </font><font color="#800000">#73  </font><font color="#000080">: </font>goPgUp<font color="#000080">;
+        </font><font color="#800000">#81  </font><font color="#000080">: </font>goPgDn<font color="#000080">;
+        </font><font color="#800000">#71  </font><font color="#000080">: </font>goHome<font color="#000080">;
+        </font><font color="#800000">#79  </font><font color="#000080">: </font>goend<font color="#000080">;
+      </font><font color="#FF0000"><b>end
+    else
+      Case </b></font>c <font color="#FF0000"><b>of
+        </b></font><font color="#000080">^[ : </font>saveFile<font color="#000080">;
+        ^</font>H <font color="#000080">: </font>backChar<font color="#000080">;
+        ^</font>C <font color="#000080">: </font><font color="#008000"><i>{abortFile}</i></font><font color="#000080">;
+        ^</font>Y <font color="#000080">: </font>deleteLine<font color="#000080">;
+     </font><font color="#FF0000"><b>else
+       </b></font>insChar<font color="#000080">(</font>c<font color="#000080">);
+     </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>Until </b></font><font color="#000080">(</font>c <font color="#000080">= ^[) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>c <font color="#000080">= ^</font>C<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>getRows <font color="#000080">: </font>Byte<font color="#000080">; </font><font color="#FF0000"><b>Assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">mov  ax, $1130
+  xor  dx, dx
+  int  $10
+  or   dx, dx
+  jnz  @S
+  mov  dx, 24
+ @S: </font><font color="#008000"><i>{cga/mda don't have this fn}
+  </i></font><font color="#FF00FF">inc  dx
+  mov  al, dl
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>oldMode <font color="#000080">: </font>Byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  Asm
+    </b></font><font color="#FF00FF">mov ah, $F
+    int $10
+    mov oldMode, al
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{save old Gr mode}
+
+  </i></font><font color="#FF0000"><b>if </b></font>oldMode <font color="#000080">= </font><font color="#800000">7 </font><font color="#FF0000"><b>then
+    </b></font>vSeg <font color="#000080">:= </font><font color="#800000">$B000</font><font color="#000080">;  </font><font color="#008000"><i>{check For Mono}
+
+  </i></font>nLines <font color="#000080">:= </font>getRows<font color="#000080">;
+  </font>halfPage <font color="#000080">:= </font>pred<font color="#000080">(</font>nLines <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">);
+  </font>cls<font color="#000080">;
+  </font>title<font color="#000080">;
+
+  </font><font color="#FF0000"><b>if </b></font>paramCount <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>error<font color="#000080">(</font><font color="#800000">'Need Filename as parameter'</font><font color="#000080">)
+  </font><font color="#FF0000"><b>else
+  begin
+    Asm
+      </b></font><font color="#FF00FF">mov bh, 0
+      mov dl, 0
+      mov dh, nLines
+      mov ah, 2
+      int $10
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{put cursor of}
+
+    </i></font>assign<font color="#000080">(</font>theFile<font color="#000080">, </font>paramStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+    </font>loadFile<font color="#000080">;
+    </font>edit<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTEDIT SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0011.PAS">Original</a><b>]</b></p></body>
+</html>

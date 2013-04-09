@@ -1,0 +1,296 @@
+<html>
+<head><title> "Reading Backwards" by KIM KOKKONEN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0018.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt;  Can anyone help me figure out how I can move a Text File position
+&gt;  Pointer backwards instead of forwards?
+}
+
+{$R-,S-,I-}
+
+{
+ Turbo Pascal 4.0 Unit to read Text Files backwards.
+
+ See TESTRB.PAS For a test and demonstration Program. Routines here
+ are used in a manner very similar to normal Text File read routines
+ except that the &quot;reset&quot; positions to the end of the File, and each
+ subsequent &quot;readln&quot; returns the prior line in the File Until the
+ beginning of the File is reached.
+
+ Each String returned by ReadLnBack is in normal forward order.
+
+ One quirk will occur if an attempt is made to read from Files With
+ lines longer than 255 Characters. In this Case ReadLnBack will return
+ the _last_ 255 Characters of each such line rather than the first. This
+ is in keeping With the backwards nature of the Unit, however.
+
+ Hope someone finds a use For this!
+
+ Written 6/7/88, Kim Kokkonen, TurboPower Software.
+ Released to the public domain.
+}
+
+</i></font><font color="#FF0000"><b>Unit </b></font>RB<font color="#000080">;
+  </font><font color="#008000"><i>{-Read Text Files backwards}
+
+</i></font><font color="#FF0000"><b>Interface
+
+Type
+  </b></font>BackText <font color="#000080">= </font><font color="#FF0000"><b>File</b></font><font color="#000080">;                </font><font color="#008000"><i>{We use the UserData area in the unTyped File
+
+Procedure AssignBack(Var F : BackText; Fname : String);
+  {-Assign a backwards File to a File Variable}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>ResetBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">; </font>BufSize <font color="#000080">: </font>Word<font color="#000080">);
+  </font><font color="#008000"><i>{-Reset a backwards File, allocating buffer space (128 Bytes or greater)}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>ReadLnBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>S <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+  </font><font color="#008000"><i>{-Read next line from end of backwards File}
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>CloseBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">);
+  </font><font color="#008000"><i>{-Close backwards File, releasing buffer}
+
+</i></font><font color="#FF0000"><b>Function </b></font>BoF<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">) : </font>Boolean<font color="#000080">;
+  </font><font color="#008000"><i>{-Return True when F is positioned at beginning of File}
+
+</i></font><font color="#FF0000"><b>Function </b></font>BackResult <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#008000"><i>{-Return I/O status code from operation}
+
+  {======================================================================}
+
+</i></font><font color="#FF0000"><b>Implementation
+
+Const
+  </b></font>LF <font color="#000080">= </font><font color="#800000">#10</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Type
+  </b></font>BufferArray <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">65521</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+  </font>BackRec <font color="#000080">=                       </font><font color="#008000"><i>{Same as Dos.FileRec, With UserData filled in
+    Record
+      Handle : Word;
+      Mode : Word;
+      RecSize : Word;
+      Private : Array[1..26] of Byte;
+      Fpos : LongInt;             {Current File position}
+      </i></font>BufP <font color="#000080">: ^</font>BufferArray<font color="#000080">;        </font><font color="#008000"><i>{Pointer to Text buffer}
+      </i></font>Bpos <font color="#000080">: </font>Word<font color="#000080">;                </font><font color="#008000"><i>{Current position Within buffer}
+      </i></font>Bcnt <font color="#000080">: </font>Word<font color="#000080">;                </font><font color="#008000"><i>{Count of Characters in buffer}
+      </i></font>Bsize <font color="#000080">: </font>Word<font color="#000080">;               </font><font color="#008000"><i>{Size of Text buffer, 0 if none}
+      </i></font>UserData <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">15</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">; </font><font color="#008000"><i>{Remaining UserData}
+      </i></font>Name <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">79</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Char<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>BResult <font color="#000080">: </font>Word<font color="#000080">;                 </font><font color="#008000"><i>{Internal IoResult}
+
+  </i></font><font color="#FF0000"><b>Procedure </b></font>AssignBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">; </font>Fname <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+    </font><font color="#008000"><i>{-Assign a backwards File to a File Variable}
+  </i></font><font color="#FF0000"><b>begin
+    if </b></font>BResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+      </b></font>Assign<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">), </font>Fname<font color="#000080">);
+      </font>BResult <font color="#000080">:= </font>IoResult<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>ResetBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">; </font>BufSize <font color="#000080">: </font>Word<font color="#000080">);
+    </font><font color="#008000"><i>{-Reset a backwards File, allocating buffer}
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>BR <font color="#000080">: </font>BackRec <font color="#FF0000"><b>Absolute </b></font>F<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>BResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      With </b></font>BR <font color="#FF0000"><b>do begin
+        </b></font><font color="#008000"><i>{Open File}
+        </i></font>Reset<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">), </font><font color="#800000">1</font><font color="#000080">);
+        </font>BResult <font color="#000080">:= </font>IoResult<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>BResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          </b></font>Exit<font color="#000080">;
+
+        </font><font color="#008000"><i>{Seek to end}
+        </i></font>Fpos <font color="#000080">:= </font>FileSize<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">));
+        </font>Seek<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">), </font>Fpos<font color="#000080">);
+        </font>BResult <font color="#000080">:= </font>IoResult<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>BResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          </b></font>Exit<font color="#000080">;
+
+        </font><font color="#008000"><i>{Allocate buffer}
+        </i></font><font color="#FF0000"><b>if </b></font>BufSize <font color="#000080">&lt; </font><font color="#800000">128 </font><font color="#FF0000"><b>then
+          </b></font>BufSize <font color="#000080">:= </font><font color="#800000">128</font><font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>MaxAvail <font color="#000080">&lt; </font>BufSize <font color="#FF0000"><b>then begin
+          </b></font>BResult <font color="#000080">:= </font><font color="#800000">203</font><font color="#000080">;
+          </font>Exit<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font>GetMem<font color="#000080">(</font>BufP<font color="#000080">, </font>BufSize<font color="#000080">);
+        </font>Bsize <font color="#000080">:= </font>BufSize<font color="#000080">;
+        </font>Bcnt <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+        </font>Bpos <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Function </b></font>BoF<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">) : </font>Boolean<font color="#000080">;
+    </font><font color="#008000"><i>{-Return True when F is at beginning of File}
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>BR <font color="#000080">: </font>BackRec <font color="#FF0000"><b>Absolute </b></font>F<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    With </b></font>BR <font color="#FF0000"><b>do
+      </b></font>BoF <font color="#000080">:= (</font>Fpos <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Bpos <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Function </b></font>GetCh<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">) : </font>Char<font color="#000080">;
+    </font><font color="#008000"><i>{-Return next Character from end of File}
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>BR <font color="#000080">: </font>BackRec <font color="#FF0000"><b>Absolute </b></font>F<font color="#000080">;
+    </font>Bread <font color="#000080">: </font>Word<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    With </b></font>BR <font color="#FF0000"><b>do begin
+      if </b></font>Bpos <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        </b></font><font color="#008000"><i>{Buffer used up}
+        </i></font><font color="#FF0000"><b>if </b></font>Fpos <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+          </b></font><font color="#008000"><i>{Unread File remains, first reposition File Pointer}
+          </i></font>Bread <font color="#000080">:= </font>Bsize<font color="#000080">;
+          </font>Dec<font color="#000080">(</font>Fpos<font color="#000080">, </font>Bread<font color="#000080">);
+          </font><font color="#FF0000"><b>if </b></font>Fpos <font color="#000080">&lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+            </b></font><font color="#008000"><i>{Reduce the number of Characters to read}
+            </i></font>Inc<font color="#000080">(</font>Bread<font color="#000080">, </font>Fpos<font color="#000080">);
+            </font>Fpos <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>Seek<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">), </font>Fpos<font color="#000080">);
+          </font>BResult <font color="#000080">:= </font>IoResult<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>BResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            </b></font>Exit<font color="#000080">;
+
+          </font><font color="#008000"><i>{Refill buffer}
+          </i></font>BlockRead<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">), </font>BufP<font color="#000080">^, </font>Bread<font color="#000080">, </font>Bcnt<font color="#000080">);
+          </font>BResult <font color="#000080">:= </font>IoResult<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>BResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+            </b></font>Exit<font color="#000080">;
+
+          </font><font color="#008000"><i>{Remove ^Z's from end of buffer}
+          </i></font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>Bcnt <font color="#000080">&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>BufP<font color="#000080">^[</font>Bcnt<font color="#000080">] = ^</font>Z<font color="#000080">) </font><font color="#FF0000"><b>do
+            </b></font>Dec<font color="#000080">(</font>Bcnt<font color="#000080">);
+          </font>Bpos <font color="#000080">:= </font>Bcnt<font color="#000080">;
+          </font><font color="#FF0000"><b>if </b></font>Bpos <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+            </b></font><font color="#008000"><i>{At beginning of File}
+            </i></font>GetCh <font color="#000080">:= </font>LF<font color="#000080">;
+            </font>Exit<font color="#000080">;
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+        </font><font color="#FF0000"><b>end else begin
+          </b></font><font color="#008000"><i>{At beginning of File}
+          </i></font>GetCh <font color="#000080">:= </font>LF<font color="#000080">;
+          </font>Exit<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font><font color="#008000"><i>{Return next Character}
+      </i></font>GetCh <font color="#000080">:= </font>BufP<font color="#000080">^[</font>Bpos<font color="#000080">];
+      </font>Dec<font color="#000080">(</font>Bpos<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>ReadLnBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">; </font><font color="#FF0000"><b>Var </b></font>S <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">);
+    </font><font color="#008000"><i>{-Read next line from end of backwards File}
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>Slen <font color="#000080">: </font>Byte <font color="#FF0000"><b>Absolute </b></font>S<font color="#000080">;
+    </font>Tpos <font color="#000080">: </font>Word<font color="#000080">;
+    </font>Tch <font color="#000080">: </font>Char<font color="#000080">;
+    </font>T <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    </b></font>Slen <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>BResult <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and not </b></font>BoF<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>then begin
+      </b></font><font color="#008000"><i>{Build String from end backwards}
+      </i></font>Tpos <font color="#000080">:= </font><font color="#800000">256</font><font color="#000080">;
+      </font><font color="#FF0000"><b>Repeat
+        </b></font>Tch <font color="#000080">:= </font>GetCh<font color="#000080">(</font>F<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font>BResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          </b></font>Exit<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>Tpos <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then begin
+          </b></font>Dec<font color="#000080">(</font>Tpos<font color="#000080">);
+          </font>T<font color="#000080">[</font>Tpos<font color="#000080">] := </font>Tch<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+        </font><font color="#008000"><i>{Note that GetCh arranges to return LF at beginning of File}
+      </i></font><font color="#FF0000"><b>Until </b></font>Tch <font color="#000080">= </font>LF<font color="#000080">;
+      </font><font color="#008000"><i>{Transfer to result String}
+      </i></font>Slen <font color="#000080">:= </font><font color="#800000">255</font><font color="#000080">-</font>Tpos<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Slen <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        </b></font>Move<font color="#000080">(</font>T<font color="#000080">[</font>Tpos<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">], </font>S<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">], </font>Slen<font color="#000080">);
+      </font><font color="#008000"><i>{Skip over (presumed) CR}
+      </i></font>Tch <font color="#000080">:= </font>GetCh<font color="#000080">(</font>F<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>CloseBack<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>F <font color="#000080">: </font>BackText<font color="#000080">);
+    </font><font color="#008000"><i>{-Close backwards File, releasing buffer}
+  </i></font><font color="#FF0000"><b>Var
+    </b></font>BR <font color="#000080">: </font>BackRec <font color="#FF0000"><b>Absolute </b></font>F<font color="#000080">;
+  </font><font color="#FF0000"><b>begin
+    if </b></font>BResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      With </b></font>BR <font color="#FF0000"><b>do begin
+        </b></font>Close<font color="#000080">(</font><font color="#FF0000"><b>File</b></font><font color="#000080">(</font>F<font color="#000080">));
+        </font>BResult <font color="#000080">:= </font>IoResult<font color="#000080">;
+        </font><font color="#FF0000"><b>if </b></font>BResult <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+          </b></font>Exit<font color="#000080">;
+        </font>FreeMem<font color="#000080">(</font>BufP<font color="#000080">, </font>Bsize<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Function </b></font>BackResult <font color="#000080">: </font>Word<font color="#000080">;
+    </font><font color="#008000"><i>{-Return I/O status code from operation}
+  </i></font><font color="#FF0000"><b>begin
+    </b></font>BackResult <font color="#000080">:= </font>BResult<font color="#000080">;
+    </font>BResult <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>BResult <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+
+</font><font color="#FF0000"><b>And </b></font>now<font color="#000080">, </font>the little test <font color="#FF0000"><b>Program </b></font>TESTRB<font color="#000080">.</font>PAS that demonstrates how <font color="#FF0000"><b>to </b></font>use the
+ <font color="#FF0000"><b>Unit</b></font><font color="#000080">:
+
+</font><font color="#008000"><i>{
+ Demonstration Program For RB.PAS.
+ Takes one command line parameter, the name of a Text File to read backwards.
+ Reads File one line at a time backwards and Writes the result to StdOut.
+
+ See RB.PAS For further details.
+
+ Written 6/7/88, Kim Kokkonen, TurboPower Software.
+ Released to the public domain.
+}
+
+</i></font><font color="#FF0000"><b>Program </b></font>Test<font color="#000080">;
+  </font><font color="#008000"><i>{-Demonstrate RB Unit}
+
+</i></font><font color="#FF0000"><b>Uses
+  </b></font>RB<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>F <font color="#000080">: </font>BackText<font color="#000080">;
+  </font>S <font color="#000080">: </font><font color="#FF0000"><b>String</b></font><font color="#000080">;
+
+  </font><font color="#FF0000"><b>Procedure </b></font>CheckError<font color="#000080">(</font>Result <font color="#000080">: </font>Word<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    if </b></font>Result <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then begin
+      </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'RB error '</font><font color="#000080">, </font>Result<font color="#000080">);
+      </font>Halt<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  if </b></font>ParamCount <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>AssignBack<font color="#000080">(</font>F<font color="#000080">, </font><font color="#800000">'RB.PAS'</font><font color="#000080">)
+  </font><font color="#FF0000"><b>else
+    </b></font>AssignBack<font color="#000080">(</font>F<font color="#000080">, </font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+  </font>CheckError<font color="#000080">(</font>BackResult<font color="#000080">);
+  </font>ResetBack<font color="#000080">(</font>F<font color="#000080">, </font><font color="#800000">1024</font><font color="#000080">);
+  </font>CheckError<font color="#000080">(</font>BackResult<font color="#000080">);
+  </font><font color="#FF0000"><b>While not </b></font>BoF<font color="#000080">(</font>F<font color="#000080">) </font><font color="#FF0000"><b>do begin
+    </b></font>ReadLnBack<font color="#000080">(</font>F<font color="#000080">, </font>S<font color="#000080">);
+    </font>CheckError<font color="#000080">(</font>BackResult<font color="#000080">);
+    </font>WriteLn<font color="#000080">(</font>S<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>CloseBack<font color="#000080">(</font>F<font color="#000080">);
+  </font>CheckError<font color="#000080">(</font>BackResult<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TEXTFILE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0018.PAS">Original</a><b>]</b></p></body>
+</html>

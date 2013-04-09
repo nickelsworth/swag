@@ -1,0 +1,1271 @@
+<html>
+<head><title> "LZH Compression II" by ANDREW EIGUS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DATATYPE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0038.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>Unit </b></font>LZSSUnit<font color="#000080">;
+</font><font color="#008000"><i>{
+   LZSSUNIT - Compress and uncompress unit using LZ77 algorithm for
+   Borland (Turbo) Pascal version 7.0.
+
+   Assembler Programmer: Andy Tam, Pascal Conversion: Douglas Webb,
+   Unit Conversion and Dynamic Memory Allocation: Andrew Eigus.
+
+   Public Domain version 1.02, last changed on 30.11.94.
+   Target platforms: DOS, DPMI, Windows.
+
+   Written by Andrew Eigus (aka: Mr. Byte) of:
+   Fidonet: 2:5100/33,
+   Internet: aeigus@fgate.castle.riga.lv, aeigus@kristin.cclu.lv.
+}
+
+</i></font><font color="#FF0000"><b>interface
+
+</b></font><font color="#008000"><i>{#Z+}
+{ This unit is ready for use with Dj. Murdoch's ScanHelp utility which
+  will make a Borland .TPH file for it. }
+{#Z-}
+
+</i></font><font color="#FF0000"><b>const
+  </b></font>LZRWBufSize     <font color="#000080">= </font><font color="#800000">8192</font><font color="#000080">; </font><font color="#008000"><i>{ Read buffer size }
+
+{#Z+}
+  </i></font>N           <font color="#000080">= </font><font color="#800000">4096</font><font color="#000080">;  </font><font color="#008000"><i>{ Bigger N -&gt; Better compression on big files only. }
+  </i></font>F           <font color="#000080">= </font><font color="#800000">18</font><font color="#000080">;
+  </font>Threshold   <font color="#000080">= </font><font color="#800000">2</font><font color="#000080">;
+  </font>Nul         <font color="#000080">= </font>N <font color="#000080">* </font><font color="#800000">2</font><font color="#000080">;
+  </font>InBufPtr    <font color="#000080">: </font>word <font color="#000080">= </font>LZRWBufSize<font color="#000080">;
+  </font>InBufSize   <font color="#000080">: </font>word <font color="#000080">= </font>LZRWBufSize<font color="#000080">;
+  </font>OutBufPtr   <font color="#000080">: </font>word <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#008000"><i>{#Z-}
+
+</i></font><font color="#FF0000"><b>type
+</b></font><font color="#008000"><i>{#X TWriteProc}{#X LZSquash}{#X LZUnsquash}
+
+  </i></font>TReadProc <font color="#000080">= </font><font color="#FF0000"><b>function</b></font><font color="#000080">(</font><font color="#FF0000"><b>var </b></font>ReadBuf<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>NumRead <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">;
+  </font><font color="#008000"><i>{ This is declaration for custom read function. It should read
+    #LZRWBufSize# bytes from ReadBuf. The return value is ignored. }
+
+{#X TReadProc}{#X LZSquash}{#X LZUnsquash}
+  </i></font>TWriteProc <font color="#000080">= </font><font color="#FF0000"><b>function</b></font><font color="#000080">(</font><font color="#FF0000"><b>var </b></font>WriteBuf<font color="#000080">; </font>Count <font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>NumWritten <font color="#000080">: </font>word<font color="#000080">) :
+</font>word<font color="#000080">;  </font><font color="#008000"><i>{ This is declaration for custom write function. It should write
+    Count bytes into WriteBuf and return number of actual bytes written
+    into NumWritten variable. The return value is ignored. }
+
+{#Z+}
+  </i></font>PLZRWBuffer <font color="#000080">= ^</font>TLZRWBuffer<font color="#000080">;
+  </font>TLZRWBuffer <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>LZRWBufSize <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">; </font><font color="#008000"><i>{ file buffers }
+
+  </i></font>PLZTextBuf <font color="#000080">= ^</font>TLZTextBuf<font color="#000080">;
+  </font>TLZTextBuf <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>N <font color="#000080">+ </font>F <font color="#000080">- </font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+
+  </font>PLeftMomTree <font color="#000080">= ^</font>TLeftMomTree<font color="#000080">;
+  </font>TLeftMomTree <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>N<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word<font color="#000080">;
+  </font>PRightTree <font color="#000080">= ^</font>TRightTree<font color="#000080">;
+  </font>TRightTree <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>N <font color="#000080">+ </font><font color="#800000">256</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>LZSSMemRequired <font color="#000080">= </font>SizeOf<font color="#000080">(</font>TLZRWBuffer<font color="#000080">) * </font><font color="#800000">2 </font><font color="#000080">+
+    </font>SizeOf<font color="#000080">(</font>TLZTextBuf<font color="#000080">) + </font>SizeOf<font color="#000080">(</font>TLeftMomTree<font color="#000080">) * </font><font color="#800000">2 </font><font color="#000080">+ </font>SizeOf<font color="#000080">(</font>TRightTree<font color="#000080">);
+</font><font color="#008000"><i>{#Z-}
+
+</i></font><font color="#FF0000"><b>function </b></font>LZInit <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#008000"><i>{ This function should be called before any other compression routines
+  from this unit - it allocates memory and initializes all internal
+  variables required by compression procedures. If allocation fails,
+  LZInit returns False, this means that there isn't enough memory for
+  compression or decompression process. It returns True if initialization
+  was successful. }
+{#X LZDone}{#X LZSquash}{#X LZUnsquash}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LZSquash<font color="#000080">(</font>ReadProc <font color="#000080">: </font>TReadProc<font color="#000080">; </font>WriteProc <font color="#000080">: </font>TWriteProc<font color="#000080">);
+</font><font color="#008000"><i>{ This procedure is used for compression. ReadProc specifies custom
+  read function that reads data, and WriteProc specifies custom write
+  function that writes compressed data. }
+{#X LZUnsquash}{#X LZInit}{#X LZDone}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LZUnSquash<font color="#000080">(</font>ReadProc <font color="#000080">: </font>TReadProc<font color="#000080">; </font>WriteProc <font color="#000080">: </font>TWriteProc<font color="#000080">);
+</font><font color="#008000"><i>{ This procedure is used for decompression. ReadProc specifies custom
+  read function that reads compressed data, and WriteProc specifies
+  custom write function that writes decompressed data. }
+{#X LZSquash}{#X LZInit}{#X LZDone}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>LZDone<font color="#000080">;
+</font><font color="#008000"><i>{ This procedure should be called after you finished compression or
+  decompression. It deallocates (frees) all memory allocated by LZInit.
+  Note: You should always call LZDone after you finished using compression
+  routines from this unit. }
+{#X LZInit}{#X LZSquash}{#X LZUnsquash}
+
+</i></font><font color="#FF0000"><b>implementation
+
+var
+  </b></font>Height<font color="#000080">, </font>MatchPos<font color="#000080">, </font>MatchLen<font color="#000080">, </font>LastLen <font color="#000080">: </font>word<font color="#000080">;
+  </font>TextBufP <font color="#000080">: </font>PLZTextBuf<font color="#000080">;
+  </font>LeftP<font color="#000080">, </font>MomP <font color="#000080">: </font>PLeftMomTree<font color="#000080">;
+  </font>RightP <font color="#000080">: </font>PRightTree<font color="#000080">;
+  </font>CodeBuf <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">16</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+  </font>LZReadProc <font color="#000080">: </font>TReadProc<font color="#000080">;
+  </font>LZWriteProc <font color="#000080">: </font>TWriteProc<font color="#000080">;
+  </font>InBufP<font color="#000080">, </font>OutBufP <font color="#000080">: </font>PLZRWBuffer<font color="#000080">;
+  </font>Bytes <font color="#000080">: </font>word<font color="#000080">;
+  </font>Initialized <font color="#000080">: </font>boolean<font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>LZSS_Read <font color="#000080">: </font>word<font color="#000080">;    </font><font color="#008000"><i>{ Returns # of bytes read }
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>LZReadProc<font color="#000080">(</font>InBufP<font color="#000080">^, </font>Bytes<font color="#000080">);
+  </font>LZSS_Read <font color="#000080">:= </font>Bytes<font color="#000080">;
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ LZSS_Read }
+
+</i></font><font color="#FF0000"><b>Function </b></font>LZSS_Write <font color="#000080">: </font>word<font color="#000080">;  </font><font color="#008000"><i>{ Returns # of bytes written }
+</i></font><font color="#FF0000"><b>Begin
+  </b></font>LZWriteProc<font color="#000080">(</font>OutBufP<font color="#000080">^, </font>OutBufPtr<font color="#000080">, </font>Bytes<font color="#000080">);
+  </font>LZSS_Write <font color="#000080">:= </font>Bytes
+<font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ LZSS_Write }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Getc<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+</b></font><font color="#008000"><i>{
+  getc : return a character from the buffer
+          RETURN : AL = input char
+                   Carry set when EOF
+}
+              </i></font><font color="#FF00FF">push    bx
+              mov     bx, inBufPtr
+              cmp     bx, inBufSize
+              jb      @getc1
+              push    cx
+              push    dx
+              push    di
+              push    si
+              call    LZSS_Read
+              pop     si
+              pop     di
+              pop     dx
+              pop     cx
+              mov     inBufSize, ax
+              or      ax, ax
+              jz      @getc2               </font><font color="#008000"><i>{ ; EOF }
+              </i></font><font color="#FF00FF">xor     bx, bx
+  @getc1:
+              PUSH    DI
+              LES     DI,[InBufP]
+              MOV     AL,BYTE PTR [ES:DI+BX]
+              POP     DI
+              inc     bx
+              mov     inBufPtr, bx
+              pop     bx
+              clc                         </font><font color="#008000"><i>{ ; clear the carry flag }
+              </i></font><font color="#FF00FF">jmp     @</font><font color="#FF0000"><b>end
+  </b></font><font color="#000080">@</font>getc2<font color="#000080">:     </font>pop     bx
+              stc                         <font color="#008000"><i>{ ; set carry to indicate EOF }
+  </i></font><font color="#000080">@</font><font color="#FF0000"><b>end</b></font><font color="#000080">:
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Getc }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Putc<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  putc : put a character into the output buffer
+             Entry : AL = output char
+}
+</i></font><font color="#FF0000"><b>Asm
+              </b></font><font color="#FF00FF">push    bx
+              mov     bx, outBufPtr
+              PUSH    DI
+              LES     DI,[OutBufP]
+              MOV     BYTE PTR [ES:DI+BX],AL
+              POP     DI
+              inc     bx
+              cmp     bx, LZRWBufSize
+              jb      @putc1
+              mov     OutBufPtr,LZRWBufSize   </font><font color="#008000"><i>{ Just so the flush will work. }
+              </i></font><font color="#FF00FF">push    cx
+              push    dx
+              push    di
+              push    si
+              call    LZSS_Write
+              pop     si
+              pop     di
+              pop     dx
+              pop     cx
+              xor     bx, bx
+  @putc1:     mov     outBufPtr, bx
+              pop     bx
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Putc }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>InitTree<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  initTree : initialize all binary search trees.  There are 256 BST's, one
+             for all strings started with a particular character.  The
+             parent is tree K is the node N + K + 1 and it has only a
+             right child
+}
+</i></font><font color="#FF0000"><b>Asm
+      </b></font><font color="#FF00FF">cld
+      push    ds
+      pop     es
+      LES     DI,[RightP]
+</font><font color="#008000"><i>{      mov     di,offset right}
+      </i></font><font color="#FF00FF">add     di, (N + 1) * 2
+      mov     cx, 256
+      mov     ax, NUL
+      rep     stosw
+      LES     DI,[MomP]
+</font><font color="#008000"><i>{      mov     di, offset mom}
+      </i></font><font color="#FF00FF">mov     cx, N
+      rep     stosw
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ InitTree }
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Splay<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  splay : use splay tree operations to move the node to the 'top' of
+           tree.  Note that it will not actual become the root of the tree
+           because the root of each tree is a special node.  Instead, it
+           will become the right child of this special node.
+
+             ENTRY : di = the node to be rotated
+}
+</i></font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">@Splay1:
+              PUSH    BX
+              LES     BX,[MomP]
+              MOV     SI,[ES:BX+DI]
+              POP     BX
+</font><font color="#008000"><i>{              mov     si, [Offset Mom + di]}
+              </i></font><font color="#FF00FF">cmp     si, NUL           </font><font color="#008000"><i>{ ; exit if its parent is a special
+node }              </i></font><font color="#FF00FF">ja      @Splay4
+              PUSH    DI
+              LES     DI,[MomP]
+              ADD     DI,SI
+              MOV     BX,[ES:DI]
+</font><font color="#008000"><i>{              mov     bx, [Offset Mom + si]}
+              </i></font><font color="#FF00FF">POP     DI
+              cmp     bx, NUL           </font><font color="#008000"><i>{ ; check if its grandparent is special
+}              </i></font><font color="#FF00FF">jbe     @Splay5           </font><font color="#008000"><i>{ ; if not then skip }
+              </i></font><font color="#FF00FF">PUSH    BX
+              LES     BX,[LeftP]
+              CMP     DI,[ES:BX+SI]
+              POP     BX
+</font><font color="#008000"><i>{              cmp     di, [Offset Left + si]} { ; is the current node is a
+left child ? }              </i></font><font color="#FF00FF">jne     @Splay2
+              PUSH    BX
+              LES     BX,[RightP]
+              MOV     DX,[ES:BX+DI]
+</font><font color="#008000"><i>{              mov     dx, [Offset Right + di]}    { ; perform a left zig
+operation }              </i></font><font color="#FF00FF">LES     BX,[LeftP]
+              MOV     [ES:BX+SI],DX
+</font><font color="#008000"><i>{              mov     [Offset Left + si], dx}
+              </i></font><font color="#FF00FF">LES     BX,[RightP]
+              MOV     [ES:BX+DI],SI
+              POP     BX
+</font><font color="#008000"><i>{              mov     [Offset Right + di], si}
+              </i></font><font color="#FF00FF">jmp     @Splay3
+  @Splay2:
+              PUSH    BX
+              LES     BX,[LeftP]
+              MOV     DX,[ES:BX+DI]
+</font><font color="#008000"><i>{              mov     dx, [Offset Left + di]}     { ; perform a right zig }
+              </i></font><font color="#FF00FF">LES     BX,[RightP]
+              MOV     [ES:BX+SI],DX
+</font><font color="#008000"><i>{              mov     [Offset Right + si], dx}
+              </i></font><font color="#FF00FF">LES     BX,[LeftP]
+              MOV     [ES:BX+DI],SI
+              POP     BX
+</font><font color="#008000"><i>{              mov     [Offset Left + di], si}
+  </i></font><font color="#FF00FF">@Splay3:
+              PUSH    SI
+              LES     SI,[RightP]
+              MOV     [ES:SI+BX],DI
+              POP     SI
+</font><font color="#008000"><i>{              mov     [Offset Right + bx], di}
+              </i></font><font color="#FF00FF">xchg    bx, dx
+              PUSH    AX
+              MOV     AX,BX
+              LES     BX,[MomP]
+              ADD     BX,AX
+              MOV     [ES:BX],SI
+              LES     BX,[MomP]
+              MOV     [ES:BX+SI],DI
+              LES     BX,[MomP]
+              MOV     [ES:BX+DI],DX
+              MOV     BX,AX
+              POP     AX
+</font><font color="#008000"><i>{              mov     [Offset Mom + bx], si
+              mov     [Offset Mom + si], di
+              mov     [Offset Mom + di], dx}
+  </i></font><font color="#FF00FF">@Splay4:    jmp     @</font><font color="#FF0000"><b>end
+  </b></font><font color="#000080">@</font>Splay5<font color="#000080">:
+              </font>PUSH    DI
+              LES     DI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     CX<font color="#000080">,[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">]
+              </font>POP     DI
+<font color="#008000"><i>{              mov     cx, [Offset Mom + bx]}
+              </i></font>PUSH    BX
+              LES     BX<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>CMP     DI<font color="#000080">,[</font>ES<font color="#000080">:</font>BX<font color="#000080">+</font>SI<font color="#000080">]
+              </font>POP     BX
+<font color="#008000"><i>{              cmp     di, [Offset Left + si]}
+              </i></font>jne     <font color="#000080">@</font>Splay7
+              PUSH    DI
+              LES     DI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>CMP     SI<font color="#000080">,[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">]
+              </font>POP     DI
+<font color="#008000"><i>{              cmp     si, [Offset Left + bx]}
+              </i></font>jne     <font color="#000080">@</font>Splay6
+              PUSH    AX
+              MOV     AX<font color="#000080">,</font>DI
+              LES     DI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>SI
+              MOV     DX<font color="#000080">,[</font>ES<font color="#000080">:</font>DI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     dx, [Offset Right + si]   } { ; perform a left zig-zig
+operation }              </i></font>LES     DI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Left + bx], dx}
+              </i></font>xchg    bx<font color="#000080">, </font>dx
+              LES     DI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], dx}
+              </i></font>LES     DI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>AX
+              MOV     BX<font color="#000080">,[</font>ES<font color="#000080">:</font>DI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     bx, [Offset Right + di]}
+              </i></font>LES     DI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>SI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">],</font>BX
+              LES     DI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">],</font>SI
+<font color="#008000"><i>{              mov     [Offset Left +si], bx
+              mov     [Offset Mom + bx], si}
+              </i></font>mov     bx<font color="#000080">, </font>dx
+              LES     DI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>SI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">],</font>BX
+              LES     DI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">],</font>SI
+<font color="#008000"><i>{              mov     [Offset Right + si], bx
+              mov     [Offset Right + di], si}
+              </i></font>LES     DI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">],</font>SI
+              LES     DI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>SI
+              STOSW
+              MOV     DI<font color="#000080">,</font>AX
+              POP     AX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], si
+              mov     [Offset Mom + si], di}
+              </i></font>jmp     <font color="#000080">@</font>Splay9
+  <font color="#000080">@</font>Splay6<font color="#000080">:
+              </font>PUSH    AX
+              MOV     AX<font color="#000080">,</font>SI
+              LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     DX<font color="#000080">,[</font>ES<font color="#000080">:</font>SI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     dx, [Offset Left + di]}     { ; perform a left zig-zag
+operation }              </i></font>LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Right + bx], dx}
+              </i></font>xchg    bx<font color="#000080">, </font>dx
+              LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], dx}
+              </i></font>LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     BX<font color="#000080">,[</font>ES<font color="#000080">:</font>SI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     bx, [Offset Right + di]}
+              </i></font>LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>BX
+<font color="#008000"><i>{              mov     [Offset Left + si], bx}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], si}
+              </i></font>mov     bx<font color="#000080">, </font>dx
+              LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>BX
+<font color="#008000"><i>{              mov     [Offset Left + di], bx}
+              </i></font>LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Right + di], si}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>DI
+<font color="#008000"><i>{              mov     [Offset Mom + si], di}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DI
+              MOV     SI<font color="#000080">,</font>AX
+              POP     AX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], di}
+              </i></font>jmp     <font color="#000080">@</font>Splay9
+  <font color="#000080">@</font>Splay7<font color="#000080">:
+              </font>PUSH    DI
+              LES     DI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>CMP     SI<font color="#000080">,[</font>ES<font color="#000080">:</font>DI<font color="#000080">+</font>BX<font color="#000080">]
+              </font>POP     DI
+<font color="#008000"><i>{              cmp     si, [Offset Right + bx]}
+              </i></font>jne     <font color="#000080">@</font>Splay8
+              PUSH    AX
+              MOV     AX<font color="#000080">,</font>SI
+              LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     DX<font color="#000080">,[</font>ES<font color="#000080">:</font>SI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     dx, [Offset Left + si]}     { ; perform a right zig-zig
+}              </i></font>LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Right + bx], dx}
+              </i></font>xchg    bx<font color="#000080">, </font>dx
+              LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], dx}
+              </i></font>LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     BX<font color="#000080">,[</font>ES<font color="#000080">:</font>SI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     bx, [Offset Left + di]}
+              </i></font>LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>BX
+<font color="#008000"><i>{              mov     [Offset Right + si], bx}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], si}
+              </i></font>mov     bx<font color="#000080">, </font>dx
+              LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>BX
+<font color="#008000"><i>{              mov     [Offset Left + si], bx}
+              </i></font>LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Left + di], si}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], si}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>DI
+<font color="#008000"><i>{              mov     [Offset Mom + si], di}
+              </i></font>MOV     SI<font color="#000080">,</font>AX
+              POP     AX
+              jmp     <font color="#000080">@</font>Splay9
+  <font color="#000080">@</font>Splay8<font color="#000080">:
+              </font>PUSH    AX
+              MOV     AX<font color="#000080">,</font>SI
+              LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     DX<font color="#000080">,[</font>ES<font color="#000080">:</font>SI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     dx, [Offset Right + di]}    { ; perform a right zig-zag
+}              </i></font>LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Left + bx], dx}
+              </i></font>xchg    bx<font color="#000080">, </font>dx
+              LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], dx}
+              </i></font>LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     BX<font color="#000080">,[</font>ES<font color="#000080">:</font>SI<font color="#000080">]
+</font><font color="#008000"><i>{              mov     bx, [Offset Left + di]}
+              </i></font>LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>BX
+<font color="#008000"><i>{              mov     [Offset Right + si], bx}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Mom + bx], si}
+              </i></font>mov     bx<font color="#000080">, </font>dx
+              LES     SI<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>BX
+<font color="#008000"><i>{              mov     [Offset Right + di], bx}
+              </i></font>LES     SI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>DI
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>AX
+<font color="#008000"><i>{              mov     [Offset Left + di], si}
+              </i></font>LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>ADD     SI<font color="#000080">,</font>AX
+              MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">],</font>DI
+              LES     SI<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>SI<font color="#000080">+</font>BX<font color="#000080">],</font>DI
+<font color="#008000"><i>{              mov     [Offset Mom + si], di
+              mov     [Offset Mom + bx], di}
+              </i></font>MOV     SI<font color="#000080">,</font>AX
+              POP     AX
+  <font color="#000080">@</font>Splay9<font color="#000080">:    </font>mov     si<font color="#000080">, </font>cx
+              cmp     si<font color="#000080">, </font>NUL
+              ja      <font color="#000080">@</font>Splay10
+              PUSH    DI
+              LES     DI<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>ADD     DI<font color="#000080">,</font>SI
+              CMP     BX<font color="#000080">,[</font>ES<font color="#000080">:</font>DI<font color="#000080">]
+              </font>POP     DI
+<font color="#008000"><i>{              cmp     bx, [Offset Left + si]}
+              </i></font>jne     <font color="#000080">@</font>Splay10
+              PUSH    BX
+              LES     BX<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>BX<font color="#000080">+</font>SI<font color="#000080">],</font>DI
+              POP     BX
+<font color="#008000"><i>{              mov     [Offset Left + si], di}
+              </i></font>jmp     <font color="#000080">@</font>Splay11
+  <font color="#000080">@</font>Splay10<font color="#000080">:
+              </font>PUSH    BX
+              LES     BX<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>BX<font color="#000080">+</font>SI<font color="#000080">],</font>DI
+              POP     BX
+<font color="#008000"><i>{              mov     [Offset Right + si], di}
+  </i></font><font color="#000080">@</font>Splay11<font color="#000080">:
+              </font>PUSH    BX
+              LES     BX<font color="#000080">,[</font>MomP<font color="#000080">]
+              </font>MOV     <font color="#000080">[</font>ES<font color="#000080">:</font>BX<font color="#000080">+</font>DI<font color="#000080">],</font>SI
+              POP     BX
+<font color="#008000"><i>{              mov     [Offset Mom + di], si}
+              </i></font>jmp     <font color="#000080">@</font>Splay1
+  <font color="#000080">@</font><font color="#FF0000"><b>end</b></font><font color="#000080">:
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ SPlay }
+
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>InsertNode<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+  insertNode : insert the new node to the corresponding tree.  Note that the
+               position of a string in the buffer also served as the node
+               number.
+             ENTRY : di = position in the buffer
+}
+</i></font><font color="#FF0000"><b>Asm
+              </b></font><font color="#FF00FF">push    si
+              push    dx
+              push    cx
+              push    bx
+              mov     dx, 1
+              xor     ax, ax
+              mov     matchLen, ax
+              mov     height, ax
+              LES     SI,[TextBufP]
+              ADD     SI,DI
+              MOV     AL,BYTE PTR [ES:SI]
+</font><font color="#008000"><i>{             mov     al, byte ptr [Offset TextBuf + di]}
+              </i></font><font color="#FF00FF">shl     di, 1
+              add     ax, N + 1
+              shl     ax, 1
+              mov     si, ax
+              mov     ax, NUL
+              PUSH    BX
+              LES     BX,[RightP]
+              MOV     WORD PTR [ES:BX+DI],AX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + di], ax}
+              </i></font><font color="#FF00FF">LES     BX,[LeftP]
+              MOV     WORD PTR [ES:BX+DI],AX
+              POP     BX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Left + di], ax}
+  </i></font><font color="#FF00FF">@Ins1:inc     height
+              cmp     dx, 0
+              jl      @Ins3
+              PUSH    DI
+              LES     DI,[RightP]
+              ADD     DI,SI
+              MOV     AX,WORD PTR [ES:DI]
+              POP     DI
+</font><font color="#008000"><i>{              mov     ax, word ptr [Offset Right + si]}
+              </i></font><font color="#FF00FF">cmp     ax, NUL
+              je      @Ins2
+              mov     si, ax
+              jmp     @Ins5
+  @Ins2:
+              PUSH    BX
+              LES     BX,[RightP]
+              MOV     WORD PTR [ES:BX+SI],DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + si], di}
+              </i></font><font color="#FF00FF">LES     BX,[MomP]
+              MOV     WORD PTR [ES:BX+DI],SI
+              POP     BX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + di], si}
+              </i></font><font color="#FF00FF">jmp     @Ins11
+  @Ins3:
+              PUSH    BX
+              LES     BX,[LeftP]
+              ADD     BX,SI
+              MOV     AX,WORD PTR [ES:BX]
+              POP     BX
+</font><font color="#008000"><i>{              mov     ax, word ptr [Offset Left + si]}
+              </i></font><font color="#FF00FF">cmp     ax, NUL
+              je      @Ins4
+              mov     si, ax
+              jmp     @Ins5
+  @Ins4:
+              PUSH    BX
+              LES     BX,[LeftP]
+              ADD     BX,SI
+              MOV     WORD PTR [ES:BX],DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Left + si], di}
+              </i></font><font color="#FF00FF">LES     BX,[MomP]
+              ADD     BX,DI
+              MOV     WORD PTR [ES:BX],SI
+              POP     BX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + di], si}
+              </i></font><font color="#FF00FF">jmp     @Ins11
+  @Ins5:      mov     bx, 1
+              shr     si, 1
+              shr     di, 1
+              xor     ch, ch
+              xor     dh, dh
+  @Ins6:
+              PUSH    SI
+              LES     SI,[TextBufP]
+              ADD     SI,DI
+              MOV     DL,BYTE PTR [ES:SI+BX]
+              POP     SI
+              PUSH    DI
+              LES     DI,[TextBufP]
+              ADD     DI,SI
+              MOV     CL,BYTE PTR [ES:DI+BX]
+              POP     DI
+</font><font color="#008000"><i>{              mov     dl, byte ptr [Offset Textbuf + di + bx]
+              mov     cl, byte ptr [Offset TextBuf + si + bx]}
+              </i></font><font color="#FF00FF">sub     dx, cx
+              jnz     @Ins7
+              inc     bx
+              cmp     bx, F
+              jb      @Ins6
+  @Ins7:      shl     si, 1
+              shl     di, 1
+              cmp     bx, matchLen
+              jbe     @Ins1
+              mov     ax, si
+              shr     ax, 1
+              mov     matchPos, ax
+              mov     matchLen, bx
+              cmp     bx, F
+              jb      @Ins1
+  @Ins8:
+              PUSH    CX
+              LES     BX,[MomP]
+              MOV     AX,WORD PTR [ES:BX+SI]
+</font><font color="#008000"><i>{              mov     ax, word ptr [Offset Mom + si]}
+              </i></font><font color="#FF00FF">LES     BX,[MomP]
+              MOV     WORD PTR [ES:BX+DI],AX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + di], ax}
+              </i></font><font color="#FF00FF">LES     BX,[LeftP]
+              MOV     CX,WORD PTR [ES:BX+SI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Left + si]}
+              </i></font><font color="#FF00FF">LES     BX,[LeftP]
+              MOV     WORD PTR [ES:BX+DI],CX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Left + di], bx}
+              </i></font><font color="#FF00FF">LES     BX,[MomP]
+              ADD     BX,CX
+              MOV     WORD PTR [ES:BX],DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + bx], di}
+              </i></font><font color="#FF00FF">LES     BX,[RightP]
+              MOV     CX,WORD PTR [ES:BX+SI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Right + si]}
+              </i></font><font color="#FF00FF">LES     BX,[RightP]
+              MOV     WORD PTR [ES:BX+DI],CX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + di], bx}
+              </i></font><font color="#FF00FF">LES     BX,[MomP]
+              ADD     BX,CX
+              MOV     WORD PTR [ES:BX],DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + bx], di}
+              </i></font><font color="#FF00FF">LES     BX,[MomP]
+              MOV     CX,WORD PTR [ES:BX+SI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Mom + si]}
+              </i></font><font color="#FF00FF">MOV     BX,CX
+              POP     CX
+              PUSH    DI
+              LES     DI,[RightP]
+              CMP     SI,WORD PTR [ES:DI+BX]
+              POP     DI
+</font><font color="#008000"><i>{              cmp     si, word ptr [Offset Right + bx]}
+              </i></font><font color="#FF00FF">jne     @Ins9
+              PUSH    SI
+              LES     SI,[RightP]
+              MOV     WORD PTR [ES:SI+BX],DI
+              POP     SI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + bx], di}
+              </i></font><font color="#FF00FF">jmp     @Ins10
+  @Ins9:
+              PUSH    SI
+              LES     SI,[LeftP]
+              MOV     WORD PTR [ES:SI+BX],DI
+              POP     SI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Left + bx], di}
+  </i></font><font color="#FF00FF">@Ins10:
+              PUSH    DI
+              LES     DI,[MomP]
+              ADD     DI,SI
+              MOV     WORD PTR [ES:DI],NUL
+              POP     DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + si], NUL}
+  </i></font><font color="#FF00FF">@Ins11:     cmp     height, 30
+              jb      @Ins12
+              call    Splay
+  @Ins12:     pop     bx
+              pop     cx
+              pop     dx
+              pop     si
+              shr     di, 1
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ InsertNode }
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>DeleteNode<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#008000"><i>{
+   deleteNode : delete the node from the tree
+
+            ENTRY : SI = position in the buffer
+}
+</i></font><font color="#FF0000"><b>Asm
+              </b></font><font color="#FF00FF">push    di
+              push    bx
+              shl     si, 1
+              PUSH    DI
+              LES     DI,[MomP]
+              ADD     DI,SI
+              CMP     WORD PTR [ES:DI],NUL
+              POP     DI
+</font><font color="#008000"><i>{              cmp     word ptr [Offset Mom + si], NUL}   { ; if it has no
+parent then exit }              </i></font><font color="#FF00FF">je      @del7
+              PUSH    DI
+              LES     DI,[RightP]
+              ADD     DI,SI
+              CMP     WORD PTR [ES:DI],NUL
+              POP     DI
+</font><font color="#008000"><i>{              cmp     word ptr [Offset Right + si], NUL} { ; does it have
+right child ? }              </i></font><font color="#FF00FF">je      @del8
+              PUSH    BX
+              LES     BX,[LeftP]
+              MOV     DI,WORD PTR [ES:BX+SI]
+              POP     BX
+</font><font color="#008000"><i>{              mov     di, word ptr [Offset Left + si] }  { ; does it have left
+child ? }              </i></font><font color="#FF00FF">cmp     di, NUL
+              je      @del9
+              PUSH    SI
+              LES     SI,[RightP]
+              ADD     SI,DI
+              MOV     AX,WORD PTR [ES:SI]
+              POP     SI
+</font><font color="#008000"><i>{              mov     ax, word ptr [Offset Right + di]}  { ; does it have
+right grandchild ? }              </i></font><font color="#FF00FF">cmp     ax, NUL
+              je      @del2                             </font><font color="#008000"><i>{ ; if no then skip }
+  </i></font><font color="#FF00FF">@del1:      mov     di, ax                            </font><font color="#008000"><i>{ ; find the rightmost
+node in }              </i></font><font color="#FF00FF">PUSH    SI
+              LES     SI,[RightP]
+              ADD     SI,DI
+              MOV     AX,WORD PTR [ES:SI]
+              POP     SI
+</font><font color="#008000"><i>{              mov     ax, word ptr [Offset Right + di] } { ;   the right
+subtree }              </i></font><font color="#FF00FF">cmp     ax, NUL
+              jne     @del1
+              PUSH    CX
+              MOV     CX,SI
+              LES     SI,[MomP]
+              ADD     SI,DI
+              MOV     BX,WORD PTR [ES:SI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Mom + di] }   { ; move this node as
+the root of }              </i></font><font color="#FF00FF">LES     SI,[LeftP]
+              ADD     SI,DI
+              MOV     AX,WORD PTR [ES:SI]
+</font><font color="#008000"><i>{              mov     ax, word ptr [Offset Left + di]}   { ;   the subtree }
+              </i></font><font color="#FF00FF">LES     SI,[RightP]
+              MOV     WORD PTR [ES:SI+BX],AX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + bx], ax}
+              </i></font><font color="#FF00FF">xchg    ax, bx
+              LES     SI,[MomP]
+              MOV     WORD PTR [ES:SI+BX],AX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + bx], ax}
+              </i></font><font color="#FF00FF">LES     SI,[LeftP]
+              ADD     SI,CX
+              MOV     BX,WORD PTR [ES:SI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Left + si]}
+              </i></font><font color="#FF00FF">LES     SI,[LeftP]
+              ADD     SI,DI
+              MOV     WORD PTR [ES:SI],BX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Left + di], bx}
+              </i></font><font color="#FF00FF">LES     SI,[MomP]
+              MOV     WORD PTR [ES:SI+BX],DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + bx], di}
+              </i></font><font color="#FF00FF">MOV     SI,CX
+              POP     CX
+  @del2:
+              PUSH    CX
+              MOV     CX,SI
+              LES     SI,[RightP]
+              ADD     SI,CX
+              MOV     BX,WORD PTR [ES:SI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Right + si]}
+              </i></font><font color="#FF00FF">LES     SI,[RightP]
+              ADD     SI,DI
+              MOV     WORD PTR [ES:SI],BX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + di], bx}
+              </i></font><font color="#FF00FF">LES     SI,[MomP]
+              MOV     WORD PTR [ES:SI+BX],DI
+              MOV     SI,CX
+              POP     CX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + bx], di}
+  </i></font><font color="#FF00FF">@del3:
+              PUSH    CX
+              MOV     CX,DI
+              LES     DI,[MomP]
+              ADD     DI,SI
+              MOV     BX,WORD PTR [ES:DI]
+</font><font color="#008000"><i>{              mov     bx, word ptr [Offset Mom + si]}
+              </i></font><font color="#FF00FF">LES     DI,[MomP]
+              ADD     DI,CX
+              MOV     WORD PTR [ES:DI],BX
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + di], bx}
+              </i></font><font color="#FF00FF">MOV     DI,CX
+              POP     CX
+              PUSH    DI
+              LES     DI,[RightP]
+              CMP     SI,WORD PTR [ES:DI+BX]
+              POP     DI
+</font><font color="#008000"><i>{              cmp     si, word ptr [Offset Right + bx]}
+              </i></font><font color="#FF00FF">jne     @del4
+              PUSH    SI
+              LES     SI,[RightP]
+              MOV     WORD PTR [ES:SI+BX],DI
+              POP     SI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Right + bx], di}
+              </i></font><font color="#FF00FF">jmp     @del5
+  @del4:
+              PUSH    SI
+              LES     SI,[LeftP]
+              MOV     WORD PTR [ES:SI+BX],DI
+              POP     SI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Left + bx], di}
+  </i></font><font color="#FF00FF">@del5:
+              PUSH    DI
+              LES     DI,[MomP]
+              ADD     DI,SI
+              MOV     WORD PTR [ES:DI],NUL
+              POP     DI
+</font><font color="#008000"><i>{              mov     word ptr [Offset Mom + si], NUL}
+  </i></font><font color="#FF00FF">@del7:      pop     bx
+              pop     di
+              shr     si, 1
+              jmp     @</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  @</font>del8<font color="#000080">:
+              </font>PUSH    BX
+              LES     BX<font color="#000080">,[</font>LeftP<font color="#000080">]
+              </font>MOV     DI<font color="#000080">,</font>WORD PTR <font color="#000080">[</font>ES<font color="#000080">:</font>BX<font color="#000080">+</font>SI<font color="#000080">]
+              </font>POP     BX
+<font color="#008000"><i>{              mov     di, word ptr [Offset Left + si]}
+              </i></font>jmp     <font color="#000080">@</font>del3
+  <font color="#000080">@</font>del9<font color="#000080">:
+              </font>PUSH    BX
+              LES     BX<font color="#000080">,[</font>RightP<font color="#000080">]
+              </font>MOV     DI<font color="#000080">,</font>WORD PTR <font color="#000080">[</font>ES<font color="#000080">:</font>BX<font color="#000080">+</font>SI<font color="#000080">]
+              </font>POP     BX
+<font color="#008000"><i>{              mov     di, word ptr [Offset Right + si]}
+              </i></font>jmp     <font color="#000080">@</font>del3
+  <font color="#000080">@</font><font color="#FF0000"><b>end</b></font><font color="#000080">:
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ DeleteNode }
+
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Encode<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+              </b></font><font color="#FF00FF">call    initTree
+              xor     bx, bx
+              mov     [Offset CodeBuf + bx], bl
+              mov     dx, 1
+              mov     ch, dl
+              xor     si, si
+              mov     di, N - F
+  @Encode2:   call    getc
+              jc      @Encode3
+              PUSH    SI
+              LES     SI,[TextBufP]
+              ADD     SI,DI
+              MOV     BYTE PTR [ES:SI+BX],AL
+              POP     SI
+</font><font color="#008000"><i>{              mov     byte ptr [Offset TextBuf +di + bx], al}
+              </i></font><font color="#FF00FF">inc     bx
+              cmp     bx, F
+              jb      @Encode2
+  @Encode3:   or      bx, bx
+              jne     @Encode4
+              jmp     @Encode19
+  @Encode4:   mov     cl, bl
+              mov     bx, 1
+              push    di
+              sub     di, 1
+  @Encode5:   call    InsertNode
+              inc     bx
+              dec     di
+              cmp     bx, F
+              jbe     @Encode5
+              pop     di
+              call    InsertNode
+  @Encode6:   mov     ax, matchLen
+              cmp     al, cl
+              jbe     @Encode7
+              mov     al, cl
+              mov     matchLen, ax
+  @Encode7:   cmp     al, THRESHOLD
+              ja      @Encode8
+              mov     matchLen, 1
+              or      byte ptr codeBuf, ch
+              mov     bx, dx
+              PUSH    SI
+              LES     SI,[TextBufP]
+              ADD     SI,DI
+              MOV     AL,BYTE PTR [ES:SI]
+              POP     SI
+</font><font color="#008000"><i>{              mov     al, byte ptr [Offset TextBuf + di]}
+              </i></font><font color="#FF00FF">mov     byte ptr [Offset CodeBuf + bx], al
+              inc     dx
+              jmp     @Encode9
+  @Encode8:   mov     bx, dx
+              mov     al, byte ptr matchPos
+              mov     byte ptr [Offset Codebuf + bx], al
+              inc     bx
+              mov     al, byte ptr (matchPos + 1)
+              push    cx
+              mov     cl, 4
+              shl     al, cl
+              pop     cx
+              mov     ah, byte ptr matchLen
+              sub     ah, THRESHOLD + 1
+              add     al, ah
+              mov     byte ptr [Offset Codebuf + bx], al
+              inc     bx
+              mov     dx, bx
+  @Encode9:   shl     ch, 1
+              jnz     @Encode11
+              xor     bx, bx
+  @Encode10:  mov     al, byte ptr [Offset CodeBuf + bx]
+              call    putc
+              inc     bx
+              cmp     bx, dx
+              jb      @Encode10
+              mov     dx, 1
+              mov     ch, dl
+              mov     byte ptr codeBuf, dh
+  @Encode11:  mov     bx, matchLen
+              mov     lastLen, bx
+              xor     bx, bx
+  @Encode12:  call    getc
+</font><font color="#008000"><i>{              jc      @Encode14}
+              </i></font><font color="#FF00FF">jc      @Encode15
+              push    ax
+              call    deleteNode
+              pop     ax
+              PUSH    DI
+              LES     DI,[TextBufP]
+              ADD     DI,SI
+              stosb
+              POP     DI
+</font><font color="#008000"><i>{              mov     byte ptr [Offset TextBuf + si], al}
+              </i></font><font color="#FF00FF">cmp     si, F - 1
+              jae     @Encode13
+              PUSH    DI
+              LES     DI,[TextBufP]
+              ADD     DI,SI
+              MOV     BYTE PTR [ES:DI+N],AL
+              POP     DI
+</font><font color="#008000"><i>{              mov     byte ptr [Offset TextBuf + si + N], al}
+  </i></font><font color="#FF00FF">@Encode13:  inc     si
+              and     si, N - 1
+              inc     di
+              and     di, N - 1
+              call    insertNode
+              inc     bx
+              cmp     bx, lastLen
+              jb      @Encode12
+</font><font color="#008000"><i>(*  @Encode14:  sub     printCount, bx
+              jnc     @Encode15
+              mov     ax, printPeriod
+              mov     printCount, ax
+              push    dx                 { Print out a period as a sign. }
+              mov     dl, DBLARROW
+              mov     ah, 2
+              int     21h
+              pop     dx *)
+  </i></font><font color="#FF00FF">@Encode15:  cmp     bx, lastLen
+              jae     @Encode16
+              inc     bx
+              call    deleteNode
+              inc     si
+              and     si, N - 1
+              inc     di
+              and     di, N - 1
+              dec     cl
+              jz      @Encode15
+              call    insertNode
+              jmp     @Encode15
+  @Encode16:  cmp     cl, 0
+              jbe     @Encode17
+              jmp     @Encode6
+  @Encode17:  cmp     dx, 1
+              jb      @Encode19
+              xor     bx, bx
+  @Encode18:  mov     al, byte ptr [Offset Codebuf + bx]
+              call    putc
+              inc     bx
+              cmp     bx, dx
+              jb      @Encode18
+  @Encode19:
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Encode }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>Decode<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+              </b></font><font color="#FF00FF">xor     dx, dx
+              mov     di, N - F
+  @Decode2:   shr     dx, 1
+              or      dh, dh
+              jnz     @Decode3
+              call    getc
+              jc      @Decode9
+              mov     dh, 0ffh
+              mov     dl, al
+  @Decode3:   test    dx, 1
+              jz      @Decode4
+              call    getc
+              jc      @Decode9
+              PUSH    SI
+              LES     SI,[TextBufP]
+              ADD     SI,DI
+              MOV     BYTE PTR [ES:SI],AL
+              POP     SI
+</font><font color="#008000"><i>{              mov     byte ptr [Offset TextBuf + di], al}
+              </i></font><font color="#FF00FF">inc     di
+              and     di, N - 1
+              call    putc
+              jmp     @Decode2
+  @Decode4:   call    getc
+              jc      @Decode9
+              mov     ch, al
+              call    getc
+              jc      @Decode9
+              mov     bh, al
+              mov     cl, 4
+              shr     bh, cl
+              mov     bl, ch
+              mov     cl, al
+              and     cl, 0fh
+              add     cl, THRESHOLD
+              inc     cl
+  @Decode5:   and     bx, N - 1
+              PUSH    SI
+              LES     SI,[TextBufP]
+              MOV     AL,BYTE PTR [ES:SI+BX]
+              ADD     SI,DI
+              MOV     BYTE PTR [ES:SI],AL
+              POP     SI
+</font><font color="#008000"><i>{              mov     al, byte ptr [Offset TextBuf + bx]
+              mov     byte ptr [Offset TextBuf + di], al}
+              </i></font><font color="#FF00FF">inc     di
+              and     di, N - 1
+              call    putc
+              inc     bx
+              dec     cl
+              jnz     @Decode5
+              jmp     @Decode2
+  @Decode9:
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ Decode }
+
+</i></font><font color="#FF0000"><b>Function </b></font>LZInit <font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  if </b></font>Initialized <font color="#FF0000"><b>then </b></font>Exit<font color="#000080">;
+  </font>LZInit <font color="#000080">:= </font>False<font color="#000080">;
+  </font>New<font color="#000080">(</font>InBufP<font color="#000080">);
+  </font>New<font color="#000080">(</font>OutBufP<font color="#000080">);
+  </font>New<font color="#000080">(</font>TextBufP<font color="#000080">);
+  </font>New<font color="#000080">(</font>LeftP<font color="#000080">);
+  </font>New<font color="#000080">(</font>MomP<font color="#000080">);
+  </font>New<font color="#000080">(</font>RightP<font color="#000080">);
+  </font>Initialized <font color="#000080">:= (</font>InBufP <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>OutBufP <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and
+    </b></font><font color="#000080">(</font>TextBufP <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>LeftP <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>MomP <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>RightP <font color="#000080">&lt;&gt; </font><font color="#FF0000"><b>nil</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Initialized <font color="#FF0000"><b>then </b></font>LZInit <font color="#000080">:= </font>True <font color="#FF0000"><b>else
+  begin
+    </b></font>Initialized <font color="#000080">:= </font>True<font color="#000080">;
+    </font>LZDone
+  <font color="#FF0000"><b>end
+End</b></font><font color="#000080">; </font><font color="#008000"><i>{ LZInit }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>LZDone<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  if </b></font>Initialized <font color="#FF0000"><b>then
+  begin
+    </b></font>Dispose<font color="#000080">(</font>InBufP<font color="#000080">);
+    </font>Dispose<font color="#000080">(</font>OutBufP<font color="#000080">);
+    </font>Dispose<font color="#000080">(</font>RightP<font color="#000080">);
+    </font>Dispose<font color="#000080">(</font>MomP<font color="#000080">);
+    </font>Dispose<font color="#000080">(</font>LeftP<font color="#000080">);
+    </font>Dispose<font color="#000080">(</font>TextBufP<font color="#000080">);
+    </font>Initialized <font color="#000080">:= </font>False
+  <font color="#FF0000"><b>end
+End</b></font><font color="#000080">; </font><font color="#008000"><i>{ LZDone }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>LZSquash<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  if </b></font>Initialized <font color="#FF0000"><b>then
+  begin
+    </b></font>InBufPtr <font color="#000080">:= </font>LZRWBufSize<font color="#000080">;
+    </font>InBufSize <font color="#000080">:= </font>LZRWBufSize<font color="#000080">;
+    </font>OutBufPtr <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>Height <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>MatchPos <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>MatchLen <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>LastLen <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+    </font>FillChar<font color="#000080">(</font>TextBufP<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>TLZTextBuf<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+    </font>FillChar<font color="#000080">(</font>LeftP<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>TLeftMomTree<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+    </font>FillChar<font color="#000080">(</font>MomP<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>TLeftMomTree<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+    </font>FillChar<font color="#000080">(</font>RightP<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>TRightTree<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+    </font>FillChar<font color="#000080">(</font>CodeBuf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>CodeBuf<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+
+    </font>LZReadProc <font color="#000080">:= </font>ReadProc<font color="#000080">;
+    </font>LZWriteProc <font color="#000080">:= </font>WriteProc<font color="#000080">;
+
+    </font>Encode<font color="#000080">;
+    </font>LZSS_Write
+  <font color="#FF0000"><b>end
+End</b></font><font color="#000080">; </font><font color="#008000"><i>{ LZSquash }
+
+</i></font><font color="#FF0000"><b>Procedure </b></font>LZUnSquash<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  if </b></font>Initialized <font color="#FF0000"><b>then
+  begin
+    </b></font>InBufPtr <font color="#000080">:= </font>LZRWBufSize<font color="#000080">;
+    </font>InBufSize <font color="#000080">:= </font>LZRWBufSize<font color="#000080">;
+    </font>OutBufPtr <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+    </font>FillChar<font color="#000080">(</font>TextBufP<font color="#000080">^, </font>SizeOf<font color="#000080">(</font>TLZTextBuf<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);
+
+    </font>LZReadProc <font color="#000080">:= </font>ReadProc<font color="#000080">;
+    </font>LZWriteProc <font color="#000080">:= </font>WriteProc<font color="#000080">;
+
+    </font>Decode<font color="#000080">;
+    </font>LZSS_Write
+  <font color="#FF0000"><b>end
+End</b></font><font color="#000080">; </font><font color="#008000"><i>{ LZUnSquash }
+
+{$IFDEF Windows}
+</i></font><font color="#FF0000"><b>Function </b></font>HeapFunc<font color="#000080">(</font>Size <font color="#000080">: </font>word<font color="#000080">) : </font>integer<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">MOV AX,1
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ HeapFunc }
+{$ENDIF}
+
+</i></font><font color="#FF0000"><b>Begin
+</b></font><font color="#008000"><i>{$IFDEF Windows}
+  </i></font>HeapError <font color="#000080">:= @</font>HeapFunc<font color="#000080">;
+</font><font color="#008000"><i>{$ENDIF}
+  </i></font>Initialized <font color="#000080">:= </font>False
+<font color="#FF0000"><b>End</b></font><font color="#000080">. </font><font color="#008000"><i>{ LZSSUNIT }
+
+
+
+
+
+
+
+
+</i></font><font color="#FF0000"><b>Program </b></font>LZSSDemo<font color="#000080">;
+</font><font color="#008000"><i>{ Copyright (c) 1994 by Andrew Eigus   Fidonet: 2:5100/33 }
+{ Demonstrates the use of LZSSUnit (LZSSUNIT.PAS), Public Domain }
+
+</i></font><font color="#FF0000"><b>uses </b></font>LZSSUnit<font color="#000080">;
+
+</font><font color="#FF0000"><b>var </b></font>InFile<font color="#000080">, </font>OutFile <font color="#000080">: </font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Function </b></font>ToUpper<font color="#000080">(</font>S <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Asm
+  </b></font><font color="#FF00FF">PUSH DS
+  CLD
+  LDS SI,S
+  LES DI,@Result
+  LODSB
+  STOSB
+  XOR AH,AH
+  XCHG AX,CX
+  JCXZ @@3
+@@1:
+  LODSB
+  CMP AL,'a'
+  JB  @@2
+  CMP AL,'z'
+  JA  @@2
+  SUB AL,20h
+@@2:
+  STOSB
+  LOOP @@1
+@@3:
+  POP DS
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ ToUpper }
+
+</i></font><font color="#FF0000"><b>Function </b></font>ReadProc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>ReadBuf<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>NumRead <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">; </font><font color="#FF0000"><b>far</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>BlockRead<font color="#000080">(</font>InFile<font color="#000080">, </font>ReadBuf<font color="#000080">, </font>LZRWBufSize<font color="#000080">, </font>NumRead<font color="#000080">);
+  </font>Write<font color="#000080">(</font><font color="#800000">#13</font><font color="#000080">, </font>FilePos<font color="#000080">(</font>InFile<font color="#000080">), </font><font color="#800000">' -&gt; '</font><font color="#000080">)
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ ReadProc }
+
+</i></font><font color="#FF0000"><b>Function </b></font>WriteProc<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>WriteBuf<font color="#000080">; </font>Count <font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>var </b></font>NumWritten <font color="#000080">: </font>word<font color="#000080">) : </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>far</b></font><font color="#000080">;</font><font color="#FF0000"><b>Begin
+  </b></font>BlockWrite<font color="#000080">(</font>OutFile<font color="#000080">, </font>WriteBuf<font color="#000080">, </font>Count<font color="#000080">, </font>NumWritten<font color="#000080">);
+  </font>Write<font color="#000080">(</font>FilePos<font color="#000080">(</font>OutFile<font color="#000080">), </font><font color="#800000">#13</font><font color="#000080">)
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">; </font><font color="#008000"><i>{ WriteProc }
+
+</i></font><font color="#FF0000"><b>Begin
+  if </b></font>ParamCount <font color="#000080">&lt; </font><font color="#800000">2 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Usage: LZSSDEMO &lt;inputfile&gt; &lt;outputfile&gt; [unsquash]'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>if not </b></font>LZInit <font color="#FF0000"><b>then
+  begin
+    </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Not enough memory'</font><font color="#000080">);
+    </font>Halt<font color="#000080">(</font><font color="#800000">8</font><font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Assign<font color="#000080">(</font>InFile<font color="#000080">, </font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">));
+  </font>Reset<font color="#000080">(</font>InFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>IOResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>Assign<font color="#000080">(</font>OutFile<font color="#000080">, </font>ParamStr<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">));
+    </font>Rewrite<font color="#000080">(</font>OutFile<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font>IOResult <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    begin
+      if </b></font>ToUpper<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">3</font><font color="#000080">)) =  </font><font color="#800000">'UNSQUASH' </font><font color="#FF0000"><b>then
+        </b></font>LZUnSquash<font color="#000080">(</font>ReadProc<font color="#000080">, </font>WriteProc<font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>LZSquash<font color="#000080">(</font>ReadProc<font color="#000080">, </font>WriteProc<font color="#000080">);
+      </font>Close<font color="#000080">(</font>OutFile<font color="#000080">)
+    </font><font color="#FF0000"><b>end else </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Cannot create output file'</font><font color="#000080">);
+    </font>Close<font color="#000080">(</font>InFile<font color="#000080">)
+  </font><font color="#FF0000"><b>end else </b></font>WriteLn<font color="#000080">(</font><font color="#800000">'Cannot open input file'</font><font color="#000080">);
+  </font>LZDone<font color="#000080">;
+  </font>WriteLn
+<font color="#FF0000"><b>End</b></font><font color="#000080">.
+
+
+</font><font color="#008000"><i>{
+So boys and girls...
+
+Here is just a ritual doc file, couz i hate to write READMEs! ;)
+Okay, LZSSUNIT.PAS is my source unit for Borland (Turbo) Pascal for
+implementation of LZSS (LZ77) compression algorithm in your programs.
+It is designed to work with all three DOS, DPMI and Windows platforms
+of Borland Pascal 7.0. Extremely clear example to show the use of this
+unit and very easy implementation.
+
+One note: I figured out that it compresses and decompresses files faster
+and better! than the similar Microsoft COMPRESS/EXPAND utilities used by slow
+Microsoft Setup program. Microsoft COMPRESS uses the same algo, however.
+
+The source code provided is all Public Domain and thus no charge is
+required for the author. Use at your own risk and modify as you wish.
+I have am also not against of putting it in the new SWAG, eh Gayle?
+
+Thanks send to:
+
+Mr. Byte of TR/-\NC3T3CHN0PH0BiA
+SysOp of AndRew's BBS  * +371-2-559777
+Fidonet: 2:5100/33
+Internet: aeigus@fgate.castle.riga.lv, aeigus@kristin.cclu.lv
+
+If you still love the source so much, you are still welcome to send
+some &quot;support&quot; fee to:
+
+Andrew Eigus
+Heinrichstr. 76
+CH-8005 Zurich
+}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DATATYPE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0038.PAS">Original</a><b>]</b></p></body>
+</html>

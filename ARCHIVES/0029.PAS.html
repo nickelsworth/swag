@@ -1,0 +1,509 @@
+<html>
+<head><title> "RDC Compression" by MIKE CHAPIN</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#008000"><i>{
+Well here it is as promised. This is a Pascal port of Ross
+Data compression. This particular unit does no buffer
+compression/decompression but you can add it if you want.
+The C implementation I did has Buffer to file compression
+and file to buffer decompression.
+
+This is a freebie and is availble for SWAG if they
+want it.
+
+
+Common data types unit I use a lot. Looks like Delphi
+incorporated similar types.
+
+}
+(*
+  Common data types and structures.
+*)
+
+</i></font><font color="#FF0000"><b>Unit </b></font>Common<font color="#000080">;
+</font><font color="#FF0000"><b>Interface
+
+Type
+  </b></font>PByte <font color="#000080">= ^</font>Byte<font color="#000080">;
+  </font>ByteArray <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">65000</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+  </font>PByteArray <font color="#000080">= ^</font>ByteArray<font color="#000080">;
+
+  </font>PInteger <font color="#000080">= ^</font>Integer<font color="#000080">;
+  </font>IntArray <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">32000</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Integer<font color="#000080">;
+  </font>PIntArray <font color="#000080">= ^</font>IntArray<font color="#000080">;
+
+  </font>PWord <font color="#000080">= ^</font>Word<font color="#000080">;
+  </font>WordArray <font color="#000080">= </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">32000</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Word<font color="#000080">;
+  </font>PWordArray <font color="#000080">= ^</font>WordArray<font color="#000080">;
+
+</font><font color="#FF0000"><b>Implementation
+
+END</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>(***************************************************
+ * RDC Unit                                        *
+ *                                                 *
+ * This is a Pascal port of C code from an article *
+ * In &quot;The C Users Journal&quot;, 1/92 Written by       *
+ * Ed Ross.                                        *
+ *                                                 *
+ * This particular code has worked well under,     *
+ * Real, Protected and Windows.                    *
+ *                                                 *
+ * The compression is not quite as good as PKZIP   *
+ * but it decompresses about 5 times faster.       *
+ ***************************************************)
+</i></font><font color="#FF0000"><b>Unit </b></font>RDCUnit<font color="#000080">;
+</font><font color="#FF0000"><b>Interface
+Uses
+  </b></font>Common<font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Comp_FileToFile<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>infile<font color="#000080">, </font>outfile<font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>Procedure </b></font>Decomp_FileToFile<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>infile<font color="#000080">, </font>outfile<font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">);
+
+</font><font color="#FF0000"><b>Implementation
+Const
+  </b></font>HASH_LEN <font color="#000080">=  </font><font color="#800000">4096</font><font color="#000080">;    </font><font color="#008000"><i>{ # hash table entries }
+  </i></font>HASH_SIZE <font color="#000080">= </font>HASH_LEN <font color="#000080">* </font>Sizeof<font color="#000080">(</font>word<font color="#000080">);
+  </font>BUFF_LEN <font color="#000080">= </font><font color="#800000">16384</font><font color="#000080">;    </font><font color="#008000"><i>{ size of disk io buffer }
+
+
+(*
+ compress inbuff_len bytes of inbuff into outbuff
+ using hash_len entries in hash_tbl.
+
+ return length of outbuff, or &quot;0 - inbuff_len&quot;
+ if inbuff could not be compressed.
+*)
+</i></font><font color="#FF0000"><b>Function </b></font>rdc_compress<font color="#000080">(</font>ibuff      <font color="#000080">: </font>Pointer<font color="#000080">;
+                      </font>inbuff_len <font color="#000080">: </font>Word<font color="#000080">;
+                      </font>obuff      <font color="#000080">: </font>Pointer<font color="#000080">;
+                      </font>htable     <font color="#000080">: </font>Pointer<font color="#000080">) : </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>inbuff      <font color="#000080">: </font>PByte <font color="#FF0000"><b>Absolute </b></font>ibuff<font color="#000080">;
+  </font>outbuff     <font color="#000080">: </font>PByte <font color="#FF0000"><b>Absolute </b></font>obuff<font color="#000080">;
+  </font>hash_tbl    <font color="#000080">: </font>PWordArray <font color="#FF0000"><b>Absolute </b></font>htable<font color="#000080">;
+  </font>in_idx      <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>in_idxa     <font color="#000080">: </font>PByteArray <font color="#FF0000"><b>absolute </b></font>in_idx<font color="#000080">;
+  </font>inbuff_end  <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>anchor      <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>pat_idx     <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>cnt         <font color="#000080">: </font>Word<font color="#000080">;
+  </font>gap         <font color="#000080">: </font>Word<font color="#000080">;
+  </font>c           <font color="#000080">: </font>Word<font color="#000080">;
+  </font>hash        <font color="#000080">: </font>Word<font color="#000080">;
+  </font>hashlen     <font color="#000080">: </font>Word<font color="#000080">;
+  </font>ctrl_idx    <font color="#000080">: </font>PWord<font color="#000080">;
+  </font>ctrl_bits   <font color="#000080">: </font>Word<font color="#000080">;
+  </font>ctrl_cnt    <font color="#000080">: </font>Word<font color="#000080">;
+  </font>out_idx     <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>outbuff_end <font color="#000080">: </font>PByte<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>in_idx <font color="#000080">:= </font>inbuff<font color="#000080">;
+  </font>inbuff_end <font color="#000080">:= </font>Pointer<font color="#000080">(</font>LongInt<font color="#000080">(</font>inbuff<font color="#000080">) + </font>inbuff_len<font color="#000080">);
+  </font>ctrl_idx <font color="#000080">:= </font>Pointer<font color="#000080">(</font>outbuff<font color="#000080">);
+  </font>ctrl_cnt <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+
+  </font>out_idx <font color="#000080">:= </font>Pointer<font color="#000080">(</font>longint<font color="#000080">(</font>outbuff<font color="#000080">) + </font>Sizeof<font color="#000080">(</font>Word<font color="#000080">));
+  </font>outbuff_end <font color="#000080">:= </font>Pointer<font color="#000080">(</font>LongInt<font color="#000080">(</font>outbuff<font color="#000080">) + (</font>inbuff_len <font color="#000080">- </font><font color="#800000">48</font><font color="#000080">));
+
+  </font><font color="#008000"><i>{ skip the compression for a small buffer }
+
+  </i></font><font color="#FF0000"><b>If </b></font>inbuff_len <font color="#000080">&lt;= </font><font color="#800000">18 </font><font color="#FF0000"><b>Then
+  Begin
+    </b></font>Move<font color="#000080">(</font>outbuff<font color="#000080">, </font>inbuff<font color="#000080">, </font>inbuff_len<font color="#000080">);
+    </font>rdc_compress <font color="#000080">:= </font><font color="#800000">0 </font><font color="#000080">- </font>inbuff_len<font color="#000080">;
+    </font>Exit<font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ adjust # hash entries so hash algorithm can
+    use 'and' instead of 'mod' }
+
+  </i></font>hashlen <font color="#000080">:= </font>HASH_LEN <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ scan thru inbuff }
+
+  </i></font><font color="#FF0000"><b>While </b></font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) &lt; </font>LongInt<font color="#000080">(</font>inbuff_end<font color="#000080">) </font><font color="#FF0000"><b>Do
+  Begin
+    </b></font><font color="#008000"><i>{ make room for the control bits
+      and check for outbuff overflow }
+
+    </i></font><font color="#FF0000"><b>If </b></font>ctrl_cnt <font color="#000080">= </font><font color="#800000">16 </font><font color="#FF0000"><b>Then
+    Begin
+      </b></font>ctrl_idx<font color="#000080">^ := </font>ctrl_bits<font color="#000080">;
+      </font>ctrl_cnt <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font>ctrl_idx <font color="#000080">:= </font>Pointer<font color="#000080">(</font>out_idx<font color="#000080">);
+      </font>Inc<font color="#000080">(</font>word<font color="#000080">(</font>out_idx<font color="#000080">), </font><font color="#800000">2</font><font color="#000080">);
+      </font><font color="#FF0000"><b>If </b></font>LongInt<font color="#000080">(</font>out_idx<font color="#000080">) &gt; </font>LongInt<font color="#000080">(</font>outbuff_end<font color="#000080">) </font><font color="#FF0000"><b>Then
+      Begin
+        </b></font>Move<font color="#000080">(</font>outbuff<font color="#000080">, </font>inbuff<font color="#000080">, </font>inbuff_len<font color="#000080">);
+        </font>rdc_compress <font color="#000080">:= </font>inbuff_len<font color="#000080">;
+        </font>Exit<font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>End
+    Else
+      </b></font>Inc<font color="#000080">(</font>ctrl_cnt<font color="#000080">);
+
+      </font><font color="#008000"><i>{ look for rle }
+
+      </i></font>anchor <font color="#000080">:= </font>in_idx<font color="#000080">;
+      </font>c <font color="#000080">:= </font>in_idx<font color="#000080">^;
+      </font>Inc<font color="#000080">(</font>in_idx<font color="#000080">);
+
+      </font><font color="#FF0000"><b>While </b></font><font color="#000080">(</font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) &lt; </font>longint<font color="#000080">(</font>inbuff_end<font color="#000080">))
+            </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>in_idx<font color="#000080">^ = </font>c<font color="#000080">)
+            </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>anchor<font color="#000080">) &lt; (</font>HASH_LEN <font color="#000080">+ </font><font color="#800000">18</font><font color="#000080">)) </font><font color="#FF0000"><b>Do
+        </b></font>Inc<font color="#000080">(</font>in_idx<font color="#000080">);
+
+      </font><font color="#008000"><i>{ store compression code if character is
+        repeated more than 2 times }
+
+      </i></font>cnt <font color="#000080">:= </font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>anchor<font color="#000080">);
+      </font><font color="#FF0000"><b>If </b></font>cnt <font color="#000080">&gt; </font><font color="#800000">2 </font><font color="#FF0000"><b>Then
+      Begin
+        If </b></font>cnt <font color="#000080">&lt;= </font><font color="#800000">18 </font><font color="#FF0000"><b>Then     </b></font><font color="#008000"><i>{ short rle }
+        </i></font><font color="#FF0000"><b>Begin
+          </b></font>out_idx<font color="#000080">^ := </font>cnt <font color="#000080">- </font><font color="#800000">3</font><font color="#000080">;
+          </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+          </font>out_idx<font color="#000080">^ := </font>c<font color="#000080">;
+          </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+        </font><font color="#FF0000"><b>End
+        Else                    </b></font><font color="#008000"><i>{ long rle }
+        </i></font><font color="#FF0000"><b>Begin
+          </b></font>Dec<font color="#000080">(</font>cnt<font color="#000080">, </font><font color="#800000">19</font><font color="#000080">);
+          </font>out_idx<font color="#000080">^ := </font><font color="#800000">16 </font><font color="#000080">+ (</font>cnt <font color="#FF0000"><b>and </b></font><font color="#800000">$0F</font><font color="#000080">);
+          </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+          </font>out_idx<font color="#000080">^ := </font>cnt <font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">;
+          </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+          </font>out_idx<font color="#000080">^ := </font>c<font color="#000080">;
+          </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+        </font>ctrl_bits <font color="#000080">:= (</font>ctrl_bits <font color="#FF0000"><b>Shl </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>Or </b></font><font color="#800000">1</font><font color="#000080">;
+        </font>Continue<font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#008000"><i>{ look for pattern if 2 or more characters
+        remain in the input buffer }
+
+      </i></font>in_idx <font color="#000080">:= </font>anchor<font color="#000080">;
+
+      </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>LongInt<font color="#000080">(</font>inbuff_end<font color="#000080">) - </font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">)) &gt; </font><font color="#800000">2 </font><font color="#FF0000"><b>Then
+      Begin
+        </b></font><font color="#008000"><i>{ locate offset of possible pattern
+          in sliding dictionary }
+
+        </i></font>hash <font color="#000080">:= ((((</font>in_idxa<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>And </b></font><font color="#800000">15</font><font color="#000080">) </font><font color="#FF0000"><b>Shl </b></font><font color="#800000">8</font><font color="#000080">) </font><font color="#FF0000"><b>Or </b></font>in_idxa<font color="#000080">^[</font><font color="#800000">1</font><font color="#000080">]) </font><font color="#FF0000"><b>Xor
+                 </b></font><font color="#000080">((</font>in_idxa<font color="#000080">^[</font><font color="#800000">0</font><font color="#000080">] </font><font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>Or </b></font><font color="#000080">(</font>in_idxa<font color="#000080">^[</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">)))
+                 </font><font color="#FF0000"><b>And </b></font>hashlen<font color="#000080">;
+
+        </font>pat_idx <font color="#000080">:= </font>in_idx<font color="#000080">;
+        </font>Word<font color="#000080">(</font>pat_idx<font color="#000080">) := </font>hash_tbl<font color="#000080">^[</font>hash<font color="#000080">];
+        </font>hash_tbl<font color="#000080">^[</font>hash<font color="#000080">] := </font>Word<font color="#000080">(</font>in_idx<font color="#000080">);
+
+        </font><font color="#008000"><i>{ compare characters if we're within 4098 bytes }
+
+        </i></font>gap <font color="#000080">:= </font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>pat_idx<font color="#000080">);
+        </font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>gap <font color="#000080">&lt;= </font>HASH_LEN <font color="#000080">+ </font><font color="#800000">2</font><font color="#000080">) </font><font color="#FF0000"><b>Then
+        Begin
+          While </b></font><font color="#000080">(</font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) &lt; </font>LongInt<font color="#000080">(</font>inbuff_end<font color="#000080">))
+                </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>LongInt<font color="#000080">(</font>pat_idx<font color="#000080">) &lt; </font>LongInt<font color="#000080">(</font>anchor<font color="#000080">))
+                </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>pat_idx<font color="#000080">^ = </font>in_idx<font color="#000080">^)
+                </font><font color="#FF0000"><b>And </b></font><font color="#000080">(</font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>anchor<font color="#000080">) &lt; </font><font color="#800000">271</font><font color="#000080">) </font><font color="#FF0000"><b>Do
+          Begin
+            </b></font>Inc<font color="#000080">(</font>in_idx<font color="#000080">);
+            </font>Inc<font color="#000080">(</font>pat_idx<font color="#000080">);
+          </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+          </font><font color="#008000"><i>{ store pattern if it is more than 2 characters }
+
+          </i></font>cnt <font color="#000080">:= </font>LongInt<font color="#000080">(</font>in_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>anchor<font color="#000080">);
+          </font><font color="#FF0000"><b>If </b></font>cnt <font color="#000080">&gt; </font><font color="#800000">2 </font><font color="#FF0000"><b>Then
+          Begin
+            </b></font>Dec<font color="#000080">(</font>gap<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+
+            </font><font color="#FF0000"><b>If </b></font>cnt <font color="#000080">&lt;= </font><font color="#800000">15 </font><font color="#FF0000"><b>Then     </b></font><font color="#008000"><i>{ short pattern }
+            </i></font><font color="#FF0000"><b>Begin
+              </b></font>out_idx<font color="#000080">^ := (</font>cnt <font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">) + (</font>gap <font color="#FF0000"><b>And </b></font><font color="#800000">$0F</font><font color="#000080">);
+              </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+              </font>out_idx<font color="#000080">^ := </font>gap <font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">;
+              </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+            </font><font color="#FF0000"><b>End
+            Else                    </b></font><font color="#008000"><i>{ long pattern }
+            </i></font><font color="#FF0000"><b>Begin
+              </b></font>out_idx<font color="#000080">^ := </font><font color="#800000">32 </font><font color="#000080">+ (</font>gap <font color="#FF0000"><b>And </b></font><font color="#800000">$0F</font><font color="#000080">);
+              </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+              </font>out_idx<font color="#000080">^ := </font>gap <font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">;
+              </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+              </font>out_idx<font color="#000080">^ := </font>cnt <font color="#000080">- </font><font color="#800000">16</font><font color="#000080">;
+              </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+            </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+            </font>ctrl_bits <font color="#000080">:= (</font>ctrl_bits <font color="#FF0000"><b>Shl </b></font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>Or </b></font><font color="#800000">1</font><font color="#000080">;
+            </font>Continue<font color="#000080">;
+          </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#008000"><i>{ can't compress this character
+        so copy it to outbuff }
+
+      </i></font>out_idx<font color="#000080">^ := </font>c<font color="#000080">;
+      </font>Inc<font color="#000080">(</font>out_idx<font color="#000080">);
+      </font>Inc<font color="#000080">(</font>anchor<font color="#000080">);
+      </font>in_idx <font color="#000080">:= </font>anchor<font color="#000080">;
+      </font>ctrl_bits <font color="#000080">:= </font>ctrl_bits <font color="#FF0000"><b>Shl </b></font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ save last load of control bits }
+
+  </i></font>ctrl_bits <font color="#000080">:= </font>ctrl_bits <font color="#FF0000"><b>Shl </b></font><font color="#000080">(</font><font color="#800000">16 </font><font color="#000080">- </font>ctrl_cnt<font color="#000080">);
+  </font>ctrl_idx<font color="#000080">^ := </font>ctrl_bits<font color="#000080">;
+
+  </font><font color="#008000"><i>{ and return size of compressed buffer }
+
+  </i></font>rdc_compress <font color="#000080">:= </font>LongInt<font color="#000080">(</font>out_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>outbuff<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>(*
+ decompress inbuff_len bytes of inbuff into outbuff.
+
+ return length of outbuff.
+*)
+</i></font><font color="#FF0000"><b>Function </b></font>RDC_Decompress<font color="#000080">(</font>inbuff     <font color="#000080">: </font>PByte<font color="#000080">;
+                        </font>inbuff_len <font color="#000080">: </font>Word<font color="#000080">;
+                        </font>outbuff    <font color="#000080">: </font>PByte<font color="#000080">) : </font>Integer<font color="#000080">;
+</font><font color="#FF0000"><b>Var
+  </b></font>ctrl_bits    <font color="#000080">: </font>Word<font color="#000080">;
+  </font>ctrl_mask    <font color="#000080">: </font>Word<font color="#000080">;
+  </font>inbuff_idx   <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>outbuff_idx  <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>inbuff_end   <font color="#000080">: </font>PByte<font color="#000080">;
+  </font>cmd<font color="#000080">, </font>cnt     <font color="#000080">: </font>Word<font color="#000080">;
+  </font>ofs<font color="#000080">, </font>len     <font color="#000080">: </font>Word<font color="#000080">;
+  </font>outbuff_src  <font color="#000080">: </font>PByte<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>ctrl_mask <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>inbuff_idx <font color="#000080">:= </font>inbuff<font color="#000080">;
+  </font>outbuff_idx <font color="#000080">:= </font>outbuff<font color="#000080">;
+  </font>inbuff_end <font color="#000080">:= </font>Pointer<font color="#000080">(</font>LongInt<font color="#000080">(</font>inbuff<font color="#000080">) + </font>inbuff_len<font color="#000080">);
+
+  </font><font color="#008000"><i>{ process each item in inbuff }
+  </i></font><font color="#FF0000"><b>While </b></font>LongInt<font color="#000080">(</font>inbuff_idx<font color="#000080">) &lt; </font>LongInt<font color="#000080">(</font>inbuff_end<font color="#000080">) </font><font color="#FF0000"><b>Do
+  Begin
+    </b></font><font color="#008000"><i>{ get new load of control bits if needed }
+    </i></font>ctrl_mask <font color="#000080">:= </font>ctrl_mask <font color="#FF0000"><b>Shr </b></font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>If </b></font>ctrl_mask <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+    Begin
+      </b></font>ctrl_bits <font color="#000080">:= </font>PWord<font color="#000080">(</font>inbuff_idx<font color="#000080">)^;
+      </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">);
+      </font>ctrl_mask <font color="#000080">:= </font><font color="#800000">$8000</font><font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+    </font><font color="#008000"><i>{ just copy this char if control bit is zero }
+    </i></font><font color="#FF0000"><b>If </b></font><font color="#000080">(</font>ctrl_bits <font color="#FF0000"><b>And </b></font>ctrl_mask<font color="#000080">) = </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+    Begin
+      </b></font>outbuff_idx<font color="#000080">^ := </font>inbuff_idx<font color="#000080">^;
+      </font>Inc<font color="#000080">(</font>outbuff_idx<font color="#000080">);
+      </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+      </font>Continue<font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+    </font><font color="#008000"><i>{ undo the compression code }
+    </i></font>cmd <font color="#000080">:= (</font>inbuff_idx<font color="#000080">^ </font><font color="#FF0000"><b>Shr </b></font><font color="#800000">4</font><font color="#000080">) </font><font color="#FF0000"><b>And </b></font><font color="#800000">$0F</font><font color="#000080">;
+    </font>cnt <font color="#000080">:= </font>inbuff_idx<font color="#000080">^ </font><font color="#FF0000"><b>And </b></font><font color="#800000">$0F</font><font color="#000080">;
+    </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+
+    </font><font color="#FF0000"><b>Case </b></font>cmd <font color="#FF0000"><b>Of
+      </b></font><font color="#800000">0 </font><font color="#000080">:     </font><font color="#008000"><i>{ short rle }
+      </i></font><font color="#FF0000"><b>Begin
+        </b></font>Inc<font color="#000080">(</font>cnt<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+        </font>FillChar<font color="#000080">(</font>outbuff_idx<font color="#000080">^, </font>cnt<font color="#000080">, </font>inbuff_idx<font color="#000080">^);
+        </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>outbuff_idx<font color="#000080">, </font>cnt<font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#800000">1 </font><font color="#000080">:     </font><font color="#008000"><i>{ long rle }
+      </i></font><font color="#FF0000"><b>Begin
+        </b></font>Inc<font color="#000080">(</font>cnt<font color="#000080">,  </font>inbuff_idx<font color="#000080">^ </font><font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">);
+        </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>cnt<font color="#000080">, </font><font color="#800000">19</font><font color="#000080">);
+        </font>FillChar<font color="#000080">(</font>outbuff_idx<font color="#000080">^, </font>cnt<font color="#000080">, </font>inbuff_idx<font color="#000080">^);
+        </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>outbuff_idx<font color="#000080">, </font>cnt<font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#800000">2 </font><font color="#000080">:     </font><font color="#008000"><i>{ long pattern }
+      </i></font><font color="#FF0000"><b>Begin
+        </b></font>ofs <font color="#000080">:= </font>cnt <font color="#000080">+ </font><font color="#800000">3</font><font color="#000080">;
+        </font>Inc<font color="#000080">(</font>ofs<font color="#000080">, </font>inbuff_idx<font color="#000080">^ </font><font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">);
+        </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+        </font>cnt <font color="#000080">:= </font>inbuff_idx<font color="#000080">^;
+        </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>cnt<font color="#000080">, </font><font color="#800000">16</font><font color="#000080">);
+        </font>outbuff_src <font color="#000080">:= </font>Pointer<font color="#000080">(</font>LongInt<font color="#000080">(</font>outbuff_idx<font color="#000080">) - </font>ofs<font color="#000080">);
+        </font>Move<font color="#000080">(</font>outbuff_src<font color="#000080">^, </font>outbuff_idx<font color="#000080">^, </font>cnt<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>outbuff_idx<font color="#000080">, </font>cnt<font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+      </font><font color="#FF0000"><b>Else    </b></font><font color="#008000"><i>{ short pattern}
+      </i></font><font color="#FF0000"><b>Begin
+        </b></font>ofs <font color="#000080">:= </font>cnt <font color="#000080">+ </font><font color="#800000">3</font><font color="#000080">;
+        </font>Inc<font color="#000080">(</font>ofs<font color="#000080">, </font>inbuff_idx<font color="#000080">^ </font><font color="#FF0000"><b>Shl </b></font><font color="#800000">4</font><font color="#000080">);
+        </font>Inc<font color="#000080">(</font>inbuff_idx<font color="#000080">);
+        </font>outbuff_src <font color="#000080">:= </font>Pointer<font color="#000080">(</font>LongInt<font color="#000080">(</font>outbuff_idx<font color="#000080">) - </font>ofs<font color="#000080">);
+        </font>Move<font color="#000080">(</font>outbuff_src<font color="#000080">^, </font>outbuff_idx<font color="#000080">^, </font>cmd<font color="#000080">);
+        </font>Inc<font color="#000080">(</font>outbuff_idx<font color="#000080">, </font>cmd<font color="#000080">);
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ return length of decompressed buffer }
+  </i></font>RDC_Decompress <font color="#000080">:= </font>LongInt<font color="#000080">(</font>outbuff_idx<font color="#000080">) - </font>LongInt<font color="#000080">(</font>outbuff<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Comp_FileToFile<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>infile<font color="#000080">, </font>outfile<font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>code         <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>bytes_read   <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>compress_len <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>HashPtr      <font color="#000080">: </font>PWordArray<font color="#000080">;
+  </font>inputbuffer<font color="#000080">,
+  </font>outputbuffer <font color="#000080">: </font>PByteArray<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Getmem<font color="#000080">(</font>HashPtr<font color="#000080">, </font>HASH_SIZE<font color="#000080">);
+  </font>Fillchar<font color="#000080">(</font>hashPtr<font color="#000080">^, </font>HASH_SIZE<font color="#000080">, </font><font color="#800000">#0</font><font color="#000080">);
+  </font>Getmem<font color="#000080">(</font>inputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+  </font>Getmem<font color="#000080">(</font>outputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+
+  </font><font color="#008000"><i>{ read infile BUFF_LEN bytes at a time }
+
+  </i></font>bytes_read <font color="#000080">:= </font>BUFF_LEN<font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>bytes_read <font color="#000080">= </font>BUFF_LEN <font color="#FF0000"><b>Do
+  Begin
+    </b></font>Blockread<font color="#000080">(</font>infile<font color="#000080">, </font>inputbuffer<font color="#000080">^, </font>BUFF_LEN<font color="#000080">, </font>bytes_read<font color="#000080">);
+
+    </font><font color="#008000"><i>{ compress this load of bytes }
+    </i></font>compress_len <font color="#000080">:= </font>RDC_Compress<font color="#000080">(</font>PByte<font color="#000080">(</font>inputbuffer<font color="#000080">), </font>bytes_read<font color="#000080">,
+                                 </font>PByte<font color="#000080">(</font>outputbuffer<font color="#000080">), </font>HashPtr<font color="#000080">);
+
+    </font><font color="#008000"><i>{ write length of compressed buffer }
+    </i></font>Blockwrite<font color="#000080">(</font>outfile<font color="#000080">, </font>compress_len<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>code<font color="#000080">);
+
+    </font><font color="#008000"><i>{ check for negative length indicating the buffer could not be compressed }
+    </i></font><font color="#FF0000"><b>If </b></font>compress_len <font color="#000080">&lt; </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+      </b></font>compress_len <font color="#000080">:= </font><font color="#800000">0 </font><font color="#000080">- </font>compress_len<font color="#000080">;
+
+    </font><font color="#008000"><i>{ write the buffer }
+    </i></font>Blockwrite<font color="#000080">(</font>outfile<font color="#000080">, </font>outputbuffer<font color="#000080">^, </font>compress_len<font color="#000080">, </font>code<font color="#000080">);
+    </font><font color="#008000"><i>{ we're done if less than full buffer was read }
+  </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ add trailer to indicate End of File }
+  </i></font>compress_len <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>Blockwrite<font color="#000080">(</font>outfile<font color="#000080">, </font>compress_len<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>code<font color="#000080">);
+  </font><font color="#008000"><i>{
+  If (code &lt;&gt; 2) then
+     err_exit('Error writing trailer.'+#13+#10);
+  }
+  </i></font>Freemem<font color="#000080">(</font>HashPtr<font color="#000080">, </font>HASH_SIZE<font color="#000080">);
+  </font>Freemem<font color="#000080">(</font>inputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+  </font>Freemem<font color="#000080">(</font>outputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>Procedure </b></font>Decomp_FileToFile<font color="#000080">(</font><font color="#FF0000"><b>Var </b></font>infile<font color="#000080">, </font>outfile<font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>Var
+  </b></font>code         <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>block_len    <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>decomp_len   <font color="#000080">: </font>Integer<font color="#000080">;
+  </font>HashPtr      <font color="#000080">: </font>PWordArray<font color="#000080">;
+  </font>inputbuffer<font color="#000080">,
+  </font>outputbuffer <font color="#000080">: </font>PByteArray<font color="#000080">;
+</font><font color="#FF0000"><b>Begin
+  </b></font>Getmem<font color="#000080">(</font>inputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+  </font>Getmem<font color="#000080">(</font>outputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+  </font><font color="#008000"><i>{ read infile BUFF_LEN bytes at a time }
+  </i></font>block_len <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>While </b></font>block_len <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+  Begin
+    </b></font>Blockread<font color="#000080">(</font>infile<font color="#000080">, </font>block_len<font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font>code<font color="#000080">);
+    </font><font color="#008000"><i>{
+    If (code &lt;&gt; 2) then
+      err_exit('Can''t read block length.'+#13+#10);
+    }
+    { check for End-of-file flag }
+    </i></font><font color="#FF0000"><b>If </b></font>block_len <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>Then
+    Begin
+      If </b></font><font color="#000080">(</font>block_len <font color="#000080">&lt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>Then </b></font><font color="#008000"><i>{ copy uncompressed chars }
+      </i></font><font color="#FF0000"><b>Begin
+        </b></font>decomp_len <font color="#000080">:= </font><font color="#800000">0 </font><font color="#000080">- </font>block_len<font color="#000080">;
+        </font>Blockread<font color="#000080">(</font>infile<font color="#000080">, </font>outputbuffer<font color="#000080">^, </font>decomp_len<font color="#000080">, </font>code<font color="#000080">);
+        </font><font color="#008000"><i>{
+        If code &lt;&gt; decomp_len) then
+          err_exit('Can''t read uncompressed block.'+#13+#10);
+        }
+      </i></font><font color="#FF0000"><b>End
+      Else                </b></font><font color="#008000"><i>{ decompress this buffer }
+      </i></font><font color="#FF0000"><b>Begin
+        </b></font>Blockread<font color="#000080">(</font>infile<font color="#000080">, </font>inputbuffer<font color="#000080">^, </font>block_len<font color="#000080">, </font>code<font color="#000080">);
+        </font><font color="#008000"><i>{
+        If (code &lt;&gt; block_len) then
+          err_exit('Can''t read compressed block.'+#13+#10);
+        }
+        </i></font>decomp_len <font color="#000080">:= </font>RDC_Decompress<font color="#000080">(</font>PByte<font color="#000080">(</font>inputbuffer<font color="#000080">), </font>block_len<font color="#000080">,
+                                     </font>PByte<font color="#000080">(</font>outputbuffer<font color="#000080">));
+      </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+      </font><font color="#008000"><i>{ and write this buffer outfile }
+      </i></font>Blockwrite<font color="#000080">(</font>outfile<font color="#000080">, </font>outputbuffer<font color="#000080">^, </font>decomp_len<font color="#000080">, </font>code<font color="#000080">);
+      </font><font color="#008000"><i>{
+      if (code &lt;&gt; decomp_len) then
+        err_exit('Error writing uncompressed data.'+#13+#10);
+      }
+    </i></font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+  </font>Freemem<font color="#000080">(</font>inputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+  </font>Freemem<font color="#000080">(</font>outputbuffer<font color="#000080">, </font>BUFF_LEN<font color="#000080">);
+</font><font color="#FF0000"><b>End</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+
+&lt;------------------- </font>CUT <font color="#000080">-------------------------&gt;
+
+</font>Here <font color="#FF0000"><b>is </b></font>the test <font color="#FF0000"><b>program </b></font>I used <font color="#FF0000"><b>to </b></font>test this<font color="#000080">. </font>You will
+have <font color="#FF0000"><b>to </b></font>change it <font color="#FF0000"><b>to </b></font>reflect other <font color="#FF0000"><b>file </b></font>names but it
+will give you an idea <font color="#FF0000"><b>of </b></font>how <font color="#FF0000"><b>to </b></font>use the <font color="#FF0000"><b>unit</b></font><font color="#000080">.
+
+&lt;------------------- </font>CUT <font color="#000080">-------------------------&gt;
+</font><font color="#FF0000"><b>Program </b></font>RDCTest<font color="#000080">;
+</font><font color="#FF0000"><b>Uses
+  </b></font>RDCUnit<font color="#000080">;
+
+</font><font color="#FF0000"><b>Var
+  </b></font>fin<font color="#000080">, </font>fout <font color="#000080">: </font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+  </font>a         <font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">50</font><font color="#000080">] </font><font color="#FF0000"><b>Of </b></font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>BEGIN
+</b></font><font color="#008000"><i>{
+  Assign(fin, 'ASMINTRO.TXT');
+  Reset(fin, 1);
+
+  Assign(fout, 'ASMINTRO.RDC');
+  Rewrite(fout, 1);
+
+  Comp_FileToFile(fin, fout);
+}
+  </i></font>Assign<font color="#000080">(</font>fin<font color="#000080">, </font><font color="#800000">'ASMINTRO.RDC'</font><font color="#000080">);
+  </font>Reset<font color="#000080">(</font>fin<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+
+  </font>Assign<font color="#000080">(</font>fout<font color="#000080">, </font><font color="#800000">'ASMINTRO.2'</font><font color="#000080">);
+  </font>Rewrite<font color="#000080">(</font>fout<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+
+  </font>Decomp_FileToFile<font color="#000080">(</font>fin<font color="#000080">, </font>fout<font color="#000080">);
+
+  </font>Close<font color="#000080">(</font>fin<font color="#000080">);
+  </font>Close<font color="#000080">(</font>fout<font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to ARCHIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0029.PAS">Original</a><b>]</b></p></body>
+</html>

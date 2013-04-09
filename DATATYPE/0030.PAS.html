@@ -1,0 +1,92 @@
+<html>
+<head><title> "Fast Data Move" by BRENT BEACH</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DATATYPE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+From: ae723@FreeNet.Carleton.CA (Brent Beach)
+
+&gt;&gt;&gt; I am looking for a *fast* routine that can move more than 64k on any
+&gt;&gt;&gt; 80x86.
+&gt;&gt; A loop using movsb is limited to 64K, but movsw can move 128K at a time.
+&gt;&gt; 2 movsb loops can move 128K.  3 can do 196K, see where I'm going?
+&gt;
+&gt;MOVSW cannot move more than 64k. It is limited to 64k by the segmented
+&gt;architecture. So, to move more than 64k, several MOVSW are necessary. My
+&gt;problem is to find a routine in which this is done in a clever way.  In fact,
+&gt;I know that I would not come up with a clever coding, so I hope that an asm
+&gt;guru somewhere has already done it...
+
+You can never move 64KB in a single REP MOVSx instruction.
+First, the MOVSx instructions only update the offsets, not the
+segment registers, so 64KB is a maximu. Second, you run into
+problems when the offset is $FFFF. Third, you can move even
+less if the original addresses do not both have offset 0.
+
+To handle all cases, you should try for moving a little less.
+The following moves only 63KB. You could move 64K-16 bytes. I
+tested this routine with the longtype array upperbound 16 (it
+works with any multiple of 16).
+
+By using a fast move for 63KB you gain almost all the speed you
+can; it is probably not worth writing the glue code in ASM.
+
+The speed gain over the builtin MOVE procedure is around 38% on
+my machine (486/33). A test program ran for 2.58 seconds with
+ASM, 4.17 seconds with MOVE.
+}
+
+</i></font><font color="#FF0000"><b>procedure
+   </b></font>movelong<font color="#000080">(    </font>fromp   <font color="#000080">: </font>pointer<font color="#000080">;
+                </font>top     <font color="#000080">: </font>pointer<font color="#000080">;
+                </font>len     <font color="#000080">: </font>longint<font color="#000080">);
+  </font><font color="#008000"><i>{--------
+   long mover
+   - assumes from and to do not overlap (to not in from) }
+</i></font><font color="#FF0000"><b>type
+   </b></font>longtype        <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1 </font><font color="#000080">.. </font><font color="#800000">63 </font><font color="#000080">* </font><font color="#800000">1024</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;
+   </font>longtypeptr     <font color="#000080">= ^ </font>longtype<font color="#000080">;
+   </font>ptrrec          <font color="#000080">= </font><font color="#FF0000"><b>record
+      </b></font>ofs<font color="#000080">, </font>seg     <font color="#000080">: </font>word<font color="#000080">; </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>const
+   </b></font>longtypelen     <font color="#000080">= </font>sizeof<font color="#000080">(</font>longtype<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+   </b></font><font color="#008000"><i>{ fix the pointers: offsets between 0 and 15 }
+   </i></font>inc<font color="#000080">(</font>ptrrec<font color="#000080">(</font>fromp<font color="#000080">).</font>seg<font color="#000080">, </font>ptrrec<font color="#000080">(</font>fromp<font color="#000080">).</font>ofs <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">);
+   </font>ptrrec<font color="#000080">(</font>fromp<font color="#000080">).</font>ofs <font color="#000080">:= </font>ptrrec<font color="#000080">(</font>fromp<font color="#000080">).</font>ofs <font color="#FF0000"><b>and </b></font><font color="#800000">15</font><font color="#000080">;
+   </font>inc<font color="#000080">(</font>ptrrec<font color="#000080">(</font>top<font color="#000080">).</font>seg<font color="#000080">, </font>ptrrec<font color="#000080">(</font>top<font color="#000080">).</font>ofs <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">);
+   </font>ptrrec<font color="#000080">(</font>top<font color="#000080">).</font>ofs <font color="#000080">:= </font>ptrrec<font color="#000080">(</font>top<font color="#000080">).</font>ofs <font color="#FF0000"><b>and </b></font><font color="#800000">15</font><font color="#000080">;
+
+   </font><font color="#008000"><i>{ move pieces }
+   </i></font><font color="#FF0000"><b>while </b></font>len <font color="#000080">&gt; </font>sizeof<font color="#000080">(</font>longtype<font color="#000080">) </font><font color="#FF0000"><b>do begin
+      </b></font><font color="#008000"><i>{ faster than: move(fromp^, top^, sizeof(longtype)); }
+      </i></font><font color="#FF0000"><b>asm
+         </b></font><font color="#FF00FF">push    ds
+         lds     si,fromp
+         les     di,top
+         mov     cx,(longtypelen / 2)
+         cld
+         rep     movsw
+         pop     ds
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>dec<font color="#000080">(</font>len<font color="#000080">, </font>sizeof<font color="#000080">(</font>longtype<font color="#000080">));
+      </font>inc<font color="#000080">(</font>ptrrec<font color="#000080">(</font>fromp<font color="#000080">).</font>seg<font color="#000080">, </font>sizeof<font color="#000080">(</font>longtype<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">);
+      </font>inc<font color="#000080">(</font>ptrrec<font color="#000080">(</font>top<font color="#000080">).</font>seg<font color="#000080">, </font>sizeof<font color="#000080">(</font>longtype<font color="#000080">) </font><font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">);
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>if </b></font>len <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font><font color="#008000"><i>{ faster than: move(fromp^, top^, len); }
+      </i></font><font color="#FF0000"><b>asm
+         </b></font><font color="#FF00FF">push    ds
+         lds     si,fromp
+         les     di,top
+         mov     cx,word(len)
+         shr     cx, 1
+         cld
+         jnc     @wordmove
+         movsb
+      @wordmove:
+         rep     movsw
+         pop     ds
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DATATYPE SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0030.PAS">Original</a><b>]</b></p></body>
+</html>

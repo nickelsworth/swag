@@ -1,0 +1,365 @@
+<html>
+<head><title> "Sprite Game" by JOHN HOWARD</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0126.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code>
+<font color="#FF0000"><b>program </b></font>SpriteGame<font color="#000080">;         </font><font color="#008000"><i>{Verifies a VGA is present}
+{$G+,R-}
+(* jh  Syntax:  spritegame.exe  [number]
+  optional number is the total population of sprites.  Default is maxsprites.
+*)
+{ Original Sprites program by Bas van Gaalen, Holland, PD }
+{ Modified by Luis Mezquita Raya }
+{ Modified by John Howard (jh) into a game }
+{ 30-MAY-1994 jh Version 1.0
+  Now a game to see which sprite survives the longest.
+  Renamed tScrArray to Screen, and tSprArray to SpriteData.
+  Removed CRT unit &amp; saved around 1616 bytes.  Added command line parameter.
+  Added timer and energy definitions to provide statistics.
+  21-JUN-1994 jh Version 1.1 = ~7.5k
+  Added OnlyVGA and SetMode procedures.  Added CharSet &amp; CharType definitions.
+  Implemented characters as sprites.
+  29-JUN-1994 jh Version 1.2 = ~8.5k due to command line help
+  Places identification on each sprite by using HexDigits.  CharColor defaults
+  to sprite number (0..maxsprites) as a color index in the palette.  Fixed bug
+  in moire background screen limits.
+}
+</i></font><font color="#FF0000"><b>const
+      </b></font>maxsprites<font color="#000080">=</font><font color="#800000">128</font><font color="#000080">;                   </font><font color="#008000"><i>{ Number of sprites is [1..128] }
+      </i></font>pxsize<font color="#000080">=</font><font color="#800000">320</font><font color="#000080">;                       </font><font color="#008000"><i>{ screen x-size }
+      </i></font>pysize<font color="#000080">=</font><font color="#800000">200</font><font color="#000080">;                       </font><font color="#008000"><i>{ screen y-size }
+      </i></font>xsize<font color="#000080">=</font><font color="#800000">32</font><font color="#000080">;                         </font><font color="#008000"><i>{ sprite x-size }
+      </i></font>ysize<font color="#000080">=</font><font color="#800000">32</font><font color="#000080">;                         </font><font color="#008000"><i>{ sprite y-size }
+      </i></font>CharRows<font color="#000080">=</font><font color="#800000">8</font><font color="#000080">;                       </font><font color="#008000"><i>{ Characters are 8 rows high }
+      </i></font>HexDigits <font color="#000080">: </font><font color="#FF0000"><b>ARRAY</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">15</font><font color="#000080">] </font><font color="#FF0000"><b>OF </b></font>Char <font color="#000080">= </font><font color="#800000">'0123456789ABCDEF'</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+      </b></font>Screen<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>pysize<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font>pxsize<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+      </font>pScreen<font color="#000080">=^</font>Screen<font color="#000080">;
+      </font>SpriteData<font color="#000080">=</font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>ysize<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">..</font>xsize<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+      </font>pSpriteData<font color="#000080">=^</font>SpriteData<font color="#000080">;
+      </font>SprRec<font color="#000080">=</font><font color="#FF0000"><b>record
+              </b></font>x<font color="#000080">,</font>y <font color="#000080">: </font>word<font color="#000080">;              </font><font color="#008000"><i>{Absolute location of sprite}
+              </i></font>xspd<font color="#000080">,</font>yspd <font color="#000080">: </font>shortint<font color="#000080">;    </font><font color="#008000"><i>{Velocity horizontal and vertical}
+              </i></font>energy <font color="#000080">: </font>shortint<font color="#000080">;       </font><font color="#008000"><i>{Hide is neg., dead is 0, show is pos.}
+              </i></font>buf <font color="#000080">: </font>pSpriteData<font color="#000080">;       </font><font color="#008000"><i>{Rectangle of sprite definition}
+             </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>CharType <font color="#000080">= </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>CharRows<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Byte<font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+      </b></font>CharSet <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>CharType <font color="#FF0000"><b>absolute </b></font><font color="#800000">$F000</font><font color="#000080">:</font><font color="#800000">$FA6E</font><font color="#000080">;
+      </font>sprite <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>maxsprites<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>SprRec<font color="#000080">;
+      </font>vidscr<font color="#000080">,</font>virscr<font color="#000080">,</font>bgscr <font color="#000080">: </font>pScreen<font color="#000080">;   </font><font color="#008000"><i>{video, virtual, background screens}
+      </i></font>dead <font color="#000080">: </font>byte<font color="#000080">;                     </font><font color="#008000"><i>{Counts the dead sprites}
+      </i></font>survivor <font color="#000080">: </font>byte<font color="#000080">;                 </font><font color="#008000"><i>{Identify the last dead sprite}
+      </i></font>Population <font color="#000080">: </font>word<font color="#000080">;               </font><font color="#008000"><i>{Population from 1..128}
+      {CharColor : byte;}              {Character digit color 0..255}
+
+      </i></font>Timer <font color="#000080">: </font>longint<font color="#000080">;                 </font><font color="#008000"><i>{Stopwatch}
+      </i></font>H<font color="#000080">, </font>M<font color="#000080">, </font>S<font color="#000080">, </font>S100 <font color="#000080">: </font>Word<font color="#000080">;
+      </font>Startclock<font color="#000080">, </font>Stopclock <font color="#000080">: </font>Real<font color="#000080">;
+      </font>mins<font color="#000080">, </font>secs     <font color="#000080">: </font>integer<font color="#000080">;
+      </font>Code<font color="#000080">: </font>integer<font color="#000080">;                     </font><font color="#008000"><i>{temporary result of VAL conversion}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>GetTime<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Hr<font color="#000080">, </font>Mn<font color="#000080">, </font>Sec<font color="#000080">, </font>S100 <font color="#000080">: </font>word<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">; </font><font color="#008000"><i>{Avoids DOS unit}
+</i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ah,2ch
+    int 21h
+    xor ah,ah                 </font><font color="#008000"><i>{fast register clearing instead of MOV AH,0}
+    </i></font><font color="#FF00FF">mov al,dl
+    les di,S100
+    stosw
+    mov al,dh
+    les di,Sec
+    stosw
+    mov al,cl
+    les di,Mn
+    stosw
+    mov al,ch
+    les di,Hr
+    stosw
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>StartTimer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetTime<font color="#000080">(</font>H<font color="#000080">, </font>M<font color="#000080">, </font>S<font color="#000080">, </font>S100<font color="#000080">);
+  </font>StartClock <font color="#000080">:= (</font>H <font color="#000080">* </font><font color="#800000">3600</font><font color="#000080">) + (</font>M <font color="#000080">* </font><font color="#800000">60</font><font color="#000080">) + </font>S <font color="#000080">+ (</font>S100 <font color="#000080">/ </font><font color="#800000">100</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>StopTimer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetTime<font color="#000080">(</font>H<font color="#000080">, </font>M<font color="#000080">, </font>S<font color="#000080">, </font>S100<font color="#000080">);
+  </font>StopClock <font color="#000080">:= (</font>H <font color="#000080">* </font><font color="#800000">3600</font><font color="#000080">) + (</font>M <font color="#000080">* </font><font color="#800000">60</font><font color="#000080">) + </font>S <font color="#000080">+ (</font>S100 <font color="#000080">/ </font><font color="#800000">100</font><font color="#000080">);
+  </font>Timer <font color="#000080">:= </font>trunc<font color="#000080">(</font>StopClock <font color="#000080">- </font>StartClock<font color="#000080">);
+  </font>secs <font color="#000080">:= </font>Timer <font color="#FF0000"><b>mod </b></font><font color="#800000">60</font><font color="#000080">;                             </font><font color="#008000"><i>{Seconds remaining}
+  </i></font>mins <font color="#000080">:= </font>Timer <font color="#FF0000"><b>div </b></font><font color="#800000">60</font><font color="#000080">;                             </font><font color="#008000"><i>{Reduce into minutes}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>function </b></font>KeyPressed <font color="#000080">: </font>boolean<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;   </font><font color="#008000"><i>{Avoids unit CRT.KeyPressed}
+</i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ah,01h;    int 16h;    jnz @0;    xor ax,ax;    jmp @1;
+@0: mov al,1
+@1:
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>SetMode<font color="#000080">(</font>M<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov ah,0;        mov al,M;        int 10h;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>SetPal<font color="#000080">(</font>col<font color="#000080">,</font>r<font color="#000080">,</font>g<font color="#000080">,</font>b<font color="#000080">:</font>byte<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;      </font><font color="#008000"><i>{256 color palette}
+</i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">mov dx,03c8h
+    mov al,col             </font><font color="#008000"><i>{color}
+    </i></font><font color="#FF00FF">out dx,al
+    inc dx
+    mov al,r               </font><font color="#008000"><i>{red component}
+    </i></font><font color="#FF00FF">out dx,al
+    mov al,g               </font><font color="#008000"><i>{green component}
+    </i></font><font color="#FF00FF">out dx,al
+    mov al,b               </font><font color="#008000"><i>{blue component}
+    </i></font><font color="#FF00FF">out dx,al
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>flip<font color="#000080">(</font>srcscr<font color="#000080">, </font>destscr <font color="#000080">: </font>pScreen<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;   </font><font color="#008000"><i>{copy screen}
+</i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">push ds
+    lds si,srcscr
+    les di,destscr
+    mov cx,pxsize*pysize/2
+    rep movsw
+    pop ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>cls<font color="#000080">(</font>scr <font color="#000080">: </font>pScreen<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;   </font><font color="#008000"><i>{clear screen}
+</i></font><font color="#FF0000"><b>asm
+    </b></font><font color="#FF00FF">les di,scr;  xor ax,ax;  mov cx,pxsize*pysize/2;  rep stosw
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>retrace<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">mov dx,03dah
+@vert1: in al,dx
+        test al,8
+        jnz @vert1
+@vert2: in al,dx
+        test al,8
+        jz @vert2
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>PutSprite<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>sprite<font color="#000080">: </font>SprRec<font color="#000080">; </font>virseg<font color="#000080">: </font>pScreen<font color="#000080">); </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+        </b></font><font color="#FF00FF">push ds
+        lds si,sprite                   </font><font color="#008000"><i>{ get sprite segment }
+        </i></font><font color="#FF00FF">les di,virseg                   </font><font color="#008000"><i>{ get virtual screen segment }
+        </i></font><font color="#FF00FF">mov ax,SprRec[ds:si].y
+        shl ax,6
+        mov di,ax
+        shl ax,2
+        add di,ax                       </font><font color="#008000"><i>{ y*pxsize }
+        </i></font><font color="#FF00FF">add di,SprRec[ds:si].x          </font><font color="#008000"><i>{ y*pxsize+x }
+        </i></font><font color="#FF00FF">mov dx,pxsize-xsize             </font><font color="#008000"><i>{ number of pixels left on line }
+        </i></font><font color="#FF00FF">lds si,SprRec[ds:si].buf
+        mov bx,ysize
+@l1:    mov cx,xsize
+@l0:    lodsb
+        or al,al
+        jz @skip                        </font><font color="#008000"><i>{ check if transparent &quot;Black&quot; }
+        </i></font><font color="#FF00FF">mov es:[di],al                  </font><font color="#008000"><i>{ draw it }
+</i></font><font color="#FF00FF">@skip:  inc di
+        dec cx
+        jnz @l0
+        add di,dx
+        dec bx
+        jnz @l1
+        pop ds
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>procedure </b></font>OnlyVGA<font color="#000080">; </font><font color="#FF0000"><b>assembler</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>asm
+  </b></font><font color="#FF00FF">@CheckForVga: </font><font color="#008000"><i>{push    es}
+                </i></font><font color="#FF00FF">mov     AH,1ah         </font><font color="#008000"><i>{Get Display Combination Code}
+                </i></font><font color="#FF00FF">mov     AL,00h         </font><font color="#008000"><i>{AX := $1A00;}
+                </i></font><font color="#FF00FF">int     10h            </font><font color="#008000"><i>{Intr($10, Regs);}
+                </i></font><font color="#FF00FF">cmp     AL,1ah         </font><font color="#008000"><i>{IsVGA:= (AL=$1A) AND((BL=7) OR(BL=8))}
+                </i></font><font color="#FF00FF">jne     @NoVGA
+                cmp     BL,07h         </font><font color="#008000"><i>{VGA w/ monochrome analog display}
+                </i></font><font color="#FF00FF">je      @VgaPresent
+                cmp     BL,08h         </font><font color="#008000"><i>{VGA w/ color analog display}
+                </i></font><font color="#FF00FF">je      @VgaPresent
+  @NoVGA:
+                mov     ax,3           </font><font color="#008000"><i>{text mode}
+                </i></font><font color="#FF00FF">int     10h
+                push    cs
+                pop     ds
+                lea     dx,@message
+                mov     ah,9
+                int     21h            </font><font color="#008000"><i>{print $ terminated string}
+                </i></font><font color="#FF00FF">mov     ax,4c00h
+                int     21h            </font><font color="#008000"><i>{terminate}
+  </i></font><font color="#FF00FF">@message:     db      'Sorry, but you need a VGA to see this!',10,13,24h
+  @VgaPresent:  </font><font color="#008000"><i>{pop     es}
+  {... After here is where your VGA code can execute}
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;  </font><font color="#008000"><i>{OnlyVGA}
+
+</i></font><font color="#FF0000"><b>VAR   </b></font>n <font color="#000080">: </font>byte<font color="#000080">;               </font><font color="#008000"><i>{sprite number}
+      </i></font>hx<font color="#000080">,</font>hy<font color="#000080">,</font>i<font color="#000080">,</font>j<font color="#000080">,</font>k<font color="#000080">,</font>np <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>BEGIN  </b></font><font color="#008000"><i>{PROGRAM}
+ {Get text from command line and convert into a number}
+ </i></font>Val<font color="#000080">(</font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">), </font>Population<font color="#000080">, </font>Code<font color="#000080">);
+ </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Code <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">)    </font><font color="#008000"><i>{writeln('Bad number at position: ', Code);}
+   </i></font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Population <font color="#000080">&lt;</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>OR </b></font><font color="#000080">(</font>Population <font color="#000080">&gt; </font>maxsprites<font color="#000080">) </font><font color="#FF0000"><b>then
+   </b></font>Population <font color="#000080">:= </font>maxsprites<font color="#000080">;    </font><font color="#008000"><i>{default}
+ </i></font><font color="#FF0000"><b>if </b></font>ParamStr<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">) = </font><font color="#800000">'?' </font><font color="#FF0000"><b>then
+   begin
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'Howard International, P.O. Box 34633, NKC, MO 64116 USA'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'1994 Freeware Sprite Game v1.2'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'Syntax:  spritegame.exe  [number]'</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font><font color="#800000">'         optional number is the total population of sprites (1 to 128)'</font><font color="#000080">);
+    </font>halt<font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font><font color="#008000"><i>{CharColor := Population;}
+ </i></font>OnlyVGA<font color="#000080">;
+ </font>SetMode<font color="#000080">(</font><font color="#800000">$13</font><font color="#000080">);                  </font><font color="#008000"><i>{320x200x256x1 plane}
+ </i></font>Randomize<font color="#000080">;
+ </font>vidscr <font color="#000080">:= </font>Ptr<font color="#000080">(</font><font color="#800000">$A000</font><font color="#000080">,</font><font color="#800000">0</font><font color="#000080">);
+ </font>New<font color="#000080">(</font>virscr<font color="#000080">); </font>cls<font color="#000080">(</font>virscr<font color="#000080">); </font>New<font color="#000080">(</font>bgscr<font color="#000080">); </font>cls<font color="#000080">(</font>bgscr<font color="#000080">);
+ </font>np <font color="#000080">:= </font><font color="#800000">128 </font><font color="#FF0000"><b>div </b></font>Population<font color="#000080">;
+ </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>Population<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+  begin  </b></font><font color="#008000"><i>{Define moire background pattern}
+   </i></font><font color="#FF0000"><b>case </b></font>i <font color="#FF0000"><b>mod </b></font><font color="#800000">6 </font><font color="#FF0000"><b>of
+    </b></font><font color="#800000">0</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+       </b></font>hx <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;       </font>hy <font color="#000080">:= </font>i<font color="#000080">*</font>np<font color="#000080">;       </font>n <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">1</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+       </b></font>hx <font color="#000080">:= </font>i<font color="#000080">*</font>np<font color="#000080">;     </font>hy <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;         </font>n <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">2</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+       </b></font>hx <font color="#000080">:= </font>i<font color="#000080">*</font>np<font color="#000080">;     </font>hy <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;          </font>n <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">3</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+       </b></font>hx <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;       </font>hy <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;          </font>n <font color="#000080">:= </font>i<font color="#000080">*</font>np<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">4</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+       </b></font>hx <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;        </font>hy <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;         </font>n <font color="#000080">:= </font>i<font color="#000080">*</font>np<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#800000">5</font><font color="#000080">:</font><font color="#FF0000"><b>begin
+       </b></font>hx<font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;         </font>hy<font color="#000080">:= </font>i<font color="#000080">*</font>np<font color="#000080">;        </font>n <font color="#000080">:= </font><font color="#800000">23</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+   </font><font color="#FF0000"><b>for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>np<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+    begin
+     </b></font>k <font color="#000080">:= </font>j <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+     </font>SetPal<font color="#000080">(</font>np<font color="#000080">*</font>i<font color="#000080">+</font>j<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">, </font>k<font color="#000080">+</font>hx<font color="#000080">, </font>k<font color="#000080">+</font>hy<font color="#000080">, </font>k<font color="#000080">+</font>n<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font><font color="#800000">127 </font><font color="#FF0000"><b>do </b></font>SetPal<font color="#000080">(</font><font color="#800000">127</font><font color="#000080">+</font>i<font color="#000080">, </font>i <font color="#FF0000"><b>div </b></font><font color="#800000">3</font><font color="#000080">, </font><font color="#800000">20</font><font color="#000080">+</font>i <font color="#FF0000"><b>div </b></font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">20</font><font color="#000080">+</font>i <font color="#FF0000"><b>div </b></font><font color="#800000">7</font><font color="#000080">);
+ </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pxsize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do     </b></font><font color="#008000"><i>{jh bug!  Reduce to legal screen limits}
+   </i></font><font color="#FF0000"><b>for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>pysize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+     </b></font>bgscr<font color="#000080">^[</font>j<font color="#000080">,</font>i<font color="#000080">] := </font><font color="#800000">128</font><font color="#000080">+ </font>ABS<font color="#000080">(</font>i<font color="#000080">*</font>i <font color="#000080">- </font>j<font color="#000080">*</font>j<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">127</font><font color="#000080">;
+</font><font color="#008000"><i>(*
+ flip(bgscr, vidscr);               {copy background to video}
+ {SetPal(?,r,g,b)}                  {force a visible text palette entry}
+ writeln('Sprite Game v1.2 ');      {modify video}
+ flip(vidscr, bgscr);               {copy video to background}
+*)
+ </i></font>hx <font color="#000080">:= </font>xsize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+ </font>hy <font color="#000080">:= </font>ysize <font color="#FF0000"><b>shr </b></font><font color="#800000">1</font><font color="#000080">;
+ </font><font color="#FF0000"><b>for </b></font>n <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Population <font color="#FF0000"><b>do
+  begin
+   with </b></font>sprite<font color="#000080">[</font>n<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+     </b></font>x <font color="#000080">:= </font><font color="#800000">20</font><font color="#000080">+ </font>random<font color="#000080">(</font><font color="#800000">280 </font><font color="#000080">- </font>xsize<font color="#000080">);
+     </font>y <font color="#000080">:= </font><font color="#800000">20</font><font color="#000080">+ </font>random<font color="#000080">(</font><font color="#800000">160 </font><font color="#000080">- </font>ysize<font color="#000080">);
+     </font>xspd <font color="#000080">:= </font>random<font color="#000080">(</font><font color="#800000">6</font><font color="#000080">) - </font><font color="#800000">3</font><font color="#000080">;
+     </font>yspd <font color="#000080">:= </font>random<font color="#000080">(</font><font color="#800000">6</font><font color="#000080">) - </font><font color="#800000">3</font><font color="#000080">;
+     </font>energy <font color="#000080">:= </font>random<font color="#000080">(</font><font color="#800000">10</font><font color="#000080">);         </font><font color="#008000"><i>{punishes liberals}
+     </i></font><font color="#FF0000"><b>if </b></font>xspd<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+       begin
+        </b></font>xspd <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font>energy <font color="#000080">:= </font>random<font color="#000080">(</font><font color="#800000">20</font><font color="#000080">);      </font><font color="#008000"><i>{average life expectancy}
+       </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font><font color="#FF0000"><b>if </b></font>yspd<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+       begin
+        </b></font>yspd <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+        </font>energy <font color="#000080">:= </font>random<font color="#000080">(</font><font color="#800000">40</font><font color="#000080">);      </font><font color="#008000"><i>{rewards conservatives}
+       </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+     </font>New<font color="#000080">(</font>buf<font color="#000080">);
+     </font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>xsize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+      for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>ysize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+       begin
+        </b></font>k <font color="#000080">:= (</font>i<font color="#000080">-</font>hx<font color="#000080">) * (</font>i<font color="#000080">-</font>hx<font color="#000080">) + (</font>j<font color="#000080">-</font>hy<font color="#000080">) * (</font>j<font color="#000080">-</font>hy<font color="#000080">);
+        </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>k<font color="#000080">&lt; </font>hx<font color="#000080">*</font>hx<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>k<font color="#000080">&gt; </font>hx<font color="#000080">*</font>hx <font color="#FF0000"><b>div </b></font><font color="#800000">16</font><font color="#000080">)
+        </font><font color="#FF0000"><b>then </b></font>buf<font color="#000080">^[</font>j<font color="#000080">,</font>i<font color="#000080">] := </font>k <font color="#FF0000"><b>mod </b></font>np  <font color="#000080">+ </font>np <font color="#000080">* (</font>n<font color="#000080">-</font><font color="#800000">1</font><font color="#000080">)
+        </font><font color="#FF0000"><b>else </b></font>buf<font color="#000080">^[</font>j<font color="#000080">,</font>i<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;       </font><font color="#008000"><i>{CRT color &quot;Black&quot; is transparent}
+       </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{with}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{for}
+
+  {jh Can store your own bitmap image in any sprite[n].buf^[j,i] such as: }
+  </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>xsize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+    for </b></font>j <font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font>ysize<font color="#000080">-</font><font color="#800000">1 </font><font color="#FF0000"><b>do
+      begin
+        </b></font>sprite<font color="#000080">[</font><font color="#800000">1</font><font color="#000080">].</font>buf<font color="#000080">^[</font>j<font color="#000080">,</font>i<font color="#000080">] := </font>j<font color="#000080">;           </font><font color="#008000"><i>{first sprite.  Horizontal bars}
+        </i></font>sprite<font color="#000080">[</font>Population<font color="#000080">].</font>buf<font color="#000080">^[</font>j<font color="#000080">,</font>i<font color="#000080">] := </font>i<font color="#000080">;  </font><font color="#008000"><i>{last sprite.  Vertical bars}
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{jh Get characters from default font and attach to sprites}
+  </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>CharRows <font color="#FF0000"><b>do
+    for </b></font>j <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>CharRows <font color="#FF0000"><b>do
+      begin
+        for </b></font>n <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Population <font color="#FF0000"><b>do
+          begin
+            </b></font><font color="#008000"><i>{first hex digit for current sprite}
+            </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>CharSet<font color="#000080">[</font>ord<font color="#000080">(</font>HexDigits<font color="#000080">[</font>n <font color="#FF0000"><b>SHR </b></font><font color="#800000">4</font><font color="#000080">]),</font>i<font color="#000080">] </font><font color="#FF0000"><b>shr </b></font><font color="#000080">(</font><font color="#800000">8</font><font color="#000080">-</font>j<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">1 </font><font color="#000080">= </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+              </b></font>sprite<font color="#000080">[</font>n<font color="#000080">].</font>buf<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">] := </font>n       <font color="#008000"><i>{CharColor}
+            </i></font><font color="#FF0000"><b>else
+              </b></font>sprite<font color="#000080">[</font>n<font color="#000080">].</font>buf<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;      </font><font color="#008000"><i>{transparent}
+            {second hex digit for current sprite}
+            </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>CharSet<font color="#000080">[</font>ord<font color="#000080">(</font>HexDigits<font color="#000080">[</font>n <font color="#FF0000"><b>AND </b></font><font color="#800000">$F</font><font color="#000080">]),</font>i<font color="#000080">] </font><font color="#FF0000"><b>shr </b></font><font color="#000080">(</font><font color="#800000">8</font><font color="#000080">-</font>j<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#800000">1 </font><font color="#000080">=</font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>then
+              </b></font>sprite<font color="#000080">[</font>n<font color="#000080">].</font>buf<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">+</font>CharRows<font color="#000080">] := </font>n   <font color="#008000"><i>{CharColor}
+            </i></font><font color="#FF0000"><b>else
+              </b></font>sprite<font color="#000080">[</font>n<font color="#000080">].</font>buf<font color="#000080">^[</font>i<font color="#000080">,</font>j<font color="#000080">+</font>CharRows<font color="#000080">] := </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{transparent}
+          </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>(* {mark last sprite 'Z'}
+   sprite[Population].buf^[i,j] := CharSet[ord('Z'),i] shr (8-j) and 1; *)
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font><font color="#008000"><i>{jh Keep track of the last dead sprite and how old it was. }
+  </i></font>StartTimer<font color="#000080">;
+  </font><font color="#FF0000"><b>while not </b></font><font color="#000080">(</font>KeyPressed <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>dead<font color="#000080">=</font>Population<font color="#000080">)) </font><font color="#FF0000"><b>do
+  begin
+  </b></font>flip<font color="#000080">(</font>bgscr<font color="#000080">, </font>virscr<font color="#000080">);
+  </font>retrace<font color="#000080">;
+  </font>dead <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                         </font><font color="#008000"><i>{reset the sentinel}
+  </i></font><font color="#FF0000"><b>for </b></font>n <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Population <font color="#FF0000"><b>do
+    with </b></font>sprite<font color="#000080">[</font>n<font color="#000080">] </font><font color="#FF0000"><b>do
+    begin
+      if </b></font>energy <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>PutSprite<font color="#000080">(</font>sprite<font color="#000080">[</font>n<font color="#000080">], </font>virscr<font color="#000080">)     </font><font color="#008000"><i>{show(n)}
+      { else if energy &lt; 0 then hide(n) }
+      </i></font><font color="#FF0000"><b>else </b></font>inc<font color="#000080">(</font>dead<font color="#000080">);
+      </font>inc<font color="#000080">(</font>x<font color="#000080">,</font>xspd<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>x<font color="#000080">&lt;</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>x <font color="#000080">&gt; (</font><font color="#800000">310 </font><font color="#000080">- </font>xsize<font color="#000080">)) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>xspd <font color="#000080">:= -</font>xspd<font color="#000080">;
+        </font>energy <font color="#000080">:= </font>energy <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>inc<font color="#000080">(</font>y<font color="#000080">,</font>yspd<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>y<font color="#000080">&lt;</font><font color="#800000">10</font><font color="#000080">) </font><font color="#FF0000"><b>or </b></font><font color="#000080">(</font>y <font color="#000080">&gt; (</font><font color="#800000">190 </font><font color="#000080">- </font>ysize<font color="#000080">)) </font><font color="#FF0000"><b>then
+      begin
+        </b></font>yspd <font color="#000080">:= -</font>yspd<font color="#000080">;
+        </font>energy <font color="#000080">:= </font>energy <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{with}
+  </i></font>flip<font color="#000080">(</font>virscr<font color="#000080">, </font>vidscr<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{while}
+
+  </i></font>StopTimer<font color="#000080">;
+  </font>survivor <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>for </b></font>n <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>Population <font color="#FF0000"><b>do
+    begin                           </b></font><font color="#008000"><i>{find last dead sprite with zero energy}
+      </i></font><font color="#FF0000"><b>if </b></font>sprite<font color="#000080">[</font>n<font color="#000080">].</font>energy <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>survivor <font color="#000080">:= </font>n<font color="#000080">;
+      </font>Dispose<font color="#000080">(</font>sprite<font color="#000080">[</font>n<font color="#000080">].</font>buf<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Dispose<font color="#000080">(</font>virscr<font color="#000080">);  </font>Dispose<font color="#000080">(</font>bgscr<font color="#000080">);
+  </font>SetMode<font color="#000080">(</font><font color="#800000">$3</font><font color="#000080">);      </font><font color="#008000"><i>{resume text video mode 3h= 80x25x16 color}
+  </i></font>writeln<font color="#000080">(</font><font color="#800000">'Last dead sprite was # '</font><font color="#000080">, </font>survivor<font color="#000080">, </font><font color="#800000">' of '</font><font color="#000080">, </font>Population<font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Time of death was '</font><font color="#000080">, </font>trunc<font color="#000080">(</font>StopClock<font color="#000080">));
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Life span was '</font><font color="#000080">, </font>mins<font color="#000080">:</font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">' Minute and '</font><font color="#000080">, </font>secs<font color="#000080">:</font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">' Seconds'</font><font color="#000080">);
+</font><font color="#FF0000"><b>END</b></font><font color="#000080">.   </font><font color="#008000"><i>{PROGRAM}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to GRAPHICS SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0126.PAS">Original</a><b>]</b></p></body>
+</html>

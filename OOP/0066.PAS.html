@@ -1,0 +1,335 @@
+<html>
+<head><title> "Change Dialogs from Lists" by OLAF LUEDER</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to OOP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0066.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{From: q3817075@bonsai (Olaf Lueder)}
+{
+: I'm writing a program using BP7.0 and TurboVision. I have DialogBox
+: which contains some Datafields and a listbox. The problem is now that
+: when the selection in the listbox changes I want to change the
+: contents of the datafields. The way i'm doing it now is first get the
+: data with Dlg^.GetData(Data) and then delete Dlg^ from the destkop
+: (and ofcourse dispose it). Now I modify the data and creates the
+: dialogbox all over before I insert it again. This is not really what I
+: wannet - How do I do the same without having to delete and then insert
+: the dialogbox...
+There are various ways to solve your problem...
+
+At first: There is the 'FocusItem'-method, which is called by the
+HandleEvent
+          of the ListBox, whenever a new Item is focused by pressing the
+arrow-
+          keys or using the mouse.
+
+That's the method you'll have to modify.
+
+You could do it in the follow way:
+
+  procedure tNewListBox.FocusItem(Item: integer);
+  var Data: record
+              InputLine1: string[20];
+              InputLine2: integer;
+              CheckBox1 : word;
+              .
+              .
+              List      : pCollection;
+              Item      : integer;
+            end;
+  begin
+    inherited FocusItem(Item);
+    Owner^.GetData(Data);
+    (* here you can modify Data using the values of your actually list-item*)
+    (* for example: Data.InputLine1:=pListBoxItem(List^.at(Item))^.Name    *)
+    Owner^.SetData(Data);
+  end;
+
+But there still be a problem...
+
+Owner^.SetData calls ListBox^.SetData, and ListBox^.SetData calls
+ ListBox^.NewList and this method calls dispose(List, done)...
+
+So you have to redefine the NewList-method:
+
+  procedure tNewListBox.NewList(AList: pCollection);
+  begin
+    List := AList;
+    if AList = nil then SetRange(0)
+                   else SetRange(AList^.Count);
+    if Range &gt; 0 then FocusItem(0);
+    DrawView;
+    (* we don't call dispose(List, done *)
+  end;
+
+It's a solution of your problem, but it isn't a nice one...
+
+Much better way is to use messages.
+
+What does we have ?
+
+We've a ListBox, and of course a Collection with our data.
+Now you can send a Message from the ListBox to the Owner of itself and
+every
+ subview of your dialog can hear that a new list-item was focused...
+Storing a pointer of the focused list-item at the InfoPtr of the
+Event-record-
+every subview can take required data and change itself.
+
+Short (???) Demo:
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>Test<font color="#000080">;
+</font><font color="#FF0000"><b>uses </b></font>Objects<font color="#000080">, </font>Drivers<font color="#000080">, </font>App<font color="#000080">, </font>Menus<font color="#000080">, </font>Views<font color="#000080">, </font>Dialogs<font color="#000080">, </font>Validate<font color="#000080">;
+
+</font><font color="#FF0000"><b>const </b></font>cmListItemFocused         <font color="#000080">= </font><font color="#800000">1000</font><font color="#000080">;
+      </font>cmTestDialog              <font color="#000080">= </font><font color="#800000">1001</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type  </b></font>pListData                 <font color="#000080">= ^</font>tListData<font color="#000080">;
+      </font>tListData                 <font color="#000080">= </font><font color="#FF0000"><b>record
+                                    </b></font>FirstName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">20</font><font color="#000080">];
+                                    </font>LastName <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">30</font><font color="#000080">];
+                                    </font>Age      <font color="#000080">: </font>longint<font color="#000080">;
+                                    </font>Sex      <font color="#000080">: </font>word<font color="#000080">;
+                                  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pDataCollection           <font color="#000080">= ^</font>tDataCollection<font color="#000080">;
+      </font>tDataCollection           <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tCollection<font color="#000080">)
+        </font><font color="#FF0000"><b>constructor </b></font>Init<font color="#000080">;
+         </font><font color="#FF0000"><b>procedure </b></font>FreeItem<font color="#000080">(</font>Item<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+        </font><font color="#008000"><i>(* you have to add 'GetItem' and 'PutItem' and to registrate it *)
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pNewInputLine             <font color="#000080">= ^</font>tNewInputLine<font color="#000080">;
+      </font>tNewInputLine             <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tInputLine<font color="#000080">)
+        </font><font color="#FF0000"><b>constructor </b></font>Init<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Bounds<font color="#000080">: </font>TRect<font color="#000080">; </font>AMaxLen<font color="#000080">: </font>Integer<font color="#000080">);
+        </font><font color="#FF0000"><b>procedure </b></font>HandleEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Event<font color="#000080">: </font>tEvent<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pFirstNameInputLine       <font color="#000080">= ^</font>tFirstNameInputLine<font color="#000080">;
+      </font>tFirstNameInputLine       <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tNewInputLine<font color="#000080">)
+        </font><font color="#FF0000"><b>procedure </b></font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pLastNameInputLine        <font color="#000080">= ^</font>tLastNameInputLine<font color="#000080">;
+      </font>tLastNameInputLine        <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tNewInputLine<font color="#000080">)
+        </font><font color="#FF0000"><b>procedure </b></font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pAgeInputLine             <font color="#000080">= ^</font>tAgeInputLine<font color="#000080">;
+      </font>tAgeInputLine             <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tNewInputLine<font color="#000080">)
+        </font><font color="#FF0000"><b>procedure </b></font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pNewRadioButtons          <font color="#000080">= ^</font>tNewRadioButtons<font color="#000080">;
+      </font>tNewRadioButtons          <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tRadioButtons<font color="#000080">)
+         </font><font color="#FF0000"><b>constructor </b></font>Init<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Bounds<font color="#000080">: </font>TRect<font color="#000080">; </font>AStrings<font color="#000080">: </font>PSItem<font color="#000080">);
+        </font><font color="#FF0000"><b>procedure </b></font>HandleEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Event<font color="#000080">: </font>tEvent<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pSexRadioButtons          <font color="#000080">= ^</font>tSexRadioButtons<font color="#000080">;
+      </font>tSexRadioButtons          <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tNewRadioButtons<font color="#000080">)
+        </font><font color="#FF0000"><b>procedure </b></font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pNewListBox               <font color="#000080">= ^</font>tNewListBox<font color="#000080">;
+      </font>tNewListBox               <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tListBox<font color="#000080">)
+        </font><font color="#FF0000"><b>procedure </b></font>FocusItem<font color="#000080">(</font>Item<font color="#000080">: </font>integer<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pTestListBox              <font color="#000080">= ^</font>tTestListBox<font color="#000080">;
+      </font>tTestListBox              <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tNewListBox<font color="#000080">)
+        </font><font color="#FF0000"><b>function </b></font>GetText<font color="#000080">(</font>Item<font color="#000080">: </font>integer<font color="#000080">; </font>MaxLen<font color="#000080">: </font>integer<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>destructor </b></font>Done<font color="#000080">; </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>pTestDialog               <font color="#000080">= ^</font>tTestDialog<font color="#000080">;
+      </font>tTestDialog               <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tDialog<font color="#000080">)
+        </font><font color="#FF0000"><b>constructor </b></font>Init<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>tTestApp                  <font color="#000080">= </font><font color="#FF0000"><b>object</b></font><font color="#000080">(</font>tApplication<font color="#000080">)
+        </font><font color="#FF0000"><b>procedure </b></font>HandleEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Event<font color="#000080">: </font>TEvent<font color="#000080">); </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+         </font><font color="#FF0000"><b>procedure </b></font>InitMenuBar<font color="#000080">; </font><font color="#FF0000"><b>virtual</b></font><font color="#000080">;
+        </font><font color="#FF0000"><b>procedure </b></font>TestDialog<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var   </b></font>TestApp<font color="#000080">: </font>tTestApp<font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>NewDataItem<font color="#000080">(</font>AFirstName<font color="#000080">, </font>ALastName<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">; </font>AAge<font color="#000080">: </font>longint<font color="#000080">;
+                     </font>ASex<font color="#000080">: </font>word<font color="#000080">): </font>pListData<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>Item<font color="#000080">: </font>pListData<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetMem<font color="#000080">(</font>Item<font color="#000080">, </font>SizeOf<font color="#000080">(</font>tListData<font color="#000080">));
+  </font><font color="#FF0000"><b>with </b></font>Item<font color="#000080">^ </font><font color="#FF0000"><b>do begin
+    </b></font>FirstName<font color="#000080">:=</font>AFirstName<font color="#000080">;
+    </font>LastName<font color="#000080">:=</font>ALastName<font color="#000080">;
+    </font>Age<font color="#000080">:=</font>AAge<font color="#000080">;
+    </font>Sex<font color="#000080">:=</font>ASex<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>NewDataItem<font color="#000080">:=</font>Item<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONSTRUCTOR </b></font>tDataCollection<font color="#000080">.</font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>Init<font color="#000080">( </font><font color="#800000">5</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+   </font>insert<font color="#000080">(</font>NewDataItem<font color="#000080">(</font><font color="#800000">'Olaf'</font><font color="#000080">, </font><font color="#800000">'Lueder'</font><font color="#000080">, </font><font color="#800000">23</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+  </font>insert<font color="#000080">(</font>NewDataItem<font color="#000080">(</font><font color="#800000">'second'</font><font color="#000080">, </font><font color="#800000">'person'</font><font color="#000080">, </font><font color="#800000">55</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">));
+  </font>insert<font color="#000080">(</font>NewDataItem<font color="#000080">(</font><font color="#800000">'third'</font><font color="#000080">, </font><font color="#800000">'person'</font><font color="#000080">, </font><font color="#800000">77</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+  </font>insert<font color="#000080">(</font>NewDataItem<font color="#000080">(</font><font color="#800000">'fourth'</font><font color="#000080">, </font><font color="#800000">'person'</font><font color="#000080">, </font><font color="#800000">11</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">));
+  </font>insert<font color="#000080">(</font>NewDataItem<font color="#000080">(</font><font color="#800000">'fifth'</font><font color="#000080">, </font><font color="#800000">'person'</font><font color="#000080">, </font><font color="#800000">33</font><font color="#000080">, </font><font color="#800000">1</font><font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tDataCollection<font color="#000080">.</font>FreeItem<font color="#000080">(</font>Item<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>FreeMem<font color="#000080">(</font>Item<font color="#000080">, </font>SizeOf<font color="#000080">(</font>tListData<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONSTRUCTOR </b></font>tNewInputLine<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Bounds<font color="#000080">: </font>TRect<font color="#000080">; </font>AMaxLen<font color="#000080">: </font>Integer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>Init<font color="#000080">(</font>Bounds<font color="#000080">, </font>AMaxLen<font color="#000080">);
+  </font>Options<font color="#000080">:=</font>Options <font color="#FF0000"><b>or </b></font>ofPostProcess<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tNewInputLine<font color="#000080">.</font>HandleEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Event<font color="#000080">: </font>tEvent<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>HandleEvent<font color="#000080">(</font>Event<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Event<font color="#000080">.</font>What<font color="#000080">=</font>evCommand<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Event<font color="#000080">.</font>Command<font color="#000080">=</font>cmListItemFocused<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Modify<font color="#000080">(</font>Event<font color="#000080">.</font>InfoPtr<font color="#000080">);
+ </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tNewInputLine<font color="#000080">.</font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  Abstract</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tFirstNameInputLine<font color="#000080">.</font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>Str<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Str<font color="#000080">:=</font>Copy<font color="#000080">(</font>tListData<font color="#000080">(</font>AData<font color="#000080">^).</font>FirstName<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>MaxLen<font color="#000080">);
+  </font>SetData<font color="#000080">(</font>Str<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tLastNameInputLine<font color="#000080">.</font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>Str<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Str<font color="#000080">:=</font>Copy<font color="#000080">(</font>tListData<font color="#000080">(</font>AData<font color="#000080">^).</font>LastName<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font>MaxLen<font color="#000080">);
+  </font>SetData<font color="#000080">(</font>Str<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tAgeInputLine<font color="#000080">.</font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">[</font><font color="#800000">3</font><font color="#000080">];
+ </font><font color="#FF0000"><b>begin
+  </b></font>Str<font color="#000080">(</font>pListData<font color="#000080">(</font>AData<font color="#000080">)^.</font>Age<font color="#000080">, </font>S<font color="#000080">);
+  </font>SetData<font color="#000080">(</font>S<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONSTRUCTOR </b></font>tNewRadioButtons<font color="#000080">.</font>Init<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Bounds<font color="#000080">: </font>TRect<font color="#000080">; </font>AStrings<font color="#000080">: </font>PSItem<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>Init<font color="#000080">(</font>Bounds<font color="#000080">, </font>AStrings<font color="#000080">);
+  </font>Options<font color="#000080">:=</font>Options <font color="#FF0000"><b>or </b></font>ofPostProcess<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tNewRadioButtons<font color="#000080">.</font>HandleEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Event<font color="#000080">: </font>tEvent<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>HandleEvent<font color="#000080">(</font>Event<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Event<font color="#000080">.</font>What<font color="#000080">=</font>evCommand<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Event<font color="#000080">.</font>Command<font color="#000080">=</font>cmListItemFocused<font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>Modify<font color="#000080">(</font>Event<font color="#000080">.</font>InfoPtr<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tNewRadioButtons<font color="#000080">.</font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>SetData<font color="#000080">(</font>pListData<font color="#000080">(</font>AData<font color="#000080">)^.</font>Sex<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>PROCEDURE </b></font>tSexRadioButtons<font color="#000080">.</font>Modify<font color="#000080">(</font>AData<font color="#000080">: </font>pointer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>SetData<font color="#000080">(</font>pListData<font color="#000080">(</font>AData<font color="#000080">)^.</font>Sex<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tNewListBox<font color="#000080">.</font>FocusItem<font color="#000080">(</font>Item<font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>FocusItem<font color="#000080">(</font>Item<font color="#000080">);
+  </font><font color="#FF0000"><b>Message</b></font><font color="#000080">(</font>Owner<font color="#000080">, </font>evCommand<font color="#000080">, </font>cmListItemFocused<font color="#000080">, </font>List<font color="#000080">^.</font>At<font color="#000080">(</font>Item<font color="#000080">));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>FUNCTION </b></font>tTestListBox<font color="#000080">.</font>GetText<font color="#000080">(</font>Item<font color="#000080">: </font>integer<font color="#000080">; </font>MaxLen<font color="#000080">: </font>integer<font color="#000080">): </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>S<font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>pListData<font color="#000080">(</font>List<font color="#000080">^.</font>At<font color="#000080">(</font>Item<font color="#000080">))^ </font><font color="#FF0000"><b>do begin
+    </b></font>Str<font color="#000080">(</font>Age<font color="#000080">, </font>S<font color="#000080">);
+    </font><font color="#FF0000"><b>case </b></font>Sex <font color="#FF0000"><b>of
+      </b></font><font color="#800000">0</font><font color="#000080">: </font>S<font color="#000080">:=</font>S<font color="#000080">+</font><font color="#800000">', male'</font><font color="#000080">;
+      </font><font color="#800000">1</font><font color="#000080">: </font>S<font color="#000080">:=</font>S<font color="#000080">+</font><font color="#800000">', female'</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>GetText<font color="#000080">:=</font>LastName<font color="#000080">+</font><font color="#800000">', '</font><font color="#000080">+</font>FirstName<font color="#000080">+</font><font color="#800000">', '</font><font color="#000080">+</font>S<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>DESTRUCTOR </b></font>tTestListBox<font color="#000080">.</font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>NewList<font color="#000080">(</font><font color="#FF0000"><b>nil</b></font><font color="#000080">);
+  </font><font color="#FF0000"><b>inherited </b></font>Done<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>CONSTRUCTOR </b></font>tTestDialog<font color="#000080">.</font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>R<font color="#000080">: </font>tRect<font color="#000080">;
+    </font>View<font color="#000080">: </font>pView<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">76</font><font color="#000080">, </font><font color="#800000">10</font><font color="#000080">);
+  </font><font color="#FF0000"><b>inherited </b></font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'Test-Dialog'</font><font color="#000080">);
+  </font>Options<font color="#000080">:=</font>Options <font color="#FF0000"><b>or </b></font>ofCentered<font color="#000080">;
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">37</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+  </font>View<font color="#000080">:=</font>New<font color="#000080">(</font>pFirstNameInputLine<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">20</font><font color="#000080">));
+  </font>insert<font color="#000080">(</font>View<font color="#000080">);
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+  </font>Insert<font color="#000080">(</font>New<font color="#000080">(</font>pLabel<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'~F~irstName:'</font><font color="#000080">, </font>View<font color="#000080">)));
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">53</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">74</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+  </font>View<font color="#000080">:=</font>New<font color="#000080">(</font>pLastNameInputLine<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">30</font><font color="#000080">));
+  </font>insert<font color="#000080">(</font>View<font color="#000080">);
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">41</font><font color="#000080">, </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">52</font><font color="#000080">, </font><font color="#800000">3</font><font color="#000080">);
+   </font>Insert<font color="#000080">(</font>New<font color="#000080">(</font>pLabel<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'~L~astName:'</font><font color="#000080">, </font>View<font color="#000080">)));
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">20</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+  </font>View<font color="#000080">:=</font>New<font color="#000080">(</font>pAgeInputLine<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">3</font><font color="#000080">));
+  </font>pInputLine<font color="#000080">(</font>View<font color="#000080">)^.</font>SetValidator<font color="#000080">(</font>New<font color="#000080">(</font>pRangeValidator<font color="#000080">, </font>Init<font color="#000080">( </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">150</font><font color="#000080">)));
+  </font>insert<font color="#000080">(</font>View<font color="#000080">);
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+  </font>Insert<font color="#000080">(</font>New<font color="#000080">(</font>pLabel<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'~A~ge:'</font><font color="#000080">, </font>View<font color="#000080">)));
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">32</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">74</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+  </font>View<font color="#000080">:=</font>New<font color="#000080">(</font>pSexRadioButtons<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">,
+    </font>NewSItem<font color="#000080">(</font><font color="#800000">'~f~emale'</font><font color="#000080">,
+    </font>NewSItem<font color="#000080">(</font><font color="#800000">'~m~ale'</font><font color="#000080">,
+    </font><font color="#FF0000"><b>nil</b></font><font color="#000080">))));
+  </font>insert<font color="#000080">(</font>View<font color="#000080">);
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">25</font><font color="#000080">, </font><font color="#800000">4</font><font color="#000080">, </font><font color="#800000">30</font><font color="#000080">, </font><font color="#800000">5</font><font color="#000080">);
+  </font>insert<font color="#000080">(</font>New<font color="#000080">(</font>pLabel<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'~S~ex:'</font><font color="#000080">, </font>View<font color="#000080">)));
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">74</font><font color="#000080">, </font><font color="#800000">9</font><font color="#000080">);
+  </font>View<font color="#000080">:=</font>New<font color="#000080">(</font>pTestListBox<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">, </font><font color="#FF0000"><b>nil</b></font><font color="#000080">));
+  </font>pListBox<font color="#000080">(</font>View<font color="#000080">)^.</font>NewList<font color="#000080">(</font>New<font color="#000080">(</font>pDataCollection<font color="#000080">, </font>Init<font color="#000080">));
+  </font>insert<font color="#000080">(</font>View<font color="#000080">);
+  </font>R<font color="#000080">.</font>Assign<font color="#000080">( </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">15</font><font color="#000080">, </font><font color="#800000">7</font><font color="#000080">);
+  </font>Insert<font color="#000080">(</font>New<font color="#000080">(</font>pLabel<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font><font color="#800000">'L~i~st:'</font><font color="#000080">, </font>View<font color="#000080">)));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+ </font><font color="#FF0000"><b>PROCEDURE </b></font>tTestApp<font color="#000080">.</font>HandleEvent<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Event<font color="#000080">: </font>tEvent<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  inherited </b></font>HandleEvent<font color="#000080">(</font>Event<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>Event<font color="#000080">.</font>What <font color="#000080">= </font>evCommand<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Event<font color="#000080">.</font>Command <font color="#000080">= </font>cmTestDialog<font color="#000080">) </font><font color="#FF0000"><b>then begin
+   </b></font>TestDialog<font color="#000080">;
+    </font>ClearEvent<font color="#000080">(</font>Event<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tTestApp<font color="#000080">.</font>InitMenuBar<font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>R<font color="#000080">: </font>tRect<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetExtent<font color="#000080">(</font>R<font color="#000080">);
+  </font>R<font color="#000080">.</font>B<font color="#000080">.</font>Y <font color="#000080">:= </font>R<font color="#000080">.</font>A<font color="#000080">.</font>Y <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+  </font>MenuBar <font color="#000080">:= </font>New<font color="#000080">(</font>pMenuBar<font color="#000080">, </font>Init<font color="#000080">(</font>R<font color="#000080">, </font>NewMenu<font color="#000080">(
+    </font>NewItem<font color="#000080">(</font><font color="#800000">'~T~est'</font><font color="#000080">, </font><font color="#800000">''</font><font color="#000080">, </font>kbAltT<font color="#000080">, </font>cmTestDialog<font color="#000080">, </font>hcNoContext<font color="#000080">,
+  </font><font color="#FF0000"><b>nil</b></font><font color="#000080">))));
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>PROCEDURE </b></font>tTestApp<font color="#000080">.</font>TestDialog<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ExecuteDialog<font color="#000080">(</font>New<font color="#000080">(</font>pTestDialog<font color="#000080">, </font>Init<font color="#000080">), </font><font color="#FF0000"><b>nil</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  with </b></font>TestApp <font color="#FF0000"><b>do begin
+    </b></font>Init<font color="#000080">;
+    </font>Run<font color="#000080">;
+    </font>Done<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to OOP SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0066.PAS">Original</a><b>]</b></p></body>
+</html>

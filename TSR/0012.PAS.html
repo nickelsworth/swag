@@ -1,0 +1,230 @@
+<html>
+<head><title> "TSR in DPMI Mode" by CEES BINKHORST</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0012.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+CEES BINKHORST
+
+&gt; I have a Turbo Pascal program running in DPMI mode that needs to
+&gt; interface to a real mode TSR program.  The TSR program issues
+&gt; INT$61 when it has data that needs to be serviced.  I've installed
+&gt; an interupt service routine that works ok in real mode, but not DPMI.
+
+Have a look at the following. With some amendments it will do what you want.
+
+;from c't 1/1992 #196
+.286p                  ;generate protected mode code for 286 or higher
+
+dpmitsr segment public ;dpmitsr: name of program
+                       ;segment: indicates start of programcode for
+                       ; 'dpmitsr'. see also end of code: 'dpmitsr ends'
+                       ;public (without addition (name)): instruction
+                       ; for linker to put all of it in one segment
+     assume cs:dpmitsr, ds:dpmitsr ;as soon as program starts 'cs' and
+                                   ; 'ds' cpu-registers (code and data segment
+                                   ; segment registers) are filled with memory
+                                   ; position of start of program 'dpmitsr'
+                                   ;there are no seperate code en data
+                                   ; segments
+olduserint     label word       ;
+               dw    ?, ?
+readmessage    db 'This text is in TSR and is be shown through a pointer.', 0
+writemessage   db 'This text is copied from TSR', 0
+writedata      equ $-offset writemessage ;calculate length 'writemessage' and
+                                         ; use value later in program
+;--------- procedure 'userint' is comparable with a pascal instruction if:
+; case ah of 0: execute instruction 'message'
+;            1: excute instruction 'read'
+;            2: excute instruction 'write'
+userint     proc far ;new int 61h
+                     ;userint: name has only measning within thsi text for
+                     ; compiler - see also end 'userint endp'
+                     ;proc far: instruktion for compiler to generate code
+                     ; to push a segment:offset return address on the stack
+                     ; (near proc pushes only offset)
+                     ; this procedure is called from another
+                     ; code segment (dos through int. in dpmiwin!)
+            pushf    ;save flags
+            cmp ah, 00h ;message instruction - see dpmiwin dcs.eax:=$00000000
+            je  message
+            cmp ah, 01h ;read instruction = dpmiwin dcs.eax:=$00000100
+            je  read
+            cmp ah, 02h ;write instruction = dpmiwin dcs.eax:=$00000200
+            je  write
+            popf        ;put flags back if ah is not 00, 01 or 02 in ah and
+            jmp dword ptr cs:[olduserint]  ; continue with old interrupt
+;---------- procedure 'message'
+message:    mov ax,0affeh     ;affe hex is in-memory mark of this program
+            popf              ;put flags back
+            iret              ;interrupt ends here and has only put
+                              ; affe hex in cpu register ax
+                              ;program dpmiwin will see it there and know then
+                              ; that 'dpmitsr' is loaded in memory
+;---------- procedure 'read'
+read:       mov ax, seg dpmitsr  ;make registers es:di together pint to
+            mov es, ax           ; string readmessage. this will then be used
+                                 ; by 'dpmiwin' to put it on the screen
+            mov di, offset readmessage
+            popf              ;put flags back
+            iret              ;interrupt ends now here
+;---------- procedure 'write'
+write:      push cx           ;save registers
+            push si
+            push ds
+            cld               ;direction flag = 0
+            mov cx, seg dpmitsr
+            mov ds, cx        ;make ds:si point to string writemessage
+            mov cx, writedata ;get calculated length of string writemessage
+            mov si, offset writemessage
+            rep movsb         ; and copy string from ds:si to es:di.
+                              ; es:di are put in dpmicallstruc by dpmiwin
+            pop ds            ;put registers back
+            pop si
+            pop cx
+            popf              ;put flags back
+            iret              ;interrupt now ends here
+userint     endp              ;end of code for procedure 'userint'
+                              ; van gehele echte interrupt dus
+;---------- this code does not remain in memory
+install:    mov ax, seg dpmitsr   ;make ds:dx point to string hello$
+            mov ds, ax
+            mov dx, offset hello$ ;offset of message that it is installed
+                                  ; as a memory-resident program
+            mov ah, 09h           ;send string hello$ to (dos) screen
+            int 21h               ; to signal installation of 'dpmitsr'
+            mov ax, 03561h        ;what is old address of int. 61h
+            int 21h
+            mov [olduserint], bx  ; and save it in two steps
+            mov [olduserint+2], es ;
+            mov ax, 2561h         ;subfunction 25 of int. 21: pu new address
+            mov dx, offset userint; int. 61h (procedure 'userint') in memory
+            int 21h
+            mov dx, offset install ;how many bytes (convert to paragraphs by:
+shr 4)
+            shr dx, 4              ;  of program have to
+            add dx, 011h           ;  remain in memory
+            mov ax, 03100h         ;subfunction 31 of int. 21 with 'return
+code' 0
+            int 21h                ;makes part of program resident
+hello$      db  13,10,'DPMITSR-example installed.',13,10,'$'
+dpmitsr     ends
+            end install            ;end of installation procedure
+
+}
+</i></font><font color="#FF0000"><b>program </b></font>dpmiwin<font color="#000080">;               </font><font color="#008000"><i>{from c't 1/1992 # 197}
+
+</i></font><font color="#FF0000"><b>uses
+  </b></font>winprocs<font color="#000080">,
+  </font>wintypes<font color="#000080">,
+  </font>win31<font color="#000080">,
+  </font>wincrt<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>tDPMICallStruc <font color="#000080">= </font><font color="#FF0000"><b>Record  </b></font><font color="#008000"><i>{for use by RMInterrupt}
+    </i></font>EDI<font color="#000080">, </font>ESI<font color="#000080">, </font>EBP<font color="#000080">, </font>Reserved<font color="#000080">,
+    </font>EBX<font color="#000080">, </font>EDX<font color="#000080">, </font>ECX<font color="#000080">, </font>EAX <font color="#000080">: </font>longint<font color="#000080">;
+    </font>Flags<font color="#000080">, </font>ES<font color="#000080">, </font>DS<font color="#000080">, </font>FS<font color="#000080">,
+    </font>GS<font color="#000080">, </font>IP<font color="#000080">, </font>CS<font color="#000080">, </font>SP<font color="#000080">, </font>SS <font color="#000080">: </font>word<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>RMInterrupt<font color="#000080">(</font>IntNo<font color="#000080">, </font>flags<font color="#000080">, </font>copywords <font color="#000080">: </font>byte<font color="#000080">;
+                     </font><font color="#FF0000"><b>var </b></font>DPMICallStruc <font color="#000080">: </font>tDPMICallStruc<font color="#000080">) : </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">push es       </font><font color="#008000"><i>{save es en di from protected mode on stack}
+    </i></font><font color="#FF00FF">push di
+    mov bh, flags </font><font color="#008000"><i>{if bit 0 is zero interrupt controller ...}
+                  {... and A20-line will be reset. other bits must be zero}
+    </i></font><font color="#FF00FF">mov bl, intno </font><font color="#008000"><i>{put interrupt nummer to be executed in register bl}
+    </i></font><font color="#FF00FF">mov cx, word ptr copywords </font><font color="#008000"><i>{cx = number of words that are to be copied...}
+                  { from... prot. mode to real mode stack}
+    </i></font><font color="#FF00FF">mov ax, 0300h </font><font color="#008000"><i>{put DPMI simulate real mode interrupt nummer in register ax}
+    </i></font><font color="#FF00FF">les di, dpmiCallStruc  </font><font color="#008000"><i>{16-bits pointer to record - 32 bits uses edi}
+                  {les di, ...: load segment (2 bytes) dpmicallstruc in}
+                  { register di en offset (ook 2 bytes) }
+                  { in register es. in short load pointer to dpmicallstruc}
+                  { in registers di:es                                 }
+    </i></font><font color="#FF00FF">int 31h       </font><font color="#008000"><i>{excute interrupt nummer in bl in real-mode after filling }
+           { cpu-registers with values from dpmicallstruc and return in}
+           { protected mode with contents of cpu-registers at end of real-mode}
+           { interrupt in dpmicallstruc. i.o.w. act as if dpmicallstruc  }
+           { are the cpu-registers at the end of excuting the real-mode int.}
+    </i></font><font color="#FF00FF">jc @error
+    mov ax, 1           </font><font color="#008000"><i>{function succesfull}
+    </i></font><font color="#FF00FF">jmp @done
+   @error:
+    xor ax, ax          </font><font color="#008000"><i>{make ax=0, function not succesfull}
+   </i></font><font color="#FF00FF">@done:
+    pop di              </font><font color="#008000"><i>{put es and di back}
+    </i></font><font color="#FF00FF">pop es
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>selector  <font color="#000080">: </font>word<font color="#000080">;
+  </font>segment   <font color="#000080">: </font>word<font color="#000080">;
+  </font>selseg    <font color="#000080">: </font>longint<font color="#000080">;
+  </font>dcs       <font color="#000080">: </font>tdpmicallstruc<font color="#000080">;
+  </font>printstrg <font color="#000080">: </font>pchar<font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>fillchar<font color="#000080">(</font>dcs<font color="#000080">, </font>sizeof<font color="#000080">(</font>dcs<font color="#000080">), </font><font color="#800000">0</font><font color="#000080">);    </font><font color="#008000"><i>{zero dcs}
+    {------- verify presence of dpmitsr in memory}
+  </i></font>dcs<font color="#000080">.</font>eax <font color="#000080">:= </font><font color="#800000">$00000000</font><font color="#000080">;  </font><font color="#008000"><i>{just for clarity that ax is called with function 0}
+                         { as contents is already zero because of use}
+                         { of function filchar() on previous line. }
+  </i></font>rminterrupt<font color="#000080">(</font><font color="#800000">$61</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>dcs<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>dcs<font color="#000080">.</font>eax <font color="#FF0000"><b>and </b></font><font color="#800000">$ffff </font><font color="#000080">= </font><font color="#800000">$affe</font><font color="#000080">) </font><font color="#FF0000"><b>then
+    </b></font>writeln<font color="#000080">(</font><font color="#800000">'DPMItsr in memory'</font><font color="#000080">)
+   </font><font color="#FF0000"><b>else
+     </b></font>writeln<font color="#000080">(</font><font color="#800000">'Something went wrong!'</font><font color="#000080">);
+             </font><font color="#008000"><i>{this part needs improvement.                 }
+             {if dpmitsr is not in memory then pc may crash,}
+             { which is not strange as then an interrupt  }
+             { is called that most likely is 0000:0000 in        }
+             { memory.                                        }
+             {this is to be substituted with a routine that first checks}
+             { that pointer of int. 61 is not 0000:0000.        }
+    {------- read string through pointer}
+  </i></font>dcs<font color="#000080">.</font>eax <font color="#000080">:= </font><font color="#800000">$00000100</font><font color="#000080">;              </font><font color="#008000"><i>{call int. 61 (=dpmitsr) with ah = 1}
+  </i></font>rminterrupt<font color="#000080">(</font><font color="#800000">$61</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>dcs<font color="#000080">);
+  </font>selector <font color="#000080">:= </font>allocselector<font color="#000080">(</font>word<font color="#000080">(</font><font color="#FF0000"><b>nil</b></font><font color="#000080">)); </font><font color="#008000"><i>{make new selector and fill with values:}
+  </i></font>setselectorbase<font color="#000080">(</font>selector<font color="#000080">, </font>longint<font color="#000080">(</font>dcs<font color="#000080">.</font>es<font color="#000080">) * </font><font color="#800000">16</font><font color="#000080">);
+                                      </font><font color="#008000"><i>{ base: es is put in by 'dpmitsr'}
+  </i></font>setselectorlimit<font color="#000080">(</font>selector<font color="#000080">, </font>longint<font color="#000080">(</font><font color="#800000">$ffff</font><font color="#000080">));
+                                     </font><font color="#008000"><i>{ and limit: $ffff is maximum value. this}
+                                     { does not give problems because we put a}
+                                     { 'zero-terminated' string on the screen.}
+  </i></font>printstrg <font color="#000080">:= </font>ptr<font color="#000080">(</font>selector<font color="#000080">, </font>word<font color="#000080">(</font>dcs<font color="#000080">.</font>edi<font color="#000080">));   </font><font color="#008000"><i>{also di is put in by 'dpmitsr'  }
+  </i></font>writeln<font color="#000080">(</font>printstrg<font color="#000080">);
+  </font>freeselector<font color="#000080">(</font>selector<font color="#000080">);
+    </font><font color="#008000"><i>{------- read string by making a copy from real-mode memory to
+              Windows-memory in low 640k-area}
+  </i></font>selseg <font color="#000080">:= </font>globaldosalloc<font color="#000080">(</font><font color="#800000">100</font><font color="#000080">); </font><font color="#008000"><i>{allocate 100 bytes Windows-memory below 640k.}
+                               {high word of longint 'selseg' is segment for }
+                               { use in real-mode and low word is selector    }
+                               { for use in protected mode.                 }
+  </i></font><font color="#FF0000"><b>if </b></font>selseg <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>selector <font color="#000080">:= </font>word<font color="#000080">(</font>selseg <font color="#FF0000"><b>and </b></font><font color="#800000">$ffff</font><font color="#000080">);  </font><font color="#008000"><i>{determine selector}
+    </i></font>segment  <font color="#000080">:= </font>word<font color="#000080">(</font>selseg <font color="#FF0000"><b>shr </b></font><font color="#800000">16</font><font color="#000080">);      </font><font color="#008000"><i>{determine segment}
+    </i></font>dcs<font color="#000080">.</font>eax  <font color="#000080">:= </font><font color="#800000">$00000200</font><font color="#000080">;               </font><font color="#008000"><i>{call int. 61 (=dpmitsr) with ah = 2   }
+    </i></font>dcs<font color="#000080">.</font>es   <font color="#000080">:= </font>segment<font color="#000080">;                   </font><font color="#008000"><i>{use segment for int. 61 in real-mode}
+    </i></font>dcs<font color="#000080">.</font>edi  <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                       </font><font color="#008000"><i>{offset is 0                          }
+    </i></font>rminterrupt<font color="#000080">(</font><font color="#800000">$61</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font>dcs<font color="#000080">);
+    </font>printstrg <font color="#000080">:= </font>ptr<font color="#000080">(</font>selector<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">);
+    </font>writeln<font color="#000080">(</font>printstrg<font color="#000080">);
+    </font>globaldosfree<font color="#000080">(</font>selector<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font><font color="#008000"><i>{
+To excute the program, dpmitsr.exe has to be executed before starting Windows.
+Dpmitsr will remain permanently in memory.
+
+Both DPMITSR.ASM and DPMIWIN.PAS were nicely running programs in early 1992
+with TPW. Now, under BPW an error is reported from the SYSTEM unit.
+However, as I now don't have the time to trace the error herewith the programs,
+as it will surely point the way for you to go.
+}
+</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to TSR SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0012.PAS">Original</a><b>]</b></p></body>
+</html>

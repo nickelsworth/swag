@@ -1,0 +1,118 @@
+<html>
+<head><title> "Direct Write & Scroll" by LOU DUCHEZ</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to SCREEN SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0032.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+LOU DUCHEZ
+
+&gt;I have two questions. First, How can I display ANSI files from a Pascal
+&gt;program by using the CON driver (read: ANSI.SYS) instead of going to the
+&gt;trouble of writing a terminal emulator, and still remain
+&gt;window-relative? I used TP5.5's WRITE procedure to write to a file
+&gt;assigned to the CON device instead of the CRT unit's standard OutPut,
+&gt;but this obliterated my status line at the bottom of the screen when the
+&gt;ANSI file scrolled. Is there an easy way to write to the CON device
+&gt;while remaining window-relative without having to modify ANSI.SYS or
+&gt;write a terminal emulation procedure?
+&gt; My second question: How can I call a batch file from within a Pascal
+&gt;program and pass %1-%9 parameters to it? I'm aware of the EXEC
+&gt;procedure, but doesn't that only work on executables?
+
+Second question first: you're right about EXEC calling only executables.
+So try calling &quot;COMMAND.COM&quot; as your program, and give it parameters of
+&quot;/C &quot; plus the batch file name plus whatever arguments you intend to pass.
+(That tells the system to run a single command out of DOS.)  Look up
+ParamCount and ParamStr() to see how Pascal uses command-line parameters.
+
+First question second: you know, I addressed this problem just yesterday
+trying to write a program.  I concluded that, if you're going to bypass
+CRT, you need to do a lot of &quot;manual&quot; work yourself to keep a window
+going.  Let me show you the tools I devised:
+
+
+---PROCEDURE ATSCROLL: SCROLLS A SCREEN REGION UP OR DOWN (negative or
+   positive number in LINESDOWN, respectively)
+}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>atscroll<font color="#000080">(</font>x1<font color="#000080">, </font>y1<font color="#000080">, </font>x2<font color="#000080">, </font>y2 <font color="#000080">: </font>byte<font color="#000080">; </font>linesdown <font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>tmpbyte<font color="#000080">,
+  </font>intbyte<font color="#000080">,
+  </font>clearattrib <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>linesdown <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+  begin
+    </b></font>clearattrib <font color="#000080">:= </font>foxfore <font color="#000080">+ </font>foxback <font color="#FF0000"><b>shl </b></font><font color="#800000">4</font><font color="#000080">;
+    </font>x1 <font color="#000080">:= </font>x1 <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+    </font>y1 <font color="#000080">:= </font>y1 <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+    </font>x2 <font color="#000080">:= </font>x2 <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+    </font>y2 <font color="#000080">:= </font>y2 <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>linesdown <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+      </b></font>intbyte <font color="#000080">:= </font><font color="#800000">$07
+    </font><font color="#FF0000"><b>else
+      </b></font>intbyte <font color="#000080">:= </font><font color="#800000">$06</font><font color="#000080">;
+    </font>tmpbyte <font color="#000080">:= </font>abs<font color="#000080">(</font>linesdown<font color="#000080">);
+    </font><font color="#FF0000"><b>asm
+      </b></font><font color="#FF00FF">mov ah, intbyte
+      mov al, tmpbyte
+      mov bh, clearattrib
+      mov ch, y1
+      mov cl, x1
+      mov dh, y2
+      mov dl, x2
+      int 10h
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{
+---FUNCTION YPOS: Returns the line the cursor is on.  I wrote it because
+   I don't always trust WHEREY (or WHEREX): they report, for example, the
+   cursor position relative to a text window.  So I had it lying around,
+   and I opted to use it in my routines.
+}
+</i></font><font color="#FF0000"><b>function </b></font>ypos <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>tmpbyt <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  asm
+    </b></font><font color="#FF00FF">mov ah, 03h
+    mov bh, 0
+    int 10h
+    mov tmpbyt, dh
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>ypos <font color="#000080">:= </font>tmpbyt <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{
+--- PROCEDURE WRITEANDFIXOVERHANG: I use it in place of WRITELN in my
+    program: before writing a line of text, it checks if there's room
+    at the bottom of the screen.  If not, it scrolls the screen up
+    before writing.  Keep in mind that this program is bent on preserving
+    the top three or four screen lines, not the bottom lines.
+}
+</i></font><font color="#FF0000"><b>procedure </b></font>writeandfixoverhang<font color="#000080">(</font>strin <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">);
+</font><font color="#FF0000"><b>const
+  </b></font>scrollat <font color="#000080">: </font>byte <font color="#000080">= </font><font color="#800000">24</font><font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>overhang <font color="#000080">: </font>byte<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  if </b></font>ypos <font color="#000080">&gt;= </font>scrollat <font color="#FF0000"><b>then
+  begin
+    </b></font>overhang <font color="#000080">:= </font>ypos <font color="#000080">- </font>scrollat <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+    </font>atscroll<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">4 </font><font color="#000080">+ </font>overhang<font color="#000080">, </font><font color="#800000">0</font><font color="#000080">, </font><font color="#800000">80</font><font color="#000080">, </font><font color="#800000">25</font><font color="#000080">, -</font>overhang<font color="#000080">);
+    </font>movecursor<font color="#000080">(</font><font color="#800000">1</font><font color="#000080">, </font>ypos <font color="#000080">- </font>overhang<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>writeln<font color="#000080">(</font>strin<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{
+So assuming your text lines don't get too long (line longer than 160 chars),
+these routines will keep the top of your screen from getting eaten.  If you
+want to preserve space at the bottom of the screen instead (or both top and
+bottom), change WRITEANDFIXOVERHANG.
+
+BTW, if there are any compiling problems, let me know.  I took out all the
+stuff that applied specifically to my application -- I might have stupidly
+changed something you need ...
+}</i></font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to SCREEN SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0032.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,233 @@
+<html>
+<head><title> "Read/Write Transfer Speed" by MARNIX TIMMERMANS</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0100.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#008000"><i>{
+&gt; Is there any difference in speed between blockreading a given number of
+&gt; bytes with a recordlength of 1 and a bigger recordlength, something like
+
+&gt; reset(file1,1);
+&gt; reset(file2,256);
+&gt; blockread(file1,Buffer^,32768);
+&gt; blockread(file2,Buffer^,128);
+
+&gt; Oh yes, it is !
+No, the buffer is equally big in both cases (128*256 = 32768).
+
+&gt; With the biggest buffer you have the shortest reading-time, simple isn't
+&gt; it? Try to test it with an easy copy-program.
+&gt; First with reset(file,1), then with reset(file,4096) or 8192 or 32768.
+&gt; Now copy a big file (over 1 MB) an take a look on your watch.
+
+I've changed some program I've made and it doesn't make any difference.
+Look at comment:
+}
+
+</i></font><font color="#FF0000"><b>program </b></font>HD2<font color="#000080">;
+
+</font><font color="#008000"><i>{$R-,S-}
+
+</i></font><font color="#FF0000"><b>uses </b></font>Dos<font color="#000080">;
+
+</font><font color="#FF0000"><b>const
+  </b></font>MaxDirSize <font color="#000080">= </font><font color="#800000">512</font><font color="#000080">;
+  </font>BufSize <font color="#000080">= </font><font color="#800000">32768</font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>buf<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font>BufSize<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font>MinSize<font color="#000080">, </font>TotSize<font color="#000080">, </font>Tdiff<font color="#000080">, </font>diff<font color="#000080">, </font>timer1<font color="#000080">, </font>timer2<font color="#000080">, </font>Tsize<font color="#000080">, </font>size <font color="#000080">: </font>longint<font color="#000080">;
+  </font>Count<font color="#000080">,</font>Iter<font color="#000080">, </font>MaxIter <font color="#000080">: </font>word<font color="#000080">;
+  </font>Dir<font color="#000080">: </font>DirStr<font color="#000080">;
+  </font>path <font color="#000080">: </font>pathstr<font color="#000080">;
+  </font>srec <font color="#000080">: </font>searchrec<font color="#000080">;
+  </font>options <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>capslock<font color="#000080">(</font>doelwit <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">) : </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>var </b></font>i <font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>i <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>length<font color="#000080">(</font>doelwit<font color="#000080">) </font><font color="#FF0000"><b>do
+    if </b></font>doelwit<font color="#000080">[</font>i<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'a'</font><font color="#000080">..</font><font color="#800000">'z'</font><font color="#000080">] </font><font color="#FF0000"><b>then
+      </b></font>doelwit<font color="#000080">[</font>i<font color="#000080">] := </font>chr<font color="#000080">(</font>ord<font color="#000080">(</font>doelwit<font color="#000080">[</font>i<font color="#000080">])-</font><font color="#800000">32</font><font color="#000080">);
+  </font>capslock <font color="#000080">:= </font>doelwit<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>LogTime<font color="#000080">( </font><font color="#FF0000"><b>var </b></font>ti <font color="#000080">: </font>longint<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>ho<font color="#000080">,</font>mi<font color="#000080">,</font>se<font color="#000080">,</font>hund <font color="#000080">: </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>GetTime<font color="#000080">(</font>ho<font color="#000080">,</font>mi<font color="#000080">,</font>se<font color="#000080">,</font>hund<font color="#000080">);
+  </font>Ti <font color="#000080">:= </font>hund<font color="#000080">+</font>se<font color="#000080">*</font><font color="#800000">100</font><font color="#000080">+</font>mi<font color="#000080">*</font><font color="#800000">6000</font><font color="#000080">+</font>ho<font color="#000080">*</font><font color="#800000">360000</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>function </b></font>ReadNumber<font color="#000080">(</font>t<font color="#000080">:</font>byte<font color="#000080">; </font>s<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">): </font>word<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>nm<font color="#000080">:</font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+  </font>rn<font color="#000080">: </font>word<font color="#000080">;
+  </font>code<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>nm <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>inc<font color="#000080">(</font>t<font color="#000080">,</font><font color="#800000">2</font><font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>t<font color="#000080">&lt;=</font>length<font color="#000080">(</font>s<font color="#000080">)) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>s<font color="#000080">[</font>t<font color="#000080">] </font><font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">'0'</font><font color="#000080">..</font><font color="#800000">'9'</font><font color="#000080">]) </font><font color="#FF0000"><b>do
+  begin
+    </b></font>Nm <font color="#000080">:= </font>Nm <font color="#000080">+ </font>s<font color="#000080">[</font>t<font color="#000080">];
+    </font>inc<font color="#000080">(</font>t<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Val<font color="#000080">( </font>Nm<font color="#000080">, </font>rn<font color="#000080">, </font>code<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>code<font color="#000080">=</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>ReadNumber <font color="#000080">:= </font>Rn
+  <font color="#FF0000"><b>else
+    </b></font>ReadNumber <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Init<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>TotSize <font color="#000080">:= </font><font color="#800000">128</font><font color="#000080">;
+  </font>MaxIter <font color="#000080">:= </font><font color="#800000">10</font><font color="#000080">;
+  </font>MinSize <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font>Tdiff <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;  </font>Tsize <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>options <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+  </font>path <font color="#000080">:= </font><font color="#800000">''</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>Help<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">(</font><font color="#800000">'Syntax:  HD [filename] [options]'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'/Mxxxx : Minimum filesize for files to be tested'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'/Txxxx : Total size in Kb per file read (default = 128 kb)'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'/Ixxxx : Maximum iterations'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'/?     : This helptext'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'This programs measures how fast the specified file can be read into memory'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'and then the transfer rate is been calculated.  If a file is smaller than'</font><font color="#000080">);
+  </font>writeln<font color="#000080">( </font>TotSize<font color="#000080">, </font><font color="#800000">' Kb the file will be read more than once to accomplish more reliable results.'</font><font color="#000080">);
+  </font>halt<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>GetParams<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>t<font color="#000080">:</font>byte<font color="#000080">;
+  </font>f<font color="#000080">:</font><font color="#FF0000"><b>file</b></font><font color="#000080">;
+  </font>Attr<font color="#000080">:</font>word<font color="#000080">;
+  </font>N<font color="#000080">:</font>NameStr<font color="#000080">;
+  </font>E<font color="#000080">:</font>ExtStr<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  for </b></font>t <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>ParamCount <font color="#FF0000"><b>do
+    if </b></font>Copy<font color="#000080">(</font>ParamStr<font color="#000080">(</font>t<font color="#000080">),</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">) &lt;&gt; </font><font color="#800000">'/' </font><font color="#FF0000"><b>then
+      </b></font>path <font color="#000080">:= </font>ParamStr<font color="#000080">(</font>t<font color="#000080">)
+    </font><font color="#FF0000"><b>else
+      </b></font>options <font color="#000080">:= </font>options <font color="#000080">+ </font>paramstr<font color="#000080">(</font>t<font color="#000080">);
+
+
+  </font>t <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+  </font><font color="#FF0000"><b>while </b></font>t <font color="#000080">&lt; </font>length<font color="#000080">(</font>options<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    if </b></font>options<font color="#000080">[</font>t<font color="#000080">]=</font><font color="#800000">'/' </font><font color="#FF0000"><b>then
+    begin
+      case </b></font>upcase<font color="#000080">(</font>options<font color="#000080">[</font>t<font color="#000080">+</font><font color="#800000">1</font><font color="#000080">]) </font><font color="#FF0000"><b>of
+      </b></font><font color="#800000">'T'</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font>ReadNumber<font color="#000080">(</font>t<font color="#000080">,</font>options<font color="#000080">) &lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>TotSize <font color="#000080">:= </font>ReadNumber<font color="#000080">(</font>t<font color="#000080">,</font>options<font color="#000080">);
+      </font><font color="#800000">'M'</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font>ReadNumber<font color="#000080">(</font>t<font color="#000080">,</font>options<font color="#000080">) &lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>MinSize <font color="#000080">:= </font>ReadNumber<font color="#000080">(</font>t<font color="#000080">,</font>options<font color="#000080">);
+      </font><font color="#800000">'I'</font><font color="#000080">: </font><font color="#FF0000"><b>if </b></font>ReadNumber<font color="#000080">(</font>t<font color="#000080">,</font>options<font color="#000080">) &lt;&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then </b></font>MaxIter <font color="#000080">:= </font>ReadNumber<font color="#000080">(</font>t<font color="#000080">,</font>options<font color="#000080">);
+      </font><font color="#800000">'?'</font><font color="#000080">: </font>Help<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>inc<font color="#000080">(</font>t<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Min.  size: '</font><font color="#000080">, </font>MinSize<font color="#000080">, </font><font color="#800000">' Kb'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Total size: '</font><font color="#000080">, </font>TotSize<font color="#000080">, </font><font color="#800000">' Kb'</font><font color="#000080">);
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Iterations: '</font><font color="#000080">, </font>MaxIter<font color="#000080">);
+  </font>writeln<font color="#000080">;
+
+  </font>Path <font color="#000080">:= </font>FExpand<font color="#000080">(</font>Path<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>Path<font color="#000080">[</font>Length<font color="#000080">(</font>Path<font color="#000080">)] &lt;&gt; </font><font color="#800000">'\' </font><font color="#FF0000"><b>then
+  begin
+    </b></font>Assign<font color="#000080">(</font>F<font color="#000080">, </font>Path<font color="#000080">);
+    </font>GetFAttr<font color="#000080">(</font>F<font color="#000080">, </font>Attr<font color="#000080">);
+    </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Attr <font color="#FF0000"><b>and </b></font>Directory <font color="#000080">&lt;&gt; </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>then
+      </b></font>Path <font color="#000080">:= </font>Path <font color="#000080">+ </font><font color="#800000">'\'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>FSplit<font color="#000080">(</font>Path<font color="#000080">, </font>Dir<font color="#000080">, </font>N<font color="#000080">, </font>E<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>N <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>N <font color="#000080">:= </font><font color="#800000">'*'</font><font color="#000080">;
+  </font><font color="#FF0000"><b>if </b></font>E <font color="#000080">= </font><font color="#800000">'' </font><font color="#FF0000"><b>then </b></font>E <font color="#000080">:= </font><font color="#800000">'.*'</font><font color="#000080">;
+  </font>Path <font color="#000080">:= </font>Dir <font color="#000080">+ </font>N <font color="#000080">+ </font>E<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'Path:     '</font><font color="#000080">, </font>Path<font color="#000080">);
+  </font>writeln<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>procedure </b></font>GetBench<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>F<font color="#000080">:</font><font color="#FF0000"><b>File</b></font><font color="#000080">;
+  </font>sr <font color="#000080">: </font>SearchRec<font color="#000080">;
+  </font>t <font color="#000080">: </font>word<font color="#000080">;
+  </font>NumRead<font color="#000080">: </font>Word<font color="#000080">;
+  </font>iterstr <font color="#000080">: </font><font color="#FF0000"><b>string</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Count <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>FindFirst<font color="#000080">(</font>Path<font color="#000080">, </font>Archive<font color="#000080">, </font>sr<font color="#000080">);
+  </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>DosError <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>Count <font color="#000080">&lt; </font>MaxDirSize<font color="#000080">) </font><font color="#FF0000"><b>do
+  begin
+    if </b></font><font color="#000080">(</font>sr<font color="#000080">.</font>attr <font color="#FF0000"><b>and </b></font>ReadOnly<font color="#000080">) &lt;&gt; </font>ReadOnly <font color="#FF0000"><b>then
+    begin
+      </b></font>assign<font color="#000080">(</font>f<font color="#000080">, </font>dir<font color="#000080">+</font>sr<font color="#000080">.</font>name<font color="#000080">);
+
+      </font>size <font color="#000080">:= </font>sr<font color="#000080">.</font>size<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>size<font color="#000080">&lt;</font>MinSize<font color="#000080">*</font><font color="#800000">1024 </font><font color="#FF0000"><b>then
+        </b></font>iter <font color="#000080">:= </font><font color="#800000">0
+      </font><font color="#FF0000"><b>else
+        </b></font>iter <font color="#000080">:= (</font>TotSize<font color="#000080">*</font><font color="#800000">1024</font><font color="#000080">) </font><font color="#FF0000"><b>div </b></font>size <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>iter<font color="#000080">&gt;</font>MaxIter <font color="#FF0000"><b>then </b></font>Iter <font color="#000080">:= </font>MaxIter<font color="#000080">;
+      </font>write<font color="#000080">( </font>copy<font color="#000080">(</font>sr<font color="#000080">.</font>name<font color="#000080">+</font><font color="#800000">'             '</font><font color="#000080">,</font><font color="#800000">1</font><font color="#000080">,</font><font color="#800000">13</font><font color="#000080">));
+      </font><font color="#FF0000"><b>if </b></font>iter <font color="#000080">&gt; </font><font color="#800000">1 </font><font color="#FF0000"><b>then
+      begin
+        </b></font>str<font color="#000080">( </font>iter<font color="#000080">, </font>iterstr<font color="#000080">);
+        </font>write<font color="#000080">( </font><font color="#800000">'('</font><font color="#000080">+</font>iterstr<font color="#000080">+</font><font color="#800000">'x)' </font><font color="#000080">: </font><font color="#800000">6</font><font color="#000080">)
+      </font><font color="#FF0000"><b>end
+      else
+        </b></font>write<font color="#000080">( </font><font color="#800000">' ' </font><font color="#000080">: </font><font color="#800000">6</font><font color="#000080">);
+
+      </font>LogTime<font color="#000080">( </font>timer1<font color="#000080">);
+
+      </font><font color="#FF0000"><b>for </b></font>t <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>to </b></font>iter <font color="#FF0000"><b>do
+      begin
+        </b></font>Reset<font color="#000080">(</font>F<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);  </font><font color="#008000"><i>{ COMMENT: 'reset (f,512)' }
+        </i></font><font color="#FF0000"><b>repeat
+          </b></font>BlockRead<font color="#000080">(</font>F<font color="#000080">, </font>buf<font color="#000080">, </font>SizeOf<font color="#000080">(</font>buf<font color="#000080">), </font>NumRead<font color="#000080">);
+          </font><font color="#008000"><i>{ COMMENT: and 'SizeOf(Buf) div 512' doesn't make any difference }
+        </i></font><font color="#FF0000"><b>until </b></font><font color="#000080">(</font>NumRead <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">);
+        </font>Close<font color="#000080">(</font>F<font color="#000080">);
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+      </font>LogTime<font color="#000080">( </font>Timer2<font color="#000080">);
+      </font>diff <font color="#000080">:= </font>Timer2<font color="#000080">-</font>timer1<font color="#000080">;
+      </font>write<font color="#000080">( </font><font color="#800000">'  '</font><font color="#000080">, </font>size<font color="#000080">*</font>iter <font color="#000080">: </font><font color="#800000">6</font><font color="#000080">, </font><font color="#800000">' bytes in '</font><font color="#000080">, </font>diff<font color="#000080">/</font><font color="#800000">100 </font><font color="#000080">: </font><font color="#800000">5 </font><font color="#000080">: </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">' sec.  '</font><font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>Diff<font color="#000080">&gt;</font><font color="#800000">0 </font><font color="#FF0000"><b>then
+        </b></font>writeln<font color="#000080">( </font><font color="#800000">'Transfer speed '</font><font color="#000080">, </font>iter<font color="#000080">*</font>size<font color="#000080">/</font>diff<font color="#000080">/</font><font color="#800000">10.24 </font><font color="#000080">: </font><font color="#800000">3 </font><font color="#000080">: </font><font color="#800000">1</font><font color="#000080">,
+                 </font><font color="#800000">' Kb/sec.'</font><font color="#000080">)
+      </font><font color="#FF0000"><b>else
+        </b></font>writeln<font color="#000080">;
+      </font>inc<font color="#000080">( </font>Tdiff<font color="#000080">, </font>diff<font color="#000080">);
+      </font>inc<font color="#000080">( </font>Tsize<font color="#000080">, </font>size<font color="#000080">*</font>iter<font color="#000080">);
+      </font>inc<font color="#000080">( </font>count<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>FindNext<font color="#000080">(</font>sr<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>begin
+  </b></font>writeln<font color="#000080">;
+  </font>writeln<font color="#000080">(</font><font color="#800000">'HD Transfer Speed Timer  v2.0 * (c)1991,1993 Marnix Timmermans'</font><font color="#000080">);
+  </font>writeln<font color="#000080">;
+
+  </font>Init<font color="#000080">;
+
+  </font>GetParams<font color="#000080">;
+
+  </font>GetBench<font color="#000080">;
+
+  </font>writeln<font color="#000080">;
+  </font>writeln<font color="#000080">( </font><font color="#800000">'Totals of '</font><font color="#000080">,</font>count<font color="#000080">:</font><font color="#800000">5</font><font color="#000080">,</font><font color="#800000">' files : '</font><font color="#000080">, </font>Tsize<font color="#000080">, </font><font color="#800000">' bytes in '</font><font color="#000080">, </font>Tdiff<font color="#000080">/</font><font color="#800000">100 </font><font color="#000080">: </font><font color="#800000">5 </font><font color="#000080">: </font><font color="#800000">2</font><font color="#000080">, </font><font color="#800000">' sec.  '</font><font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>TDiff <font color="#000080">&lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+    </b></font>writeln<font color="#000080">( </font><font color="#800000">'Average Transfer speed: '</font><font color="#000080">, </font>Tsize<font color="#000080">/</font>Tdiff<font color="#000080">/</font><font color="#800000">10.24 </font><font color="#000080">: </font><font color="#800000">3 </font><font color="#000080">: </font><font color="#800000">1</font><font color="#000080">, </font><font color="#800000">' Kb/sec.'</font><font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DRIVES SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0100.PAS">Original</a><b>]</b></p></body>
+</html>

@@ -1,0 +1,691 @@
+<html>
+<head><title> "GIF Image Component" by RICHARD SHOTBOLT</title><link rel="STYLESHEET" type="text/css" href="../swagsource.css"></head>
+<body><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0180.PAS">Original</a><b>]</b></p><!--StartFragment--><pre><code><font color="#FF0000"><b>unit </b></font>xGif<font color="#000080">; </font><font color="#008000"><i>{$D-}
+
+{Freeware GIF image component
+
+Based on GifUtl.pas (c)1993 Sean Wenzel 	Compuserve 71736,1245
+Converted to Delphi by Richard Dominelli 	RichardA_Dominelli@mskcc.org
+Converted to Delphi 2 and made into an
+image component by Richard Shotbolt		Compuserve 100327,2305
+
+enhance component as a descendant from          www.fabula.com
+TBitmap and register the GIF file format        stefc@fabula.com
+so it's ideal for include it in the xTools      CompuServe 100023,275
+Now you can Load bitmaps from
+by Stefan B&ouml;ther
+
+Left Open :
+  - Also store the format via SaveToStream override
+    so the GIF format can be used in blob formats
+    also !
+  - GIF 89a format not work propably 
+  - use real gif transarency for TransparentColor
+    property instead of lower-left pixel
+  - support of new PNG format
+
+Before using the GIF format in any commercial
+application be sure you know the legal issuees for
+this format !!!
+}
+
+</i></font><font color="#FF0000"><b>interface
+
+uses
+  </b></font>Windows<font color="#000080">, </font>Forms<font color="#000080">, </font>SysUtils<font color="#000080">, </font>Classes<font color="#000080">, </font>Graphics<font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>TGifBitmap <font color="#000080">= </font><font color="#FF0000"><b>class</b></font><font color="#000080">(</font>TBitmap<font color="#000080">)
+  </font><font color="#FF0000"><b>public
+    procedure </b></font>LoadFromStream<font color="#000080">(</font>Stream<font color="#000080">: </font>TStream<font color="#000080">); </font><font color="#FF0000"><b>override</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>EGifException <font color="#000080">= </font><font color="#FF0000"><b>class</b></font><font color="#000080">(</font>Exception<font color="#000080">)
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>implementation
+
+uses
+  </b></font>Math<font color="#000080">; 
+
+</font><font color="#FF0000"><b>const
+  </b></font><font color="#008000"><i>{ image descriptor bit masks }
+  </i></font>idLocalColorTable      <font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">;</font>	  <font color="#008000"><i>{ set if a local color table follows }
+  </i></font>idInterlaced           <font color="#000080">= </font><font color="#800000">$40</font><font color="#000080">;</font>	  <font color="#008000"><i>{ set if image is interlaced }
+  </i></font>idSort                 <font color="#000080">= </font><font color="#800000">$20</font><font color="#000080">;</font>	  <font color="#008000"><i>{ set if color table is sorted }
+  </i></font>idReserved             <font color="#000080">= </font><font color="#800000">$0C</font><font color="#000080">;</font>	  <font color="#008000"><i>{ reserved - must be set to $00 }
+  </i></font>idColorTableSize       <font color="#000080">= </font><font color="#800000">$07</font><font color="#000080">;</font>	  <font color="#008000"><i>{ size of color table as above }
+  </i></font>Trailer<font color="#000080">: </font>byte          <font color="#000080">= </font><font color="#800000">$3B</font><font color="#000080">;</font>	  <font color="#008000"><i>{ indicates the end of the GIF data stream }
+  </i></font>ExtensionIntroducer<font color="#000080">: </font>byte <font color="#000080">= </font><font color="#800000">$21</font><font color="#000080">;
+  </font>MAXSCREENWIDTH         <font color="#000080">= </font><font color="#800000">800</font><font color="#000080">;
+  </font>ImageSeparator<font color="#000080">: </font>byte   <font color="#000080">= </font><font color="#800000">$2C</font><font color="#000080">;
+
+  </font><font color="#008000"><i>{ logical screen descriptor packed field masks }
+  </i></font>lsdGlobalColorTable <font color="#000080">= </font><font color="#800000">$80</font><font color="#000080">;</font>	<font color="#008000"><i>{ set if global color table follows L.S.D. }
+  </i></font>lsdColorResolution <font color="#000080">= </font><font color="#800000">$70</font><font color="#000080">;</font>	<font color="#008000"><i>{ Color resolution - 3 bits }
+  </i></font>lsdSort <font color="#000080">= </font><font color="#800000">$08</font><font color="#000080">;</font>					<font color="#008000"><i>{ set if global color table is sorted - 1 bit }
+  </i></font>lsdColorTableSize <font color="#000080">= </font><font color="#800000">$07</font><font color="#000080">;</font>	<font color="#008000"><i>{ size of global color table - 3 bits }
+</i></font>										<font color="#008000"><i>{ Actual size = 2^value+1    - value is 3 bits }
+  </i></font>BlockTerminator<font color="#000080">: </font>byte <font color="#000080">= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ terminates stream of data blocks }
+  </i></font>MAXCODES <font color="#000080">= </font><font color="#800000">4095</font><font color="#000080">;</font>				<font color="#008000"><i>{ the maximum number of different codes 0 inclusive }
+
+  { error constants }
+  </i></font>geNoError         <font color="#000080">=  </font><font color="#800000">0</font><font color="#000080">;  </font><font color="#008000"><i>{ no errors found }
+  </i></font>geNoFile          <font color="#000080">=  </font><font color="#800000">1</font><font color="#000080">;  </font><font color="#008000"><i>{ gif file not found }
+  </i></font>geNotGIF          <font color="#000080">=  </font><font color="#800000">2</font><font color="#000080">;  </font><font color="#008000"><i>{ file is not a gif file }
+  </i></font>geNoGlobalColor   <font color="#000080">=  </font><font color="#800000">3</font><font color="#000080">;  </font><font color="#008000"><i>{ no Global Color table found }
+  </i></font>geImagePreceded   <font color="#000080">=  </font><font color="#800000">4</font><font color="#000080">;  </font><font color="#008000"><i>{ image descriptor preceeded by other unknown data }
+  </i></font>geEmptyBlock      <font color="#000080">=  </font><font color="#800000">5</font><font color="#000080">;  </font><font color="#008000"><i>{ Block has no data }
+  </i></font>geUnExpectedEOF   <font color="#000080">=  </font><font color="#800000">6</font><font color="#000080">;  </font><font color="#008000"><i>{ unexpected EOF }
+  </i></font>geBadCodeSize     <font color="#000080">=  </font><font color="#800000">7</font><font color="#000080">;  </font><font color="#008000"><i>{ bad code size }
+  </i></font>geBadCode         <font color="#000080">=  </font><font color="#800000">8</font><font color="#000080">;  </font><font color="#008000"><i>{ Bad code was found }
+  </i></font>geBitSizeOverflow <font color="#000080">=  </font><font color="#800000">9</font><font color="#000080">;  </font><font color="#008000"><i>{ bit size went beyond 12 bits }
+  </i></font>geNoBMP           <font color="#000080">= </font><font color="#800000">10</font><font color="#000080">;  </font><font color="#008000"><i>{ Could not make BMP file }
+
+  </i></font>ErrName<font color="#000080">: </font><font color="#FF0000"><b>Array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">10</font><font color="#000080">] </font><font color="#FF0000"><b>of string </b></font><font color="#000080">= (
+</font>	<font color="#800000">'GIF file not found'</font><font color="#000080">,
+</font>	<font color="#800000">'Not a GIF file'</font><font color="#000080">,
+</font>	<font color="#800000">'Missing color table'</font><font color="#000080">,
+</font>	<font color="#800000">'Bad data'</font><font color="#000080">,
+</font>	<font color="#800000">'No data'</font><font color="#000080">,
+</font> 	<font color="#800000">'Unexpected EOF'</font><font color="#000080">,
+</font>	<font color="#800000">'Bad code size'</font><font color="#000080">,
+</font>	<font color="#800000">'Bad code'</font><font color="#000080">,
+</font>	<font color="#800000">'Bad bit size'</font><font color="#000080">,
+        </font><font color="#800000">'Bad bitmap'</font><font color="#000080">);
+
+</font>CodeMask<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">12</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>Word <font color="#000080">= (  </font><font color="#008000"><i>{ bit masks for use with Next code }
+</i></font>	<font color="#800000">0</font><font color="#000080">,
+</font>	<font color="#800000">$0001</font><font color="#000080">, </font><font color="#800000">$0003</font><font color="#000080">,
+</font>	<font color="#800000">$0007</font><font color="#000080">, </font><font color="#800000">$000F</font><font color="#000080">,
+</font>	<font color="#800000">$001F</font><font color="#000080">, </font><font color="#800000">$003F</font><font color="#000080">,
+</font>	<font color="#800000">$007F</font><font color="#000080">, </font><font color="#800000">$00FF</font><font color="#000080">,
+</font>	<font color="#800000">$01FF</font><font color="#000080">, </font><font color="#800000">$03FF</font><font color="#000080">,
+</font>	<font color="#800000">$07FF</font><font color="#000080">, </font><font color="#800000">$0FFF</font><font color="#000080">);
+
+</font><font color="#FF0000"><b>type
+  </b></font>TDataSubBlock <font color="#000080">= </font><font color="#FF0000"><b>packed record
+    </b></font>Size<font color="#000080">: </font>byte<font color="#000080">;     </font><font color="#008000"><i>{ size of the block -- 0 to 255 }
+    </i></font>Data<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">1</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ the data }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>THeader <font color="#000080">= </font><font color="#FF0000"><b>packed record
+    </b></font>Signature<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">; </font><font color="#008000"><i>{ contains 'GIF' }
+    </i></font>Version<font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>char<font color="#000080">;   </font><font color="#008000"><i>{ '87a' or '89a' }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font>TLogicalScreenDescriptor <font color="#000080">= </font><font color="#FF0000"><b>packed record
+  </b></font>ScreenWidth<font color="#000080">: </font>word<font color="#000080">;              </font><font color="#008000"><i>{ logical screen width }
+  </i></font>ScreenHeight<font color="#000080">: </font>word<font color="#000080">;  </font><font color="#008000"><i>{ logical screen height }
+  </i></font>PackedFields<font color="#000080">: </font>byte<font color="#000080">;     </font><font color="#008000"><i>{ packed fields - see below }
+  </i></font>BackGroundColorIndex<font color="#000080">: </font>byte<font color="#000080">;     </font><font color="#008000"><i>{ index to global color table }
+  </i></font>AspectRatio<font color="#000080">: </font>byte<font color="#000080">;      </font><font color="#008000"><i>{ actual ratio = (AspectRatio + 15) / 64 }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font>TColorItem <font color="#000080">= </font><font color="#FF0000"><b>packed record</b></font>			<font color="#008000"><i>{ one item a a color table }
+    </i></font>Red<font color="#000080">: </font>byte<font color="#000080">;
+    </font>Green<font color="#000080">: </font>byte<font color="#000080">;
+    </font>Blue<font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>TColorTable <font color="#000080">= </font><font color="#FF0000"><b>packed array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">255</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>TColorItem<font color="#000080">;</font>	<font color="#008000"><i>{ the color table }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>TImageDescriptor <font color="#000080">= </font><font color="#FF0000"><b>packed record
+    </b></font>Separator<font color="#000080">: </font>byte<font color="#000080">;</font>		<font color="#008000"><i>{ fixed value of ImageSeparator }
+    </i></font>ImageLeftPos<font color="#000080">: </font>word<font color="#000080">;</font> 	<font color="#008000"><i>{ Column in pixels in respect to left edge of logical screen }
+    </i></font>ImageTopPos<font color="#000080">: </font>word<font color="#000080">;</font>	<font color="#008000"><i>{ row in pixels in respect to top of logical screen }
+    </i></font>ImageWidth<font color="#000080">: </font>word<font color="#000080">;</font>		<font color="#008000"><i>{ width of image in pixels }
+    </i></font>ImageHeight<font color="#000080">: </font>word<font color="#000080">;</font> 	<font color="#008000"><i>{ height of image in pixels }
+    </i></font>PackedFields<font color="#000080">: </font>byte<font color="#000080">;</font>	<font color="#008000"><i>{ see below }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ other extension blocks not currently supported by this unit
+	- Graphic Control extension
+	- Comment extension           I'm not sure what will happen if these blocks
+	- Plain text extension        are encountered but it'll be interesting
+	- application extension }
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>TExtensionBlock <font color="#000080">= </font><font color="#FF0000"><b>packed record
+    </b></font>Introducer<font color="#000080">: </font>byte<font color="#000080">;                               </font><font color="#008000"><i>{ fixed value of ExtensionIntroducer }
+    </i></font>ExtensionLabel<font color="#000080">: </font>byte<font color="#000080">;
+    </font>BlockSize<font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+  </font>PCodeItem <font color="#000080">= ^</font>TCodeItem<font color="#000080">;
+  </font>TCodeItem <font color="#000080">= </font><font color="#FF0000"><b>packed record
+    </b></font>Code1<font color="#000080">, </font>Code2<font color="#000080">: </font>byte<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{===============================================================}
+{    Bitmap File Structs
+{===============================================================}
+
+</i></font><font color="#FF0000"><b>type
+  </b></font>GraphicLine      <font color="#000080">= </font><font color="#FF0000"><b>packed array </b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font><font color="#800000">2048</font><font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">;
+  </font>PBmLine         <font color="#000080">= ^</font>TBmpLinesStruct<font color="#000080">;
+  </font>TBmpLinesStruct <font color="#000080">= </font><font color="#FF0000"><b>packed record
+    </b></font>LineData  <font color="#000080">: </font>GraphicLine<font color="#000080">;
+    </font>LineNo    <font color="#000080">: </font>Integer<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>type
+  </b></font><font color="#008000"><i>{ This is the actual gif object }
+  </i></font>PGif <font color="#000080">= ^</font>TGif<font color="#000080">;
+  </font>TGif <font color="#000080">= </font><font color="#FF0000"><b>class</b></font><font color="#000080">(</font>TObject<font color="#000080">)
+  </font><font color="#FF0000"><b>private
+    </b></font>FStream             <font color="#000080">: </font>TStream<font color="#000080">;</font>       	     <font color="#008000"><i>{ the file stream for the gif file }
+    </i></font>Header              <font color="#000080">: </font>THeader<font color="#000080">;</font>  		     <font color="#008000"><i>{ gif file header }
+    </i></font>LogicalScreen       <font color="#000080">: </font>TLogicalScreenDescriptor<font color="#000080">;  </font><font color="#008000"><i>{ gif screen descriptor }
+    </i></font>GlobalColorTable    <font color="#000080">: </font>TColorTable<font color="#000080">;</font>		     <font color="#008000"><i>{ global color table }
+    </i></font>LocalColorTable     <font color="#000080">: </font>TColorTable<font color="#000080">;</font>		     <font color="#008000"><i>{ local color table }
+    </i></font>ImageDescriptor     <font color="#000080">: </font>TImageDescriptor<font color="#000080">;</font> 	     <font color="#008000"><i>{ image descriptor }
+    </i></font>UseLocalColors      <font color="#000080">: </font>boolean<font color="#000080">;</font>		<font color="#008000"><i>{ true if local colors in use }
+    </i></font>Interlaced          <font color="#000080">: </font>boolean<font color="#000080">;</font>				<font color="#008000"><i>{ true if image is interlaced }
+    </i></font>LZWCodeSize         <font color="#000080">: </font>Byte<font color="#000080">;</font>				<font color="#008000"><i>{ minimum size of the LZW codes in bits }
+    </i></font>ImageData           <font color="#000080">: </font>TDataSubBlock<font color="#000080">;</font>		<font color="#008000"><i>{ variable to store incoming gif data }
+    </i></font>TableSize           <font color="#000080">: </font>Word<font color="#000080">;</font>					<font color="#008000"><i>{ number of entrys in the color table }
+    </i></font>BitsLeft<font color="#000080">,
+    </font>BytesLeft           <font color="#000080">: </font>Integer<font color="#000080">;</font>	<font color="#008000"><i>{ bits left in byte - bytes left in block }
+    </i></font>BadCodeCount        <font color="#000080">: </font>word<font color="#000080">;</font>          	<font color="#008000"><i>{ bad code counter }
+    </i></font>CurrCodeSize        <font color="#000080">: </font>Integer<font color="#000080">;</font>       	<font color="#008000"><i>{ Current size of code in bits }
+    </i></font>ClearCode           <font color="#000080">: </font>Integer<font color="#000080">;</font>          	<font color="#008000"><i>{ Clear code value }
+    </i></font>EndingCode          <font color="#000080">: </font>Integer<font color="#000080">;</font>         	<font color="#008000"><i>{ ending code value }
+    </i></font>Slot                <font color="#000080">: </font>Word<font color="#000080">;</font>							<font color="#008000"><i>{ position that the next new code is to be added }
+    </i></font>TopSlot             <font color="#000080">: </font>Word<font color="#000080">;</font>			<font color="#008000"><i>{ highest slot position for the current code size }
+    </i></font>HighCode            <font color="#000080">: </font>Word<font color="#000080">;</font>		<font color="#008000"><i>{ highest code that does not require decoding }
+    </i></font>NextByte            <font color="#000080">: </font>Integer<font color="#000080">;</font>	<font color="#008000"><i>{ the index to the next byte in the datablock array }
+    </i></font>CurrByte            <font color="#000080">: </font>Byte<font color="#000080">;</font>  		<font color="#008000"><i>{ the current byte }
+    </i></font>DecodeStack         <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MAXCODES<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>byte<font color="#000080">; </font><font color="#008000"><i>{ stack for the decoded codes }
+    </i></font>Prefix              <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MAXCODES<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;                     </font><font color="#008000"><i>{ array for code prefixes }
+    </i></font>Suffix              <font color="#000080">: </font><font color="#FF0000"><b>array</b></font><font color="#000080">[</font><font color="#800000">0</font><font color="#000080">..</font>MAXCODES<font color="#000080">] </font><font color="#FF0000"><b>of </b></font>integer<font color="#000080">;             </font><font color="#008000"><i>{ array for code suffixes }
+    </i></font>LineBuffer          <font color="#000080">: </font>GraphicLine<font color="#000080">; </font><font color="#008000"><i>{ array for buffer line output }
+    </i></font>CurrentX<font color="#000080">,
+    </font>CurrentY            <font color="#000080">: </font>Integer<font color="#000080">;                                            </font><font color="#008000"><i>{ current screen locations }
+    </i></font>Status              <font color="#000080">: </font>Word<font color="#000080">;
+    </font>InterlacePass       <font color="#000080">: </font>byte<font color="#000080">;    </font><font color="#008000"><i>{ interlace pass number }
+    {Conversion Routine Vars}
+    </i></font>BmHeader <font color="#000080">: </font>TBitmapInfoHeader<font color="#000080">; </font><font color="#008000"><i>{File Header for bitmap file}
+    </i></font>ImageLines<font color="#000080">: </font>TList<font color="#000080">; </font><font color="#008000"><i>{Image data}
+    {Member Functions}
+    </i></font><font color="#FF0000"><b>procedure </b></font>ParseMem<font color="#000080">;
+    </font><font color="#FF0000"><b>function </b></font>NextCode<font color="#000080">: </font>word<font color="#000080">;</font> 	<font color="#008000"><i>{ returns the next available code }
+    </i></font><font color="#FF0000"><b>procedure </b></font>Error<font color="#000080">(</font>ErrCode<font color="#000080">: </font>integer<font color="#000080">);
+    </font><font color="#FF0000"><b>procedure </b></font>InitCompressionStream<font color="#000080">;   </font><font color="#008000"><i>{ initializes info for decode }
+    </i></font><font color="#FF0000"><b>procedure </b></font>ReadSubBlock<font color="#000080">;  </font><font color="#008000"><i>{ reads a data subblock from the stream }
+    </i></font><font color="#FF0000"><b>procedure </b></font>CreateLine<font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>CreateBitHeader<font color="#000080">; </font><font color="#008000"><i>{Takes the gif header information and converts it to BMP}
+    </i></font><font color="#FF0000"><b>procedure </b></font>Decode<font color="#000080">;
+  </font><font color="#FF0000"><b>public
+    constructor </b></font>Create<font color="#000080">;
+    </font><font color="#FF0000"><b>destructor </b></font>Destroy<font color="#000080">; </font><font color="#FF0000"><b>override</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>procedure </b></font>LoadFromStream<font color="#000080">(</font>Stream<font color="#000080">: </font>TStream<font color="#000080">);
+    </font><font color="#FF0000"><b>procedure </b></font>SaveToStream<font color="#000080">(</font>Stream<font color="#000080">: </font>TStream<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+
+</font><font color="#008000"><i>(*
+
+function Power(A, N: real): real; { returns A raised to the power of N }
+begin
+  Power := exp(N * ln(A));
+end;
+
+*)
+
+{ TGifBitmap }
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGifBitmap<font color="#000080">.</font>LoadFromStream<font color="#000080">(</font>Stream<font color="#000080">: </font>TStream<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>aBitmap <font color="#000080">: </font>TBitmap<font color="#000080">;
+  </font>aGif    <font color="#000080">: </font>TGif<font color="#000080">;
+  </font>aStream <font color="#000080">: </font>TMemoryStream<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>aGif <font color="#000080">:= </font>TGif<font color="#000080">.</font>Create<font color="#000080">;
+  </font><font color="#FF0000"><b>try
+    </b></font>aGif<font color="#000080">.</font>LoadFromStream<font color="#000080">(</font>Stream<font color="#000080">);
+
+    </font>aStream<font color="#000080">:=</font>TMemoryStream<font color="#000080">.</font>Create<font color="#000080">;
+    </font><font color="#FF0000"><b>try
+      </b></font>aGif<font color="#000080">.</font>SaveToStream<font color="#000080">(</font>aStream<font color="#000080">);
+      </font>aBitmap<font color="#000080">:=</font>TBitmap<font color="#000080">.</font>Create<font color="#000080">;
+      </font>aBitmap<font color="#000080">.</font>LoadFromStream<font color="#000080">(</font>aStream<font color="#000080">);
+      </font>Assign<font color="#000080">(</font>aBitmap<font color="#000080">);
+    </font><font color="#FF0000"><b>finally
+      </b></font>aStream<font color="#000080">.</font>Free<font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>finally
+    </b></font>aGif<font color="#000080">.</font>Free<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{ TGif }
+
+</i></font><font color="#FF0000"><b>constructor </b></font>TGif<font color="#000080">.</font>Create<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FStream <font color="#000080">:= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">;
+  </font>ImageLines <font color="#000080">:= </font>TList<font color="#000080">.</font>Create<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>destructor </b></font>TGif<font color="#000080">.</font>Destroy<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>ImageLines<font color="#000080">.</font>Free<font color="#000080">;
+  </font><font color="#FF0000"><b>inherited </b></font>Destroy<font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>LoadFromStream<font color="#000080">(</font>Stream<font color="#000080">: </font>TStream<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  </b></font>FStream<font color="#000080">:=</font>Stream<font color="#000080">;
+  </font><font color="#008000"><i>{ Converts GIF file to bitstream }
+  </i></font>ParseMem<font color="#000080">;
+  </font><font color="#008000"><i>{ Create the bitmap header info }
+  </i></font>CreateBitHeader<font color="#000080">;
+  </font><font color="#008000"><i>{ Decode the GIF }
+  </i></font>Decode<font color="#000080">;
+</font><font color="#008000"><i>(*  WriteBitmapToStream; *)
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+{Raise exception with a message}
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>Error<font color="#000080">(</font>ErrCode<font color="#000080">: </font>integer<font color="#000080">);
+</font><font color="#FF0000"><b>begin
+  raise </b></font>EGifException<font color="#000080">.</font>Create<font color="#000080">(</font>ErrName<font color="#000080">[</font>ErrCode<font color="#000080">]);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>ParseMem<font color="#000080">;
+</font><font color="#008000"><i>{Decodes the header and palette info}
+</i></font><font color="#FF0000"><b>begin
+  </b></font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>Header<font color="#000080">, </font>sizeof<font color="#000080">(</font>Header<font color="#000080">)); </font><font color="#008000"><i>{ read the header }
+  {Stupid validation tricks}
+  </i></font><font color="#FF0000"><b>if </b></font>Header<font color="#000080">.</font>Signature <font color="#000080">&lt;&gt; </font><font color="#800000">'GIF' </font><font color="#FF0000"><b>then </b></font>Error<font color="#000080">(</font>geNotGif<font color="#000080">);  </font><font color="#008000"><i>{ is vaild signature }
+  {Decode the header information}
+  </i></font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>LogicalScreen<font color="#000080">, </font>sizeof<font color="#000080">(</font>LogicalScreen<font color="#000080">));
+  </font><font color="#FF0000"><b>if </b></font>LogicalScreen<font color="#000080">.</font>PackedFields <font color="#FF0000"><b>and </b></font>lsdGlobalColorTable <font color="#000080">= </font>lsdGlobalColorTable <font color="#FF0000"><b>then
+  begin
+    </b></font>TableSize <font color="#000080">:= </font>Trunc<font color="#000080">(</font>intPower<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">,(</font>LogicalScreen<font color="#000080">.</font>PackedFields <font color="#FF0000"><b>and </b></font>lsdColorTableSize<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">));
+    </font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>GlobalColorTable<font color="#000080">, </font>TableSize<font color="#000080">*</font>sizeof<font color="#000080">(</font>TColorItem<font color="#000080">)); </font><font color="#008000"><i>{ read Global Color Table }
+  </i></font><font color="#FF0000"><b>end else
+    </b></font>Error<font color="#000080">(</font>geNoGlobalColor<font color="#000080">);
+  </font><font color="#008000"><i>{Done with Global Headers}
+  {Image specific headers}
+  </i></font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>ImageDescriptor<font color="#000080">, </font>sizeof<font color="#000080">(</font>ImageDescriptor<font color="#000080">)); </font><font color="#008000"><i>{ read image descriptor }
+  {Decode image header info}
+  </i></font><font color="#FF0000"><b>if </b></font>ImageDescriptor<font color="#000080">.</font>Separator <font color="#000080">&lt;&gt; </font>ImageSeparator <font color="#FF0000"><b>then   </b></font><font color="#008000"><i>{ verify that it is the descriptor }
+     </i></font>Error<font color="#000080">(</font>geImagePreceded<font color="#000080">);
+  </font><font color="#008000"><i>{Check for local color table}
+  </i></font><font color="#FF0000"><b>if </b></font>ImageDescriptor<font color="#000080">.</font>PackedFields <font color="#FF0000"><b>and </b></font>idLocalColorTable <font color="#000080">= </font>idLocalColorTable <font color="#FF0000"><b>then
+  begin                                                               </b></font><font color="#008000"><i>{ if local color table }
+    </i></font>TableSize <font color="#000080">:= </font>Trunc<font color="#000080">(</font>intPower<font color="#000080">(</font><font color="#800000">2</font><font color="#000080">,(</font>ImageDescriptor<font color="#000080">.</font>PackedFields <font color="#FF0000"><b>and </b></font>idColorTableSize<font color="#000080">)+</font><font color="#800000">1</font><font color="#000080">));
+    </font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>LocalColorTable<font color="#000080">, </font>TableSize<font color="#000080">*</font>sizeof<font color="#000080">(</font>TColorItem<font color="#000080">)); </font><font color="#008000"><i>{ read Local Color Table }
+    </i></font>UseLocalColors <font color="#000080">:= </font>True<font color="#000080">;
+  </font><font color="#FF0000"><b>end else
+    </b></font>UseLocalColors <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#008000"><i>{Check for interlaced}
+  </i></font><font color="#FF0000"><b>if </b></font>ImageDescriptor<font color="#000080">.</font>PackedFields <font color="#FF0000"><b>and </b></font>idInterlaced <font color="#000080">= </font>idInterlaced <font color="#FF0000"><b>then
+  begin
+    </b></font>Interlaced <font color="#000080">:= </font>true<font color="#000080">;
+    </font>InterlacePass <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+ </font><font color="#008000"><i>{End of image header stuff}
+ {Reset then Expand capacity of the Image Lines list}
+ </i></font>ImageLines<font color="#000080">.</font>Clear<font color="#000080">;
+ </font>ImageLines<font color="#000080">.</font>Capacity <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageHeight<font color="#000080">;
+ </font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>FStream <font color="#000080">= </font><font color="#FF0000"><b>nil</b></font><font color="#000080">) </font><font color="#FF0000"><b>then</b></font>	<font color="#008000"><i>{ check for stream error }
+    </i></font>Error<font color="#000080">(</font>geNoFile<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>InitCompressionStream<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font><font color="#008000"><i>{InitGraphics;}</i></font>   								<font color="#008000"><i>{ Initialize the graphics display }
+  </i></font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>LZWCodeSize<font color="#000080">, </font>sizeof<font color="#000080">(</font>byte<font color="#000080">));</font>	<font color="#008000"><i>{ get minimum code size }
+  </i></font><font color="#FF0000"><b>if not </b></font><font color="#000080">(</font>LZWCodeSize <font color="#FF0000"><b>in </b></font><font color="#000080">[</font><font color="#800000">2</font><font color="#000080">..</font><font color="#800000">9</font><font color="#000080">]) </font><font color="#FF0000"><b>then</b></font>     	<font color="#008000"><i>{ valid code sizes 2-9 bits }
+     </i></font>Error<font color="#000080">(</font>geBadCodeSize<font color="#000080">);
+  </font>CurrCodeSize <font color="#000080">:= </font>succ<font color="#000080">(</font>LZWCodeSize<font color="#000080">); </font><font color="#008000"><i>{ set the initial code size }
+  </i></font>ClearCode <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font>LZWCodeSize<font color="#000080">;    </font><font color="#008000"><i>{ set the clear code }
+  </i></font>EndingCode <font color="#000080">:= </font>succ<font color="#000080">(</font>ClearCode<font color="#000080">);     </font><font color="#008000"><i>{ set the ending code }
+  </i></font>HighCode <font color="#000080">:= </font>pred<font color="#000080">(</font>ClearCode<font color="#000080">);</font>   		<font color="#008000"><i>{ set the highest code not needing decoding }
+  </i></font>BytesLeft <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;                    </font><font color="#008000"><i>{ clear other variables }
+  </i></font>BitsLeft <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>CurrentX <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>CurrentY <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>ReadSubBlock<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>ImageData<font color="#000080">.</font>Size<font color="#000080">, </font>sizeof<font color="#000080">(</font>ImageData<font color="#000080">.</font>Size<font color="#000080">)); </font><font color="#008000"><i>{ get the data block size }
+  </i></font><font color="#FF0000"><b>if </b></font>ImageData<font color="#000080">.</font>Size <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then
+     </b></font>Error<font color="#000080">(</font>geEmptyBlock<font color="#000080">);</font>									<font color="#008000"><i>{ check for empty block }
+  </i></font>FStream<font color="#000080">.</font>Read<font color="#000080">(</font>ImageData<font color="#000080">.</font>Data<font color="#000080">, </font>ImageData<font color="#000080">.</font>Size<font color="#000080">);</font> 	<font color="#008000"><i>{ read in the block }
+  </i></font>NextByte <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;                                 </font><font color="#008000"><i>{ reset next byte }
+  </i></font>BytesLeft <font color="#000080">:= </font>ImageData<font color="#000080">.</font>Size<font color="#000080">;</font>        				<font color="#008000"><i>{ reset bytes left }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>function </b></font>TGif<font color="#000080">.</font>NextCode<font color="#000080">: </font>word<font color="#000080">; </font><font color="#008000"><i>{ returns a code of the proper bit size }
+</i></font><font color="#FF0000"><b>begin
+  if </b></font>BitsLeft <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font>    	<font color="#008000"><i>{ any bits left in byte ? }
+  </i></font><font color="#FF0000"><b>begin</b></font> 						<font color="#008000"><i>{ any bytes left }
+    </i></font><font color="#FF0000"><b>if </b></font>BytesLeft <font color="#000080">&lt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font> 	<font color="#008000"><i>{ if not get another block }
+       </i></font>ReadSubBlock<font color="#000080">;
+    </font>CurrByte <font color="#000080">:= </font>ImageData<font color="#000080">.</font>Data<font color="#000080">[</font>NextByte<font color="#000080">];</font> 	<font color="#008000"><i>{ get a byte }
+    </i></font>Inc<font color="#000080">(</font>NextByte<font color="#000080">);</font>                        	<font color="#008000"><i>{ set the next byte index }
+    </i></font>BitsLeft <font color="#000080">:= </font><font color="#800000">8</font><font color="#000080">;</font>                        	<font color="#008000"><i>{ set bits left in the byte }
+    </i></font>Dec<font color="#000080">(</font>BytesLeft<font color="#000080">);</font>                       	<font color="#008000"><i>{ decrement the bytes left counter }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>Result <font color="#000080">:= </font>CurrByte <font color="#FF0000"><b>shr </b></font><font color="#000080">(</font><font color="#800000">8 </font><font color="#000080">- </font>BitsLeft<font color="#000080">);</font>			<font color="#008000"><i>{ shift off any previosly used bits}
+  </i></font><font color="#FF0000"><b>while </b></font>CurrCodeSize <font color="#000080">&gt; </font>BitsLeft <font color="#FF0000"><b>do</b></font>        	<font color="#008000"><i>{ need more bits ? }
+    </i></font><font color="#FF0000"><b>begin
+      if </b></font>BytesLeft <font color="#000080">&lt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>then</b></font>						<font color="#008000"><i>{ any bytes left in block ? }
+         </i></font>ReadSubBlock<font color="#000080">;                       </font><font color="#008000"><i>{ if not read in another block }
+      </i></font>CurrByte <font color="#000080">:= </font>ImageData<font color="#000080">.</font>Data<font color="#000080">[</font>NextByte<font color="#000080">];</font> 	<font color="#008000"><i>{ get another byte }
+      </i></font>inc<font color="#000080">(</font>NextByte<font color="#000080">);</font>                        	<font color="#008000"><i>{ increment NextByte counter }
+      </i></font>Result <font color="#000080">:= </font>Result <font color="#FF0000"><b>or </b></font><font color="#000080">(</font>CurrByte <font color="#FF0000"><b>shl </b></font>BitsLeft<font color="#000080">);</font>	<font color="#008000"><i>{ add the remaining bits to the return value }
+      </i></font>BitsLeft <font color="#000080">:= </font>BitsLeft <font color="#000080">+ </font><font color="#800000">8</font><font color="#000080">;              </font><font color="#008000"><i>{ set bit counter }
+      </i></font>Dec<font color="#000080">(</font>BytesLeft<font color="#000080">);</font>                     	<font color="#008000"><i>{ decrement bytesleft counter }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font>BitsLeft <font color="#000080">:= </font>BitsLeft <font color="#000080">- </font>CurrCodeSize<font color="#000080">;  </font><font color="#008000"><i>{ subtract the code size from bitsleft }
+  </i></font>Result <font color="#000080">:= </font>Result <font color="#FF0000"><b>and </b></font>CodeMask<font color="#000080">[</font>CurrCodeSize<font color="#000080">];</font><font color="#008000"><i>{ mask off the right number of bits }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>Decode<font color="#000080">;  </font><font color="#008000"><i>{ this procedure actually decodes the GIF image }
+</i></font><font color="#FF0000"><b>var
+  </b></font>SP<font color="#000080">: </font>integer<font color="#000080">; </font><font color="#008000"><i>{ index to the decode stack }
+
+  { local procedure that decodes a code and puts it on the decode stack }
+  </i></font><font color="#FF0000"><b>procedure </b></font>DecodeCode<font color="#000080">(</font><font color="#FF0000"><b>var </b></font>Code<font color="#000080">: </font>word<font color="#000080">);
+  </font><font color="#FF0000"><b>begin
+    while </b></font>Code <font color="#000080">&gt; </font>HighCode <font color="#FF0000"><b>do </b></font><font color="#008000"><i>{ rip thru the prefix list placing suffixes }
+    </i></font><font color="#FF0000"><b>begin                    </b></font><font color="#008000"><i>{ onto the decode stack }
+      </i></font>DecodeStack<font color="#000080">[</font>SP<font color="#000080">] := </font>Suffix<font color="#000080">[</font>Code<font color="#000080">]; </font><font color="#008000"><i>{ put the suffix on the decode stack }
+      </i></font>inc<font color="#000080">(</font>SP<font color="#000080">);                         </font><font color="#008000"><i>{ increment decode stack index }
+      </i></font>Code <font color="#000080">:= </font>Prefix<font color="#000080">[</font>Code<font color="#000080">];            </font><font color="#008000"><i>{ get the new prefix }
+    </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>DecodeStack<font color="#000080">[</font>SP<font color="#000080">] := </font>Code<font color="#000080">;</font>        		<font color="#008000"><i>{ put the last code onto the decode stack }
+    </i></font>Inc<font color="#000080">(</font>SP<font color="#000080">);</font>                    			<font color="#008000"><i>{ increment the decode stack index }
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#FF0000"><b>var
+  </b></font>TempOldCode<font color="#000080">, </font>OldCode<font color="#000080">: </font>word<font color="#000080">;
+  </font>BufCnt<font color="#000080">: </font>word<font color="#000080">;</font>	<font color="#008000"><i>{ line buffer counter }
+  </i></font>Code<font color="#000080">, </font>C<font color="#000080">: </font>word<font color="#000080">;
+  </font>CurrBuf<font color="#000080">: </font>word<font color="#000080">;</font>	<font color="#008000"><i>{ line buffer index }
+  </i></font>MaxVal<font color="#000080">: </font>boolean<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>InitCompressionStream<font color="#000080">;    </font><font color="#008000"><i>{ Initialize decoding paramaters }
+  </i></font>OldCode <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>SP <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>BufCnt <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageWidth<font color="#000080">; </font><font color="#008000"><i>{ set the Image Width }
+  </i></font>CurrBuf <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+  </font>MaxVal <font color="#000080">:= </font>False<font color="#000080">;
+  </font>C <font color="#000080">:= </font>NextCode<font color="#000080">;</font>				<font color="#008000"><i>{ get the initial code - should be a clear code }
+  </i></font><font color="#FF0000"><b>while </b></font>C <font color="#000080">&lt;&gt; </font>EndingCode <font color="#FF0000"><b>do  </b></font><font color="#008000"><i>{ main loop until ending code is found }
+  </i></font><font color="#FF0000"><b>begin
+    if </b></font>C <font color="#000080">= </font>ClearCode <font color="#FF0000"><b>then</b></font>	<font color="#008000"><i>{ code is a clear code - so clear }
+    </i></font><font color="#FF0000"><b>begin
+      </b></font>CurrCodeSize <font color="#000080">:= </font>LZWCodeSize <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;</font>	<font color="#008000"><i>{ reset the code size }
+      </i></font>Slot <font color="#000080">:= </font>EndingCode <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;</font>				<font color="#008000"><i>{ set slot for next new code }
+      </i></font>TopSlot <font color="#000080">:= </font><font color="#800000">1 </font><font color="#FF0000"><b>shl </b></font>CurrCodeSize<font color="#000080">;</font>	<font color="#008000"><i>{ set max slot number }
+      </i></font><font color="#FF0000"><b>while </b></font>C <font color="#000080">= </font>ClearCode <font color="#FF0000"><b>do
+</b></font>	C <font color="#000080">:= </font>NextCode<font color="#000080">;</font>	<font color="#008000"><i>{ read until all clear codes gone - shouldn't happen }
+      </i></font><font color="#FF0000"><b>if </b></font>C <font color="#000080">= </font>EndingCode <font color="#FF0000"><b>then
+</b></font>	 Error<font color="#000080">(</font>geBadCode<font color="#000080">);</font>   	<font color="#008000"><i>{ ending code after a clear code }
+      </i></font><font color="#FF0000"><b>if </b></font>C <font color="#000080">&gt;= </font>Slot <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ if the code is beyond preset codes then set to zero }
+</i></font>	 C <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+      </font>OldCode <font color="#000080">:= </font>C<font color="#000080">;
+      </font>DecodeStack<font color="#000080">[</font>sp<font color="#000080">] := </font>C<font color="#000080">;</font> 	<font color="#008000"><i>{ output code to decoded stack }
+      </i></font>inc<font color="#000080">(</font>SP<font color="#000080">);</font>        			<font color="#008000"><i>{ increment decode stack index }
+    </i></font><font color="#FF0000"><b>end else   </b></font><font color="#008000"><i>{ the code is not a clear code or an ending code so it must }
+    </i></font><font color="#FF0000"><b>begin  </b></font><font color="#008000"><i>{ be a code code - so decode the code }
+      </i></font>Code <font color="#000080">:= </font>C<font color="#000080">;
+      </font><font color="#FF0000"><b>if </b></font>Code <font color="#000080">&lt; </font>Slot <font color="#FF0000"><b>then     </b></font><font color="#008000"><i>{ is the code in the table? }
+      </i></font><font color="#FF0000"><b>begin
+</b></font>      	DecodeCode<font color="#000080">(</font>Code<font color="#000080">);</font>     			<font color="#008000"><i>{ decode the code }
+</i></font>      	<font color="#FF0000"><b>if </b></font>Slot <font color="#000080">&lt;= </font>TopSlot <font color="#FF0000"><b>then
+</b></font>      	<font color="#FF0000"><b>begin</b></font>               			<font color="#008000"><i>{ add the new code to the table }
+          </i></font>Suffix<font color="#000080">[</font>Slot<font color="#000080">] := </font>Code<font color="#000080">;</font>  		<font color="#008000"><i>{ make the suffix }
+</i></font>	  PreFix<font color="#000080">[</font>slot<font color="#000080">] := </font>OldCode<font color="#000080">;</font> 	<font color="#008000"><i>{ the previous code - a link to the data }
+</i></font>	  inc<font color="#000080">(</font>Slot<font color="#000080">);</font>     	<font color="#008000"><i>{ increment slot number }
+</i></font>	  OldCode <font color="#000080">:= </font>C<font color="#000080">;</font>    	<font color="#008000"><i>{ set oldcode }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>	<font color="#FF0000"><b>if </b></font>Slot <font color="#000080">&gt;= </font>TopSlot <font color="#FF0000"><b>then</b></font> 		<font color="#008000"><i>{ have reached the top slot for bit size }
+</i></font>	<font color="#FF0000"><b>begin</b></font>                   	<font color="#008000"><i>{ increment code bit size }
+</i></font>	  <font color="#FF0000"><b>if </b></font>CurrCodeSize <font color="#000080">&lt; </font><font color="#800000">12 </font><font color="#FF0000"><b>then</b></font> 	<font color="#008000"><i>{ new bit size not too big? }
+</i></font>	  <font color="#FF0000"><b>begin
+</b></font>	    TopSlot <font color="#000080">:= </font>TopSlot <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;</font>	<font color="#008000"><i>{ new top slot }
+</i></font>	    inc<font color="#000080">(</font>CurrCodeSize<font color="#000080">)</font> 			<font color="#008000"><i>{ new code size }
+          </i></font><font color="#FF0000"><b>end else
+            </b></font>MaxVal <font color="#000080">:= </font>True<font color="#000080">;</font> 			<font color="#008000"><i>{ Must check next code is a start code }
+</i></font>       	<font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end else
+      begin</b></font>	<font color="#008000"><i>{ the code is not in the table }
+        </i></font><font color="#FF0000"><b>if </b></font>Code <font color="#000080">&lt;&gt; </font>Slot <font color="#FF0000"><b>then
+</b></font>	   Error<font color="#000080">(</font>geBadCode<font color="#000080">); </font><font color="#008000"><i>{ so error out }
+</i></font>	<font color="#008000"><i>{ the code does not exist so make a new entry in the code table
+	  and then translate the new code }
+</i></font>	TempOldCode <font color="#000080">:= </font>OldCode<font color="#000080">;  </font><font color="#008000"><i>{ make a copy of the old code }
+</i></font>	<font color="#FF0000"><b>while </b></font>OldCode <font color="#000080">&gt; </font>HighCode <font color="#FF0000"><b>do</b></font> 	<font color="#008000"><i>{ translate the old code and place it }
+</i></font>	<font color="#FF0000"><b>begin</b></font>              			<font color="#008000"><i>{ on the decode stack }
+</i></font>	  DecodeStack<font color="#000080">[</font>SP<font color="#000080">] := </font>Suffix<font color="#000080">[</font>OldCode<font color="#000080">]; </font><font color="#008000"><i>{ do the suffix }
+</i></font>	  OldCode <font color="#000080">:= </font>Prefix<font color="#000080">[</font>OldCode<font color="#000080">];         </font><font color="#008000"><i>{ get next prefix }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>	DecodeStack<font color="#000080">[</font>SP<font color="#000080">] := </font>OldCode<font color="#000080">;</font>	<font color="#008000"><i>{ put the code onto the decode stack }
+</i></font>                          		<font color="#008000"><i>{ but DO NOT increment stack index }
+</i></font>			                <font color="#008000"><i>{ the decode stack is not incremented because because we are only
+ 			                  translating the oldcode to get the first character }
+        </i></font><font color="#FF0000"><b>if </b></font>Slot <font color="#000080">&lt;= </font>TopSlot <font color="#FF0000"><b>then
+</b></font>	<font color="#FF0000"><b>begin</b></font> 	<font color="#008000"><i>{ make new code entry }
+</i></font>	  Suffix<font color="#000080">[</font>Slot<font color="#000080">] := </font>OldCode<font color="#000080">;</font>     	<font color="#008000"><i>{ first char of old code }
+</i></font>	  Prefix<font color="#000080">[</font>Slot<font color="#000080">] := </font>TempOldCode<font color="#000080">;</font> 	<font color="#008000"><i>{ link to the old code prefix }
+</i></font>	  inc<font color="#000080">(</font>Slot<font color="#000080">);</font>                   	<font color="#008000"><i>{ increment slot }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font>	<font color="#FF0000"><b>if </b></font>Slot <font color="#000080">&gt;= </font>TopSlot <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{ slot is too big }
+</i></font>	<font color="#FF0000"><b>begin</b></font>						<font color="#008000"><i>{ increment code size }
+</i></font>	  <font color="#FF0000"><b>if </b></font>CurrCodeSize <font color="#000080">&lt; </font><font color="#800000">12 </font><font color="#FF0000"><b>then
+</b></font>	  <font color="#FF0000"><b>begin
+</b></font>	    TopSlot <font color="#000080">:= </font>TopSlot <font color="#FF0000"><b>shl </b></font><font color="#800000">1</font><font color="#000080">;</font>	<font color="#008000"><i>{ new top slot }
+            </i></font>inc<font color="#000080">(</font>CurrCodeSize<font color="#000080">);</font>   		<font color="#008000"><i>{ new code size }
+          </i></font><font color="#FF0000"><b>end else
+            </b></font>MaxVal <font color="#000080">:= </font>True<font color="#000080">;</font> 			<font color="#008000"><i>{ Must check next code is a start code }
+        </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font>	DecodeCode<font color="#000080">(</font>Code<font color="#000080">); </font><font color="#008000"><i>{ now that the table entry exists decode it }
+</i></font>	OldCode <font color="#000080">:= </font>C<font color="#000080">;     </font><font color="#008000"><i>{ set the new old code }
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#008000"><i>{ the decoded string is on the decode stack so pop it off and put it
+      into the line buffer }
+    </i></font><font color="#FF0000"><b>while </b></font>SP <font color="#000080">&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+    begin
+      </b></font>dec<font color="#000080">(</font>SP<font color="#000080">);
+      </font>LineBuffer<font color="#000080">[</font>CurrBuf<font color="#000080">] := </font>DecodeStack<font color="#000080">[</font>SP<font color="#000080">];
+      </font>inc<font color="#000080">(</font>CurrBuf<font color="#000080">);
+      </font>dec<font color="#000080">(</font>BufCnt<font color="#000080">);
+      </font><font color="#FF0000"><b>if </b></font>BufCnt <font color="#000080">= </font><font color="#800000">0 </font><font color="#FF0000"><b>then  </b></font><font color="#008000"><i>{ is the line full ? }
+      </i></font><font color="#FF0000"><b>begin
+</b></font>	CreateLine<font color="#000080">;
+</font>	CurrBuf <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;
+</font>	BufCnt <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageWidth<font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>C <font color="#000080">:= </font>NextCode<font color="#000080">;</font>	<font color="#008000"><i>{ get the next code and go at is some more }
+    </i></font><font color="#FF0000"><b>if </b></font><font color="#000080">(</font>MaxVal <font color="#000080">= </font>True<font color="#000080">) </font><font color="#FF0000"><b>and </b></font><font color="#000080">(</font>C <font color="#000080">&lt;&gt; </font>ClearCode<font color="#000080">) </font><font color="#FF0000"><b>then
+</b></font>     	Error<font color="#000080">(</font>geBitSizeOverflow<font color="#000080">);
+    </font>MaxVal <font color="#000080">:= </font>False<font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; </font><font color="#008000"><i>{ while }
+</i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>CreateBitHeader<font color="#000080">;
+</font><font color="#008000"><i>{ This routine takes the values from the GIF image
+  descriptor and fills in the appropriate values in the
+  bit map header struct. }
+</i></font><font color="#FF0000"><b>begin
+  with </b></font>BmHeader <font color="#FF0000"><b>do
+  begin
+    </b></font>biSize           <font color="#000080">:= </font>Sizeof<font color="#000080">(</font>TBitmapInfoHeader<font color="#000080">);
+    </font>biWidth          <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageWidth<font color="#000080">;
+    </font>biHeight         <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageHeight<font color="#000080">;
+    </font>biPlanes         <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;            </font><font color="#008000"><i>{Arcane and rarely used}
+    </i></font>biBitCount       <font color="#000080">:= </font><font color="#800000">8</font><font color="#000080">;            </font><font color="#008000"><i>{Hmmm Should this be hardcoded ?}
+    </i></font>biCompression    <font color="#000080">:= </font>BI_RGB<font color="#000080">;       </font><font color="#008000"><i>{Sorry Did not implement compression in this version}
+    </i></font>biSizeImage      <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;            </font><font color="#008000"><i>{Valid since we are not compressing the image}
+    </i></font>biXPelsPerMeter  <font color="#000080">:=</font><font color="#800000">143</font><font color="#000080">;           </font><font color="#008000"><i>{Rarely used very arcane field}
+    </i></font>biYPelsPerMeter  <font color="#000080">:=</font><font color="#800000">143</font><font color="#000080">;           </font><font color="#008000"><i>{Ditto}
+    </i></font>biClrUsed        <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;            </font><font color="#008000"><i>{all colors are used}
+    </i></font>biClrImportant   <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">;            </font><font color="#008000"><i>{all colors are important}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+{fills in Line list with current line}
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>CreateLine<font color="#000080">;
+</font><font color="#FF0000"><b>var
+  </b></font>p<font color="#000080">: </font>PBmLine<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  </b></font>Application<font color="#000080">.</font>ProcessMessages<font color="#000080">;
+  </font><font color="#008000"><i>{Create a new bmp line}
+  </i></font>New<font color="#000080">(</font>p<font color="#000080">);
+  </font><font color="#008000"><i>{Fill in the data}
+  </i></font>p<font color="#000080">^.</font>LineData <font color="#000080">:= </font>LineBuffer<font color="#000080">;
+  </font>p<font color="#000080">^.</font>LineNo <font color="#000080">:= </font>CurrentY<font color="#000080">;
+  </font><font color="#008000"><i>{Add it to the list of lines}
+  </i></font>ImageLines<font color="#000080">.</font>Add<font color="#000080">(</font>p<font color="#000080">);
+  </font><font color="#008000"><i>{Prepare for the next line}
+  </i></font>Inc<font color="#000080">(</font>CurrentY<font color="#000080">);
+  </font><font color="#FF0000"><b>if </b></font>InterLaced <font color="#FF0000"><b>then
+  </b></font><font color="#008000"><i>{ Interlace support }
+  </i></font><font color="#FF0000"><b>begin
+    case </b></font>InterlacePass <font color="#FF0000"><b>of
+      </b></font><font color="#800000">0</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font>CurrentY <font color="#000080">+ </font><font color="#800000">7</font><font color="#000080">;
+      </font><font color="#800000">1</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font>CurrentY <font color="#000080">+ </font><font color="#800000">7</font><font color="#000080">;
+      </font><font color="#800000">2</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font>CurrentY <font color="#000080">+ </font><font color="#800000">3</font><font color="#000080">;
+      </font><font color="#800000">3</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font>CurrentY <font color="#000080">+ </font><font color="#800000">1</font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>if </b></font>CurrentY <font color="#000080">&gt;= </font>ImageDescriptor<font color="#000080">.</font>ImageHeight <font color="#FF0000"><b>then
+    begin
+      </b></font>Inc<font color="#000080">(</font>InterLacePass<font color="#000080">);
+      </font><font color="#FF0000"><b>case </b></font>InterLacePass <font color="#FF0000"><b>of
+        </b></font><font color="#800000">1</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font><font color="#800000">4</font><font color="#000080">;
+        </font><font color="#800000">2</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font><font color="#800000">2</font><font color="#000080">;
+        </font><font color="#800000">3</font><font color="#000080">: </font>CurrentY <font color="#000080">:= </font><font color="#800000">1</font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>procedure </b></font>TGif<font color="#000080">.</font>SaveToStream<font color="#000080">(</font>Stream<font color="#000080">: </font>TStream<font color="#000080">);
+</font><font color="#FF0000"><b>var
+  </b></font>BitFile<font color="#000080">: </font>TBitmapFileHeader<font color="#000080">;
+  </font>i<font color="#000080">: </font>integer<font color="#000080">;
+  </font>Line<font color="#000080">: </font>integer<font color="#000080">;
+  </font>ch<font color="#000080">: </font>char<font color="#000080">;
+  </font>p<font color="#000080">: </font>PBmLine<font color="#000080">;
+  </font>x<font color="#000080">: </font>integer<font color="#000080">;
+</font><font color="#FF0000"><b>begin
+  with </b></font>BitFile <font color="#FF0000"><b>do begin
+     </b></font>bfSize <font color="#000080">:= (</font><font color="#800000">3</font><font color="#000080">*</font><font color="#800000">255</font><font color="#000080">) + </font>Sizeof<font color="#000080">(</font>TBitmapFileHeader<font color="#000080">) +  </font><font color="#008000"><i>{Color map info}
+</i></font>	                 Sizeof<font color="#000080">(</font>TBitmapInfoHeader<font color="#000080">) +
+</font>  	<font color="#000080">(</font>ImageDescriptor<font color="#000080">.</font>ImageHeight<font color="#000080">*</font>ImageDescriptor<font color="#000080">.</font>ImageWidth<font color="#000080">);
+     </font>bfReserved1 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{not currently used}
+     </i></font>bfReserved2 <font color="#000080">:= </font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{not currently used}
+     </i></font>bfOffBits <font color="#000080">:= (</font><font color="#800000">4</font><font color="#000080">*</font><font color="#800000">256</font><font color="#000080">)+ </font>Sizeof<font color="#000080">(</font>TBitmapFileHeader<font color="#000080">)+
+                           </font>Sizeof<font color="#000080">(</font>TBitmapInfoHeader<font color="#000080">);
+  </font><font color="#FF0000"><b>end</b></font><font color="#000080">; 
+  </font><font color="#008000"><i>{Write the file header}
+  </i></font><font color="#FF0000"><b>with </b></font>Stream <font color="#FF0000"><b>do begin
+    </b></font>Position<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">;
+    </font>ch<font color="#000080">:=</font><font color="#800000">'B'</font><font color="#000080">;
+    </font>Write<font color="#000080">(</font>ch<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font>ch<font color="#000080">:=</font><font color="#800000">'M'</font><font color="#000080">;
+    </font>Write<font color="#000080">(</font>ch<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+    </font>Write<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfSize<font color="#000080">,</font>sizeof<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfSize<font color="#000080">));
+    </font>Write<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfReserved1<font color="#000080">,</font>sizeof<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfReserved1<font color="#000080">));
+    </font>Write<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfReserved2<font color="#000080">,</font>sizeof<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfReserved2<font color="#000080">));
+    </font>Write<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfOffBits<font color="#000080">,</font>sizeof<font color="#000080">(</font>BitFile<font color="#000080">.</font>bfOffBits<font color="#000080">));
+    </font><font color="#008000"><i>{Write the bitmap image header info}
+    </i></font>Write<font color="#000080">(</font>BmHeader<font color="#000080">,</font>sizeof<font color="#000080">(</font>BmHeader<font color="#000080">));
+    </font><font color="#008000"><i>{Write the BGR palete inforamtion to this file}
+    </i></font><font color="#FF0000"><b>if </b></font>UseLocalColors <font color="#FF0000"><b>then </b></font><font color="#008000"><i>{Use the local color table}
+    </i></font><font color="#FF0000"><b>begin
+      for </b></font>i<font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do
+      begin
+        </b></font>Write<font color="#000080">(</font>LocalColorTable<font color="#000080">[</font>i<font color="#000080">].</font>Blue<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font>LocalColorTable<font color="#000080">[</font>i<font color="#000080">].</font>Green<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font>LocalColorTable<font color="#000080">[</font>i<font color="#000080">].</font>Red<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font>ch<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">); </font><font color="#008000"><i>{Bogus palete entry required by windows}
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end else </b></font><font color="#008000"><i>{Use the global table}
+    </i></font><font color="#FF0000"><b>begin
+      for </b></font>i<font color="#000080">:= </font><font color="#800000">0 </font><font color="#FF0000"><b>to </b></font><font color="#800000">255 </font><font color="#FF0000"><b>do
+      begin
+        </b></font>Write<font color="#000080">(</font>GlobalColorTable<font color="#000080">[</font>i<font color="#000080">].</font>Blue<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font>GlobalColorTable<font color="#000080">[</font>i<font color="#000080">].</font>Green<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font>GlobalColorTable<font color="#000080">[</font>i<font color="#000080">].</font>Red<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">);
+        </font>Write<font color="#000080">(</font>ch<font color="#000080">,</font><font color="#800000">1</font><font color="#000080">); </font><font color="#008000"><i>{Bogus palete entry required by windows}
+      </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+    </font><font color="#008000"><i>{Init the Line Counter}
+    </i></font>Line <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageHeight<font color="#000080">;
+    </font><font color="#008000"><i>{Write out File lines in reverse order}
+    </i></font><font color="#FF0000"><b>while </b></font>Line <font color="#000080">&gt;= </font><font color="#800000">0 </font><font color="#FF0000"><b>do
+    begin
+      </b></font><font color="#008000"><i>{Go through the line list in reverse order looking for the
+       current Line. Use reverse order since non interlaced gifs are
+       stored top to bottom.  Bmp file need to be written bottom to
+       top}
+      </i></font><font color="#FF0000"><b>for </b></font>i <font color="#000080">:= (</font>ImageLines<font color="#000080">.</font>Count <font color="#000080">- </font><font color="#800000">1</font><font color="#000080">) </font><font color="#FF0000"><b>downto </b></font><font color="#800000">0  </font><font color="#FF0000"><b>do
+      begin
+        </b></font>p <font color="#000080">:= </font>ImageLines<font color="#000080">.</font>Items<font color="#000080">[</font>i<font color="#000080">];
+        </font><font color="#FF0000"><b>if </b></font>p<font color="#000080">^.</font>LineNo <font color="#000080">= </font>Line <font color="#FF0000"><b>then
+        begin
+          </b></font>x <font color="#000080">:= </font>ImageDescriptor<font color="#000080">.</font>ImageWidth<font color="#000080">;
+          </font>Write<font color="#000080">(</font>p<font color="#000080">^.</font>LineData<font color="#000080">, </font>x<font color="#000080">);
+          </font>ch <font color="#000080">:= </font>chr<font color="#000080">(</font><font color="#800000">0</font><font color="#000080">);
+          </font><font color="#FF0000"><b>while </b></font><font color="#000080">(</font>x <font color="#FF0000"><b>and </b></font><font color="#800000">3</font><font color="#000080">) &lt;&gt; </font><font color="#800000">0 </font><font color="#FF0000"><b>do </b></font><font color="#008000"><i>{ Pad up to 4-byte boundary with zeroes }
+          </i></font><font color="#FF0000"><b>begin
+            </b></font>Inc<font color="#000080">(</font>x<font color="#000080">);
+            </font>Write<font color="#000080">(</font>ch<font color="#000080">, </font><font color="#800000">1</font><font color="#000080">);
+          </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+          </font>break<font color="#000080">;
+        </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+      </font>Dec<font color="#000080">(</font>Line<font color="#000080">);
+    </font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+    </font>Position<font color="#000080">:=</font><font color="#800000">0</font><font color="#000080">; </font><font color="#008000"><i>{ reset mewmory stream}
+  </i></font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">;
+
+</font><font color="#008000"><i>{------------------------------------------------------------------------------}
+
+</i></font><font color="#FF0000"><b>initialization
+  </b></font><font color="#008000"><i>{ register the TGifBitmap as a new graphic file format
+    now all the TPicture storage stuff can access our new
+    GIF graphic format !
+  }
+  </i></font>TPicture<font color="#000080">.</font>RegisterFileFormat<font color="#000080">(</font><font color="#800000">'gif'</font><font color="#000080">,</font><font color="#800000">'GIF-Format'</font><font color="#000080">, </font>TGifBitmap<font color="#000080">);
+</font><font color="#FF0000"><b>end</b></font><font color="#000080">.
+
+</font>
+</code></pre><!--EndFragment--><p align="center"><b>[</b><a href="index.html">Back to DELPHI SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="../index.html">Back to Main SWAG index</a><b>]</b>&nbsp;&nbsp;<b>[</b><a href="0180.PAS">Original</a><b>]</b></p></body>
+</html>
